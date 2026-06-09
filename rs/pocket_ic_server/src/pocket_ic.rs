@@ -35,8 +35,11 @@ use ic_btc_interface::{
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
 use ic_config::{
-    execution_environment, flag_status::FlagStatus, http_handler, logger::Config as LoggerConfig,
-    subnet_config::SubnetConfig,
+    execution_environment,
+    flag_status::FlagStatus,
+    http_handler,
+    logger::Config as LoggerConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
 };
 use ic_crypto_sha2::Sha256;
 use ic_doge_interface::{
@@ -648,7 +651,7 @@ impl PocketIcSubnets {
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
-        let mut subnet_config = SubnetConfig::new(subnet_type);
+        let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
         // using `let IcpConfig { }` with explicit field names
         // to force an update after adding a new field to `IcpConfig`
         let IcpConfig {
@@ -2090,7 +2093,7 @@ impl PocketIcSubnets {
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\00\73\a8\b8\4e\b1\57\86\da\34\9e\b3\98\0a\84\cb\c7\fb\f0\35\88\d9\d0\9c\52\37\a8\99\70\45\1d\98";
+            //         module_hash = blob "\fd\07\13\7c\a4\68\7d\a5\69\d7\66\a2\f1\e1\66\04\ff\d7\4e\52\7e\7b\6b\f4\3b\7b\dd\0f\8e\d9\2e\dc";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -2119,6 +2122,7 @@ impl PocketIcSubnets {
             //           email_verification = opt variant { Google };
             //           issuer = "https://accounts.google.com";
             //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           seed_jwks = null;
             //           client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
             //         };
             //         record {
@@ -2130,6 +2134,7 @@ impl PocketIcSubnets {
             //           email_verification = opt variant { Unknown };
             //           issuer = "https://appleid.apple.com";
             //           auth_scope = vec { "openid" };
+            //           seed_jwks = null;
             //           client_id = "ai.id.auth";
             //         };
             //         record {
@@ -2141,6 +2146,15 @@ impl PocketIcSubnets {
             //           email_verification = opt variant { Microsoft };
             //           issuer = "https://login.microsoftonline.com/{tid}/v2.0";
             //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           seed_jwks = opt vec {
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "Xt-o7hDbpupAz-ZPm6HxCFWS3cI" }; record { "n"; "tNylHNFgnoQG0dYZd113g5t-NTvMow5yOeGfF60pRPtuXzhsPm6dOkvo8yEVGtED3xzlUpu6uwaMz9lHd_hILKI4PbGSXBR1A-DMrrZYmiO8YX5JC9Xaj2XF_Jc4QLgjTu9ocJzL-FMFFpgbkAv_PIgvQTAbTm7_rHLQWpeB5TvdgnMilmL1NmQHQjiWZKhw63HLhiuob1WhMQI0oFt0jui6gKaf2enk6_-z-BLWqbIqfOO9Y1rF7Zj-gNwDBrkjEDbs_hXn9nCujZwjouO8YBmcwgxsPjeeZk0heG6DtVDnsALevPTPJwPQB_w_ObXqeYDe8Ceu7jqAAMx1NDxBpw" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "cYovdPYWG6Wi4m9upkiJFv0-K_k" }; record { "n"; "oF7hyLvRZlWKRB9PRg8ZXZfs37XFsMQG30Ihv4uhC3GK3hBUHRbF9t46exQHronUMCGvO418qng5qXVP-mvfyAkzS-v_kgEix8Oq205h43gsSvk_YBCZBH1nxjT8GLcbRI4uXpzfopmuYXbYEXfFkKCh7TBz1oIjnP43nMqi8LHCzUUiHA9EWYLMGS8pu1iNjntW0dbd3R78ybBVfps-hwZNLWEQjxPI2lUy7fycAyafQQE1xvtF4Rf5m9D6pByQu3b-hudXhDcfR97ubix2trL8EUz5jqTs20PIQ8p-r5aVbsllfZENaXcQLGIgwIL_q76iACMgI-krJBCg8YXZ-w" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "wh06sEkzLHJ5sNNaUyRY2_6O8K0" }; record { "n"; "vOPjy3R_ACXnxYPAVvvQiXWl4Saa7fagNNf5q53Bb5Pj1o2TtY4cTiRooFDvpKeE-FVrC0ZclenTOiTPvgJqxHQnxCTBBZYRQ9UF7KDf3fFAAUnn4HsLQRir6dwb-E5GRG4T7i_y3pzAGun5QFsA9-eNLRucDfGpONcxhujoCTMnfqo6ac2h6BUQqlWza9Ko8wEeTHmzGlkr5bCqJXI4vtjcapQlCpvs5DSTpxWMwbHU-h-jIDsI97wIIlIn-jkmkbhUp7PZdlrot9-LBsVD3ZUyPD2poLmr161QW5i4lOEn4lhxfRtEmn9d6C0N0SQXCp5pk-kA15gyNZavP3n5sQ" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "6y1pWCGDr4fCwPR3-3fVE6m6KWA" }; record { "n"; "jXn6iT_1KGLa74gkm7qa6WKSC0L0ONKupZLJllGsthiA_JHyUeTTZt-hXH1pQ90qxCpAlCH0-msXbwryVa9rT-UYQeOXI5hTOWhu0ICbu8Kb6s5Nvue6V8ertXQA4AOTbaWH4ZS67hlVOWNalYeg0fSf0kxVrdlSOURlElzo6ZNehKJhH2OTAhYVGRKLdUHQYFGveJiyl6ZfxBH-ryXhPwmN_qcAv0viSCTJkCLUBSgMwiCq7hdPBeDLrcH84D1LZ9Ub8KX0xcdw07GLbKlE650_WmB9j5QAKfstGfyLesnj6eeV6z3RvN1YCn0vwS575iXyhwNZhDf_bfv5aTcQZQ" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "k2MRQ8fu3BbJrTPLnDOyWDq1m60" }; record { "n"; "kuZEJyH4lGC6nsedsIaeO4i1_-_Xv6aJU4uXVGzYhfwi1Cc0hKqdQ_ITktP6Cyfos-UPbXO6FEv6VwF2I88cnWrV1riiFIS9L99r8YuSh5z260hdJewk9wwtLlZ54RrfOoLqESgEiBSWVwHyCJEwV0kUSFsU1TEFOZPFYeHJBQXSASS6t4V2hPHgpKiQ-_3E7WS6XlPMQGXGcKa7P4Feo4yo5Ut6h4xKdGny5fFCvOQHjDbn4HGDa_Aup8435n6A9rlK_bsf_z-uirXOQX7-YTaLex5KrurGNJU6Yi3tC87-eziipo8H8D0hJW1yteHm7n5VdfOYUEMNI7zcSBLPnQ" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "WhbMkxZh2-Vh0hv5vl6Wo5XN-TQ" }; record { "n"; "rFR1drVxL2QTmxn2cRmOOudP-AqLKp4vlQrNu_dniLJyoo7Uw9fzFDkSckEmel7B7KT1ibl6NGuK94cPCT9Aqr0ztlC2sIPvkUTOKFM2MqckXDJCox4TcmhSNIt-vT7jYQSOrtdFF8M0S4E-WVUUhdGoQ9xAfEmofmISh01x4wkTDzreENjHBJI0O4JFl96z56S0LLsR-yBlgtFidu33tkRKt1joiLxv7yHwODg0HZeXp3t5DPwqPjfQB8YKf5I2-gWcdo3ZPbADCtkRAYWl13DEPxu8Xzpmi-DhXzHUUD-j7EKTBLZ5EWFfODi3NvG9ei7mX3N-iqqoe_JFYmPpcw" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "q-rwfBcgFoOzOr5Pa3fE1ivrIGk" }; record { "n"; "mjrQv4gEYpZoyT6Llz6lIMNsET8VWACV9jFDci_0HHUB8TebRSe1g9bXL29GUBCrWXNY3NXJtD_rE5SNjV0WNK-cPC81LqZS11xoHjfBJc-c6zgBf0mAVpZcYFNxyomF5BX5PWRUj8hEPOMth5Hjx_KlLU6G02rmqYJTA7o4cXLfkXzaQN2OjVh2WNFl4ScjyAIt2xRwrWzLtj3dyNL4JnkBNQ933rEM6eIlewOyGn3rocmtXk4nGvyXMBHNDinHyM4BMmMuWpND-mJiJtnQWwziPpp6ImuukIRNLkj0_t-RLvDLSmpmugGGPgJlQLF39EU-ib-C7Po_1eGxvn8J7Q" }; record { "e"; "AQAB" }; };
+            //           };
             //           client_id = "80d5203e-9ba2-4acf-97a1-88d926a0bbbf";
             //         };
             //       };
@@ -2172,6 +2186,7 @@ impl PocketIcSubnets {
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
                   email_verification: Some(OpenIdEmailVerification::Google),
+                  seed_jwks: None,
                 }])
             } else {
                 None
@@ -3539,6 +3554,7 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
         ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
         ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
+        ic_types::canister_http::CanisterHttpMethod::PATCH => CanisterHttpMethod::PATCH,
     }
 }
 

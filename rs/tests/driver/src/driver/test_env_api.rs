@@ -167,17 +167,15 @@ use ic_nns_test_utils::{
 };
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
-    node::v1 as pb_node,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    subnet::v1 as pb_subnet,
+    node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord, subnet::v1 as pb_subnet,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
     node::NodeRegistry,
+    replica_version::ReplicaVersionRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_registry_keys::REPLICA_VERSION_KEY_PREFIX;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -188,8 +186,6 @@ use ic_types::{
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
-use itertools::Itertools;
-use prost::Message;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, warn};
@@ -531,61 +527,12 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
-        Ok(self
-            .local_registry
-            .get_key_family(
-                "blessed_replica_versions",
-                self.local_registry.get_latest_version(),
-            )
-            .map_err(anyhow::Error::from)?
-            .iter()
-            .filter_map(|key| {
-                let r = self
-                    .local_registry
-                    .get_versioned_value(key, self.local_registry.get_latest_version())
-                    .unwrap_or_else(|_| {
-                        panic!("Failed to get entry {key} for blessed replica versions")
-                    });
+    pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
+        let registry_version = self.local_registry.get_latest_version();
 
-                r.as_ref().map(|v| {
-                    BlessedReplicaVersions::decode(v.as_slice()).expect("Invalid registry value")
-                })
-            })
-            .collect_vec()
-            .first()
-            .ok_or(anyhow::anyhow!(
-                "Failed to find any blessed replica versions"
-            ))?
-            .blessed_version_ids
-            .clone())
-    }
-
-    pub fn replica_version_records(&self) -> anyhow::Result<Vec<(String, ReplicaVersionRecord)>> {
-        Ok(self
-            .local_registry
-            .get_key_family(
-                REPLICA_VERSION_KEY_PREFIX,
-                self.local_registry.get_latest_version(),
-            )
-            .map_err(anyhow::Error::from)?
-            .iter()
-            .map(|key| {
-                let r = self
-                    .local_registry
-                    .get_versioned_value(key, self.local_registry.get_latest_version())
-                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {key}"));
-                (
-                    key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
-                    r.as_ref()
-                        .map(|v| {
-                            ReplicaVersionRecord::decode(v.as_slice())
-                                .expect("Invalid registry value")
-                        })
-                        .unwrap(),
-                )
-            })
-            .collect_vec())
+        self.local_registry
+            .get_all_replica_version_records(registry_version)?
+            .context("get_all_replica_version_records always returns Some (and it did not)")
     }
 
     /// The subnet id of the root subnet.
@@ -1403,27 +1350,21 @@ impl<T: HasTopologySnapshot> GetFirstHealthyNodeSnapshot for T {
         })
     }
     fn get_first_healthy_nns_node_snapshot(&self) -> IcNodeSnapshot {
-        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        let root_subnet_id = self.topology_snapshot().root_subnet_id();
         self.get_first_healthy_node_snapshot_where(|s| s.subnet_id == root_subnet_id)
     }
     fn get_first_healthy_non_nns_node_snapshot(&self) -> IcNodeSnapshot {
-        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        let root_subnet_id = self.topology_snapshot().root_subnet_id();
         self.get_first_healthy_node_snapshot_where(|s| s.subnet_id != root_subnet_id)
     }
     fn get_first_healthy_system_but_not_nns_node_snapshot(&self) -> IcNodeSnapshot {
-        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        let root_subnet_id = self.topology_snapshot().root_subnet_id();
         self.get_first_healthy_node_snapshot_where(|s| {
             s.subnet_type() == SubnetType::System && s.subnet_id != root_subnet_id
         })
     }
 }
 
-fn get_root_subnet_id_from_snapshot<T: HasTopologySnapshot>(env: &T) -> SubnetId {
-    let ts = env.topology_snapshot();
-    ts.local_registry
-        .get_root_subnet_id(ts.registry_version)
-        .unwrap_result(ts.registry_version, "root_subnet_id")
-}
 pub trait HasRegistryLocalStore {
     fn registry_local_store_path(&self, name: &str) -> Option<PathBuf>;
 }
@@ -2100,6 +2041,10 @@ pub struct NnsCustomizations {
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
     pub registry_canister_init_payload: RegistryCanisterInitPayload,
+    /// Optional init args for the engine controller canister. When `Some`,
+    /// installed in place of the canister's hard-coded defaults.
+    pub engine_controller_init_args:
+        Option<ic_nns_test_utils::itest_helpers::EngineControllerInitArgs>,
 }
 
 impl NnsCustomizations {
@@ -2154,6 +2099,14 @@ impl NnsInstallationBuilder {
         self
     }
 
+    pub fn with_engine_controller_init_args(
+        mut self,
+        args: ic_nns_test_utils::itest_helpers::EngineControllerInitArgs,
+    ) -> Self {
+        self.customizations.engine_controller_init_args = Some(args);
+        self
+    }
+
     /// WARNING: Due to technical limitations, this does not actually cause
     /// Exchange Rate canister (XRC) to be created. Rather, this just makes the
     /// Cycles Minting canister aware of the XRC. Creating XRC is done outside
@@ -2177,10 +2130,13 @@ impl NnsInstallationBuilder {
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
+        let nns_subnet_id = node
+            .subnet_id()
+            .expect("NNS installation node must belong to a subnet");
         info!(log, "Wait for node reporting healthy status");
         node.await_status_is_healthy().unwrap();
 
-        let install_future = install_nns_canisters(&log, url, &prep_dir, self);
+        let install_future = install_nns_canisters(&log, url, &prep_dir, self, nns_subnet_id);
         block_on(async {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
@@ -2653,6 +2609,7 @@ pub async fn install_nns_canisters(
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
     nns_installation_builder: &NnsInstallationBuilder,
+    nns_subnet_id: SubnetId,
 ) {
     info!(
         logger,
@@ -2664,9 +2621,25 @@ pub async fn install_nns_canisters(
         ledger_balances,
         neurons,
         mut registry_canister_init_payload,
+        engine_controller_init_args,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
+
+    // If the caller did not supply explicit engine-controller init args, fall
+    // back to authorizing `TEST_NEURON_1_OWNER_PRINCIPAL` and pinning the
+    // initial DKG subnet to the NNS subnet we're installing on. This matches
+    // what the typical testnet setup wants and avoids every testnet repeating
+    // the same wiring.
+    let engine_controller_init_args = engine_controller_init_args.unwrap_or_else(|| {
+        ic_nns_test_utils::itest_helpers::EngineControllerInitArgs {
+            authorized_caller: Some(
+                ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL.0,
+            ),
+            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
+        }
+    });
+    init_payloads.with_engine_controller_init_args(engine_controller_init_args);
 
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();

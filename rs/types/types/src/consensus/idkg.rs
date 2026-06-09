@@ -192,9 +192,6 @@ pub struct IDkgPayload {
 
 impl Hash for IDkgPayload {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if !self.empty_signature_agreements_flag {
-            BTreeMap::<PseudoRandomId, CompletedSignature>::new().hash(state);
-        }
         // empty_signature_agreements_flag is ignored
         self.available_pre_signatures.hash(state);
         self.pre_signatures_in_creation.hash(state);
@@ -1688,14 +1685,14 @@ impl Display for SignedIDkgComplaint {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgComplaintContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgComplaint {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -1765,14 +1762,14 @@ impl Display for SignedIDkgOpening {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgOpeningContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 

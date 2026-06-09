@@ -60,8 +60,12 @@
     "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
-    "sha256": "1fe3ce73e9422a0a3e0444ea7b5a615d2b36c4b940d3cbcfe9e3d5c6cdc32494",
-    "tag": "release/2026-03-12"
+    "sha256": "1921396143c687dee142d3b8bbcc7b17f3684158a6e1d794e4491fdf7058e1ba",
+    "tag": "release/2026-05-27"
+  },
+  "engine-controller": {
+    "rev": "c8649149f75040378e608e2a77eb3433122e7bf9",
+    "sha256": "8b43f08214be71bbabd3afbe0072a7ed493a3fe8a1f1d3b2fb7ee64512bdc289"
   },
   "genesis-token": {
     "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
@@ -80,12 +84,12 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "39308aa8561e3b226050b3d7d366a277e61ab0c7f720dfca04439b6df8527ef5",
-    "tag": "release-2026-05-29"
+    "sha256": "34e7c805a34696cae9471c10dc30797c4daf8a14ebd53067a39ba3b66c9fe2b4",
+    "tag": "release-2026-06-05"
   },
   "internet_identity_frontend": {
-    "sha256": "81c09f98ae154846cba6c42798f3ce89e77026d04d0a3c0968b889827a1175b3",
-    "tag": "release-2026-05-26"
+    "sha256": "208f1415ddffe00af2c10cdd07cfc8f747f487dd8011839e85514e5ca50be8de",
+    "tag": "release-2026-06-05"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -104,12 +108,12 @@
     "tag": "proposal-141778"
   },
   "node-rewards": {
-    "rev": "cafe032cdc97bc6eeb2cffd47222e830e9827646",
-    "sha256": "4106fe0ccb6ea56fe61937706026b353f18f58f350f1c4537258c06eedcc6f76"
+    "rev": "f8ed7058fec7919727fbe5a41ff955795048486b",
+    "sha256": "2871c4c885ba201ec83dd5876277af79241ffa591b209663659c114dda8d2d5f"
   },
   "registry": {
-    "rev": "e878738de15674de57a348005b0ece87ec27bc47",
-    "sha256": "4d10bb9edae54710e472fa04aebd29107c3a28bf21547ad1bbbca28e37fb1140"
+    "rev": "a0f359b3cb39ec8f3f3f576345ba23cb9133e763",
+    "sha256": "1415eb5990d283e8ed6b20e732a7d95fec4a1c6b231cf6208c51b603a2c04b42"
   },
   "root": {
     "rev": "613e85748f462bc8e169195b16ddcf04706f5d7c",

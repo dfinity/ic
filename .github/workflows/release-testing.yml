@@ -34,7 +34,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:497ce2a5ac6f2c9143aa1d2fcb027f5896c854f1978ff58079d49eb6d75c0661
+      image: ghcr.io/dfinity/ic-build@sha256:55273ed5dc904e737bec678c8e7705aba76cc4b8b039574d5485f1d95d0193d3
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
@@ -78,16 +78,12 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           sparse-checkout: "ci/scripts/determine-initial-guest-os-versions.py"
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
       - id: generate
         name: Fetch beginning versions for qualification
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(python ci/scripts/determine-initial-guest-os-versions.py)
+          OUTPUT=$(python3 ci/scripts/determine-initial-guest-os-versions.py)
           echo "output=$OUTPUT" >> $GITHUB_OUTPUT
 
   guest-os-qualification:

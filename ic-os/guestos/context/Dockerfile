@@ -65,7 +65,7 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
     chmod 0755 /etc/init.d/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
-    chmod 755 /etc/initramfs-tools/scripts/init-premount/verity-root && \
+    chmod 755 /etc/initramfs-tools/scripts/local-premount/verity-root && \
     chmod 755 /etc/initramfs-tools/hooks/veritysetup
 
 # Regenerate initramfs (config changed after copying in /etc)

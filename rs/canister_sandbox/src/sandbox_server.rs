@@ -126,7 +126,7 @@ mod tests {
     };
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::{
         SerializedModuleBytes, WasmtimeEmbedder, wasm_utils,
@@ -207,7 +207,7 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(),
+                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
             ),
             Some(0),
             0,
