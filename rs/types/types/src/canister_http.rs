@@ -1185,28 +1185,8 @@ impl CountBytes for CanisterHttpResponseProof {
 }
 
 impl CanisterHttpResponseProof {
-    pub fn id(&self) -> CallbackId {
-        self.metadata.id
-    }
-
-    pub fn content_hash(&self) -> &CryptoHashOf<CanisterHttpResponse> {
-        &self.metadata.content_hash
-    }
-
-    pub fn content_size(&self) -> u32 {
-        self.metadata.content_size
-    }
-
-    pub fn is_reject(&self) -> bool {
-        self.metadata.is_reject
-    }
-
     pub fn registry_version(&self) -> RegistryVersion {
         self.metadata.registry_version
-    }
-
-    pub fn replica_version(&self) -> &ReplicaVersion {
-        &self.metadata.replica_version
     }
 }
 

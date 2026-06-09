@@ -437,7 +437,7 @@ impl CanisterHttpPayloadBuilderImpl {
             })?;
 
         // Shares reconstructed from aggregated response proofs.
-        let mut aggregate_shares: Vec<CanisterHttpResponseShare> = Vec::new();
+        let mut reconstructed_shares: Vec<CanisterHttpResponseShare> = Vec::new();
         // Accumulates all signatures in the payload, so that they can be checked
         // in a single batched multi-message verification call at the very end.
         let mut sig_inputs: Vec<ResponseShareSigInput> = Vec::new();
@@ -527,11 +527,11 @@ impl CanisterHttpPayloadBuilderImpl {
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             }
             // Reconstruct the per-signer shares from the response proof.
-            aggregate_shares.extend(utils::reconstruct_individual_shares(&response.proof));
+            reconstructed_shares.extend(utils::reconstruct_individual_shares(&response.proof));
         }
 
         // Defer signature verification of the reconstructed response shares.
-        sig_inputs.extend(response_share_sig_inputs(&aggregate_shares));
+        sig_inputs.extend(response_share_sig_inputs(&reconstructed_shares));
 
         let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee.len());
 
