@@ -3885,6 +3885,9 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::SetDefaultInitialDkgSubnet => {
                 api::NnsFunction::SetDefaultInitialDkgSubnet
             }
+            pb::NnsFunction::DeployGuestosToAllCloudEngines => {
+                api::NnsFunction::DeployGuestosToAllCloudEngines
+            }
         }
     }
 }
@@ -3984,6 +3987,9 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::DeleteSubnet => pb::NnsFunction::DeleteSubnet,
             api::NnsFunction::SetDefaultInitialDkgSubnet => {
                 pb::NnsFunction::SetDefaultInitialDkgSubnet
+            }
+            api::NnsFunction::DeployGuestosToAllCloudEngines => {
+                pb::NnsFunction::DeployGuestosToAllCloudEngines
             }
         }
     }

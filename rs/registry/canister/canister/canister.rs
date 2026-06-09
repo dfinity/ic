@@ -47,6 +47,7 @@ use registry_canister::{
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::{CreateSubnetPayload, NewSubnet},
         do_delete_subnet::DeleteSubnetPayload,
+        do_deploy_guestos_to_all_cloud_engines::DeployGuestosToAllCloudEnginesPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
@@ -560,6 +561,18 @@ fn deploy_guestos_to_all_subnet_nodes() {
 #[candid_method(update, rename = "deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
     registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update deploy_guestos_to_all_cloud_engines")]
+fn deploy_guestos_to_all_cloud_engines() {
+    check_caller_is_governance_and_log("deploy_guestos_to_all_cloud_engines");
+    over(candid_one, deploy_guestos_to_all_cloud_engines_);
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_all_cloud_engines")]
+fn deploy_guestos_to_all_cloud_engines_(payload: DeployGuestosToAllCloudEnginesPayload) {
+    registry_mut().do_deploy_guestos_to_all_cloud_engines(payload);
     recertify_registry();
 }
 

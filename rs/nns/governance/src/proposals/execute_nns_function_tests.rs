@@ -124,6 +124,26 @@ fn test_execute_nns_function_try_from_errors() {
     }
 }
 
+#[test]
+fn test_deploy_guestos_to_all_cloud_engines_routing() {
+    use ic_nns_constants::REGISTRY_CANISTER_ID;
+
+    let valid = ValidExecuteNnsFunction::try_from(ExecuteNnsFunction {
+        nns_function: NnsFunction::DeployGuestosToAllCloudEngines as i32,
+        payload: vec![],
+    })
+    .expect("DeployGuestosToAllCloudEngines should be a valid NNS function");
+
+    assert_eq!(
+        valid.nns_function,
+        ValidNnsFunction::DeployGuestosToAllCloudEngines
+    );
+    assert_eq!(
+        valid.nns_function.canister_and_function(),
+        (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_cloud_engines"),
+    );
+}
+
 // This tests a "normal" NNS function where the payload is translated through a candid file fetched
 // by the `canister_metadata` method on the management canister.
 #[tokio::test]
