@@ -125,22 +125,22 @@ fn test_execute_nns_function_try_from_errors() {
 }
 
 #[test]
-fn test_deploy_guestos_to_all_cloud_engines_routing() {
+fn test_update_guestos_version_for_subnets_routing() {
     use ic_nns_constants::REGISTRY_CANISTER_ID;
 
     let valid = ValidExecuteNnsFunction::try_from(ExecuteNnsFunction {
-        nns_function: NnsFunction::DeployGuestosToAllCloudEngines as i32,
+        nns_function: NnsFunction::UpdateGuestosVersionForSubnets as i32,
         payload: vec![],
     })
-    .expect("DeployGuestosToAllCloudEngines should be a valid NNS function");
+    .expect("UpdateGuestosVersionForSubnets should be a valid NNS function");
 
     assert_eq!(
         valid.nns_function,
-        ValidNnsFunction::DeployGuestosToAllCloudEngines
+        ValidNnsFunction::UpdateGuestosVersionForSubnets
     );
     assert_eq!(
         valid.nns_function.canister_and_function(),
-        (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_cloud_engines"),
+        (REGISTRY_CANISTER_ID, "update_guestos_version_for_subnets"),
     );
 }
 

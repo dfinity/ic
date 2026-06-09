@@ -13,10 +13,9 @@ on the process that this file is part of, see
   proposes to set or unset the default subnet to which `SetupInitialDKG`
   management canister calls are routed when no subnet is specified explicitly
   in the request.
-* Added a new `NnsFunction` variant `DeployGuestosToAllCloudEngines`, which
-  proposes to deploy a given (elected) GuestOS version to every CloudEngine
-  subnet at once. The set of affected subnets is resolved from the registry at
-  execution time rather than captured in the proposal payload.
+* Added a new `NnsFunction` variant `UpdateGuestosVersionForSubnets`, which
+  proposes to deploy a given (elected) GuestOS version to an explicit list of
+  subnets at once.
 
 ## Changed
 

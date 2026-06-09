@@ -21,11 +21,11 @@ on the process that this file is part of, see
 * Added `vcpu_type` to `GuestLaunchMeasurementMetadata` to record the virtual CPU type used for a guest launch measurement.
 * Added a new endpoint `get_subnet` to the registry canister, returning the subnet record
   of a given subnet.
-* Added a new endpoint `deploy_guestos_to_all_cloud_engines` to the registry
-  canister, which sets the `replica_version_id` of every CloudEngine subnet to a
-  given (elected) GuestOS version in a single atomic mutation. The set of
-  affected subnets is resolved from the registry at execution time (all subnets
-  whose `subnet_type` is `CloudEngine`); other subnet types are left untouched.
+* Added a new endpoint `update_guestos_version_for_subnets` to the registry
+  canister, which sets the `replica_version_id` of an explicit list of subnets
+  to a given (elected) GuestOS version in a single atomic mutation. Subnets not
+  in the list are left untouched, and subnets already on the requested version
+  are skipped.
 
 ## Changed
 

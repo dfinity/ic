@@ -512,11 +512,12 @@ enum NnsFunction {
   // calling subnet (NNS).
   NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET = 58;
 
-  // Deploy a GuestOS version to every CloudEngine subnet at once. The version
-  // must be contained in the list of elected GuestOS versions. The set of
-  // affected subnets is resolved at execution time from the registry (all
-  // subnets whose subnet_type is CloudEngine), not captured in the payload.
-  NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_CLOUD_ENGINES = 59;
+  // Deploy a GuestOS version to an explicit list of subnets at once. The
+  // proposal changes the GuestOS version used on every subnet in the provided
+  // list. The version must be contained in the list of elected GuestOS
+  // versions. The upgrade is completed when each subnet creates the next
+  // regular CUP.
+  NNS_FUNCTION_UPDATE_GUESTOS_VERSION_FOR_SUBNETS = 59;
 }
 
 // Payload of a proposal that calls a function on another NNS

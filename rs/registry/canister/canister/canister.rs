@@ -47,7 +47,6 @@ use registry_canister::{
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::{CreateSubnetPayload, NewSubnet},
         do_delete_subnet::DeleteSubnetPayload,
-        do_deploy_guestos_to_all_cloud_engines::DeployGuestosToAllCloudEnginesPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
@@ -67,6 +66,7 @@ use registry_canister::{
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
         },
+        do_update_guestos_version_for_subnets::UpdateGuestosVersionForSubnetsPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::{
@@ -564,15 +564,15 @@ fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPay
     recertify_registry();
 }
 
-#[unsafe(export_name = "canister_update deploy_guestos_to_all_cloud_engines")]
-fn deploy_guestos_to_all_cloud_engines() {
-    check_caller_is_governance_and_log("deploy_guestos_to_all_cloud_engines");
-    over(candid_one, deploy_guestos_to_all_cloud_engines_);
+#[unsafe(export_name = "canister_update update_guestos_version_for_subnets")]
+fn update_guestos_version_for_subnets() {
+    check_caller_is_governance_and_log("update_guestos_version_for_subnets");
+    over(candid_one, update_guestos_version_for_subnets_);
 }
 
-#[candid_method(update, rename = "deploy_guestos_to_all_cloud_engines")]
-fn deploy_guestos_to_all_cloud_engines_(payload: DeployGuestosToAllCloudEnginesPayload) {
-    registry_mut().do_deploy_guestos_to_all_cloud_engines(payload);
+#[candid_method(update, rename = "update_guestos_version_for_subnets")]
+fn update_guestos_version_for_subnets_(payload: UpdateGuestosVersionForSubnetsPayload) {
+    registry_mut().do_update_guestos_version_for_subnets(payload);
     recertify_registry();
 }
 

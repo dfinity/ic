@@ -4292,11 +4292,12 @@ pub enum NnsFunction {
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
     /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
-    /// Deploy a GuestOS version to every CloudEngine subnet at once. The version
-    /// must be contained in the list of elected GuestOS versions. The set of
-    /// affected subnets is resolved at execution time from the registry (all
-    /// subnets whose subnet_type is CloudEngine), not captured in the payload.
-    DeployGuestosToAllCloudEngines = 59,
+    /// Deploy a GuestOS version to an explicit list of subnets at once. The
+    /// proposal changes the GuestOS version used on every subnet in the provided
+    /// list. The version must be contained in the list of elected GuestOS
+    /// versions. The upgrade is completed when each subnet creates the next
+    /// regular CUP.
+    UpdateGuestosVersionForSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4385,8 +4386,8 @@ impl NnsFunction {
             NnsFunction::SetDefaultInitialDkgSubnet => {
                 "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET"
             }
-            NnsFunction::DeployGuestosToAllCloudEngines => {
-                "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_CLOUD_ENGINES"
+            NnsFunction::UpdateGuestosVersionForSubnets => {
+                "NNS_FUNCTION_UPDATE_GUESTOS_VERSION_FOR_SUBNETS"
             }
         }
     }
@@ -4471,8 +4472,8 @@ impl NnsFunction {
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
-            "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_CLOUD_ENGINES" => {
-                Some(Self::DeployGuestosToAllCloudEngines)
+            "NNS_FUNCTION_UPDATE_GUESTOS_VERSION_FOR_SUBNETS" => {
+                Some(Self::UpdateGuestosVersionForSubnets)
             }
             _ => None,
         }
