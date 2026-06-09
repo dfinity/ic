@@ -11,7 +11,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
     ExecutionTask, SystemState, log_memory_store::LogMemoryStore,
 };
-use crate::{InputQueueType, StateError};
+use crate::{InputQueueType, OutputRequest, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
@@ -22,7 +22,7 @@ use ic_management_canister_types_private::{
     SnapshotVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
+use ic_types::messages::{CallbackId, CanisterMessage, Ingress, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
     CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
@@ -325,10 +325,10 @@ impl CanisterState {
     /// See `SystemState::push_output_request` for documentation.
     pub fn push_output_request(
         &mut self,
-        msg: Arc<Request>,
+        request: OutputRequest,
         time: Time,
-    ) -> Result<(), (StateError, Arc<Request>)> {
-        self.system_state.push_output_request(msg, time)
+    ) -> Result<CallbackId, StateError> {
+        self.system_state.push_output_request(request, time)
     }
 
     /// See `SystemState::push_output_response` for documentation.

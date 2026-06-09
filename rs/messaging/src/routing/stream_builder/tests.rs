@@ -11,14 +11,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, CanisterStates, InputQueueType, ReplicatedState, Stream, SubnetTopology,
     metadata_state::testing::NetworkTopologyTesting,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
+    testing::{
+        CanisterQueuesTesting, OutputRequestBuilder, ReplicatedStateTesting, StreamTesting,
+        SystemStateTesting,
+    },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
     nonzero_values,
 };
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::ids::{
     SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_27, SUBNET_42, canister_test_id, user_test_id,
 };
@@ -100,19 +103,19 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let callback_id = register_callback(&mut canister_state, receiver, NO_DEADLINE);
-        let msg = generate_message_for_test(
-            sender,
-            receiver,
-            callback_id,
-            "method".to_string(),
-            payment,
-            NO_DEADLINE,
-        );
+        let msg = OutputRequestBuilder::default()
+            .sender(sender)
+            .receiver(receiver)
+            .method_name("method".to_string())
+            .payment(payment)
+            .deadline(NO_DEADLINE)
+            .build();
 
-        canister_state
-            .push_output_request(msg.clone().into(), UNIX_EPOCH)
+        let callback_id = canister_state
+            .push_output_request(msg.clone(), UNIX_EPOCH)
             .unwrap();
+        let msg = msg.into_request(callback_id);
+
         canister_state
             .system_state
             .queues_mut()
@@ -1621,13 +1624,22 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(msgs: Vec<M>) -> Can
 
         match msg {
             RequestOrResponse::Request(req) => {
-                let callback_id = register_callback(canister_state, req.receiver, req.deadline);
+                let output_request = OutputRequestBuilder::default()
+                    .sender(req.sender)
+                    .receiver(req.receiver)
+                    .method_name(req.method_name.clone())
+                    .method_payload(req.method_payload.clone())
+                    .payment(req.payment)
+                    .deadline(req.deadline)
+                    .build();
+                let callback_id = canister_state
+                    .push_output_request(output_request, UNIX_EPOCH)
+                    .unwrap();
+
                 // Check the implicit assumption that the test messages were generated with a
                 // `sender_reply_callback` that is consistent with the callback IDs that the
                 // `CallContextManager` generates and registers.
                 assert_eq!(req.sender_reply_callback, callback_id);
-
-                canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
             }
 
             RequestOrResponse::Response(rep) => {

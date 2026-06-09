@@ -21,14 +21,13 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::IC_00;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
     CallbackId, Ingress, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext, Request,
     RequestOrResponse, Response,
 };
-use ic_types::{CanisterId, CountBytes, NumBytes, Time};
+use ic_types::{CanisterId, CountBytes, Time};
 use ic_types_cycles::Cycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -1961,27 +1960,6 @@ pub fn can_push(
             }
         }
         RequestOrResponse::Response(_) => Ok(()),
-    }
-}
-
-/// Returns the guaranteed response and best-effort memory used by `req` if
-/// enqueued into an input or output queue.
-///
-/// Best-effort requests use `req.count_bytes()` worth of best-effort memory.
-/// Guaranteed response requests use the maximum of `MAX_RESPONSE_COUNT_BYTES`
-/// (reservation for the largest possible response) and `req.count_bytes()` (if
-/// larger).
-pub fn memory_usage_of_request(req: &Request) -> MessageMemoryUsage {
-    if req.is_best_effort() {
-        MessageMemoryUsage {
-            guaranteed_response: NumBytes::new(0),
-            best_effort: (req.count_bytes() as u64).into(),
-        }
-    } else {
-        MessageMemoryUsage {
-            guaranteed_response: (req.count_bytes().max(MAX_RESPONSE_COUNT_BYTES) as u64).into(),
-            best_effort: NumBytes::new(0),
-        }
     }
 }
 

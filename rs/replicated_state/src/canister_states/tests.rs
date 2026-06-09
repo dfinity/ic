@@ -3,7 +3,7 @@ use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
 };
-use crate::canister_state::system_state::testing::SystemStateTesting;
+use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::{
     CallContextManager, CanisterState, CanisterStatus, ExecutionState, ExecutionTask,
     ExportedFunctions, InputQueueType, Memory, SchedulerState, SystemState,
@@ -13,11 +13,11 @@ use ic_management_canister_types_private::{CanisterChangeDetails, CanisterChange
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_types::messages::{CallContextId, NO_DEADLINE, RequestOrResponse};
-use ic_types::methods::{Callback, SystemMethod, WasmClosure, WasmMethod};
+use ic_types::messages::{NO_DEADLINE, RequestOrResponse};
+use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CanisterTimer, ComputeAllocation, NumBytes, NumInstructions, Time};
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+use ic_types_cycles::Cycles;
 use ic_wasm_types::CanisterModule;
 use maplit::{btreemap, btreeset};
 use std::sync::Arc;
@@ -61,12 +61,12 @@ fn push_input_with_deadline(canister: &mut Arc<CanisterState>, deadline: CoarseT
 }
 
 fn push_output(canister: &mut Arc<CanisterState>) {
-    let msg = RequestBuilder::default()
+    let request = OutputRequestBuilder::default()
         .sender(canister.canister_id())
         .receiver(canister_test_id(999))
         .build();
     Arc::make_mut(canister)
-        .push_output_request(Arc::new(msg), UNIX_EPOCH)
+        .push_output_request(request, UNIX_EPOCH)
         .unwrap();
 }
 
@@ -91,12 +91,12 @@ fn cold_canister(id: u64) -> Arc<CanisterState> {
 fn cold_canister_with_guaranteed_response_reservation(id: u64) -> Arc<CanisterState> {
     let mut canister = make_canister(id);
     // Push an output request, making an input queue slot reservation.
-    let request = ic_test_utilities_types::messages::RequestBuilder::default()
+    let request = crate::testing::OutputRequestBuilder::default()
         .sender(canister.canister_id())
         .receiver(canister_test_id(999))
         .build();
     Arc::make_mut(&mut canister)
-        .push_output_request(Arc::new(request), UNIX_EPOCH)
+        .push_output_request(request, UNIX_EPOCH)
         .unwrap();
     // Drain the output queue to leave only the reservation behind.
     let _ = Arc::make_mut(&mut canister).output_into_iter().count();
@@ -824,20 +824,7 @@ fn cold_canister_with_guaranteed_response_reservation_is_aggregated() {
 
 #[test]
 fn callback_count_combines_hot_and_cold() {
-    fn make_callback(deadline: CoarseTime) -> Callback {
-        Callback::new(
-            CallContextId::from(1),
-            canister_test_id(999),
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            deadline,
-        )
-    }
+    let callee = canister_test_id(999);
 
     // A canister with only guaranteed-response (never-expiring) callbacks is
     // still cold by definition (see `CanisterState::is_cold`), which lets us
@@ -845,20 +832,17 @@ fn callback_count_combines_hot_and_cold() {
     let mut cold = cold_canister(1);
     Arc::make_mut(&mut cold)
         .system_state
-        .register_callback(make_callback(NO_DEADLINE))
-        .unwrap();
+        .with_callback(callee, NO_DEADLINE);
     assert!(cold.is_cold());
 
     // A hot canister with two callbacks (one guaranteed, one best-effort).
     let mut hot = hot_canister(2);
     Arc::make_mut(&mut hot)
         .system_state
-        .register_callback(make_callback(NO_DEADLINE))
-        .unwrap();
+        .with_callback(callee, NO_DEADLINE);
     Arc::make_mut(&mut hot)
         .system_state
-        .register_callback(make_callback(CoarseTime::from_secs_since_unix_epoch(1)))
-        .unwrap();
+        .with_callback(callee, CoarseTime::from_secs_since_unix_epoch(1));
     assert!(!hot.is_cold());
 
     let mut states = CanisterStates::default();
