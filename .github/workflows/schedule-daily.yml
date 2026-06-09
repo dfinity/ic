@@ -181,6 +181,39 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
+  local-system-tests:
+    name: Bazel Test Local System Tests
+    runs-on: *dind-large-setup
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:c3219dc2255d9359dd798913375f559e17f95772373b74c1db6e7221f50af78d
+      # `--group-add 993` gives the container -- and thus the bazel server that
+      # spawns the QEMU-backed `*_local` system tests -- membership in the
+      # runner's `kvm` group so it can open /dev/kvm. Supplementary group
+      # membership is fixed at process creation, so it must be granted here (at
+      # container creation), mirroring the `--group-add` in
+      # .devcontainer/devcontainer.json and ci/container/container-run.sh. 993 is
+      # the dfinity runners' /dev/kvm GID; GitHub Actions `container.options` is
+      # static, so -- unlike container-run.sh, which derives it via `stat -c %g
+      # /dev/kvm` -- it cannot be computed here and must match the runner.
+      options: >-
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+         --group-add 993
+    timeout-minutes: 180
+    steps:
+      - *checkout
+      - uses: ./.github/actions/netrc
+      - name: Run Local System Tests
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              --config=flaky_retry \
+              --test_tag_filters=local_system_test \
+              //rs/tests/... \
+              --keep_going
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   pocket-ic-tests-windows:
     uses: ./.github/workflows/pocket-ic-tests-windows.yml
     with:
