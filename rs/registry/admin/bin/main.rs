@@ -4905,9 +4905,14 @@ async fn main() {
 
             let guestos_versions = registry_client
                 .get_all_replica_version_records(registry_client.get_latest_version())
-                .unwrap();
+                .unwrap()
+                .unwrap_or_default();
 
-            if let Some(guestos_versions) = guestos_versions {
+            if opts.json {
+                let version_ids: Vec<String> =
+                    guestos_versions.into_iter().map(|(version, _)| version).collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
                 for (version, _) in guestos_versions {
                     println!("{}", version);
                 }
@@ -5861,9 +5866,16 @@ async fn main() {
 
             let hostos_versions = registry_client
                 .get_hostos_versions(registry_client.get_latest_version())
-                .unwrap();
+                .unwrap()
+                .unwrap_or_default();
 
-            if let Some(hostos_versions) = hostos_versions {
+            if opts.json {
+                let version_ids: Vec<String> = hostos_versions
+                    .into_iter()
+                    .map(|version| version.hostos_version_id)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
                 for version in hostos_versions {
                     println!("{}", version.hostos_version_id);
                 }
