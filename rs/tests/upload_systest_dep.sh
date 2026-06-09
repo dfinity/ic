@@ -106,6 +106,6 @@ fi
 echo "dep '$dep_filename': cluster is '$cluster'" >&2
 
 # Use the direct URL, without going through the redirect server
-dep_download_url="http://$cluster.artifacts.proxy-global.dfinity.network:8080/cas/$dep_sha256"
+dep_download_url="http://$cluster.artifacts.proxy-local.dfinity.network:8080/cas/$dep_sha256"
 echo "dep '$dep_filename': download_url: '$dep_download_url'" >&2
 echo "$dep_download_url"
