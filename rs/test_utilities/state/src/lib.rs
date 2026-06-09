@@ -32,19 +32,17 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestOrResponse},
-    methods::{Callback, WasmClosure},
+    messages::{Ingress, Request, RequestOrResponse},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -850,40 +848,6 @@ pub fn new_canister_state_with_execution(
         scheduler_state,
         canister_snapshots,
     )
-}
-
-/// Helper function to register a callback.
-pub fn register_callback(
-    canister_state: &mut CanisterState,
-    respondent: CanisterId,
-    deadline: CoarseTime,
-) -> CallbackId {
-    let call_context_id = canister_state
-        .system_state
-        .new_call_context(
-            CallOrigin::SystemTask,
-            Cycles::zero(),
-            Time::from_nanos_since_unix_epoch(0),
-            Default::default(),
-            None,
-        )
-        .unwrap();
-
-    canister_state
-        .system_state
-        .register_callback(Callback::new(
-            call_context_id,
-            respondent,
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 2),
-            WasmClosure::new(0, 2),
-            None,
-            deadline,
-        ))
-        .unwrap()
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
