@@ -581,6 +581,35 @@ impl LocalBackend {
         )
     }
 
+    /// Returns the per-group IPv6 address the test driver streams the IC nodes'
+    /// journald logs from (see
+    /// [`logs_stream_task`](crate::driver::logs_stream_task)).
+    ///
+    /// It is constructed exactly like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)
+    /// but with subnet-id `2` (`<prefix>:2::1`), so it shares all of that
+    /// address' properties — per-group unique, inside the whitelisted ULA range
+    /// `fd00::/8`, and *outside* every node `/64` so nodes reach it via their
+    /// default route — while being a *distinct* source address.
+    ///
+    /// The driver sources all other host→node traffic from
+    /// [`group_mgmt_ipv6`](Self::group_mgmt_ipv6). The GuestOS firewall caps the
+    /// number of simultaneous connections *per source address*
+    /// (`max_simultaneous_connections_per_ip_address`); streaming the long-lived
+    /// journald connection from this dedicated address keeps it from consuming a
+    /// slot in the management address' budget. Otherwise a test that
+    /// deliberately saturates that budget (the firewall `connection_count_test`)
+    /// would race the journald stream for the last slot and flake. Like
+    /// [`group_mgmt_ipv6`](Self::group_mgmt_ipv6) it is assigned to `lo` in
+    /// [`create_group`](Self::create_group).
+    pub fn group_logs_ipv6(group_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(group_name.as_bytes());
+        format!(
+            "fd00:{:02x}{:02x}:{:02x}{:02x}:2::1",
+            hash[0], hash[1], hash[2], hash[3]
+        )
+    }
+
     /// Returns the per-group private IPv4 `/24` (a deterministic subnet in the
     /// RFC 1918 `10.0.0.0/8` range). Derived from a hash of the group name —
     /// like [`group_ipv6_prefix`](Self::group_ipv6_prefix) — so concurrently
@@ -667,6 +696,13 @@ impl LocalBackend {
         // second `/64` outside the node `/64`) is assigned to `lo` and used as
         // the source for host→node traffic; see `group_mgmt_ipv6`.
         let mgmt = Self::group_mgmt_ipv6(group_name);
+        // The driver's per-group journald-streaming source address
+        // (`<prefix>:2::1`, also assigned to `lo`). The IC node journald stream
+        // is sourced from this dedicated address rather than `mgmt` so the
+        // long-lived stream does not occupy one of the node firewall's
+        // per-source-address connection slots that tests saturating that budget
+        // rely on; see `group_logs_ipv6`.
+        let logs = Self::group_logs_ipv6(group_name);
         // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
         // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
         let ipv4_prefix = Self::group_ipv4_prefix(group_name);
@@ -686,9 +722,12 @@ impl LocalBackend {
         //
         // Finally, assign the per-group management address to `lo` (idempotent
         // via `replace`, since `lo` is shared across groups and survives the
-        // bridge delete above) and override the preferred source of the node
-        // `/64`'s connected route to it, so host→node traffic is sourced from
-        // the off-`/64` management address rather than the on-bridge gateway.
+        // bridge delete above), assign the dedicated journald-streaming source
+        // address (`logs`) to `lo` the same way, and override the preferred
+        // source of the node `/64`'s connected route to the management address,
+        // so host→node traffic is sourced from the off-`/64` management address
+        // rather than the on-bridge gateway. (The journald stream binds to
+        // `logs` explicitly; everything else uses the route's preferred source.)
         // The override must target the *kernel* connected route that
         // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric
         // 256`): replacing it in place sets its preferred source. Adding a
@@ -702,6 +741,7 @@ impl LocalBackend {
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
              ip -6 addr replace {mgmt}/128 dev lo && \
+             ip -6 addr replace {logs}/128 dev lo && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_net_admin(&create_script, "create group bridge")?;

@@ -1,9 +1,11 @@
 use crate::driver::{
     constants::{COLOCATE_CONTAINER_NAME, GROUP_SETUP_DIR},
     context::GroupContext,
+    local_backend::LocalBackend,
     resource::AllocatedVm,
-    test_env::TestEnv,
+    test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
+    test_setup::{GroupSetup, SystemTestBackend},
     universal_vm::UNIVERSAL_VMS_DIR,
 };
 use anyhow::{Context, Result};
@@ -57,6 +59,25 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
     let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
     let mut streamed_nodes: HashMap<String, Ipv6Addr> = HashMap::new();
     let mut skipped_nodes: BTreeSet<String> = BTreeSet::new();
+    // How each IC node's journald stream is sourced, resolved once from the
+    // active backend (see the `stream_ic_node_logs` block below):
+    //
+    // * `ic_node_logs_resolved` flips to `true` once we know how to stream,
+    //   i.e. once the backend attribute — and, on Local, the `GroupSetup` it
+    //   derives from — has been persisted. Until then we don't stream IC node
+    //   logs, so that every stream is created with the correct source.
+    // * `ic_node_logs_source` is the source address each stream binds to:
+    //   `Some` on the Local backend, `None` on Farm (kernel-chosen source).
+    //   The GuestOS firewall caps simultaneous connections *per source
+    //   address*, so on Local we bind to a *dedicated* per-group address
+    //   (distinct from the management address used for all other host→node
+    //   traffic); otherwise these long-lived streams would consume a slot that
+    //   tests saturating that budget (the firewall `connection_count_test`)
+    //   rely on. That address is derived from the group name and assigned to
+    //   `lo` by `LocalBackend::create_group`. Farm has no such budget to
+    //   protect, so it lets the kernel pick the source.
+    let mut ic_node_logs_resolved = false;
+    let mut ic_node_logs_source: Option<Ipv6Addr> = None;
     loop {
         match discover_uvms(root_search_dir.clone()) {
             Ok(discovered_uvms) => process_discovered(
@@ -65,6 +86,7 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
                 &mut streamed_uvms,
                 &mut skipped_uvms,
                 &group_ctx.exclude_logs,
+                None,
                 &rt,
                 &logger,
             ),
@@ -73,30 +95,71 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
             }
         }
 
-        // IC node log streaming is opt-in via `--stream-ic-node-logs`. It is
-        // used by the Local backend, which runs in a sandbox without external
-        // network access and therefore has no Vector VM to ship logs to
-        // ElasticSearch. Instead we stream each IC node's journald directly to
-        // the test log. On Farm the flag is absent and this block is skipped.
+        // IC node log streaming is opt-in via `--stream-ic-node-logs`. Today
+        // only the Local backend sets it: it runs in a sandbox without external
+        // network access and so has no Vector VM to ship logs to ElasticSearch,
+        // and instead streams each IC node's journald directly to the test log.
+        // The block below nonetheless handles both backends, so enabling the
+        // flag on Farm later streams node logs there too (with a kernel-chosen
+        // source). When the flag is unset this whole block is skipped.
         if group_ctx.stream_ic_node_logs {
-            match discover_ic_nodes(&setup_env) {
-                Ok(discovered_nodes) => process_discovered(
-                    discovered_nodes,
-                    "node",
-                    &mut streamed_nodes,
-                    &mut skipped_nodes,
-                    &group_ctx.exclude_logs,
-                    &rt,
-                    &logger,
-                ),
-                Err(err) => {
-                    // Until the setup function has written the prep directory
-                    // the topology is not yet available; this is expected early
-                    // in the run, so we only log it at debug level.
-                    debug!(
-                        logger,
-                        "Discovering IC nodes failed (setup likely not ready yet): {err}"
-                    );
+            // Resolve once how to source the IC node journald streams, based on
+            // the active backend. This is lazy because the backend attribute
+            // (and, on Local, the `GroupSetup` it derives from) is only
+            // persisted once group setup starts.
+            if !ic_node_logs_resolved {
+                match SystemTestBackend::try_read_attribute(&setup_env) {
+                    // On Local, bind each stream to the dedicated per-group
+                    // source address (assigned to `lo` by
+                    // `LocalBackend::create_group`). Deriving it needs
+                    // `GroupSetup`, so we stay unresolved until it is persisted.
+                    Ok(SystemTestBackend::Local) => {
+                        if let Ok(group_setup) = GroupSetup::try_read_attribute(&setup_env) {
+                            let addr = LocalBackend::group_logs_ipv6(&group_setup.infra_group_name);
+                            match addr.parse::<Ipv6Addr>() {
+                                Ok(addr) => {
+                                    ic_node_logs_source = Some(addr);
+                                    ic_node_logs_resolved = true;
+                                }
+                                Err(err) => warn!(
+                                    logger,
+                                    "Could not parse IC node journald source address {addr:?}: {err}"
+                                ),
+                            }
+                        }
+                    }
+                    // On Farm there is no per-source firewall budget to
+                    // protect, so let the kernel pick the source
+                    // (`ic_node_logs_source` stays `None`).
+                    Ok(SystemTestBackend::Farm) => ic_node_logs_resolved = true,
+                    // The backend attribute isn't persisted yet; retry next loop.
+                    Err(_) => {}
+                }
+            }
+            // Once resolved, stream every newly discovered IC node's journald,
+            // binding to the dedicated source on Local and letting the kernel
+            // pick it on Farm.
+            if ic_node_logs_resolved {
+                match discover_ic_nodes(&setup_env) {
+                    Ok(discovered_nodes) => process_discovered(
+                        discovered_nodes,
+                        "node",
+                        &mut streamed_nodes,
+                        &mut skipped_nodes,
+                        &group_ctx.exclude_logs,
+                        ic_node_logs_source,
+                        &rt,
+                        &logger,
+                    ),
+                    Err(err) => {
+                        // Until the setup function has written the prep directory
+                        // the topology is not yet available; this is expected
+                        // early in the run, so we only log it at debug level.
+                        debug!(
+                            logger,
+                            "Discovering IC nodes failed (setup likely not ready yet): {err}"
+                        );
+                    }
                 }
             }
         }
@@ -109,12 +172,18 @@ pub(crate) fn logs_stream_task(group_ctx: GroupContext) -> () {
 /// deduplicating against `streamed` and honoring the `--exclude-logs` patterns
 /// (recorded in `skipped`). `kind` is used both as the log-line prefix
 /// (e.g. `uvm=<name>` or `node=<id>`) and in informational messages.
+///
+/// When `bind_addr` is `Some`, each streaming socket is bound to that local
+/// source address before connecting (used for IC nodes on the Local backend, so
+/// the persistent stream does not share the management address' per-source
+/// firewall connection budget); when `None` the kernel picks the source.
 fn process_discovered(
     discovered: HashMap<String, Ipv6Addr>,
     kind: &str,
     streamed: &mut HashMap<String, Ipv6Addr>,
     skipped: &mut BTreeSet<String>,
     exclude_logs: &[Regex],
+    bind_addr: Option<Ipv6Addr>,
     rt: &Runtime,
     logger: &Logger,
 ) {
@@ -141,7 +210,9 @@ fn process_discovered(
                 "Streaming Journald for newly discovered [{label}] with ipv6={value}"
             );
             // The task starts, but the handle is never joined.
-            rt.spawn(stream_journald_with_retries(logger, label, value));
+            rt.spawn(stream_journald_with_retries(
+                logger, label, value, bind_addr,
+            ));
             value
         });
     }
@@ -296,13 +367,19 @@ fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
     Ok(uvms)
 }
 
-async fn stream_journald_with_retries(logger: slog::Logger, label: String, ipv6: Ipv6Addr) {
+async fn stream_journald_with_retries(
+    logger: slog::Logger,
+    label: String,
+    ipv6: Ipv6Addr,
+    bind_addr: Option<Ipv6Addr>,
+) {
     // Start streaming Journald from the very beginning, which corresponds to the cursor="".
     let mut cursor = Cursor::Start;
     loop {
         // In normal scenarios, i.e. without errors/interrupts, the function below should never return.
         // In case it returns unexpectedly, we restart reading logs from the checkpoint cursor.
-        let (cursor_next, result) = stream_journald_from_cursor(label.clone(), ipv6, cursor).await;
+        let (cursor_next, result) =
+            stream_journald_from_cursor(label.clone(), ipv6, cursor, bind_addr).await;
         cursor = cursor_next;
         if let Err(err) = result {
             error!(
@@ -347,9 +424,20 @@ async fn stream_journald_from_cursor(
     label: String,
     ipv6: Ipv6Addr,
     mut cursor: Cursor,
+    bind_addr: Option<Ipv6Addr>,
 ) -> (Cursor, anyhow::Result<()>) {
     let socket_addr = std::net::SocketAddr::new(ipv6.into(), 19531);
     let socket = unwrap_or_return!(cursor, TcpSocket::new_v6());
+    // Bind the stream to its dedicated source address (when set) so it does not
+    // share the management address' per-source firewall connection budget; see
+    // `LocalBackend::group_logs_ipv6`. Port 0 lets the kernel pick an ephemeral
+    // source port.
+    if let Some(bind_addr) = bind_addr {
+        unwrap_or_return!(
+            cursor,
+            socket.bind(std::net::SocketAddr::new(bind_addr.into(), 0))
+        );
+    }
     let mut stream = unwrap_or_return!(cursor, socket.connect(socket_addr).await);
     unwrap_or_return!(
         cursor,
