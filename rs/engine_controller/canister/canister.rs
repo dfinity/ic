@@ -3,17 +3,19 @@
 //! This canister provides a thin user-facing API on top of the registry
 //! canister's `create_subnet` / `delete_subnet` endpoints. Only a single,
 //! hard-coded authorized principal may invoke its methods.
-use candid::{CandidType, Principal};
+use candid::Principal;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
+use ic_engine_controller::{
+    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, NewSubnet,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::do_create_subnet::{
-    CanisterCyclesCostSchedule, CreateSubnetPayload, NewSubnet,
+    CanisterCyclesCostSchedule, CreateSubnetPayload,
 };
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
-use serde::Deserialize;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -60,17 +62,6 @@ fn default_initial_dkg_subnet_id() -> SubnetId {
     SubnetId::new(PrincipalId(p))
 }
 
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
-pub struct EngineControllerInitArgs {
-    /// If `Some`, replaces the default authorized caller; if `None`, the
-    /// default is kept.
-    pub authorized_caller: Option<Principal>,
-    /// If `Some`, replaces the default `initial_dkg_subnet_id` used when
-    /// forwarding `CreateSubnetPayload` to the registry; if `None`, the
-    /// hard-coded default is kept.
-    pub initial_dkg_subnet_id: Option<Principal>,
-}
-
 fn apply_init_args(args: Option<EngineControllerInitArgs>) {
     let args = args.unwrap_or_default();
     let authorized = args
@@ -96,19 +87,6 @@ fn init(args: Option<EngineControllerInitArgs>) {
 #[post_upgrade]
 fn post_upgrade(args: Option<EngineControllerInitArgs>) {
     apply_init_args(args);
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct CreateEngineArgs {
-    pub node_ids: Vec<Principal>,
-    pub subnet_admins: Vec<Principal>,
-    /// Blessed replica version that the new engine subnet should run.
-    pub replica_version_id: String,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct DeleteEngineArgs {
-    pub subnet_id: Principal,
 }
 
 fn ensure_authorized() -> Result<Principal, String> {
