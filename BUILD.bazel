@@ -207,17 +207,6 @@ alias(
     }),
 )
 
-### mkfs.ext4, statically-linked, used to build ext4 filesystem images
-
-# mke2fs is the underlying binary; mkfs.ext4 is upstream's symlink name for it.
-alias(
-    name = "mkfs.ext4",
-    actual = select({
-        "@bazel_tools//src/conditions:linux_x86_64": "@e2fsprogs//:mke2fs",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
 ### shfmt, used to format bash code
 
 alias(
