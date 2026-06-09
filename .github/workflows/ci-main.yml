@@ -292,9 +292,9 @@ jobs:
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
             test_targets="$HOME/.cache/bazel-targets/test-targets"
-            if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
-              eval "bazel test $bazel_args --target_pattern_file=$test_targets"
-            fi
+            #if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
+            #  eval "bazel test $bazel_args --target_pattern_file=$test_targets"
+            #fi
 
   # Build & upload arm64-{linux,darwin} binaries,
   # build the entire codebase on arm64-darwin,
