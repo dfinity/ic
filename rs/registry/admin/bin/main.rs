@@ -4909,8 +4909,10 @@ async fn main() {
                 .unwrap_or_default();
 
             if opts.json {
-                let version_ids: Vec<String> =
-                    guestos_versions.into_iter().map(|(version, _)| version).collect();
+                let version_ids: Vec<String> = guestos_versions
+                    .into_iter()
+                    .map(|(version, _)| version)
+                    .collect();
                 println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
             } else {
                 for (version, _) in guestos_versions {
