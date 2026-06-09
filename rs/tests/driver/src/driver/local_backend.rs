@@ -542,13 +542,8 @@ impl LocalBackend {
         format!("{}1", Self::group_ipv6_prefix(group_name))
     }
 
-    /// Returns the per-group IPv6 *management* address. It serves two roles on
-    /// the Local backend:
-    ///
-    /// 1. the source for host→node traffic that the test driver originates, and
-    /// 2. the address on which the per-group file server
-    ///    ([`serve_files_task`](crate::driver::serve_files_task)) listens and
-    ///    that node image-download URLs point at.
+    /// Returns the per-group IPv6 *management* address: the source the test
+    /// driver originates its host→node traffic from.
     ///
     /// It is `<prefix>:1::1`, sharing the group hash with
     /// [`group_ipv6_prefix`](Self::group_ipv6_prefix): the node `/64`
@@ -562,12 +557,14 @@ impl LocalBackend {
     /// unique, introducing no new collision class beyond the node `/64`'s
     /// existing per-group uniqueness.
     ///
-    /// Serving images from this off-`/64` address (rather than from the
-    /// on-bridge gateway) also mirrors production, where the web server hosting
-    /// GuestOS/HostOS images is not on the IC nodes' `/64`. Nodes still reach it
-    /// because the RA installs the host as their default router (see
-    /// [`create_group`](Self::create_group)), and their download replies are
-    /// accepted by the GuestOS firewall's stateful `established,related` rule.
+    /// It is reserved for the test driver's *own* host→node traffic: the
+    /// driver's other long-lived connections each use their own dedicated
+    /// sibling address ([`group_logs_ipv6`](Self::group_logs_ipv6) for journald
+    /// streaming), and the per-group file server listens on yet another
+    /// ([`group_files_ipv6`](Self::group_files_ipv6)), so nothing else competes
+    /// with the management address' per-source firewall connection budget —
+    /// which matters for tests that deliberately saturate it (the firewall
+    /// `connection_count_test`).
     ///
     /// The address is assigned to `lo` (not the bridge) so `dnsmasq` does not
     /// advertise it for SLAAC; [`create_group`](Self::create_group) overrides
@@ -606,6 +603,36 @@ impl LocalBackend {
         let hash = Sha256::hash(group_name.as_bytes());
         format!(
             "fd00:{:02x}{:02x}:{:02x}{:02x}:2::1",
+            hash[0], hash[1], hash[2], hash[3]
+        )
+    }
+
+    /// Returns the per-group IPv6 address the Local backend's per-group file
+    /// server ([`serve_files_task`](crate::driver::serve_files_task)) listens
+    /// on, and that node image-download URLs point at (see
+    /// [`ic_images`](crate::driver::ic_images)).
+    ///
+    /// It is constructed exactly like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)
+    /// but with subnet-id `3` (`<prefix>:3::1`), so it shares all of that
+    /// address' properties — per-group unique, inside the whitelisted ULA range
+    /// `fd00::/8`, and *outside* every node `/64` — while being a *distinct*
+    /// address. Serving images from an off-`/64` address mirrors production,
+    /// where the web server hosting GuestOS/HostOS images is not on the IC
+    /// nodes' `/64`; nodes still reach it because the RA installs the host as
+    /// their default router (see [`create_group`](Self::create_group)) and their
+    /// download replies are accepted by the GuestOS firewall's stateful
+    /// `established,related` rule.
+    ///
+    /// Listening here rather than on [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)
+    /// keeps the management address reserved for the test driver's own host→node
+    /// traffic, so the per-source firewall connection budget stays easy to
+    /// reason about. Like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6) it is
+    /// assigned to `lo` in [`create_group`](Self::create_group).
+    pub fn group_files_ipv6(group_name: &str) -> String {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(group_name.as_bytes());
+        format!(
+            "fd00:{:02x}{:02x}:{:02x}{:02x}:3::1",
             hash[0], hash[1], hash[2], hash[3]
         )
     }
@@ -703,6 +730,11 @@ impl LocalBackend {
         // per-source-address connection slots that tests saturating that budget
         // rely on; see `group_logs_ipv6`.
         let logs = Self::group_logs_ipv6(group_name);
+        // The per-group file server's listen address (`<prefix>:3::1`, also
+        // assigned to `lo`). Serving images from a dedicated address rather than
+        // `mgmt` keeps the management address reserved for the test driver's own
+        // host→node traffic; see `group_files_ipv6`.
+        let files = Self::group_files_ipv6(group_name);
         // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
         // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
         let ipv4_prefix = Self::group_ipv4_prefix(group_name);
@@ -723,11 +755,12 @@ impl LocalBackend {
         // Finally, assign the per-group management address to `lo` (idempotent
         // via `replace`, since `lo` is shared across groups and survives the
         // bridge delete above), assign the dedicated journald-streaming source
-        // address (`logs`) to `lo` the same way, and override the preferred
-        // source of the node `/64`'s connected route to the management address,
-        // so host→node traffic is sourced from the off-`/64` management address
-        // rather than the on-bridge gateway. (The journald stream binds to
-        // `logs` explicitly; everything else uses the route's preferred source.)
+        // address (`logs`) and file-server address (`files`) to `lo` the same
+        // way, and override the preferred source of the node `/64`'s connected
+        // route to the management address, so host→node traffic is sourced from
+        // the off-`/64` management address rather than the on-bridge gateway.
+        // (The journald stream binds to `logs` and the file server to `files`
+        // explicitly; everything else uses the route's preferred source.)
         // The override must target the *kernel* connected route that
         // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric
         // 256`): replacing it in place sets its preferred source. Adding a
@@ -742,6 +775,7 @@ impl LocalBackend {
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
              ip -6 addr replace {mgmt}/128 dev lo && \
              ip -6 addr replace {logs}/128 dev lo && \
+             ip -6 addr replace {files}/128 dev lo && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_net_admin(&create_script, "create group bridge")?;
@@ -843,10 +877,13 @@ impl LocalBackend {
     }
 
     /// Tear down all domains in `group_name`, remove the bridge and any TAPs
-    /// attached to it, and remove the per-group management address from `lo`.
+    /// attached to it, and remove the per-group addresses (management,
+    /// journald-streaming and file-server) from `lo`.
     pub fn delete_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
         let mgmt = Self::group_mgmt_ipv6(group_name);
+        let logs = Self::group_logs_ipv6(group_name);
+        let files = Self::group_files_ipv6(group_name);
         info!(
             self.logger,
             "Deleting local group {group_name} (bridge {bridge})"
@@ -879,6 +916,8 @@ impl LocalBackend {
              done; \
              ip link del {bridge} 2>/dev/null; \
              ip -6 addr del {mgmt}/128 dev lo 2>/dev/null; \
+             ip -6 addr del {logs}/128 dev lo 2>/dev/null; \
+             ip -6 addr del {files}/128 dev lo 2>/dev/null; \
              true"
         );
         let _ = Self::run_net_admin(&delete_script, "delete group bridge");
