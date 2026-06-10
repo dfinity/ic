@@ -28,20 +28,19 @@ impl Step for RetireElectedVersions {
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
-        let elected_versions = env.topology_snapshot().elected_replica_versions()?;
         let replica_versions = env.topology_snapshot().replica_version_records()?;
 
         let mut versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| elected_versions.iter().any(|v| v == version.as_ref()))
+            .filter(|version| replica_versions.iter().any(|(k, _)| k == version.as_ref()))
             .cloned()
             .collect_vec();
 
         if versions_to_unelect.is_empty() {
             info!(
                 env.logger(),
-                "Versions {} are not blessed",
+                "Versions {} are not elected",
                 self.versions.iter().join(", ")
             );
             return Ok(());
@@ -66,7 +65,7 @@ impl Step for RetireElectedVersions {
                 })
                 .unwrap_or_else(|| {
                     panic!(
-                        "Blessed replica version with key {} not found in records: {}",
+                        "Elected replica version with key {} not found in records: {}",
                         r,
                         replica_versions.iter().map(|(k, _)| k).join(", ")
                     )

@@ -128,7 +128,12 @@ relabelfrom_dirs_pattern(systemd_tmpfiles_t, { tmpfs_t unlabeled_t }, { tmpfs_t 
 list_dirs_pattern(systemd_tmpfiles_t, unlabeled_t, unlabeled_t)
 
 # A tempfile is used as part of setting up machine-id
+require { type systemd_machine_id_setup_t; }
 read_files_pattern(systemd_tmpfiles_t, tmpfs_t, tmpfs_t)
+rw_files_pattern(systemd_machine_id_setup_t, tmpfs_t, tmpfs_t)
+
+# A tempfile is used as part of setting up systemd-networkd
+list_dirs_pattern(systemd_networkd_t, tmpfs_t, tmpfs_t)
 
 ###############################################################################
 # systemd-generator

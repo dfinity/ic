@@ -10,7 +10,7 @@ pub use cycles_cost_schedule::CanisterCyclesCostSchedule;
 pub use cycles_use_case::{
     BurnedCycles, CanisterCreation, ComputeAllocation, CyclesUseCase, CyclesUseCaseKind,
     CyclesUseCaseRefundableKind, DeletedCanisters, DroppedMessages, ECDSAOutcalls, HTTPOutcalls,
-    IngressInduction, Instructions, Memory, NonConsumed, RequestAndResponseTransmission,
-    SchnorrOutcalls, Uninstall, VetKd,
+    IngressInduction, Instructions, Memory, RequestAndResponseTransmission, SchnorrOutcalls,
+    Uninstall, VetKd,
 };
 pub use nominal_cycles::{NominalCycles, testing::NominalCyclesTesting};

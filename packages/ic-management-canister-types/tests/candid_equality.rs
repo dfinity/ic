@@ -72,6 +72,11 @@ fn subnet_info(_: SubnetInfoArgs) -> SubnetInfoResult {
     unimplemented!()
 }
 
+#[candid_method(query)]
+fn list_canisters() -> ListCanistersResult {
+    unimplemented!()
+}
+
 #[candid_method(update)]
 fn delete_canister(_: DeleteCanisterArgs) {
     unimplemented!()
@@ -185,6 +190,11 @@ fn upload_canister_snapshot_data(_: UploadCanisterSnapshotDataArgs) {
 
 #[candid_method(query)]
 fn fetch_canister_logs(_: FetchCanisterLogsArgs) -> FetchCanisterLogsResult {
+    unimplemented!()
+}
+
+#[candid_method(query)]
+fn canister_metrics(_: CanisterMetricsArgs) -> CanisterMetricsResult {
     unimplemented!()
 }
 

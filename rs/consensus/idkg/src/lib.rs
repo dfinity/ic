@@ -631,11 +631,13 @@ mod tests {
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_test_utilities_consensus::idkg::{
-        FakeCertifiedStateSnapshot, fake_ecdsa_idkg_master_public_key_id,
-        fake_master_public_key_ids_for_all_algorithms,
-        fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
-        fake_signature_request_context_from_id, request_id,
+    use ic_test_utilities_consensus::{
+        FakeCertifiedStateSnapshot,
+        idkg::{
+            fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+            fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
+            fake_signature_request_context_from_id, request_id,
+        },
     };
     use ic_types::{
         consensus::idkg::{

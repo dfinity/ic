@@ -158,11 +158,15 @@ def icos_build(
         "/run",
         "/boot",
         "/var",
+        "/usr/lib/python3/dist-packages/setuptools/_vendor/jaraco/text/Lorem ipsum.txt",
+        "/usr/lib/python3/dist-packages/setuptools/command/launcher manifest.xml",
+        "usr/lib/python3/dist-packages/setuptools/script (dev).tmpl",
         "/usr/lib/firmware/brcm/brcmfmac43241b4-sdio.Intel Corp.-VALLEYVIEW C0 PLATFORM.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43340-sdio.ASUSTeK COMPUTER INC.-TF103CE.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43362-sdio.ASUSTeK COMPUTER INC.-ME176C.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43430a0-sdio.ONDA-V80 PLUS.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43455-sdio.MINIX-NEO Z83-4.txt.zst",
+        "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Radxa-ROCK Pi X.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi 4 Model B.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac43455-sdio.Raspberry Pi Foundation-Raspberry Pi Compute Module 4.txt.zst",
         "/usr/lib/firmware/brcm/brcmfmac4356-pcie.Intel Corporation-CHERRYVIEW D1 PLATFORM.txt.zst",
@@ -235,12 +239,14 @@ def icos_build(
                       "$(location //toolchains/sysimage:verity_sign) " +
                       "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
                       "-r $(location " + partition_root_hash + ") " +
-                      "--dflate $(location //rs/ic_os/build_tools/dflate)",
+                      "--dflate $(location //rs/ic_os/build_tools/dflate) " +
+                      "--zstd $(location @zstd//:zstd_cli)",
                 executable = False,
                 tools = [
                     "//toolchains/sysimage:proc_wrapper",
                     "//toolchains/sysimage:verity_sign",
                     "//rs/ic_os/build_tools/dflate",
+                    "@zstd//:zstd_cli",
                 ],
                 tags = ["manual", "no-cache"],
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
@@ -271,14 +277,8 @@ def icos_build(
             # - 64 vCPUs: production-like environments
             vcpu_configs = "16 64" if "dev" in mode else "64"
 
-            # CPU type flags for sev-snp-measure, one per AMD EPYC generation.
-            # TODO(NODE-1924): Once sev-snp-measure adds EPYC-Turin as a named --vcpu-type,
-            # bump the version and replace --vcpu-sig=0xB00F00 with
-            # --vcpu-type=EPYC-Turin for consistency.
-            # Turin CPUID signature 0xB00F00 = family=26, model=0, stepping=0 encoded
-            # per the AMD CPUID spec. See QEMU EPYC-Turin patch:
-            # https://lists.gnu.org/archive/html/qemu-devel/2025-05/msg02060.html
-            vcpu_type_flags = "--vcpu-type=EPYC-v4 --vcpu-type=EPYC-Genoa --vcpu-sig=0xB00F00"
+            # Supported CPU types for sev-snp-measure, one per AMD EPYC generation.
+            vcpu_types = ["EPYC-v4", "EPYC-Genoa", "EPYC-Turin"]
 
             native.genrule(
                 name = "generate-" + launch_measurements,
@@ -290,15 +290,17 @@ def icos_build(
                 cmd = r"""
                     source $(execpath """ + boot_args + """)
                     # Create GuestLaunchMeasurements JSON for each CPU generation, vCPU count, and boot slot
-                    (for vcpu_flag in """ + vcpu_type_flags + """; do
+                    (for vcpu_type in """ + " ".join(vcpu_types) + """; do
                         for vcpus in """ + vcpu_configs + """; do
-                            for cmdline in "$$BOOT_ARGS_A" "$$BOOT_ARGS_B"; do
-                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" $$vcpu_flag --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                            # Note: We only create launch measurements for the TEE boot arg variants
+                            # (BOOT_ARGS_TEE_A and BOOT_ARGS_TEE_B)
+                            for cmdline in "$$BOOT_ARGS_TEE_A" "$$BOOT_ARGS_TEE_B"; do
+                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type "$$vcpu_type" --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
                                 # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                                 measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
-                                jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                                jq -na --arg cmd "$$cmdline" --arg m "$$measurement" --arg vcpu_type "$$vcpu_type" '{
                                   measurement: ($$m | split("\n") | map(tonumber)),
-                                  metadata: {kernel_cmdline: $$cmd}
+                                  metadata: {kernel_cmdline: $$cmd, vcpu_type: $$vcpu_type}
                                 }'
                             done
                         done

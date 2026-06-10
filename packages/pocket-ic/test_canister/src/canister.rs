@@ -399,6 +399,14 @@ async fn whois(canister: Principal) -> String {
 }
 
 #[update]
+async fn call_and_get_rejection_code(canister: Principal) -> u32 {
+    match ic_cdk::call::<_, (String,)>(canister, "whoami", ((),)).await {
+        Ok(_) => 0,
+        Err((code, _)) => code as u32,
+    }
+}
+
+#[update]
 async fn blob_len(blob: Vec<u8>) -> usize {
     blob.len()
 }

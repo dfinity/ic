@@ -11,7 +11,6 @@ use crate::{
 };
 use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_base_types::subnet_id_into_protobuf;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_config::state_manager::LsmtConfig;
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_protobuf::state::{
@@ -569,7 +568,11 @@ fn switch_to_checkpoint(
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    for tip_canister in tip.canisters_iter_mut() {
+    fn canister_switch_to_checkpoint(
+        tip_canister: &mut Arc<CanisterState>,
+        layout: &CheckpointLayout<ReadOnly>,
+        fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<(), Box<dyn std::error::Error + Send>> {
         let tip_canister = Arc::make_mut(tip_canister);
         let tip_canister_id = tip_canister.canister_id();
         let canister_layout = layout.canister(&tip_canister.canister_id()).unwrap();
@@ -680,9 +683,14 @@ fn switch_to_checkpoint(
             );
             new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
         }
+        Ok(())
     }
 
-    Ok(())
+    tip.canisters_try_for_each_mut(
+        |_id, tip_canister| -> Result<(), Box<dyn std::error::Error + Send>> {
+            canister_switch_to_checkpoint(tip_canister, layout, fd_factory)
+        },
+    )
 }
 
 /// Update the tip directory files with the most recent checkpoint operations.
@@ -1207,15 +1215,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
-            // Ignored after the first checkpoint load during an upgrade.
-            last_full_execution_round: 0.into(),
             compute_allocation: canister_state.compute_allocation(),
-            // Value is ignored when loading.
-            priority_credit: 0.into(),
-            // Value is ignored when loading.
-            long_execution_mode: Default::default(),
-            // Ignored after the first checkpoint load during an upgrade.
-            accumulated_priority: Default::default(),
             memory_allocation: canister_state.system_state.memory_allocation,
             wasm_memory_threshold: canister_state.system_state.wasm_memory_threshold,
             freeze_threshold: canister_state.system_state.freeze_threshold,
@@ -1265,6 +1265,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .canister_metrics()
                 .consumed_cycles_by_use_cases()
                 .clone(),
+            consumed_cycles_by_use_cases_as_counters: canister_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_as_counters()
+                .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
             wasm_chunk_store_metadata: canister_state
                 .system_state
@@ -1276,11 +1281,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
-            next_canister_log_record_idx: if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                canister_state.system_state.log_memory_store.next_idx()
-            } else {
-                canister_state.system_state.canister_log.next_idx()
-            },
+            next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
+            log_memory_store_migrated: canister_state.system_state.log_memory_store.is_migrated(),
+            log_memory_store_persistent_next_idx: canister_state
+                .system_state
+                .log_memory_store
+                .next_idx(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id(),
             environment_variables: canister_state

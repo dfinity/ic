@@ -10,5 +10,5 @@ mod node_operator;
 mod node_record;
 mod replica_version;
 mod routing_table;
-mod subnet;
+pub(crate) mod subnet;
 mod unassigned_nodes_config;

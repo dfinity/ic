@@ -2,19 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/nns/test_utils/prepare_golden_state",
-    "//rs/registry/routing_table",
-    "//rs/registry/subnet_type",
-    "//rs/state_machine_tests",
-    "//rs/types/base_types",
-    "//rs/types/types",
-    "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
-]
-
 # Tests that use this should have
 #
 # tags = [
@@ -44,11 +31,33 @@ rust_library(
         "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
     },
     version = "0.0.1",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/nns/test_utils/prepare_golden_state",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_test(
     name = "golden_nns_state_test",
     crate = ":golden_nns_state",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/nns/test_utils/prepare_golden_state",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+    ],
 )

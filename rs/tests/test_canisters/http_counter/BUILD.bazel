@@ -2,29 +2,19 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-certified-map",
-    "@crate_index//:serde",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
-ALIASES = {}
-
 rust_canister(
     name = "http_counter",
     srcs = [
         "src/canister.rs",
     ],
-    aliases = ALIASES,
     crate_name = "http_counter",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":src/http_counter.did",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-certified-map",
+        "@crate_index//:serde",
+    ],
 )

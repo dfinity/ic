@@ -1,6 +1,5 @@
-#![allow(deprecated)]
 use candid::Nat;
-use ic_cdk::api::call::{arg_data_raw, reply_raw};
+use ic_cdk::api::{msg_arg_data as arg_data_raw, msg_reply as reply_raw};
 use ic_cdk::futures::internals::in_query_executor_context;
 use ic_cdk::{init, query, update};
 use ic_icp_test_ledger::AddBlockResult;

@@ -11,7 +11,7 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
@@ -28,7 +28,7 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":icrc3_test_ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/icrc1",
         "@crate_index//:candid",
@@ -73,7 +73,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icrc3_test_ledger",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/index-ng",
         "//rs/ledger_suite/icrc1/ledger",

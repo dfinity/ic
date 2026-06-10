@@ -998,10 +998,11 @@ fn export_additional_symbols<'a>(
     ];
 
     let num_instructions = instructions.len();
+    let instructions_with_offsets = instructions.into_iter().map(|op| (op, 0)).collect();
     let body = Body {
         locals: vec![(1, DataType::I64)],
         num_locals: 1,
-        instructions: Instructions::new(instructions),
+        instructions: Instructions::new(instructions_with_offsets, 0, false),
         num_instructions,
         name: None,
     };
@@ -1088,10 +1089,11 @@ fn export_additional_symbols<'a>(
     ];
 
     let num_instructions = instructions.len();
+    let instructions_with_offsets = instructions.into_iter().map(|op| (op, 0)).collect();
     let body = Body {
         locals: vec![(4, DataType::I32)],
         num_locals: 4,
-        instructions: Instructions::new(instructions),
+        instructions: Instructions::new(instructions_with_offsets, 0, false),
         num_instructions,
         name: None,
     };
@@ -1316,7 +1318,10 @@ fn inject_metering(
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
         InjectionPointCostDetail::DynamicCost { .. } => true,
     });
-    let orig_elems = body.instructions.get_ops_mut();
+    let orig_elems = body
+        .instructions
+        .get_ops_mut()
+        .expect("instructions must not be instrumented at this point");
     let mut elems: Vec<wirm::wasmparser::Operator> = Vec::new();
     let mut last_injection_position = 0;
 
@@ -1414,7 +1419,10 @@ fn inject_try_grow_wasm_memory(
             WasmMemoryType::Wasm64 => func_body.locals.push((1, DataType::I64)),
         };
 
-        let orig_elems = func_body.instructions.get_ops_mut();
+        let orig_elems = func_body
+            .instructions
+            .get_ops_mut()
+            .expect("instructions must not be instrumented at this point");
         let mut elems: Vec<wirm::wasmparser::Operator> = Vec::new();
         let mut last_injection_position = 0;
         for point in injection_points {
@@ -1439,7 +1447,8 @@ fn inject_try_grow_wasm_memory(
         }
         elems.extend_from_slice(&orig_elems[last_injection_position..]);
         let num_instructions = elems.len();
-        func_body.instructions = Instructions::new(elems);
+        let elems_with_offsets = elems.into_iter().map(|op| (op, 0)).collect();
+        func_body.instructions = Instructions::new(elems_with_offsets, 0, false);
         func_body.num_instructions = num_instructions;
     }
 }
@@ -1486,7 +1495,9 @@ fn replace_system_api_functions(
         if let Some(old_index) = api_indexes.get(&api) {
             let mut builder = FunctionBuilder::new(&param, &ret);
             builder.body = body;
-            builder.replace_import_in_module(module, ImportsID(*old_index));
+            builder
+                .replace_import_in_module(module, ImportsID(*old_index))
+                .expect("failed to replace system API import");
         }
     }
 }
@@ -1579,7 +1590,7 @@ pub(super) fn instrument(
         .functions
         .iter_mut()
         .filter(|f| f.is_local())
-        .map(|f| f.unwrap_local_mut())
+        .map(|f| f.unwrap_local_mut().expect("function must be local"))
         // skip metering on injected functions
         .filter(|f| {
             *f.func_id != injected_counters.decr_instruction_counter_fn
@@ -1600,9 +1611,15 @@ pub(super) fn instrument(
         .functions
         .iter_mut()
         .filter(|f| f.is_local())
-        .map(Function::unwrap_local_mut)
+        .map(|f| Function::unwrap_local_mut(f).expect("function must be local"))
     {
-        let num_params = module.types.get(func_body.ty_id).unwrap().params().len() as u32;
+        let num_params = module
+            .types
+            .get(func_body.ty_id)
+            .unwrap()
+            .params()
+            .expect("function type must have params")
+            .len() as u32;
         inject_try_grow_wasm_memory(
             &mut func_body.body,
             num_params,
@@ -1659,7 +1676,9 @@ pub(super) fn instrument(
         wasm_instruction_count += 2;
     }
 
-    let result = module.encode();
+    let result = module.encode().map_err(|err| {
+        WasmInstrumentationError::WasmSerializeError(WasmError::new(err.to_string()))
+    })?;
 
     Ok(InstrumentationOutput {
         exported_functions,

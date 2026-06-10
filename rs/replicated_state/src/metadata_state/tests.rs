@@ -400,11 +400,7 @@ fn system_metadata_roundtrip_encoding() {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (
-                proto,
-                SubnetSchedule::default(),
-                &DummyMetrics as &dyn CheckpointLoadingMetrics
-            )
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
                 .try_into()
                 .unwrap()
         );
@@ -424,36 +420,6 @@ fn system_metadata_roundtrip_encoding() {
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
     validate_roundtrip_encoding(&system_metadata);
-}
-
-#[test]
-fn subnet_schedule_backward_compatibility() {
-    // Old encoding: `SystemMetadata` without `subnet_schedule`, plus a
-    // `SubnetSchedule` aggregated from canister states.
-    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
-    let mut subnet_schedule = SubnetSchedule::default();
-    *subnet_schedule.get_mut(CanisterId::from_u64(1)) = CanisterPriority {
-        accumulated_priority: 100.into(),
-        executed_rounds: 2,
-        long_execution_start_round: Some(3.into()),
-        last_full_execution_round: 4.into(),
-    };
-
-    // Expected decoded `SystemMetadata` has populated `subnet_schedule`.
-    let mut expected = system_metadata.clone();
-    expected.subnet_schedule = subnet_schedule.clone();
-
-    let proto = pb_metadata::SystemMetadata::from(&system_metadata);
-    assert_eq!(
-        expected,
-        (
-            proto,
-            subnet_schedule,
-            &DummyMetrics as &dyn CheckpointLoadingMetrics
-        )
-            .try_into()
-            .unwrap()
-    );
 }
 
 #[test]
@@ -528,6 +494,7 @@ fn network_topology_roundtrip_encoding() {
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
         None,
+        Some(app_subnet_id),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology);
@@ -550,6 +517,7 @@ fn network_topology_roundtrip_encoding() {
             },
             routing_table: full_routing_table,
         }),
+        Some(app_subnet_id),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology_with_full);
@@ -1172,7 +1140,6 @@ fn sign_with_threshold_context_roundtrip() {
                     request: RequestBuilder::new().build(),
                     args,
                     derivation_path: Arc::new(vec![]),
-                    deprecated_pseudo_random_id: None,
                     batch_time: UNIX_EPOCH,
                     nonce: Some([3; 32]),
                 },
@@ -2418,7 +2385,6 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
     consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
     consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::new(10));
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
@@ -2874,7 +2840,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15]
     );
 }
 

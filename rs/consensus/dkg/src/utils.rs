@@ -121,11 +121,11 @@ pub(super) fn get_dkg_dealings(
     {
         let payload = &block.payload.as_ref().as_data().dkg;
 
-        for (dkg_id, _, _) in payload.transcripts_for_remote_subnets.iter() {
+        for transcript in payload.transcripts_for_remote_subnets.iter() {
             // Add the finished DKG to excluded list
-            excluded.insert(dkg_id.clone());
+            excluded.insert(transcript.dkg_id.clone());
             // Remove already selected dealings
-            dealings.remove(dkg_id);
+            dealings.remove(&transcript.dkg_id);
         }
 
         for message in payload.messages.iter() {
@@ -206,7 +206,8 @@ mod tests {
         Height, RegistryVersion,
         batch::BatchPayload,
         consensus::{
-            Block, BlockPayload, BlockProposal, DataPayload, Payload, Rank, dkg::DkgDataPayload,
+            Block, BlockPayload, BlockProposal, DataPayload, Payload, Rank,
+            dkg::{DkgDataPayload, RemoteTranscriptResult},
             idkg,
         },
         crypto::{
@@ -371,7 +372,7 @@ mod tests {
                         dealings_included[0].clone(),
                         dealings_included[1].clone(),
                     ],
-                    transcripts_for_remote_subnets: vec![(
+                    transcripts_for_remote_subnets: vec![RemoteTranscriptResult::new(
                         dkg_id_with_transcript.clone(),
                         CallbackId::from(0),
                         Ok(dummy_transcript_for_tests()),

@@ -3,7 +3,7 @@
 # operation for the "prod" image.
 
 # Need kernel to boot anything
-linux-image-generic-hwe-24.04
+linux-image-generic-hwe-26.04
 initramfs-tools
 
 # Need systemd for boot process

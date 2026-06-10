@@ -716,10 +716,13 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         ))
     }
 
-    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()> {
+    async fn maybe_exchange_disk_encryption_key(
+        &mut self,
+        version: &ReplicaVersion,
+    ) -> UpgradeResult<()> {
         if let Some(agent) = &self.disk_encryption_key_exchange_agent {
             agent
-                .exchange_keys()
+                .exchange_keys(version)
                 .await
                 .map_err(|e| UpgradeError::DiskEncryptionKeyExchangeError(e.to_string()))
         } else {

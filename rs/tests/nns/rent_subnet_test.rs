@@ -260,6 +260,13 @@ async fn execute_fulfill_subnet_rental_request(
     let previous_registry_version = topology_snapshot.get_registry_version();
 
     let an_nns_subnet_node = topology_snapshot.root_subnet().nodes().next().unwrap();
+    let initial_dkg_subnet_id = topology_snapshot
+        .subnets()
+        .find(|subnet| {
+            subnet.subnet_type() == SubnetType::System
+                && subnet.subnet_id != topology_snapshot.root_subnet_id()
+        })
+        .unwrap();
 
     let node_ids = topology_snapshot
         .unassigned_nodes()
@@ -274,6 +281,7 @@ async fn execute_fulfill_subnet_rental_request(
         *SUBNET_USER_PRINCIPAL_ID,
         node_ids,
         replica_version_id,
+        Some(initial_dkg_subnet_id.subnet_id),
     )
     .await;
     info!(

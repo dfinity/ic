@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::address::ecdsa_public_key_to_address;
 use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
@@ -16,7 +15,7 @@ use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, Wi
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
-use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
+use ic_cdk::management_canister::EcdsaPublicKeyResult;
 use ic_ethereum_types::Address;
 use ic_secp256k1::PublicKey;
 use std::cell::RefCell;
@@ -57,7 +56,7 @@ pub struct State {
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
     pub log_scrapings: LogScrapings,
-    pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
+    pub ecdsa_public_key: Option<EcdsaPublicKeyResult>,
     pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: CandidBlockTag,
     pub first_scraped_block_number: BlockNumber,
@@ -609,11 +608,11 @@ where
 }
 
 pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
-    use ic_cdk::api::management_canister::ecdsa::{
-        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, ecdsa_public_key,
+    use ic_cdk::management_canister::{
+        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, ecdsa_public_key,
     };
 
-    fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {
+    fn to_public_key(response: &EcdsaPublicKeyResult) -> PublicKey {
         PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
             ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
         })
@@ -624,7 +623,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(DEBUG, "Fetching the ECDSA public key {key_name}");
-    let (response,) = ecdsa_public_key(EcdsaPublicKeyArgument {
+    let response = ecdsa_public_key(&EcdsaPublicKeyArgs {
         canister_id: None,
         derivation_path: crate::MAIN_DERIVATION_PATH
             .into_iter()
@@ -636,11 +635,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
         },
     })
     .await
-    .unwrap_or_else(|(error_code, message)| {
-        ic_cdk::trap(format!(
-            "failed to get minter's public key: {message} (error code = {error_code:?})",
-        ))
-    });
+    .unwrap_or_else(|err| ic_cdk::trap(format!("failed to get minter's public key: {err}")));
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
     to_public_key(&response)
 }

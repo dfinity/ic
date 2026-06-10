@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "13.0.0"
+version = "14.0.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -18,6 +18,9 @@ include = [
 ]
 authors.workspace = true
 edition.workspace = true
+
+[features]
+head_nns = []
 
 [dependencies]
 backoff = { workspace = true }
@@ -61,6 +64,7 @@ ic-cdk = { workspace = true }
 ic-error-types = { path = "../ic-error-types" }
 ic-management-canister-types-private = { path = "../../rs/types/management_canister_types" }
 ic-migration-canister = { path = "../../rs/migration_canister" }
+ic-registry-subnet-type = { path = "../../rs/registry/subnet_type" }
 ic-nns-governance-api = { path = "../../rs/nns/governance/api" }
 ic-sns-wasm = { path = "../../rs/nns/sns-wasm" }
 ic-utils = { workspace = true }

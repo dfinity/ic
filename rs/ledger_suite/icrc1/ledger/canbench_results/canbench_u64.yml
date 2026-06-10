@@ -2,13 +2,13 @@ benches:
   bench_icrc1_transfers:
     total:
       calls: 1
-      instructions: 52132236836
+      instructions: 52121937493
       heap_increase: 263
       stable_memory_increase: 256
     scopes:
       get_blocks:
         calls: 1
-        instructions: 7117160
+        instructions: 7117169
         heap_increase: 0
         stable_memory_increase: 0
       icrc103_get_allowances:
@@ -18,17 +18,17 @@ benches:
         stable_memory_increase: 0
       icrc1_transfer:
         calls: 1
-        instructions: 12277144966
+        instructions: 12276507490
         heap_increase: 34
         stable_memory_increase: 0
       icrc2_approve:
         calls: 1
-        instructions: 18497480928
+        instructions: 18496842528
         heap_increase: 25
         stable_memory_increase: 128
       icrc2_transfer_from:
         calls: 1
-        instructions: 20648935716
+        instructions: 20647878061
         heap_increase: 3
         stable_memory_increase: 0
       icrc3_get_blocks:
@@ -38,39 +38,39 @@ benches:
         stable_memory_increase: 0
       post_upgrade:
         calls: 1
-        instructions: 351211296
+        instructions: 342206791
         heap_increase: 72
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 148925235
+        instructions: 149978905
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
         calls: 1
-        instructions: 500139559
+        instructions: 492188724
         heap_increase: 201
         stable_memory_increase: 128
   bench_upgrade_baseline:
     total:
       calls: 1
-      instructions: 8696309
+      instructions: 8691889
       heap_increase: 258
       stable_memory_increase: 128
     scopes:
       post_upgrade:
         calls: 1
-        instructions: 8613894
+        instructions: 8609302
         heap_increase: 129
         stable_memory_increase: 0
       pre_upgrade:
         calls: 1
-        instructions: 79491
+        instructions: 79663
         heap_increase: 129
         stable_memory_increase: 128
       upgrade:
         calls: 1
-        instructions: 8695401
+        instructions: 8690981
         heap_increase: 258
         stable_memory_increase: 128
 version: 0.4.1

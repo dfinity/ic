@@ -3,29 +3,18 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic_bls12_381",
-    "@crate_index//:serde",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
-ALIASES = {}
-
 rust_library(
     name = "lib",
     srcs = [
         "src/lib.rs",
     ],
-    aliases = ALIASES,
     crate_name = "ic_signer",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_canister(
@@ -33,10 +22,15 @@ rust_canister(
     srcs = [
         "src/main.rs",
     ],
-    aliases = ALIASES,
     crate_name = "signer",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":src/signer.did",
     version = "0.1.0",
-    deps = DEPENDENCIES + ["//rs/tests/test_canisters/signer:lib"],
+    deps = [
+        # Keep sorted.
+        "//rs/tests/test_canisters/signer:lib",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic_bls12_381",
+        "@crate_index//:serde",
+    ],
 )

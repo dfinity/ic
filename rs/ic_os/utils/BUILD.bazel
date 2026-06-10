@@ -2,11 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:anyhow",
-]
-
 rust_library(
     name = "utils",
     srcs = glob(
@@ -15,12 +10,18 @@ rust_library(
     aliases = {},
     crate_name = "utils",
     proc_macro_deps = [],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
+    ],
 )
 
 rust_test(
     name = "test",
     size = "small",
     crate = ":utils",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:anyhow",
+    ],
 )

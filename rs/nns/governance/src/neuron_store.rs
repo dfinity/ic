@@ -1,14 +1,11 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
-    governance::{
-        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70,
-        RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS, TimeWarp,
-    },
+    governance::{LOG_PREFIX, TimeWarp},
     neuron::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
         GovernanceError, NeuronDissolveStateSnapshot, Topic, VotingPowerEconomics,
-        governance_error::ErrorType, neuron_dissolve_state_snapshot,
+        governance_error::ErrorType,
     },
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
@@ -71,6 +68,10 @@ pub enum NeuronStoreError {
         neuron_id: NeuronId,
     },
     NeuronIdGenerationUnavailable,
+    NeuronSubaccountGenerationUnavailable,
+    SubaccountAlreadyExists {
+        subaccount: Subaccount,
+    },
     InvalidOperation {
         reason: String,
     },
@@ -175,6 +176,16 @@ impl Display for NeuronStoreError {
                     Likely due to uninitialized RNG."
                 )
             }
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => {
+                write!(
+                    f,
+                    "Neuron subaccount generation is not available currently. \
+                    Likely due to uninitialized RNG."
+                )
+            }
+            NeuronStoreError::SubaccountAlreadyExists { subaccount } => {
+                write!(f, "There is already a neuron with subaccount {subaccount}.")
+            }
             NeuronStoreError::InvalidOperation { reason } => {
                 write!(f, "Invalid operation: {reason}")
             }
@@ -201,6 +212,8 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
             NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::NeuronSubaccountGenerationUnavailable => ErrorType::Unavailable,
+            NeuronStoreError::SubaccountAlreadyExists { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidOperation { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalPotentialVotingPowerOverflow => ErrorType::PreconditionFailed,
             NeuronStoreError::TotalDecidingVotingPowerOverflow => ErrorType::PreconditionFailed,
@@ -303,6 +316,32 @@ impl NeuronStore {
                  {:?}. Trying again...",
                 LOG_PREFIX,
                 neuron_id,
+            );
+        }
+    }
+
+    /// Generates a unique random neuron subaccount, retrying on collision.
+    pub fn new_neuron_subaccount(
+        &self,
+        random: &mut dyn RandomnessGenerator,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        loop {
+            let subaccount = Subaccount(
+                random
+                    .random_byte_array()
+                    .map_err(|_| NeuronStoreError::NeuronSubaccountGenerationUnavailable)?,
+            );
+
+            if !self.has_neuron_with_subaccount(subaccount) {
+                return Ok(subaccount);
+            }
+
+            ic_cdk::println!(
+                "{}WARNING: A suspiciously near-impossible event has just occurred: \
+                 we randomly picked a neuron subaccount, but it's already used: \
+                 {:?}. Trying again...",
+                LOG_PREFIX,
+                subaccount,
             );
         }
     }
@@ -443,7 +482,20 @@ impl NeuronStore {
         })
     }
 
-    pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
+    /// Checks that a deterministic (caller-supplied) subaccount is not already
+    /// in use. Unlike random subaccounts (which retry on collision), deterministic
+    /// subaccounts must fail immediately since retrying would produce the same result.
+    pub fn ensure_subaccount_available(
+        &self,
+        subaccount: Subaccount,
+    ) -> Result<Subaccount, NeuronStoreError> {
+        if self.has_neuron_with_subaccount(subaccount) {
+            return Err(NeuronStoreError::SubaccountAlreadyExists { subaccount });
+        }
+        Ok(subaccount)
+    }
+
+    fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
         self.get_neuron_id_for_subaccount(subaccount).is_some()
     }
 
@@ -778,50 +830,6 @@ impl NeuronStore {
                 .map_err(|e| NeuronStoreError::InvalidData { reason: e })?;
             Ok(())
         })
-    }
-
-    pub fn set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic(&mut self) {
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
-        });
-    }
-
-    pub fn set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(
-        &mut self,
-        pre_clamp_states: &HashMap<u64, NeuronDissolveStateSnapshot>,
-    ) {
-        let relaxed_eight_year_gang_candidates: Vec<u64> = pre_clamp_states
-            .iter()
-            .filter_map(|(neuron_id, pre_clamp_dissolve_state)| {
-                let Some(neuron_dissolve_state_snapshot::DissolveState::DissolveDelaySeconds(d)) =
-                    pre_clamp_dissolve_state.dissolve_state
-                else {
-                    // Skip neurons that were dissolving (or dissolved).
-                    return None;
-                };
-
-                // Skip neurons dissolve delay that was too small.
-                if d < RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS {
-                    return None;
-                }
-
-                // Skip neurons that are already in the eight year gang.
-                if d == MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 {
-                    return None;
-                }
-
-                // This neuron is maybe eligible for relaxed eight year gang bonus,
-                // because it was not dissolving, and had a dissolve delay of nearly
-                // 8 * 365.25 days.
-                Some(*neuron_id)
-            })
-            .collect();
-
-        with_stable_neuron_store_mut(move |stable_neuron_store| {
-            stable_neuron_store.set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(
-                relaxed_eight_year_gang_candidates,
-            );
-        });
     }
 
     pub fn clamp_dissolve_delay_for_all_neurons_or_panic(

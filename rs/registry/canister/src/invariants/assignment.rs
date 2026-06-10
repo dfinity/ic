@@ -4,8 +4,8 @@ use ic_base_types::{NodeId, PrincipalId};
 
 use super::{
     common::{
-        InvariantCheckError, RegistrySnapshot, get_api_boundary_node_records_from_snapshot,
-        get_node_records_from_snapshot,
+        InvariantCheckError, RegistrySnapshot, get_all_node_records,
+        get_api_boundary_node_records_from_snapshot,
     },
     subnet::get_subnet_records_map,
 };
@@ -30,7 +30,7 @@ pub(crate) fn check_node_assignment_invariants(
         .into_keys()
         .collect();
 
-    let errors: Vec<String> = get_node_records_from_snapshot(snapshot).keys().map(|node_id| {
+    let errors: Vec<String> = get_all_node_records(snapshot).keys().map(|node_id| {
             let (is_replica, is_api_boundary_node) = (
                 replicas.contains(node_id),
                 api_boundary_nodes.contains(node_id),
