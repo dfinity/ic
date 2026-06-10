@@ -869,7 +869,7 @@ fn remove_node_operators_(payload: RemoveNodeOperatorsPayload) {
 
 #[unsafe(export_name = "canister_update update_subnet")]
 fn update_subnet() {
-    check_caller_is_governance_and_log("update_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("update_subnet");
     over(candid_one, |payload: UpdateSubnetPayload| {
         update_subnet_(payload)
     });
