@@ -78,7 +78,15 @@ def build_container(
         # Override the first FROM statement - grabs it from local cache
         cmd += f" --from {base_image_override.image_tag}"
 
-    # Set timestamp for all files for determinism
+    # Set timestamp for all new files for determinism
+    # NOTE: This does not touch base layers. As base images are currently built
+    # by Docker, not podman, they leak timestamps. (This doesn't really matter,
+    # because they are pinned.) If we could strip timestamps from the published
+    # base images as we do locally with `build_container_base_image.py`, we
+    # could remove the `mtime` handling from the tar below.
+    #
+    # We could also `--squash-all` instead, but since we're already re-packing
+    # the tar for determinism anyway, we handle it there.
     cmd += " --timestamp 0"
 
     if dockerfile:
@@ -111,7 +119,7 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     invoke.run(f"mkdir -p {tar_dir}")
     invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
     invoke.run(
-        f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
+        f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --mtime='UTC 1970-01-01 00:00:00' --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
     )
 
 

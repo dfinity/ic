@@ -8,8 +8,9 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
+    CallContext, CallOrigin, CanisterState, CanisterStates, ExecutionState, ExportedFunctions,
+    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology,
+    SystemState,
     canister_state::{
         canister_snapshots::CanisterSnapshots,
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
@@ -31,19 +32,17 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestOrResponse},
-    methods::{Callback, WasmClosure},
+    messages::{Ingress, Request, RequestOrResponse},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -59,7 +58,7 @@ pub use history::MockIngressHistory;
 
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
-const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const INITIAL_CYCLES: Cycles = Cycles::new(100_000_000_000_000);
 const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
 
 /// Valid, but minimal wasm code.
@@ -608,7 +607,6 @@ impl Default for ExecutionStateBuilder {
 
         ExecutionStateBuilder {
             execution_state: ExecutionState::new(
-                "NOT_USED".into(),
                 WasmBinary::new(CanisterModule::new(vec![])),
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),
@@ -807,7 +805,7 @@ pub fn get_initial_state_with_balance(
 
 /// Returns the ordered IDs of the canisters contained within `state`.
 pub fn canister_ids(state: &ReplicatedState) -> Vec<CanisterId> {
-    state.canister_states().keys().cloned().collect()
+    state.canister_states().all_keys().cloned().collect()
 }
 
 pub fn new_canister_state(
@@ -850,40 +848,6 @@ pub fn new_canister_state_with_execution(
         scheduler_state,
         canister_snapshots,
     )
-}
-
-/// Helper function to register a callback.
-pub fn register_callback(
-    canister_state: &mut CanisterState,
-    respondent: CanisterId,
-    deadline: CoarseTime,
-) -> CallbackId {
-    let call_context_id = canister_state
-        .system_state
-        .new_call_context(
-            CallOrigin::SystemTask,
-            Cycles::zero(),
-            Time::from_nanos_since_unix_epoch(0),
-            Default::default(),
-            None,
-        )
-        .unwrap();
-
-    canister_state
-        .system_state
-        .register_callback(Callback::new(
-            call_context_id,
-            respondent,
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 2),
-            WasmClosure::new(0, 2),
-            None,
-            deadline,
-        ))
-        .unwrap()
 }
 
 /// Helper function to insert a canister in the provided `ReplicatedState`.
@@ -1103,7 +1067,6 @@ pub(crate) fn arb_cycles_use_case() -> impl Strategy<Value = CyclesUseCase> {
         Just(CyclesUseCase::ECDSAOutcalls),
         Just(CyclesUseCase::HTTPOutcalls),
         Just(CyclesUseCase::DeletedCanisters),
-        Just(CyclesUseCase::NonConsumed),
     ]
 }
 
@@ -1238,7 +1201,7 @@ fn new_replicated_state_with_output_queues(
         .network_topology
         .set_routing_table(routing_table);
 
-    replicated_state.put_canister_states(canister_states);
+    replicated_state.put_canister_states(CanisterStates::new(canister_states));
     if let Some(subnet_queues) = subnet_queues {
         replicated_state.put_subnet_queues(subnet_queues);
     }

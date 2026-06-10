@@ -20,7 +20,6 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 slog = { workspace = true }
-tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

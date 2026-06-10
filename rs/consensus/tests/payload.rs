@@ -38,7 +38,6 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
-use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
 /// numbers and payloads
@@ -88,6 +87,12 @@ fn consensus_produces_expected_batches() {
         state_manager
             .expect_get_state_at()
             .return_const(Ok(Labeled::new(
+                Height::new(0),
+                Arc::new(get_initial_state(0, 0)),
+            )));
+        state_manager
+            .expect_get_latest_certified_state()
+            .return_const(Some(Labeled::new(
                 Height::new(0),
                 Arc::new(get_initial_state(0, 0)),
             )));
@@ -156,8 +161,6 @@ fn consensus_produces_expected_batches() {
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
 
-        let (dummy_watcher, _) = watch::channel(Height::from(0));
-
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
@@ -185,6 +188,9 @@ fn consensus_produces_expected_batches() {
             ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
         let dkg = ic_consensus_dkg::DkgImpl::new(
             replica_config.node_id,
+            replica_config.subnet_id,
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
             dkg_key_manager,
@@ -208,7 +214,6 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&consensus_cache),
             metrics_registry.clone(),
             no_op_logger(),
-            dummy_watcher,
         );
 
         let driver = ConsensusDriver::new(

@@ -57,7 +57,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-dummy-getrandom-for-wasm",
     "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -111,6 +111,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:ic-xrc-types",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -169,10 +170,6 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = ["//rs/tla_instrumentation:proc_macros"]
-
-ALIASES = {}
-
 LIB_SRCS = glob(
     ["src/**/*.rs"],
     exclude = [
@@ -184,7 +181,6 @@ LIB_SRCS = glob(
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
-    aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
     version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
@@ -193,7 +189,6 @@ cargo_build_script(
 rust_library(
     name = "governance",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
@@ -205,7 +200,6 @@ rust_library(
 rust_library(
     name = "governance--test_feature",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_features = TEST_WITH_TLA,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES + [
@@ -227,7 +221,6 @@ rust_library(
 rust_library(
     name = "governance--pbr_feature",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_features = ["performance-based-rewards"],
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -240,7 +233,6 @@ rust_library(
 rust_library(
     name = "governance--canbench_feature",
     srcs = LIB_SRCS,
-    aliases = ALIASES,
     crate_features = ["canbench-rs"],
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -279,7 +271,6 @@ rust_canbench(
 rust_canister(
     name = "governance-bench-canister",
     srcs = ["canbench/main.rs"],
-    aliases = ALIASES,
     compile_data = ["canbench/bench.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canbench/bench.did",
@@ -292,7 +283,6 @@ rust_canister(
 rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
-    aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
@@ -310,7 +300,6 @@ rust_canister(
         "canister/canister.rs",
         "canister/tla_ledger.rs",
     ],
-    aliases = ALIASES,
     compile_data = [":test_did"],
     crate_features = TEST_WITH_TLA,
     crate_root = "canister/canister.rs",
@@ -329,7 +318,6 @@ rust_canister(
 rust_canister(
     name = "governance-canister-pbr",
     srcs = ["canister/canister.rs"],
-    aliases = ALIASES,
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
@@ -380,7 +368,7 @@ rust_test(
     compile_data = [":canister/governance_test.did"],
     crate_features = TEST_WITH_TLA,
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
@@ -390,12 +378,11 @@ rust_test(
 rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     data = [
         "//rs/nns/handlers/lifeline/impl:lifeline.did",
         "//rs/nns/handlers/root/impl:canister/root.did",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
@@ -404,13 +391,12 @@ rust_test(
 rust_test(
     name = "governance_test-test_feature",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_features = TEST_WITH_TLA,
     data = [
         "//rs/nns/handlers/lifeline/impl:lifeline.did",
         "//rs/nns/handlers/root/impl:canister/root.did",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
@@ -436,7 +422,6 @@ rust_test_suite_with_extra_srcs(
             "tests/merge_neurons.rs",  # there's a dedicated :merge_neurons_test target for this test below.
         ],
     ),
-    aliases = ALIASES,
     crate_features = TEST_WITH_TLA,
     data = [
         ":tests/neurons.csv",
@@ -447,7 +432,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
@@ -463,7 +448,6 @@ rust_ic_test(
         "tests/fixtures/mod.rs",
         "tests/governance.rs",
     ],
-    aliases = ALIASES,
     crate_features = TEST_WITH_TLA,
     crate_root = "tests/governance.rs",
     data = [
@@ -476,7 +460,7 @@ rust_ic_test(
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     tags = ["long_test"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -493,7 +477,6 @@ rust_ic_test(
         "tests/fixtures/mod.rs",
         "tests/merge_neurons.rs",
     ],
-    aliases = ALIASES,
     crate_features = TEST_WITH_TLA,
     crate_root = "tests/merge_neurons.rs",
     data = [
@@ -506,7 +489,7 @@ rust_ic_test(
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
         "TLA_MODULES": "$(locations :tla_models)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     tags = ["long_test"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",

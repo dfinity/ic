@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use crate::{common::LOG_PREFIX, registry::Registry};
 
-use super::common::check_replica_version_is_blessed;
+use super::common::check_replica_version_is_elected;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct AddApiBoundaryNodesPayload {
@@ -93,8 +93,8 @@ impl Registry {
             });
         }
 
-        // Ensure version exists and is blessed
-        check_replica_version_is_blessed(self, &payload.version);
+        // Ensure version exists and is elected
+        check_replica_version_is_elected(self, &payload.version);
     }
 }
 
@@ -105,14 +105,12 @@ mod tests {
     use ic_base_types::{NodeId, PrincipalId, SubnetId};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_protobuf::registry::{
-        api_boundary_node::v1::ApiBoundaryNodeRecord,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        api_boundary_node::v1::ApiBoundaryNodeRecord, replica_version::v1::ReplicaVersionRecord,
     };
     use ic_registry_keys::{
-        make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_node_record_key,
-        make_replica_version_key,
+        make_api_boundary_node_record_key, make_node_record_key, make_replica_version_key,
     };
-    use ic_registry_transport::{insert, update, upsert};
+    use ic_registry_transport::{insert, update};
     use ic_types::ReplicaVersion;
     use prost::Message;
 
@@ -217,8 +215,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "'version' is NOT blessed")]
-    fn should_panic_if_version_not_blessed() {
+    #[should_panic(expected = "'version' is NOT elected")]
+    fn should_panic_if_version_not_elected() {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
@@ -228,7 +226,7 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create an invalid proposal payload by specifying a version that is not blessed
+        // Create an invalid proposal payload by specifying a version that is not elected
         let node_id = node_ids_and_dkg_pks
             .keys()
             .next()
@@ -255,27 +253,16 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
-        registry.maybe_apply_mutation_internal(vec![
-            insert(
-                make_replica_version_key("version"), // key
-                ReplicaVersionRecord {
-                    release_package_sha256_hex: "".into(),
-                    release_package_urls: vec![],
-                    guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        // Create and elect version
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_replica_version_key("version"), // key
+            ReplicaVersionRecord {
+                release_package_sha256_hex: "".into(),
+                release_package_urls: vec![],
+                guest_launch_measurements: None,
+            }
+            .encode_to_vec(),
+        )]);
 
         let node_id = node_ids_and_dkg_pks
             .keys()
@@ -313,27 +300,16 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
-        registry.maybe_apply_mutation_internal(vec![
-            insert(
-                make_replica_version_key("version"), // key
-                ReplicaVersionRecord {
-                    release_package_sha256_hex: "".into(),
-                    release_package_urls: vec![],
-                    guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        // Create and elect version
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_replica_version_key("version"), // key
+            ReplicaVersionRecord {
+                release_package_sha256_hex: "".into(),
+                release_package_urls: vec![],
+                guest_launch_measurements: None,
+            }
+            .encode_to_vec(),
+        )]);
 
         // Create a valid proposal payload
         let node_id = node_ids_and_dkg_pks
@@ -362,27 +338,16 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
-        registry.maybe_apply_mutation_internal(vec![
-            insert(
-                make_replica_version_key("version"), // key
-                ReplicaVersionRecord {
-                    release_package_sha256_hex: "".into(),
-                    release_package_urls: vec![],
-                    guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        // Create and elect version
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_replica_version_key("version"), // key
+            ReplicaVersionRecord {
+                release_package_sha256_hex: "".into(),
+                release_package_urls: vec![],
+                guest_launch_measurements: None,
+            }
+            .encode_to_vec(),
+        )]);
 
         // Create an invalid proposal payload by adding a node twice
         let mut node_ids: Vec<_> = node_ids_and_dkg_pks.keys().cloned().collect();
@@ -408,27 +373,16 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
-        registry.maybe_apply_mutation_internal(vec![
-            insert(
-                make_replica_version_key("version"), // key
-                ReplicaVersionRecord {
-                    release_package_sha256_hex: "".into(),
-                    release_package_urls: vec![],
-                    guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        // Create and elect version
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_replica_version_key("version"), // key
+            ReplicaVersionRecord {
+                release_package_sha256_hex: "".into(),
+                release_package_urls: vec![],
+                guest_launch_measurements: None,
+            }
+            .encode_to_vec(),
+        )]);
 
         let node_ids: Vec<_> = node_ids_and_dkg_pks.keys().cloned().collect();
 
@@ -463,27 +417,16 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
-        registry.maybe_apply_mutation_internal(vec![
-            insert(
-                make_replica_version_key("version"), // key
-                ReplicaVersionRecord {
-                    release_package_sha256_hex: "".into(),
-                    release_package_urls: vec![],
-                    guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        // Create and elect version
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_replica_version_key("version"), // key
+            ReplicaVersionRecord {
+                release_package_sha256_hex: "".into(),
+                release_package_urls: vec![],
+                guest_launch_measurements: None,
+            }
+            .encode_to_vec(),
+        )]);
 
         // Create a valid proposal payload
         let mut node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();

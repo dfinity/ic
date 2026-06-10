@@ -2,15 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/ic_os/config/types:config_types",
-    "@crate_index//:anyhow",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:url",
-]
-
 rust_library(
     name = "config_types_compatibility_lib",
     srcs = glob(
@@ -19,7 +10,14 @@ rust_library(
     ),
     crate_name = "config_types_compatibility_lib",
     visibility = ["//rs:ic-os-pkg"],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/ic_os/config/types:config_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:url",
+    ],
 )
 
 filegroup(

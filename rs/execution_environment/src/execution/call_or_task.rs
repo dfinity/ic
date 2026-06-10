@@ -85,20 +85,21 @@ pub fn execute_call_or_task(
                     Ok(cycles) => cycles,
                     Err(err) => {
                         if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
-                            //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
-                            // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
-                            // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
-                            // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
-                            // (which calls `OnLowWasmMemoryHookStatus::update(true)`) to ensure desired behavior.
+                            // `OnLowWasmMemoryHook` was taken from `task_queue` (so the hook status is now
+                            // `Executed`), but it could not run because not enough cycles were available.
+                            // If we left the status as `Executed`, the hook would never be executed; if we
+                            // re-enqueued the hook as `Ready`, we would immediately pop it again and enter
+                            // an infinite loop (or spin until the round instruction limit is reached).
+                            //
+                            // Instead we "forget" the hook status and rely on the next message (or
+                            // management call) to re-enqueue it.
+                            //
+                            // This leaves the canister in a transiently inconsistent state
+                            // (`(ConditionNotSatisfied, condition = true)`).
                             canister
                                 .system_state
                                 .task_queue
                                 .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                            canister
-                                .system_state
-                                .task_queue
-                                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
                         }
                         return finish_call_with_error(
                             UserError::new(ErrorCode::CanisterOutOfCycles, err),

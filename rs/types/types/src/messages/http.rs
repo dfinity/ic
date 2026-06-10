@@ -342,8 +342,8 @@ pub struct SignedSenderInfo {
 pub struct SenderInfoContent<'a>(pub &'a [u8]);
 
 impl crate::crypto::SignedBytesWithoutDomainSeparator for SenderInfoContent<'_> {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.to_vec()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(self.0);
     }
 }
 
@@ -593,7 +593,7 @@ impl Delegation {
 }
 
 impl SignedBytesWithoutDomainSeparator for Delegation {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         use RawHttpRequestVal::*;
 
         let mut map = btreemap! {
@@ -607,7 +607,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
             );
         }
 
-        hash_of_map(&map, |key, value| hash_key_val(key, value)).to_vec()
+        bytes.extend_from_slice(&hash_of_map(&map, |key, value| hash_key_val(key, value)));
     }
 }
 
@@ -726,8 +726,8 @@ impl QueryResponseHash {
 }
 
 impl SignedBytesWithoutDomainSeparator for QueryResponseHash {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.to_vec()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.0);
     }
 }
 

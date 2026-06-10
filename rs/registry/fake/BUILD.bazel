@@ -4,32 +4,28 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/interfaces/registry",
-    "//rs/types/types",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/registry/keys",
-]
-
-SRCS = glob(
-    ["src/**"],
-    exclude = ["**/*tests.rs"],
-)
-
 rust_library(
     name = "fake",
-    srcs = SRCS,
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "ic_registry_client_fake",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/types/types",
+    ],
 )
 
 rust_test(
     name = "fake_test",
     srcs = glob(["src/**/*.rs"]),
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/registry/keys",
+        "//rs/types/types",
+    ],
 )

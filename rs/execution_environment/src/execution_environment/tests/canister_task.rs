@@ -1,7 +1,10 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
+};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions,
@@ -665,7 +668,7 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(400_000_000_000))
         .unwrap();
 
     let result = env.execute_ingress(canister_id, "test", vec![]).unwrap();
@@ -729,7 +732,7 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     .unwrap();
 
     let canister_id = env
-        .install_canister_with_cycles(binary, vec![], None, Cycles::new(301_000_000_000))
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(400_000_000_000))
         .unwrap();
 
     let result = env
@@ -1036,7 +1039,7 @@ where
     F: FnOnce(&StateMachine, CanisterId),
     G: FnOnce(&StateMachine, CanisterId),
 {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
@@ -1138,7 +1141,16 @@ fn global_timer_produces_transient_error_on_out_of_cycles() {
         .build();
     // The canister has no enough cycles for the install.
     let err = env
-        .install_canister_with_cycles(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None, 0_u64.into())
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(0)
+                    .build(),
+            ),
+            0_u64.into(),
+        )
         .unwrap_err();
 
     assert_eq!(RejectCode::SysTransient, err.code().into());
@@ -1251,7 +1263,22 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
         NumWasmPages::new(8)
     );
 
-    // The hook status is still `Ready`.
+    // The hook status was reset because it could not be executed.
+    assert_eq!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+
+    // We update `freezing_threshold` unfreezing canister.
+    test.update_freezing_threshold(canister_id, NumSeconds::new(100))
+        .unwrap();
+
+    // This re-evaluated the hook condition and set its status to `Ready`.
     assert_eq!(
         test.state()
             .canister_state(&canister_id)
@@ -1261,10 +1288,6 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
             .peek_hook_status(),
         OnLowWasmMemoryHookStatus::Ready
     );
-
-    // We update `freezing_threshold` unfreezing canister.
-    test.update_freezing_threshold(canister_id, NumSeconds::new(100))
-        .unwrap();
 
     // The hook is executed.
     test.execute_slice(canister_id);

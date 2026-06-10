@@ -29,6 +29,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 criterion = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
 futures = { workspace = true }
 http-body-util = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }

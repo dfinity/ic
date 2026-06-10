@@ -3,28 +3,6 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:base64",
-    "@crate_index//:candid",
-    "@crate_index//:flate2",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-certified-map",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:sha2",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_canister(
     name = "kv_store",
     srcs = [
@@ -35,12 +13,20 @@ rust_canister(
         "src/kv_store.rs",
         "src/lib.rs",
     ],
-    aliases = ALIASES,
     crate_name = "kv_store",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":src/kv_store.did",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:base64",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-certified-map",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:sha2",
+    ],
 )
 
 rust_test(
@@ -52,7 +38,15 @@ rust_test(
         "src/kv_store.rs",
         "src/lib.rs",
     ],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:base64",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-certified-map",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:sha2",
+    ],
 )

@@ -8,7 +8,8 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID, ROOT_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -36,6 +37,7 @@ use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
+    get_subnet::{GetSubnetRequest, SubnetRecord},
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
@@ -53,6 +55,7 @@ use registry_canister::{
         do_remove_node_operators::RemoveNodeOperatorsPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+        do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
         do_split_subnet::SplitSubnetPayload,
@@ -127,6 +130,15 @@ fn check_caller_is_governance_and_log(method_name: &str) {
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert!(
+        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -623,7 +635,7 @@ fn add_node_operator_(payload: AddNodeOperatorPayload) {
 
 #[unsafe(export_name = "canister_update create_subnet")]
 fn create_subnet() {
-    check_caller_is_governance_and_log("create_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("create_subnet");
     over_async(candid_one, |payload: CreateSubnetPayload| async move {
         create_subnet_(payload).await
     });
@@ -642,7 +654,7 @@ async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, Strin
 
 #[unsafe(export_name = "canister_update delete_subnet")]
 fn delete_subnet() {
-    check_caller_is_governance_and_log("delete_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("delete_subnet");
     over(candid_one, |payload: DeleteSubnetPayload| {
         delete_subnet_(payload)
     });
@@ -1171,6 +1183,16 @@ fn get_subnet_for_canister_(arg: GetSubnetForCanisterRequest) -> Result<SubnetFo
         .map_err(|e| e.to_string())
 }
 
+#[unsafe(export_name = "canister_query get_subnet")]
+fn get_subnet() {
+    over(candid_one, get_subnet_)
+}
+
+#[candid_method(query, rename = "get_subnet")]
+fn get_subnet_(arg: GetSubnetRequest) -> Result<SubnetRecord, String> {
+    registry().get_subnet_record(arg)
+}
+
 #[unsafe(export_name = "canister_update add_node")]
 fn add_node() {
     // This method can be called by anyone
@@ -1291,6 +1313,18 @@ fn set_subnet_operational_level() {
 #[candid_method(update, rename = "set_subnet_operational_level")]
 fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
     registry_mut().do_set_subnet_operational_level(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update set_default_initial_dkg_subnet")]
+fn set_default_initial_dkg_subnet() {
+    check_caller_is_governance_and_log("set_default_initial_dkg_subnet");
+    over(candid_one, set_default_initial_dkg_subnet_);
+}
+
+#[candid_method(update, rename = "set_default_initial_dkg_subnet")]
+fn set_default_initial_dkg_subnet_(payload: SetDefaultInitialDkgSubnetPayload) {
+    registry_mut().do_set_default_initial_dkg_subnet(payload);
     recertify_registry();
 }
 

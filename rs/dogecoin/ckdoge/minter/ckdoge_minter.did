@@ -383,6 +383,69 @@ type InvalidTransactionError = variant {
     };
 };
 
+// ICRC-10 supported standards record.
+type Icrc10StandardRecord = record {
+    name : text;
+    url : text;
+};
+
+// ICRC-21 Canister Call Consent Message types.
+type Icrc21ConsentMessageMetadata = record {
+    language : text;
+    utc_offset_minutes : opt int16;
+};
+
+type Icrc21DeviceSpec = variant {
+    GenericDisplay;
+    FieldsDisplay;
+};
+
+type Icrc21ConsentMessageSpec = record {
+    metadata : Icrc21ConsentMessageMetadata;
+    device_spec : opt Icrc21DeviceSpec;
+};
+
+type Icrc21ConsentMessageRequest = record {
+    method : text;
+    arg : blob;
+    user_preferences : Icrc21ConsentMessageSpec;
+};
+
+type Icrc21Value = variant {
+    TokenAmount : record {
+        decimals : nat8;
+        amount : nat64;
+        symbol : text;
+    };
+    TimestampSeconds : record { amount : nat64 };
+    DurationSeconds : record { amount : nat64 };
+    Text : record { content : text };
+};
+
+type Icrc21FieldsDisplay = record {
+    intent : text;
+    fields : vec record { text; Icrc21Value };
+};
+
+type Icrc21ConsentMessage = variant {
+    GenericDisplayMessage : text;
+    FieldsDisplayMessage : Icrc21FieldsDisplay;
+};
+
+type Icrc21ConsentInfo = record {
+    consent_message : Icrc21ConsentMessage;
+    metadata : Icrc21ConsentMessageMetadata;
+};
+
+type Icrc21ErrorInfo = record { description : text };
+
+type Icrc21Error = variant {
+    UnsupportedCanisterCall : Icrc21ErrorInfo;
+    ConsentMessageUnavailable : Icrc21ErrorInfo;
+    InsufficientPayment : Icrc21ErrorInfo;
+    GenericError : record { error_code : nat; description : text };
+};
+
 type EventType = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
@@ -490,6 +553,14 @@ service : (minter_arg : MinterArg) -> {
 
     // Returns the status of a withdrawal request.
     retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
+
+    // Returns the list of supported ICRC standards.
+    icrc10_supported_standards : () -> (vec Icrc10StandardRecord) query;
+
+    // Returns a human-readable consent message describing the requested
+    // canister call. See the ICRC-21 standard for details:
+    // https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md
+    icrc21_canister_call_consent_message : (Icrc21ConsentMessageRequest) -> (variant { Ok : Icrc21ConsentInfo; Err : Icrc21Error });
 
     // Returns internal minter parameters.
     get_minter_info : () -> (MinterInfo) query;

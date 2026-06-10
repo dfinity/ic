@@ -122,7 +122,8 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
     )
 }
 
-/// Same as above, just with the possibility to have a chip_id.
+/// Same as above, just with chip IDs on every node — used to seed nodes that satisfy the
+/// SEV invariant (SEV-enabled subnets may only contain nodes with a chip ID).
 pub fn prepare_registry_with_nodes_and_chip_id(
     start_mutation_id: u8,
     nodes: u64,

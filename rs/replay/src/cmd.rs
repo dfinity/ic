@@ -107,10 +107,10 @@ pub struct UpgradeSubnetToReplicaVersionCmd {
     /// The Replica version record.
     #[clap(value_parser = parse_json::<ReplicaVersionRecord>)]
     pub replica_version_record: ReplicaVersionRecord,
-    /// If true, the replica version will be added and blessed in the registry
+    /// If true, the replica version will be added in the registry
     /// before upgrading the subnet to it.
     #[clap(long)]
-    pub add_and_bless_replica_version: bool,
+    pub add_replica_version: bool,
 }
 
 #[derive(Clone, Parser)]

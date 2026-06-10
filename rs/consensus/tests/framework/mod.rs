@@ -48,14 +48,17 @@ use std::{
 /// with required records, including subnet record, node record, node public keys,
 /// catch-up package (with proper NiDKG transcripts).
 ///
-/// Return the registry client, catch-up package, and a list of crypto components, one
-/// for each node.
+/// Return the registry data provider, registry client, catch-up package, and a list of crypto
+/// components, one for each node.
+#[allow(clippy::type_complexity)]
 pub fn setup_subnet<R: Rng + CryptoRng>(
     subnet_id: SubnetId,
     node_ids: &[NodeId],
+    dkg_interval_length: u64,
     rng: &mut R,
 ) -> (
-    Arc<dyn RegistryClient>,
+    Arc<ProtoRegistryDataProvider>,
+    Arc<FakeRegistryClient>,
     CatchUpPackage,
     Vec<Arc<TempCryptoComponentGeneric<ChaCha20Rng>>>,
 ) {
@@ -65,7 +68,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
 
     let subnet_record = SubnetRecordBuilder::from(node_ids)
-        .with_dkg_interval_length(19)
+        .with_dkg_interval_length(dkg_interval_length)
         .with_chain_key_config(ChainKeyConfig {
             key_configs: test_master_public_key_ids()
                 .iter()
@@ -200,7 +203,6 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
             .expect("Could not add chain-key enabled subnet list");
     }
     registry_client.reload();
-    registry_client.update_to_latest_version();
 
     let cup_contents = registry_client
         .get_cup_contents(subnet_id, registry_client.get_latest_version())
@@ -215,7 +217,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
     .with_current_transcripts(ni_transcripts);
 
     let cup = make_genesis(summary);
-    (registry_client, cup, cryptos)
+    (data_provider, registry_client, cup, cryptos)
 }
 
 pub(crate) fn test_master_public_key_ids() -> Vec<MasterPublicKeyId> {

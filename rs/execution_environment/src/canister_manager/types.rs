@@ -80,6 +80,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
+    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -104,6 +105,7 @@ impl CanisterMgrConfig {
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
+        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -125,6 +127,7 @@ impl CanisterMgrConfig {
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
+            log_memory_store_feature,
         }
     }
 }
@@ -402,11 +405,6 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         required: Cycles,
     },
-    LogResizeNotEnoughCycles {
-        available: Cycles,
-        threshold: Cycles,
-        requested: Cycles,
-    },
     ReservedCyclesLimitExceededInMemoryAllocation {
         memory_allocation: MemoryAllocation,
         requested: Cycles,
@@ -502,6 +500,13 @@ pub(crate) enum CanisterManagerError {
     CanisterSnapshotAccessDenied {
         caller: PrincipalId,
         method_name: String,
+    },
+    FetchCanisterLogsNotEnoughCycles {
+        sent: Cycles,
+        required: Cycles,
+    },
+    FetchCanisterLogsAccessDenied {
+        caller: PrincipalId,
     },
 }
 
@@ -613,10 +618,6 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
                 suggestion: "Top up the canister with more cycles.".to_string(),
                 doc_link: doc_ref("insufficient-cycles-in-memory-grow-1"),
-            },
-            CanisterManagerError::LogResizeNotEnoughCycles { .. } => ErrorHelp::UserError {
-                suggestion: "Top up the canister with more cycles.".to_string(),
-                doc_link: doc_ref("log-resize-not-enough-cycles"),
             },
             CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. } => {
                 ErrorHelp::UserError {
@@ -760,8 +761,18 @@ impl AsErrorHelp for CanisterManagerError {
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
             },
+            CanisterManagerError::FetchCanisterLogsAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a controller of the target canister or \
+                a principal with log read access."
+                    .to_string(),
+                doc_link: "".to_string(),
+            },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::FetchCanisterLogsNotEnoughCycles { .. } => ErrorHelp::UserError {
+                suggestion: "Try sending more cycles with the request.".to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1000,18 +1011,6 @@ impl From<CanisterManagerError> for UserError {
                     required - available
                 ),
             ),
-            LogResizeNotEnoughCycles {
-                available,
-                threshold,
-                requested,
-            } => Self::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!(
-                    "Cannot resize canister log memory due to insufficient cycles. \
-                     At least {} additional cycles are required.{additional_help}",
-                    (threshold + requested) - available
-                ),
-            ),
             ReservedCyclesLimitExceededInMemoryAllocation {
                 memory_allocation,
                 requested,
@@ -1207,6 +1206,16 @@ impl From<CanisterManagerError> for UserError {
                 format!(
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
                 ),
+            ),
+            FetchCanisterLogsNotEnoughCycles { sent, required } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "fetch_canister_logs request sent with {sent} cycles, but {required} cycles are required."
+                ),
+            ),
+            FetchCanisterLogsAccessDenied { caller } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Caller {caller} is not allowed to access canister logs"),
             ),
         }
     }

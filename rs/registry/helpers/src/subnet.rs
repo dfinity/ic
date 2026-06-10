@@ -12,8 +12,9 @@ use ic_protobuf::{
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
-    ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_node_record_key,
-    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
+    DEFAULT_INITIAL_DKG_SUBNET_ID_KEY, ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key,
+    make_node_record_key, make_replica_version_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_types::{
@@ -71,6 +72,15 @@ pub trait SubnetRegistry {
     ) -> Result<bool, RegistryClientError>;
 
     fn get_root_subnet_id(&self, version: RegistryVersion) -> RegistryClientResult<SubnetId>;
+
+    /// Returns the [`SubnetId`] of the subnet to which `SetupInitialDKG`
+    /// management canister calls are routed by default (i.e., when the request
+    /// does not specify a subnet id explicitly), or `None` if no default has
+    /// been set in the registry.
+    fn get_default_initial_dkg_subnet_id(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetId>;
 
     fn get_node_ids_on_subnet(
         &self,
@@ -242,6 +252,24 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .map(|pr_id| {
                 PrincipalId::try_from(pr_id.raw).map_err(|err| DecodeError {
                     error: format!("get_root_subnet_id() failed with {err}"),
+                })
+            })
+            .transpose()?
+            .map(SubnetId::from))
+    }
+
+    /// Returns the default initial DKG subnet id if it is set in the registry
+    /// and can be parsed.
+    fn get_default_initial_dkg_subnet_id(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<SubnetId> {
+        let bytes = self.get_value(DEFAULT_INITIAL_DKG_SUBNET_ID_KEY, version);
+        Ok(deserialize_registry_value::<SubnetIdProto>(bytes)?
+            .and_then(|subnet_id_proto| subnet_id_proto.principal_id)
+            .map(|pr_id| {
+                PrincipalId::try_from(pr_id.raw).map_err(|err| DecodeError {
+                    error: format!("get_default_initial_dkg_subnet_id() failed with {err}"),
                 })
             })
             .transpose()?

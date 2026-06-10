@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-08: Proposal 141739
+
+http://dashboard.internetcomputer.org/proposal/141739
+
+## Added
+* Added an optional field `initial_dkg_subnet_id` to `SplitSubnetPayload` and `FulfillSubnetRentalRequest`,
+  which allows the proposer to choose which subnet should be responsible for generating the initial key
+  material of the split or rented subnet.
+
+## Changed
+* Updated the response text of some failed registry mutations. "Blessed" -> "Elected".
+
+
 # 2026-04-25: Proposal 141566
 
 http://dashboard.internetcomputer.org/proposal/141566

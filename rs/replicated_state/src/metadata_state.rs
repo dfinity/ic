@@ -181,6 +181,18 @@ pub struct SystemMetadata {
     /// Modifications to the state that have not been applied yet to the next checkpoint.
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
+
+    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
+    /// or from `LogMemoryStore` to `CanisterLog`, as per the
+    /// `log_memory_store_feature` flag.
+    ///
+    /// This is a (temporary) transient field tracking whether all canisters are
+    /// definitely using the log store required by the `log_memory_store_feature`
+    /// flag. It is intended to be used as a one-time trigger (when `false`) to
+    /// launch the (idempotent, if already performed) logs migration exactly once
+    /// per replica process (since the flag is hardcoded into the binary).
+    #[validate_eq(Ignore)]
+    pub logs_migrated: bool,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -230,6 +242,11 @@ pub struct NetworkTopology {
     /// Unfiltered topology for the certified state tree.
     /// Only set on the NNS subnet; `None` everywhere else.
     full_topology: Option<FullTopology>,
+
+    /// Subnet to which `SetupInitialDKG` management canister calls are routed
+    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// request. If `None`, such requests are routed to the calling subnet.
+    pub default_initial_dkg_subnet_id: Option<SubnetId>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -258,6 +275,7 @@ impl Default for NetworkTopology {
             bitcoin_testnet_canister_id: None,
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
+            default_initial_dkg_subnet_id: None,
         }
     }
 }
@@ -273,6 +291,7 @@ impl NetworkTopology {
         bitcoin_testnet_canister_id: Option<CanisterId>,
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
+        default_initial_dkg_subnet_id: Option<SubnetId>,
     ) -> Self {
         Self {
             subnets,
@@ -283,6 +302,7 @@ impl NetworkTopology {
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         }
     }
 
@@ -396,6 +416,7 @@ pub struct SubnetMetrics {
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_case_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -418,6 +439,10 @@ impl SubnetMetrics {
         }
         *self
             .consumed_cycles_by_use_case
+            .entry(use_case)
+            .or_insert_with(NominalCycles::zero) += cycles;
+        *self
+            .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
     }
@@ -450,6 +475,12 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case
     }
 
+    pub fn get_consumed_cycles_by_use_case_as_counters(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_case_as_counters
+    }
+
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -465,8 +496,6 @@ impl SubnetMetrics {
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
                 | CyclesUseCase::DeletedCanisters => {}
-                // Non consumed cycles should not be counted towards the total consumed.
-                CyclesUseCase::NonConsumed => {}
                 // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
@@ -519,6 +548,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         }
     }
 
@@ -767,8 +797,6 @@ impl SystemMetadata {
     /// roll back `Stopping` states on all subnet B canisters.
     ///
     /// Notes:
-    ///  * `prev_state_hash` has just been set by `take_tip()` to the checkpoint
-    ///    hash (checked against the hash in the CUP). It must be preserved.
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
     ///    the registry subnet record of the subnet that this node is part of.
     ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set
@@ -823,6 +851,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            logs_migrated: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -927,6 +956,7 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
+            logs_migrated,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1036,6 +1066,7 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
+            logs_migrated,
         })
     }
 
@@ -2137,6 +2168,7 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         };
     }
 }

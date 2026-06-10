@@ -2,37 +2,39 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/http_endpoints/async_utils",
-    "//rs/monitoring/metrics",
-    "@crate_index//:axum",
-    "@crate_index//:prometheus",
-    "@crate_index//:slog",
-    "@crate_index//:tokio",
-    "@crate_index//:tower",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/logger",
-    "@crate_index//:reqwest",
-]
-
 rust_library(
     name = "metrics",
     srcs = glob(["src/**"]),
     crate_name = "ic_http_endpoints_metrics",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/metrics",
+        "@crate_index//:axum",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tower",
+    ],
 )
 
 rust_test(
     name = "metrics_test",
     size = "small",
     crate = ":metrics",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/metrics",
+        "@crate_index//:axum",
+        "@crate_index//:prometheus",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tower",
+    ],
 )
 
 rust_test_suite(
@@ -42,5 +44,18 @@ rust_test_suite(
         ["tests/**"],
     ),
     proc_macro_deps = [],
-    deps = [":metrics"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":metrics",
+        "//rs/config",
+        "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/metrics",
+        "//rs/test_utilities/logger",
+        "@crate_index//:axum",
+        "@crate_index//:prometheus",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tower",
+    ],
 )

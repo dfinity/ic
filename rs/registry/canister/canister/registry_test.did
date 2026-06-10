@@ -250,6 +250,41 @@ type GetNodeProvidersMonthlyXdrRewardsResponse = variant {
   Err : text;
 };
 
+type GetSubnetRequest = record {
+  subnet_id : opt principal;
+};
+
+type SubnetRecord = record {
+  membership : vec blob;
+  max_ingress_bytes_per_message : nat64;
+  unit_delay_millis : nat64;
+  initial_notary_delay_millis : nat64;
+  replica_version_id : text;
+  dkg_interval_length : nat64;
+  start_as_nns : bool;
+  subnet_type : SubnetType;
+  dkg_dealings_per_block : nat64;
+  is_halted : bool;
+  max_ingress_messages_per_block : nat64;
+  max_ingress_bytes_per_block : nat64;
+  max_block_payload_size : nat64;
+  features : opt SubnetFeatures;
+  max_number_of_canisters : nat64;
+  ssh_readonly_access : vec text;
+  ssh_backup_access : vec text;
+  halt_at_cup_height : bool;
+  chain_key_config : opt ChainKeyConfig;
+  canister_cycles_cost_schedule : CanisterCyclesCostSchedule;
+  subnet_admins : vec principal;
+  recalled_replica_version_ids : vec text;
+  resource_limits : opt ResourceLimits;
+};
+
+type GetSubnetResponse = variant {
+  Ok : SubnetRecord;
+  Err : text;
+};
+
 type GetSubnetForCanisterRequest = record { "principal" : opt principal };
 
 type GetSubnetForCanisterResponse = variant {
@@ -356,7 +391,7 @@ type ReviseElectedGuestosVersionsPayload = record {
 
 type GuestLaunchMeasurements = record {
  guest_launch_measurements : vec record {
-   metadata : opt record { kernel_cmdline : opt text };
+   metadata : opt record { kernel_cmdline : opt text; vcpu_type : opt text };
    measurement : blob;
  };
 };
@@ -486,6 +521,7 @@ type UpdateSubnetPayload = record {
   max_artifact_streams_per_peer : opt nat32;
   subnet_type : opt SubnetType;
   ssh_readonly_access : opt vec text;
+  subnet_admins : opt vec principal;
   chain_key_config : opt ChainKeyConfig;
   chain_key_signing_enable : opt vec MasterPublicKeyId;
   chain_key_signing_disable : opt vec MasterPublicKeyId;
@@ -548,6 +584,16 @@ type SplitSubnetPayload = record {
   source_subnet_id: principal;
   destination_canister_ranges: vec CanisterIdRange;
   destination_node_ids: vec principal;
+  initial_dkg_subnet_id: opt principal;
+};
+
+// Payload of a proposal to set or unset the default subnet to which
+// SetupInitialDKG management canister calls are routed when no subnet is
+// specified explicitly in the request. If `subnet_id` is `null`, the registry
+// entry is removed and `SetupInitialDKG` requests fall back to being routed to
+// the calling subnet (NNS).
+type SetDefaultInitialDkgSubnetPayload = record {
+  subnet_id : opt principal;
 };
 
 type OperationType = variant {
@@ -587,6 +633,7 @@ service : {
   get_chunk : (GetChunkRequest) -> (GetChunkResponse) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
+  get_subnet : (GetSubnetRequest) -> (GetSubnetResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
   migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
@@ -601,6 +648,7 @@ service : {
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> ();
   revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
+  set_default_initial_dkg_subnet : (SetDefaultInitialDkgSubnetPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   set_subnet_operational_level : (SetSubnetOperationalLevelPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();

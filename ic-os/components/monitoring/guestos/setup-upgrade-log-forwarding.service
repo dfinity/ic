@@ -1,0 +1,22 @@
+[Unit]
+Description=Enable serial journal forwarding for Upgrade VM
+Before=systemd-journald.service
+DefaultDependencies=no
+Wants=init-config.service
+After=init-config.service
+# Only enable serial journal forwarding for Upgrade VMs
+ConditionPathExists=/run/config/guest_vm_type/upgrade
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=systemd-journald.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-upgrade-log-forwarding.sh
+
+# All guestos services that networking depends on log their outputs to the
+# console to be piped to the host terminal if the verbose flag is enabled.
+StandardOutput=journal+console
+StandardError=journal+console
