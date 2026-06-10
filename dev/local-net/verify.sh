@@ -31,6 +31,16 @@ else
 fi
 
 echo
+if command -v icp >/dev/null 2>&1; then
+    echo "==> icp network ping local-cluster (icp $(icp --version | awk '{print $2}'))"
+    # Run from this directory so icp.yaml is found.
+    (cd "$(dirname "$0")" && icp network ping local-cluster 2>&1 | sed 's/^/    /') || \
+        echo "    (icp ping returned non-zero; see output above)"
+else
+    echo "==> icp-cli not installed; skipping icp ping"
+fi
+
+echo
 echo "==> Per-node /api/v2/status (consensus liveness)"
 for i in 0 1 2 3; do
     h=$(docker exec ic-replica-$i bash -c '

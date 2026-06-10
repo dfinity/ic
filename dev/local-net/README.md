@@ -11,8 +11,9 @@ run real BFT consensus over a real QUIC P2P transport.
 
 ## Quick start
 
-Prerequisites: Docker Desktop (with Rosetta enabled on Apple Silicon); dfx
-(optional, only for deploying canisters).
+Prerequisites: Docker Desktop (with Rosetta enabled on Apple Silicon);
+optionally dfx (for canister deploys) and/or icp-cli (for ping/inspection;
+see [DEPLOY.md](./DEPLOY.md) for caveats around `icp deploy`).
 
 ```sh
 cd dev/local-net          # from the IC repo root
@@ -73,7 +74,7 @@ against the already-running network. No need to restart anything.
 |---|---|---|
 | `build.sh` | Cold build of replica + ic-prep + ic-admin + ic-nns-init + sandboxes | 5–10 min first, ~1 min incr |
 | `prep.sh` | Run `ic-prep`, generate per-node `ic.json5`, lay out `bootstrap/` | <5s |
-| `verify.sh` | Smoke-test (status + dfx ping + per-node health + NNS state) | <5s |
+| `verify.sh` | Smoke-test (status + dfx ping + icp ping + per-node health + NNS state) | <5s |
 | `iter.sh [services] [--tail]` | bazel build → restart → wait healthy. **Fast dev loop.** | 20s warm |
 | `nns-init.sh` | Build 15 NNS canister WASMs and install them on the running subnet | 30 min first, ~2 min incr |
 | `reset.sh` | Down `-v`, regen prep, fresh up. Use for genesis from height 0. | ~15s |
