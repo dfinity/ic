@@ -10,6 +10,80 @@ type DeleteEngineArgs = record {
 
 type Result = variant { Ok; Err : text };
 
+type ResourceLimits = record {
+  maximum_state_size : opt nat64;
+  maximum_state_delta : opt nat64;
+};
+
+type SubnetFeatures = record {
+  canister_sandboxing : bool;
+  http_requests : bool;
+  sev_enabled : opt bool;
+};
+
+type SubnetType = variant { application; verified_application; system; cloud_engine };
+
+type EcdsaCurve = variant { secp256k1 };
+
+type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
+
+type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
+
+type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
+
+type VetKdCurve = variant { bls12_381_g2 };
+
+type VetKdKeyId = record { curve: VetKdCurve; name: text };
+
+type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId; VetKd : VetKdKeyId };
+
+type KeyConfig = record {
+  key_id : opt MasterPublicKeyId;
+  pre_signatures_to_create_in_advance : opt nat32;
+  max_queue_size : opt nat32;
+};
+
+type ChainKeyConfig = record {
+  key_configs : vec KeyConfig;
+  signature_request_timeout_ns : opt nat64;
+  idkg_key_rotation_period_ms : opt nat64;
+  max_parallel_pre_signature_transcripts_in_creation : opt nat32;
+};
+
+type UpdateSubnetPayload = record {
+  unit_delay_millis : opt nat64;
+  max_duplicity : opt nat32;
+  features : opt SubnetFeatures;
+  resource_limits : opt ResourceLimits;
+  set_gossip_config_to_default : bool;
+  halt_at_cup_height : opt bool;
+  pfn_evaluation_period_ms : opt nat32;
+  subnet_id : principal;
+  max_ingress_bytes_per_message : opt nat64;
+  dkg_dealings_per_block : opt nat64;
+  max_block_payload_size : opt nat64;
+  start_as_nns : opt bool;
+  is_halted : opt bool;
+  max_ingress_messages_per_block : opt nat64;
+  max_ingress_bytes_per_block: opt nat64;
+  max_number_of_canisters : opt nat64;
+  retransmission_request_ms : opt nat32;
+  dkg_interval_length : opt nat64;
+  registry_poll_period_ms : opt nat32;
+  max_chunk_wait_ms : opt nat32;
+  receive_check_cache_size : opt nat32;
+  ssh_backup_access : opt vec text;
+  max_chunk_size : opt nat32;
+  initial_notary_delay_millis : opt nat64;
+  max_artifact_streams_per_peer : opt nat32;
+  subnet_type : opt SubnetType;
+  ssh_readonly_access : opt vec text;
+  subnet_admins : opt vec principal;
+  chain_key_config : opt ChainKeyConfig;
+  chain_key_signing_enable : opt vec MasterPublicKeyId;
+  chain_key_signing_disable : opt vec MasterPublicKeyId;
+};
+
 type NewSubnet = record {
   new_subnet_id : opt principal;
 };
@@ -24,4 +98,5 @@ type EngineControllerInitArgs = record {
 service : (opt EngineControllerInitArgs) -> {
   create_engine : (CreateEngineArgs) -> (CreateEngineResult);
   delete_engine : (DeleteEngineArgs) -> (Result);
+  update_engine : (UpdateSubnetPayload) -> (Result);
 }

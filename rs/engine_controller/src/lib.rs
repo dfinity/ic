@@ -9,6 +9,9 @@ use serde::Deserialize;
 // Re-export the response type returned by `create_engine` so clients don't
 // have to depend on `registry-canister` directly just to decode it.
 pub use registry_canister::mutations::do_create_subnet::NewSubnet;
+// Re-export the registry payload forwarded by `update_engine` so clients can
+// build it without depending on `registry-canister` directly.
+pub use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct EngineControllerInitArgs {

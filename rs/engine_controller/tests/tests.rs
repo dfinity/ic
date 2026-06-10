@@ -8,7 +8,7 @@ use candid::{Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_engine_controller::{
-    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, NewSubnet,
+    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
 };
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
@@ -195,6 +195,63 @@ async fn call_delete_engine(
     Decode!(&raw, Result<(), String>).unwrap()
 }
 
+async fn call_update_engine(
+    pic: &PocketIc,
+    sender: Principal,
+    payload: &UpdateSubnetPayload,
+) -> Result<(), String> {
+    let raw = pic
+        .update_call(
+            ENGINE_CONTROLLER_CANISTER_ID.get().0,
+            sender,
+            "update_engine",
+            Encode!(payload).unwrap(),
+        )
+        .await
+        .expect("ingress call should succeed");
+    Decode!(&raw, Result<(), String>).unwrap()
+}
+
+/// Build an `UpdateSubnetPayload` that targets `subnet_id` and only toggles
+/// `is_halted`, leaving every other field unchanged. `UpdateSubnetPayload`
+/// does not implement `Default`, so the full field list is spelled out here
+/// (mirrors `rs/registry/canister/src/mutations/do_update_subnet.rs`).
+fn halt_payload(subnet_id: SubnetId, is_halted: bool) -> UpdateSubnetPayload {
+    UpdateSubnetPayload {
+        subnet_id,
+        is_halted: Some(is_halted),
+        max_ingress_bytes_per_message: None,
+        max_ingress_bytes_per_block: None,
+        max_ingress_messages_per_block: None,
+        max_block_payload_size: None,
+        unit_delay_millis: None,
+        initial_notary_delay_millis: None,
+        dkg_interval_length: None,
+        dkg_dealings_per_block: None,
+        start_as_nns: None,
+        subnet_type: None,
+        halt_at_cup_height: None,
+        features: None,
+        resource_limits: None,
+        chain_key_config: None,
+        chain_key_signing_enable: None,
+        chain_key_signing_disable: None,
+        max_number_of_canisters: None,
+        ssh_readonly_access: None,
+        ssh_backup_access: None,
+        subnet_admins: None,
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: false,
+    }
+}
+
 async fn registry_get_value(pic: &PocketIc, key: Vec<u8>) -> Vec<u8> {
     let request = serialize_get_value_request(key, None).unwrap();
     let raw = pic
@@ -222,6 +279,11 @@ async fn subnet_list(pic: &PocketIc) -> Vec<Vec<u8>> {
 
 fn node_principals(node_ids: &[NodeId]) -> Vec<Principal> {
     node_ids.iter().map(|n| n.get().0).collect()
+}
+
+async fn subnet_is_halted(pic: &PocketIc, subnet_id: SubnetId) -> bool {
+    let raw = registry_get_value(pic, make_subnet_record_key(subnet_id).as_bytes().to_vec()).await;
+    SubnetRecordPb::decode(raw.as_slice()).unwrap().is_halted
 }
 
 #[tokio::test]
@@ -445,5 +507,51 @@ async fn delete_engine_caller_must_be_authorized() {
     )
     .await
     .unwrap_err();
+    assert!(err.contains("not authorized"), "unexpected error: {err}");
+}
+
+#[tokio::test]
+async fn update_engine_can_halt_and_resume_a_subnet() {
+    let (pic, node_ids, _nns_subnet_id) = setup(4).await;
+
+    let new_subnet = call_create_engine(
+        &pic,
+        authorized(),
+        &CreateEngineArgs {
+            node_ids: node_principals(&node_ids),
+            subnet_admins: vec![],
+            replica_version_id: test_replica_version(),
+        },
+    )
+    .await
+    .expect("create_engine should succeed");
+    let subnet_id = new_subnet
+        .new_subnet_id
+        .expect("create_engine should return a new subnet id");
+
+    // A freshly created engine subnet starts unhalted.
+    assert!(!subnet_is_halted(&pic, subnet_id).await);
+
+    // Halt it.
+    call_update_engine(&pic, authorized(), &halt_payload(subnet_id, true))
+        .await
+        .expect("update_engine should halt the subnet");
+    assert!(subnet_is_halted(&pic, subnet_id).await);
+
+    // Resume it again.
+    call_update_engine(&pic, authorized(), &halt_payload(subnet_id, false))
+        .await
+        .expect("update_engine should resume the subnet");
+    assert!(!subnet_is_halted(&pic, subnet_id).await);
+}
+
+#[tokio::test]
+async fn update_engine_caller_must_be_authorized() {
+    let (pic, _, _) = setup(4).await;
+    let attacker = Principal::self_authenticating(b"attacker");
+    let subnet_id = SubnetId::new(PrincipalId(Principal::management_canister()));
+    let err = call_update_engine(&pic, attacker, &halt_payload(subnet_id, true))
+        .await
+        .unwrap_err();
     assert!(err.contains("not authorized"), "unexpected error: {err}");
 }
