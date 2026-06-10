@@ -4,7 +4,7 @@ use crate::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestId,
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
         CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseReceiptShare, CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus,
     },
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
@@ -362,7 +362,7 @@ impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
 
 impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
     fn from(share: CanisterHttpResponseShare) -> Self {
-        let CanisterHttpResponseReceiptShare {
+        let CanisterHttpResponseReceipt {
             metadata,
             payment_receipt,
         } = share.content;
@@ -403,7 +403,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
             "CanisterHttpResponseSignature::payment_receipt",
         )?;
         Ok(Signed {
-            content: CanisterHttpResponseReceiptShare {
+            content: CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id,
                     content_hash,
@@ -634,7 +634,7 @@ mod tests {
     fn canister_http_response_artifact_conversion() {
         let signer = NodeId::from(PrincipalId::new_node_test_id(2));
         let share = Signed {
-            content: CanisterHttpResponseReceiptShare {
+            content: CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CanisterHttpRequestId::new(2),
                     content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![

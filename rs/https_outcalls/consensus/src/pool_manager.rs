@@ -380,7 +380,7 @@ impl CanisterHttpPoolManagerImpl {
                             .ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
                     }
 
-                    let receipt_share = CanisterHttpResponseReceiptShare {
+                    let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: response.id,
                             registry_version,
@@ -830,7 +830,7 @@ pub mod test {
                 // Try to insert a share for request id 1 (while the next expected one is the
                 // default value 0).
                 {
-                    let response_metadata = CanisterHttpResponseReceiptShare {
+                    let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(1),
                             registry_version: RegistryVersion::from(1),
@@ -930,7 +930,7 @@ pub mod test {
                         )]))),
                     ));
 
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),
@@ -1039,7 +1039,7 @@ pub mod test {
                         )]))),
                     ));
 
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),
@@ -1170,7 +1170,7 @@ pub mod test {
                     ));
 
                 let response = empty_canister_http_response(0);
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),
@@ -1372,7 +1372,7 @@ pub mod test {
 
                 // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
                 let response = empty_canister_http_response(callback_id.get());
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
                         registry_version: RegistryVersion::from(1),
@@ -1473,7 +1473,7 @@ pub mod test {
                     ));
 
                 let response = empty_canister_http_response(0);
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),
@@ -1614,7 +1614,7 @@ pub mod test {
                         content: CanisterHttpResponseContent::Success(response_body_too_large),
                     };
 
-                    let response_metadata = CanisterHttpResponseReceiptShare {
+                    let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(0),
                             registry_version: RegistryVersion::from(1),
@@ -1683,7 +1683,7 @@ pub mod test {
                         content: CanisterHttpResponseContent::Success(response_body_ok),
                     };
 
-                    let response_metadata = CanisterHttpResponseReceiptShare {
+                    let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(0),
                             registry_version: RegistryVersion::from(1),
@@ -1790,7 +1790,7 @@ pub mod test {
                     ..empty_canister_http_response(0)
                 };
 
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),
@@ -2135,7 +2135,7 @@ pub mod test {
                 };
 
                 let dishonest_hash = ic_types::crypto::crypto_hash(&dishonest_response);
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
                         registry_version: RegistryVersion::from(1),
@@ -2277,7 +2277,7 @@ pub mod test {
                     ..empty_canister_http_response(0)
                 };
 
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),
@@ -2358,7 +2358,7 @@ pub mod test {
                         )]))),
                     ));
 
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(7),
                         registry_version: RegistryVersion::from(1),
@@ -2762,7 +2762,7 @@ pub mod test {
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 0);
 
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(7),
                         registry_version: RegistryVersion::from(1),
@@ -2929,7 +2929,7 @@ pub mod test {
 
                 // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
                 let response = empty_canister_http_response(callback_id.get());
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
                         registry_version: RegistryVersion::from(1),
@@ -3031,7 +3031,7 @@ pub mod test {
                     ));
 
                 let response = empty_canister_http_response(callback_id.get());
-                let response_metadata = CanisterHttpResponseReceiptShare {
+                let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
                         registry_version: RegistryVersion::from(1),
@@ -3269,7 +3269,7 @@ pub mod test {
                         content: CanisterHttpResponseContent::Success(vec![0; oversized_len]),
                     };
 
-                    let response_metadata = CanisterHttpResponseReceiptShare {
+                    let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
                             registry_version: RegistryVersion::from(1),
@@ -3336,7 +3336,7 @@ pub mod test {
                         ]),
                     };
 
-                    let response_metadata = CanisterHttpResponseReceiptShare {
+                    let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
                             registry_version: RegistryVersion::from(1),
@@ -3514,7 +3514,7 @@ pub mod test {
 
                 // Build a per-replica receipt share whose refund claim is
                 // larger than the per-replica allowance.
-                let receipt_share = CanisterHttpResponseReceiptShare {
+                let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
                         registry_version: RegistryVersion::from(1),

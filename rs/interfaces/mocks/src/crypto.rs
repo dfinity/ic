@@ -25,7 +25,7 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
-use ic_types::canister_http::CanisterHttpResponseReceiptShare;
+use ic_types::canister_http::CanisterHttpResponseReceipt;
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -299,8 +299,8 @@ mockall::mock! {
         ) -> CryptoResult<BasicSigOf<IDkgOpeningContent>>;
 
         pub fn sign_basic_http(
-            &self, message: &CanisterHttpResponseReceiptShare,
-        ) -> CryptoResult<BasicSigOf<CanisterHttpResponseReceiptShare>>;
+            &self, message: &CanisterHttpResponseReceipt,
+        ) -> CryptoResult<BasicSigOf<CanisterHttpResponseReceipt>>;
 
         pub fn sign_basic_query(
             &self, message: &QueryResponseHash,
@@ -457,24 +457,24 @@ mockall::mock! {
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        // CanisterHttpResponseReceiptShare
+        // CanisterHttpResponseReceipt
         pub fn verify_basic_sig_http(
             &self,
-            signature: &BasicSigOf<CanisterHttpResponseReceiptShare>,
-            message: &CanisterHttpResponseReceiptShare, signer: NodeId,
+            signature: &BasicSigOf<CanisterHttpResponseReceipt>,
+            message: &CanisterHttpResponseReceipt, signer: NodeId,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
         pub fn combine_basic_sig_http(
             &self,
-            signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpResponseReceiptShare>>,
+            signatures: BTreeMap<NodeId, BasicSigOf<CanisterHttpResponseReceipt>>,
             registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSignatureBatch<CanisterHttpResponseReceiptShare>>;
+        ) -> CryptoResult<BasicSignatureBatch<CanisterHttpResponseReceipt>>;
 
         pub fn verify_basic_sig_batch_http(
             &self,
-            signature_batch: &BasicSignatureBatch<CanisterHttpResponseReceiptShare>,
-            message: &CanisterHttpResponseReceiptShare,
+            signature_batch: &BasicSignatureBatch<CanisterHttpResponseReceipt>,
+            message: &CanisterHttpResponseReceipt,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
@@ -482,8 +482,8 @@ mockall::mock! {
             &self,
             inputs: Vec<(
                 NodeId,
-                BasicSigOf<CanisterHttpResponseReceiptShare>,
-                CanisterHttpResponseReceiptShare,
+                BasicSigOf<CanisterHttpResponseReceipt>,
+                CanisterHttpResponseReceipt,
             )>,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
@@ -783,7 +783,7 @@ impl_basic_signer!(SignedIDkgDealing, sign_basic_signed_idkg_dealing);
 impl_basic_signer!(IDkgDealing, sign_basic_idkg_dealing);
 impl_basic_signer!(IDkgComplaintContent, sign_basic_idkg_complaint);
 impl_basic_signer!(IDkgOpeningContent, sign_basic_idkg_opening);
-impl_basic_signer!(CanisterHttpResponseReceiptShare, sign_basic_http);
+impl_basic_signer!(CanisterHttpResponseReceipt, sign_basic_http);
 impl_basic_signer!(QueryResponseHash, sign_basic_query);
 
 impl_basic_sig_verifier!(
@@ -829,7 +829,7 @@ impl_basic_sig_verifier!(
     verify_basic_sig_batch_multi_msg_idkg_opening
 );
 impl_basic_sig_verifier!(
-    CanisterHttpResponseReceiptShare,
+    CanisterHttpResponseReceipt,
     verify_basic_sig_http,
     combine_basic_sig_http,
     verify_basic_sig_batch_http,

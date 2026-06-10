@@ -1086,12 +1086,12 @@ impl CountBytes for CanisterHttpResponseMetadata {
 /// [`CanisterHttpPaymentReceipt`].
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct CanisterHttpResponseReceiptShare {
+pub struct CanisterHttpResponseReceipt {
     pub metadata: CanisterHttpResponseMetadata,
     pub payment_receipt: CanisterHttpPaymentReceipt,
 }
 
-impl CountBytes for CanisterHttpResponseReceiptShare {
+impl CountBytes for CanisterHttpResponseReceipt {
     fn count_bytes(&self) -> usize {
         let Self {
             metadata,
@@ -1101,7 +1101,7 @@ impl CountBytes for CanisterHttpResponseReceiptShare {
     }
 }
 
-impl CanisterHttpResponseReceiptShare {
+impl CanisterHttpResponseReceipt {
     pub fn id(&self) -> CallbackId {
         self.metadata.id
     }
@@ -1131,7 +1131,7 @@ impl CanisterHttpResponseReceiptShare {
     }
 }
 
-impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseReceiptShare {
+impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseReceipt {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         serde_cbor::to_writer(bytes, &self).unwrap();
     }
@@ -1140,12 +1140,12 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseRe
 /// A single signer's contribution to an aggregated proof: the
 /// [`CanisterHttpPaymentReceipt`] that signer signed over, together with
 /// their basic signature on the corresponding
-/// [`CanisterHttpResponseReceiptShare`].
+/// [`CanisterHttpResponseReceipt`].
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseSignature {
     pub payment_receipt: CanisterHttpPaymentReceipt,
-    pub signature: BasicSigOf<CanisterHttpResponseReceiptShare>,
+    pub signature: BasicSigOf<CanisterHttpResponseReceipt>,
 }
 
 impl CountBytes for CanisterHttpResponseSignature {
@@ -1190,8 +1190,8 @@ impl CanisterHttpResponseProof {
     }
 }
 
-/// A signature share of [`CanisterHttpResponseReceiptShare`].
-pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceiptShare>;
+/// A signature share of [`CanisterHttpResponseReceipt`].
+pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 
 /// Contains a share and optionally the full response.
 ///

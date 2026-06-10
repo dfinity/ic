@@ -1,7 +1,7 @@
 use ic_interfaces::{crypto::*, validation::ValidationResult};
 use ic_types::{
     NodeId, RegistryVersion,
-    canister_http::CanisterHttpResponseReceiptShare,
+    canister_http::CanisterHttpResponseReceipt,
     consensus::{
         BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
         RandomBeaconContent, RandomTapeContent, dkg,
@@ -430,8 +430,8 @@ pub trait ConsensusCrypto:
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>
     + SignVerify<dkg::DealingContent, BasicSignature<dkg::DealingContent>, RegistryVersion>
     + SignVerify<
-        CanisterHttpResponseReceiptShare,
-        BasicSignature<CanisterHttpResponseReceiptShare>,
+        CanisterHttpResponseReceipt,
+        BasicSignature<CanisterHttpResponseReceipt>,
         RegistryVersion,
     > + Aggregate<
         NotarizationContent,
@@ -464,10 +464,10 @@ pub trait ConsensusCrypto:
         NiDkgId,
         ThresholdSignature<CatchUpContent>,
     > + Aggregate<
-        CanisterHttpResponseReceiptShare,
-        BasicSignature<CanisterHttpResponseReceiptShare>,
+        CanisterHttpResponseReceipt,
+        BasicSignature<CanisterHttpResponseReceipt>,
         RegistryVersion,
-        BasicSignatureBatch<CanisterHttpResponseReceiptShare>,
+        BasicSignatureBatch<CanisterHttpResponseReceipt>,
     > + Crypto
     + Send
     + Sync

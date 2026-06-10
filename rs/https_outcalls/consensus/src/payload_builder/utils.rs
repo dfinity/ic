@@ -8,7 +8,7 @@ use ic_types::{
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceiptShare,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus,
     },
@@ -99,7 +99,7 @@ pub(crate) fn reconstruct_individual_shares(
     proof: &CanisterHttpResponseProof,
 ) -> impl Iterator<Item = CanisterHttpResponseShare> + '_ {
     proof.signatures.iter().map(|(signer, sig)| Signed {
-        content: CanisterHttpResponseReceiptShare {
+        content: CanisterHttpResponseReceipt {
             metadata: proof.metadata.clone(),
             payment_receipt: sig.payment_receipt.clone(),
         },
@@ -254,8 +254,8 @@ pub(crate) fn validate_response_share(
 /// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) type ResponseShareSigInput<'a> = (
     NodeId,
-    &'a BasicSigOf<CanisterHttpResponseReceiptShare>,
-    &'a CanisterHttpResponseReceiptShare,
+    &'a BasicSigOf<CanisterHttpResponseReceipt>,
+    &'a CanisterHttpResponseReceipt,
 );
 
 /// Maps response shares to the `(signer, signature, message)` inputs consumed by

@@ -236,7 +236,7 @@ mod tests {
         artifact::IdentifiableArtifact,
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-            CanisterHttpResponseReceiptShare,
+            CanisterHttpResponseReceipt,
         },
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
@@ -262,7 +262,7 @@ mod tests {
 
     fn fake_share(id: u64) -> CanisterHttpResponseShare {
         Signed {
-            content: CanisterHttpResponseReceiptShare {
+            content: CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::from(id),
                     content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),

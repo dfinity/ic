@@ -49,7 +49,7 @@ use ic_types::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseContent,
         CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseReceiptShare, CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, Replication,
     },
     consensus::get_faults_tolerated,
@@ -783,7 +783,7 @@ fn divergence_error_message() {
             sample.content_hash = CryptoHashOf::from(CryptoHash(new_hash.to_vec()));
 
             Signed {
-                content: CanisterHttpResponseReceiptShare {
+                content: CanisterHttpResponseReceipt {
                     metadata: sample,
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 },
@@ -1614,7 +1614,7 @@ pub(crate) fn metadata_to_share_with_signature(
 ) -> CanisterHttpResponseShare {
     let signer = node_test_id(from_node);
     Signed {
-        content: CanisterHttpResponseReceiptShare {
+        content: CanisterHttpResponseReceipt {
             metadata: metadata.clone(),
             payment_receipt: CanisterHttpPaymentReceipt::default(),
         },
@@ -1669,7 +1669,7 @@ fn share_with_excess_refund(
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseShare {
     CanisterHttpResponseShare::fake(
-        CanisterHttpResponseReceiptShare {
+        CanisterHttpResponseReceipt {
             metadata: metadata.clone(),
             payment_receipt: receipt_exceeding_allowance(),
         },

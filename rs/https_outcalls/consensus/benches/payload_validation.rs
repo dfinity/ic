@@ -31,7 +31,7 @@ use ic_types::{
     canister_http::{
         CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
-        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceiptShare,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus, PricingVersion, RefundStatus, Replication,
     },
@@ -242,7 +242,7 @@ fn build_target(
     }
 }
 
-/// Helper that signs `CanisterHttpResponseReceiptShare` with a committee
+/// Helper that signs `CanisterHttpResponseReceipt` with a committee
 /// node's crypto component.
 struct Signer<'a> {
     crypto: &'a [TempCryptoComponent],
@@ -252,8 +252,8 @@ impl Signer<'_> {
     fn sign(
         &self,
         node_index: usize,
-        receipt_share: &CanisterHttpResponseReceiptShare,
-    ) -> BasicSigOf<CanisterHttpResponseReceiptShare> {
+        receipt_share: &CanisterHttpResponseReceipt,
+    ) -> BasicSigOf<CanisterHttpResponseReceipt> {
         self.crypto[node_index]
             .sign_basic(receipt_share)
             .expect("failed to sign response receipt share")
@@ -294,7 +294,7 @@ impl<'a> PayloadAssembler<'a> {
         node: usize,
         metadata: &CanisterHttpResponseMetadata,
     ) -> CanisterHttpResponseSignature {
-        let receipt_share = CanisterHttpResponseReceiptShare {
+        let receipt_share = CanisterHttpResponseReceipt {
             metadata: metadata.clone(),
             payment_receipt: CanisterHttpPaymentReceipt::default(),
         };
@@ -313,7 +313,7 @@ impl<'a> PayloadAssembler<'a> {
         node: usize,
         metadata: CanisterHttpResponseMetadata,
     ) -> CanisterHttpResponseShare {
-        let receipt_share = CanisterHttpResponseReceiptShare {
+        let receipt_share = CanisterHttpResponseReceipt {
             metadata,
             payment_receipt: CanisterHttpPaymentReceipt::default(),
         };

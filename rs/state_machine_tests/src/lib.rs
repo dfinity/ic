@@ -151,7 +151,7 @@ use ic_types::{
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseReceiptShare,
+        CanisterHttpResponseReceipt,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -2701,7 +2701,7 @@ impl StateMachine {
                 canister_id,
                 content: content.clone(),
             };
-            let receipt_share = CanisterHttpResponseReceiptShare {
+            let receipt_share = CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::from(request_id),
                     registry_version,

@@ -71,8 +71,7 @@ mod crypto_hash_stability {
     use crate::batch::{BatchPayload, ValidationContext};
     use crate::canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseReceiptShare,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseReceipt,
     };
     use crate::consensus::{
         Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpContentProtobufBytes,
@@ -1096,7 +1095,7 @@ mod crypto_hash_stability {
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
-        let receipt_share = CanisterHttpResponseReceiptShare {
+        let receipt_share = CanisterHttpResponseReceipt {
             metadata,
             payment_receipt: CanisterHttpPaymentReceipt {
                 refund: Cycles::new(42),
