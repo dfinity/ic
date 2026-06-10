@@ -211,10 +211,8 @@ system_test(
 
 system_test(
     name = "fill_execution_rounds_workload",
-    # TODO: figure out the number of vCPUs used by this performance test's setup
-    # (Jaeger UVM + an Application subnet of `subnet_size` nodes, all overridden
-    # to 16 vCPUs). It is tagged `manual` and not meant to run on the local backend.
-    cpus = MIN_LOCAL_CPUS,
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 16 + 13 * 16,  # 16 vCPUs for Jaeger UVM + 13 IC Node VMs * 16 vCPUs.
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
