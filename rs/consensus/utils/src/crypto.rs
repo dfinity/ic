@@ -463,11 +463,6 @@ pub trait ConsensusCrypto:
         ThresholdSignatureShare<CatchUpContent>,
         NiDkgId,
         ThresholdSignature<CatchUpContent>,
-    > + Aggregate<
-        CanisterHttpResponseReceipt,
-        BasicSignature<CanisterHttpResponseReceipt>,
-        RegistryVersion,
-        BasicSignatureBatch<CanisterHttpResponseReceipt>,
     > + Crypto
     + Send
     + Sync
