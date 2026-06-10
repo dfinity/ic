@@ -270,6 +270,35 @@ pub fn add_global_registry_records(
         )
         .unwrap();
 
+    update_global_registry_records(
+        registry_version,
+        routing_table,
+        subnet_list,
+        chain_keys,
+        registry_data_provider.clone(),
+    );
+
+    // node rewards table
+    registry_data_provider
+        .add(
+            NODE_REWARDS_TABLE_KEY,
+            registry_version,
+            Some(NodeRewardsTable {
+                table: BTreeMap::new(),
+            }),
+        )
+        .unwrap();
+}
+
+/// Updates global registry records (routing table, subnet list, chain keys) at the given
+/// registry version. Used both during initial setup and after removing a subnet.
+pub fn update_global_registry_records(
+    registry_version: RegistryVersion,
+    routing_table: RoutingTable,
+    subnet_list: Vec<SubnetId>,
+    chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+) {
     // routing table record
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
@@ -301,17 +330,6 @@ pub fn add_global_registry_records(
             )
             .unwrap();
     }
-
-    // node rewards table
-    registry_data_provider
-        .add(
-            NODE_REWARDS_TABLE_KEY,
-            registry_version,
-            Some(NodeRewardsTable {
-                table: BTreeMap::new(),
-            }),
-        )
-        .unwrap();
 }
 
 /// Adds initial registry records to the registry managed by the registry data provider:
