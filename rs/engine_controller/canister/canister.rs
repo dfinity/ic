@@ -244,7 +244,10 @@ fn ensure_only_subnet_admins_set(payload: &UpdateSubnetPayload) -> Result<(), St
             }
         };
     }
-    check_none!(max_ingress_bytes_per_message, "max_ingress_bytes_per_message");
+    check_none!(
+        max_ingress_bytes_per_message,
+        "max_ingress_bytes_per_message"
+    );
     check_none!(max_ingress_bytes_per_block, "max_ingress_bytes_per_block");
     check_none!(
         max_ingress_messages_per_block,
@@ -267,7 +270,10 @@ fn ensure_only_subnet_admins_set(payload: &UpdateSubnetPayload) -> Result<(), St
     check_none!(max_number_of_canisters, "max_number_of_canisters");
     check_none!(ssh_readonly_access, "ssh_readonly_access");
     check_none!(ssh_backup_access, "ssh_backup_access");
-    check_none!(max_artifact_streams_per_peer, "max_artifact_streams_per_peer");
+    check_none!(
+        max_artifact_streams_per_peer,
+        "max_artifact_streams_per_peer"
+    );
     check_none!(max_chunk_wait_ms, "max_chunk_wait_ms");
     check_none!(max_duplicity, "max_duplicity");
     check_none!(max_chunk_size, "max_chunk_size");
