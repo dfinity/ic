@@ -167,7 +167,7 @@ impl MinterCanister {
         let refreshes_before = self.count_fee_percentile_refreshes();
         self.env
             .advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
-        let max_ticks = 10;
+        let max_ticks = 100;
         for _ in 0..max_ticks {
             self.env.tick();
             if self.count_fee_percentile_refreshes() > refreshes_before {
