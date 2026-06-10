@@ -1,8 +1,8 @@
 //! The engine controller canister.
 //!
 //! This canister provides a thin user-facing API on top of the registry
-//! canister's `create_subnet` / `delete_subnet` endpoints. Only a single,
-//! hard-coded authorized principal may invoke its methods.
+//! canister's `create_subnet` / `delete_subnet` / `update_subnet` endpoints.
+//! Only a single, hard-coded authorized principal may invoke its methods.
 use candid::Principal;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
@@ -16,6 +16,7 @@ use registry_canister::mutations::do_create_subnet::{
     CanisterCyclesCostSchedule, CreateSubnetPayload,
 };
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
+use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -184,6 +185,22 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
             .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
     response
+}
+
+/// Forward an `update_subnet` request to the registry. The engine
+/// controller is an authorized caller of the registry's `update_subnet`,
+/// so this lets the single authorized principal update any field of a
+/// subnet (e.g. toggle `is_halted` to halt/resume an engine subnet).
+#[update]
+async fn update_engine(payload: UpdateSubnetPayload) -> Result<(), String> {
+    ensure_authorized()?;
+    // `update_subnet` returns unit on success and traps on failure, so a
+    // failed call surfaces here as a call error rather than a decoded `Err`.
+    Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "update_subnet")
+        .with_arg(payload)
+        .await
+        .map_err(|e| format!("registry.update_subnet call failed: {e:?}"))?;
+    Ok(())
 }
 
 fn main() {
