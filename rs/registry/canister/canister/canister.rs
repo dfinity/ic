@@ -559,7 +559,7 @@ fn deploy_guestos_to_all_subnet_nodes() {
 
 #[candid_method(update, rename = "deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
-    let caller = PrincipalId::from(dfn_core::api::caller());
+    let caller = dfn_core::api::caller();
     registry_mut().do_deploy_guestos_to_all_subnet_nodes(caller, payload);
     recertify_registry();
 }
@@ -878,7 +878,7 @@ fn update_subnet() {
 
 #[candid_method(update, rename = "update_subnet")]
 fn update_subnet_(payload: UpdateSubnetPayload) {
-    let caller = PrincipalId::from(dfn_core::api::caller());
+    let caller = dfn_core::api::caller();
     registry_mut().do_update_subnet(caller, payload);
     recertify_registry();
 }
