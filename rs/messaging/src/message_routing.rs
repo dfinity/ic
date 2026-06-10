@@ -302,24 +302,24 @@ pub(crate) struct MessageRoutingMetrics {
     /// Most recently seen certified height, per remote subnet
     pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
-    pub(crate) process_batch_phase_duration: HistogramVec,
+    process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
-    pub(crate) timed_out_messages_total: IntCounterVec,
+    timed_out_messages_total: IntCounterVec,
     /// Number of timed out callbacks.
     pub(crate) timed_out_callbacks_total: IntCounter,
     /// Number of shed best-effort messages.
-    pub(crate) shed_messages_total: IntCounterVec,
+    shed_messages_total: IntCounterVec,
     /// Byte size of shed best-effort messages.
-    pub(crate) shed_message_bytes_total: IntCounterVec,
+    shed_message_bytes_total: IntCounterVec,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
-    pub(crate) subnet_split_height: IntGaugeVec,
+    subnet_split_height: IntGaugeVec,
     /// Number of blocks proposed.
-    pub(crate) blocks_proposed_total: IntCounter,
+    blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
-    pub(crate) blocks_not_proposed_total: IntCounter,
+    blocks_not_proposed_total: IntCounter,
     /// Number of blocks not proposed by blockmaker ID.
-    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
+    blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     subnet_info: IntGaugeVec,
     subnet_size: IntGauge,
