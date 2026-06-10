@@ -513,3 +513,22 @@ impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
         ))
     }
 }
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RejectSignalsV25 {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_migrating_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_not_found_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_stopped_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_stopping_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue_full_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub out_of_memory_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknown_deltas: Vec<u64>,
+}

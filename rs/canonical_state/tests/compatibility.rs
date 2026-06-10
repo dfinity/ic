@@ -72,14 +72,27 @@ pub(crate) fn arb_valid_versioned_stream_header(
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         // Stream headers may have flavours of reject signals other than `CanisterMigrating`
-        // starting from certification version 19.
+        // starting from certification version 19, except `EngineNotAllowed` (valid from V26).
+        (
+            arb_stream_header(
+                /* min_signal_count */ 0,
+                max_signal_count,
+                /* with_reject_reasons */
+                RejectReason::all()
+                    .into_iter()
+                    .filter(|reason| *reason != RejectReason::EngineNotAllowed)
+                    .collect(),
+            ),
+            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        // `EngineNotAllowed` reject signals are valid from certification version 26.
         (
             arb_stream_header(
                 /* min_signal_count */ 0,
                 max_signal_count,
                 /* with_reject_reasons */ RejectReason::all(),
             ),
-            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+            Just(CertificationVersion::V26..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         )
     ]
 }

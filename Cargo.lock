@@ -15297,6 +15297,7 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-btc-replica-types",
+ "ic-certification-version",
  "ic-interfaces",
  "ic-management-canister-types-private",
  "ic-registry-routing-table",

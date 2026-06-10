@@ -392,6 +392,9 @@ mod tests {
             "07797459A2F82D6F64628C0668C5BDB7F83447680DDB178208A40C2256409E8D",
             "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
             "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
+            // V26 adds `EngineNotAllowed` reject signals; absent any such signal the encoding is
+            // identical to V25, so the hash matches.
+            "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

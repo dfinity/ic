@@ -1,5 +1,6 @@
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
+use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
     OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
@@ -951,7 +952,15 @@ prop_compose! {
             min_size..=max_size,
             0..=10000,
             min_signal_count..=max_signal_count,
-            RejectReason::all(),
+            // `EngineNotAllowed` is only encodable from V26; these streams are certified at
+            // `CURRENT_CERTIFICATION_VERSION`.
+            RejectReason::all()
+                .into_iter()
+                .filter(|reason| {
+                    *reason != RejectReason::EngineNotAllowed
+                        || CURRENT_CERTIFICATION_VERSION >= CertificationVersion::V26
+                })
+                .collect(),
         )
     ) -> Stream {
         stream
