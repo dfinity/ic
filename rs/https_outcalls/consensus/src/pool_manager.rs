@@ -174,7 +174,7 @@ impl CanisterHttpPoolManagerImpl {
         canister_http_pool
             .get_validated_shares()
             .filter_map(|share| {
-                if active_callback_ids.contains(&share.content.id) {
+                if active_callback_ids.contains(&share.content.id()) {
                     None
                 } else {
                     Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
@@ -184,10 +184,10 @@ impl CanisterHttpPoolManagerImpl {
                 canister_http_pool
                     .get_unvalidated_artifacts()
                     // Only check the unvalidated shares belonging to the requests that we can validate.
-                    .filter(|artifact| artifact.share.content.id < next_callback_id)
+                    .filter(|artifact| artifact.share.content.id() < next_callback_id)
                     .filter_map(|artifact| {
                         let share = &artifact.share;
-                        if active_callback_ids.contains(&share.content.id) {
+                        if active_callback_ids.contains(&share.content.id()) {
                             None
                         } else {
                             Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()))
@@ -277,7 +277,7 @@ impl CanisterHttpPoolManagerImpl {
             .get_validated_shares()
             .filter_map(|share| {
                 if share.signature.signer == self.replica_config.node_id {
-                    Some(share.content.id)
+                    Some(share.content.id())
                 } else {
                     None
                 }
@@ -351,7 +351,7 @@ impl CanisterHttpPoolManagerImpl {
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
-                Ok((mut response, _payment_receipt)) => {
+                Ok((mut response, payment_receipt)) => {
                     // Drop the response if its context is no longer present in the replicated state
                     // (e.g. the request has timed out or has already been answered by enough other nodes).
                     let Some(context) = active_contexts.get(&response.id) else {
@@ -387,18 +387,21 @@ impl CanisterHttpPoolManagerImpl {
                             .ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
                     }
 
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: response.id,
-                        registry_version,
-                        content_hash: ic_types::crypto::crypto_hash(&response),
-                        content_size: response.content.count_bytes() as u32,
-                        is_reject: response.content.is_reject(),
-                        replica_version: ReplicaVersion::default(),
+                    let receipt_share = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: response.id,
+                            registry_version,
+                            content_hash: ic_types::crypto::crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: response.content.is_reject(),
+                            replica_version: ReplicaVersion::default(),
+                        },
+                        payment_receipt,
                     };
                     let signature = if let Ok(signature) = self
                         .crypto
                         .sign(
-                            &response_metadata,
+                            &receipt_share,
                             self.replica_config.node_id,
                             registry_version,
                         )
@@ -409,7 +412,7 @@ impl CanisterHttpPoolManagerImpl {
                         continue;
                     };
                     let share = Signed {
-                        content: response_metadata,
+                        content: receipt_share,
                         signature,
                     };
                     self.requested_id_cache.borrow_mut().remove(&response.id);
@@ -476,7 +479,7 @@ impl CanisterHttpPoolManagerImpl {
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
-            |share: &CanisterHttpResponseShare| (share.signature.signer, share.content.id);
+            |share: &CanisterHttpResponseShare| (share.signature.signer, share.content.id());
 
         let mut existing_signed_requests: HashSet<_> = canister_http_pool
             .get_validated_shares()
@@ -485,12 +488,12 @@ impl CanisterHttpPoolManagerImpl {
 
         canister_http_pool
             .get_unvalidated_artifacts()
-            .filter(|artifact| artifact.share.content.id < next_callback_id)
+            .filter(|artifact| artifact.share.content.id() < next_callback_id)
             .filter_map(|artifact| {
                 let share = &artifact.share;
 
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(&share.content.replica_version) {
+                    return match is_current_protocol_version(share.content.replica_version()) {
                         true => Some(CanisterHttpChangeAction::HandleInvalid(
                             share.clone(),
                             "Redundant share".into(),
@@ -499,9 +502,18 @@ impl CanisterHttpPoolManagerImpl {
                     };
                 }
 
-                let Some(context) = active_contexts.get(&share.content.id) else {
+                let Some(context) = active_contexts.get(&share.content.id()) else {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
+
+                // Invalidate shares whose refund exceeds what a single
+                // replica is allowed to claim.
+                if share.content.refund() > context.refund_status.per_replica_allowance {
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Refund is greater than replica allowance".to_string(),
+                    ));
+                }
 
                 match &context.replication {
                     Replication::FullyReplicated => {
@@ -528,21 +540,22 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         };
 
-                        if share.content.content_hash != ic_types::crypto::crypto_hash(response) {
+                        if share.content.content_hash() != &ic_types::crypto::crypto_hash(response)
+                        {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
                                 "Content hash does not match the response".to_string(),
                             ));
                         }
 
-                        if share.content.content_size != response.content.count_bytes() as u32 {
+                        if share.content.content_size() != response.content.count_bytes() as u32 {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
                                 "Content size does not match the response".to_string(),
                             ));
                         }
 
-                        if share.content.is_reject != response.content.is_reject() {
+                        if share.content.is_reject() != response.content.is_reject() {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
                                 "is_reject does not match the response content".to_string(),
@@ -718,6 +731,7 @@ pub mod test {
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
+    use ic_types_cycles::Cycles;
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
@@ -823,13 +837,16 @@ pub mod test {
                 // Try to insert a share for request id 1 (while the next expected one is the
                 // default value 0).
                 {
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: CallbackId::from(1),
-                        registry_version: RegistryVersion::from(1),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                        content_size: 0,
-                        is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                    let response_metadata = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: CallbackId::from(1),
+                            registry_version: RegistryVersion::from(1),
+                            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                            content_size: 0,
+                            is_reject: false,
+                            replica_version: ReplicaVersion::default(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
 
                     let signature = crypto
@@ -920,13 +937,16 @@ pub mod test {
                         )]))),
                     ));
 
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    content_size: 0,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let mut canister_http_pool =
@@ -952,7 +972,7 @@ pub mod test {
                 )]);
 
                 // add an unvalidated copy of the share, that has an outdated version instead
-                share.content.replica_version =
+                share.content.metadata.replica_version =
                     ReplicaVersion::from_str("outdated_version").unwrap();
 
                 let artifact = CanisterHttpResponseArtifact {
@@ -1026,13 +1046,16 @@ pub mod test {
                         )]))),
                     ));
 
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    content_size: 0,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let mut canister_http_pool =
@@ -1154,13 +1177,16 @@ pub mod test {
                     ));
 
                 let response = empty_canister_http_response(0);
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: ic_types::crypto::crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let signature = crypto
@@ -1222,7 +1248,8 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.content_hash = CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+                    bad_share.content.metadata.content_hash =
+                        CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
 
                     let artifact_with_mismatched_hash = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -1254,7 +1281,8 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.content_size = bad_share.content.content_size.wrapping_add(1);
+                    bad_share.content.metadata.content_size =
+                        bad_share.content.metadata.content_size.wrapping_add(1);
 
                     let artifact_with_mismatched_size = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -1286,7 +1314,7 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.is_reject = !bad_share.content.is_reject;
+                    bad_share.content.metadata.is_reject = !bad_share.content.metadata.is_reject;
 
                     let artifact_with_mismatched_is_reject = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -1351,13 +1379,16 @@ pub mod test {
 
                 // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
                 let response = empty_canister_http_response(callback_id.get());
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: callback_id,
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: ic_types::crypto::crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: callback_id,
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
                 let share = Signed {
                     content: response_metadata.clone(),
@@ -1449,13 +1480,16 @@ pub mod test {
                     ));
 
                 let response = empty_canister_http_response(0);
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: ic_types::crypto::crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let signature = crypto
@@ -1587,13 +1621,16 @@ pub mod test {
                         content: CanisterHttpResponseContent::Success(response_body_too_large),
                     };
 
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
-                        content_hash: ic_types::crypto::crypto_hash(&response),
-                        content_size: response.content.count_bytes() as u32,
-                        is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                    let response_metadata = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: CallbackId::from(0),
+                            registry_version: RegistryVersion::from(1),
+                            content_hash: ic_types::crypto::crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: ReplicaVersion::default(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -1653,13 +1690,16 @@ pub mod test {
                         content: CanisterHttpResponseContent::Success(response_body_ok),
                     };
 
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
-                        content_hash: ic_types::crypto::crypto_hash(&response),
-                        content_size: response.content.count_bytes() as u32,
-                        is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                    let response_metadata = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: CallbackId::from(0),
+                            registry_version: RegistryVersion::from(1),
+                            content_hash: ic_types::crypto::crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: ReplicaVersion::default(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -1757,13 +1797,16 @@ pub mod test {
                     ..empty_canister_http_response(0)
                 };
 
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: ic_types::crypto::crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: true,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: true,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let share = Signed {
@@ -1911,7 +1954,7 @@ pub mod test {
                         // Assert that the hash in the share matches the hash of the *truncated* response.
                         let expected_hash = ic_types::crypto::crypto_hash(response);
                         assert_eq!(
-                            share.content.content_hash, expected_hash,
+                            share.content.content_hash(), &expected_hash,
                             "The share's content hash must match the pruned response"
                         );
                     }
@@ -2043,7 +2086,7 @@ pub mod test {
                         // Assert that the hash in the share matches the hash of the now-pruned response.
                         let expected_hash = ic_types::crypto::crypto_hash(response);
                         assert_eq!(
-                            share.content.content_hash, expected_hash,
+                            share.content.content_hash(), &expected_hash,
                             "The share's content hash must match the pruned response"
                         );
                     }
@@ -2099,13 +2142,16 @@ pub mod test {
                 };
 
                 let dishonest_hash = ic_types::crypto::crypto_hash(&dishonest_response);
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: callback_id,
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: dishonest_hash,
-                    content_size: dishonest_response.content.count_bytes() as u32,
-                    is_reject: true,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: callback_id,
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: dishonest_hash,
+                        content_size: dishonest_response.content.count_bytes() as u32,
+                        is_reject: true,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
                 let share = Signed {
                     content: response_metadata.clone(),
@@ -2238,13 +2284,16 @@ pub mod test {
                     ..empty_canister_http_response(0)
                 };
 
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: ic_types::crypto::crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: true,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: ic_types::crypto::crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: true,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let share = Signed {
@@ -2316,13 +2365,16 @@ pub mod test {
                         )]))),
                     ));
 
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(7),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    content_size: 0,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(7),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let signature = crypto
@@ -2539,7 +2591,7 @@ pub mod test {
                 assert_matches!(
                     &change_set[0],
                     CanisterHttpChangeAction::AddToValidated(share, response) => {
-                        assert_eq!(share.content.id, active_callback_id);
+                        assert_eq!(share.content.id(), active_callback_id);
                         assert_eq!(response.id, active_callback_id);
                     }
                 );
@@ -2635,12 +2687,12 @@ pub mod test {
                     let expected_response = empty_canister_http_response(callback_id.get());
                     assert_eq!(*response, expected_response);
 
-                    assert_eq!(share.content.id, callback_id);
+                    assert_eq!(share.content.id(), callback_id);
                     assert_eq!(
-                        share.content.content_hash,
-                        ic_types::crypto::crypto_hash(&expected_response)
+                        share.content.content_hash(),
+                        &ic_types::crypto::crypto_hash(&expected_response)
                     );
-                    assert_eq!(share.content.registry_version, RegistryVersion::from(1));
+                    assert_eq!(share.content.registry_version(), RegistryVersion::from(1));
                     assert_eq!(share.signature.signer, replica_config.node_id);
                 } else {
                     panic!(
@@ -2717,13 +2769,16 @@ pub mod test {
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 0);
 
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(7),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    content_size: 0,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(7),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let signature = crypto
@@ -2881,13 +2936,16 @@ pub mod test {
 
                 // 3. MALICIOUS ARTIFACT: Create a share that is signed by the `wrong_signer_id`.
                 let response = empty_canister_http_response(callback_id.get());
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: callback_id,
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: callback_id,
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
                 let share = Signed {
                     content: response_metadata.clone(),
@@ -2980,13 +3038,16 @@ pub mod test {
                     ));
 
                 let response = empty_canister_http_response(callback_id.get());
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: callback_id,
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: crypto_hash(&response),
-                    content_size: response.content.count_bytes() as u32,
-                    is_reject: false,
-                    replica_version: ReplicaVersion::default(),
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: callback_id,
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: crypto_hash(&response),
+                        content_size: response.content.count_bytes() as u32,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
 
                 let signature = crypto
@@ -3053,7 +3114,8 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.content_hash = CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
+                    bad_share.content.metadata.content_hash =
+                        CryptoHashOf::new(CryptoHash(vec![1, 2, 3]));
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
@@ -3084,7 +3146,8 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.content_size = bad_share.content.content_size.wrapping_add(1);
+                    bad_share.content.metadata.content_size =
+                        bad_share.content.metadata.content_size.wrapping_add(1);
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
@@ -3115,7 +3178,7 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.is_reject = !bad_share.content.is_reject;
+                    bad_share.content.metadata.is_reject = !bad_share.content.metadata.is_reject;
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {
@@ -3213,13 +3276,16 @@ pub mod test {
                         content: CanisterHttpResponseContent::Success(vec![0; oversized_len]),
                     };
 
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: callback_id,
-                        registry_version: RegistryVersion::from(1),
-                        content_hash: ic_types::crypto::crypto_hash(&response),
-                        content_size: response.content.count_bytes() as u32,
-                        is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                    let response_metadata = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            registry_version: RegistryVersion::from(1),
+                            content_hash: ic_types::crypto::crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: ReplicaVersion::default(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -3277,13 +3343,16 @@ pub mod test {
                         ]),
                     };
 
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: callback_id,
-                        registry_version: RegistryVersion::from(1),
-                        content_hash: ic_types::crypto::crypto_hash(&response),
-                        content_size: response.content.count_bytes() as u32,
-                        is_reject: false,
-                        replica_version: ReplicaVersion::default(),
+                    let response_metadata = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            registry_version: RegistryVersion::from(1),
+                            content_hash: ic_types::crypto::crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: ReplicaVersion::default(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
                     let share = Signed {
                         content: response_metadata.clone(),
@@ -3396,15 +3465,121 @@ pub mod test {
                     CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
                         let expected_response = empty_response;
                         assert_eq!(*response, expected_response);
-                        assert_eq!(share.content.id, callback_id);
+                        assert_eq!(share.content.id(), callback_id);
                         assert_eq!(share.signature.signer, replica_config.node_id);
                         assert_eq!(
-                            share.content.content_hash,
-                            crypto_hash(&expected_response)
+                            share.content.content_hash(),
+                            &crypto_hash(&expected_response)
                         );
                     }
                 );
             });
+        });
+    }
+
+    #[test]
+    fn test_refund_greater_than_replica_allowance_is_invalid() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+
+                // Use a context with a small per-replica allowance.
+                let request = CanisterHttpRequestContext {
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(1000),
+                        per_replica_allowance: Cycles::new(100),
+                        refunded_cycles: Cycles::new(0),
+                        refunding_nodes: BTreeSet::new(),
+                    },
+                    ..test_request_context(
+                        Replication::FullyReplicated,
+                        PricingVersion::Legacy,
+                        None,
+                    )
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Build a per-replica receipt share whose refund claim is
+                // larger than the per-replica allowance.
+                let receipt_share = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        registry_version: RegistryVersion::from(1),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt {
+                        refund: Cycles::new(200),
+                    },
+                };
+                let signature = crypto
+                    .sign(
+                        &receipt_share,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: receipt_share,
+                    signature,
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::HandleInvalid(_, reason)
+                        if reason == "Refund is greater than replica allowance"
+                );
+            })
         });
     }
 }
