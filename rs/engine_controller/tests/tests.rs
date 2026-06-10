@@ -282,8 +282,7 @@ fn node_principals(node_ids: &[NodeId]) -> Vec<Principal> {
 }
 
 async fn subnet_is_halted(pic: &PocketIc, subnet_id: SubnetId) -> bool {
-    let raw =
-        registry_get_value(pic, make_subnet_record_key(subnet_id).as_bytes().to_vec()).await;
+    let raw = registry_get_value(pic, make_subnet_record_key(subnet_id).as_bytes().to_vec()).await;
     SubnetRecordPb::decode(raw.as_slice()).unwrap().is_halted
 }
 
