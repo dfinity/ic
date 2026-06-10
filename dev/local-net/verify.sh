@@ -54,8 +54,8 @@ done
 echo
 echo "==> NNS status"
 if docker run --rm --platform=linux/amd64 --network ic-local-net_ic-local \
-        --entrypoint /usr/local/bin/ic-admin ic-replica:dev \
-        --nns-url 'http://[fd00:1::10]:8080' get-subnet-list >/dev/null 2>&1; then
+    --entrypoint /usr/local/bin/ic-admin ic-replica:dev \
+    --nns-url 'http://[fd00:1::10]:8080' get-subnet-list >/dev/null 2>&1; then
     echo "    NNS canisters installed; ic-admin can query the Registry."
 else
     echo "    NNS canisters NOT installed (variant 2 — bare application subnet)."

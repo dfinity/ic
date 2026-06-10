@@ -40,7 +40,7 @@ DEFAULT_TARGETS=(
     "//rs/registry/admin:ic-admin"
     "//rs/nns/init:ic-nns-init"
 )
-read -r -a TARGETS <<< "${TARGETS:-${DEFAULT_TARGETS[*]}}"
+read -r -a TARGETS <<<"${TARGETS:-${DEFAULT_TARGETS[*]}}"
 
 CACHE_DIR="$LOCAL_NET_DIR/cache"
 OUT_DIR="$LOCAL_NET_DIR/out"

@@ -27,7 +27,7 @@ docker compose up -d 2>&1 | tail -5
 
 echo
 echo "Waiting for healthy (up to 60s)..."
-deadline=$(( $(date +%s) + 60 ))
+deadline=$(($(date +%s) + 60))
 while [ "$(date +%s)" -lt "$deadline" ]; do
     healthy=0
     for i in 0 1 2 3; do

@@ -36,9 +36,11 @@ TAIL=0
 SERVICES=()
 for arg in "$@"; do
     case "$arg" in
-        --tail|-t) TAIL=1 ;;
-        --help|-h)
-            sed -n '3,20p' "$0"; exit 0 ;;
+        --tail | -t) TAIL=1 ;;
+        --help | -h)
+            sed -n '3,20p' "$0"
+            exit 0
+            ;;
         *) SERVICES+=("$arg") ;;
     esac
 done
@@ -108,7 +110,7 @@ fi
 # resumed.
 echo
 echo "==> waiting for replicas to be healthy"
-deadline=$(( $(date +%s) + 60 ))
+deadline=$(($(date +%s) + 60))
 while [ "$(date +%s)" -lt "$deadline" ]; do
     healthy=0
     for i in 0 1 2 3; do
