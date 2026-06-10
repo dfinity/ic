@@ -53,8 +53,8 @@ system_test_nns(
     # the node never re-registers with the NNS on the local backend: the registry
     # stays at version 2 and the test times out waiting for the node to rejoin
     # (`block_for_newer_registry_version` in
-    # rs/tests/consensus/node_registration_test_common/src/lib.rs). The mocked-HSM
-    # self-registration flow needs to be investigated on the local backend.
+    # rs/tests/consensus/node_registration_test_common/src/lib.rs).
+    # The reason is the same as is documented for //rs/tests/node:ipv4_integration_test.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 1 unassigned = 2 IC Node VMs * 6 vCPUs.
     deps = [
@@ -73,8 +73,8 @@ system_test_nns(
     # the node never re-registers with the NNS on the local backend: the registry
     # stays at version 2 and the test times out waiting for the node to rejoin
     # (`block_for_newer_registry_version` in
-    # rs/tests/consensus/node_registration_test_common/src/lib.rs). The mocked-HSM
-    # self-registration flow needs to be investigated on the local backend.
+    # rs/tests/consensus/node_registration_test_common/src/lib.rs).
+    # The reason is the same as is documented for //rs/tests/node:ipv4_integration_test.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 1 unassigned = 2 IC Node VMs * 6 vCPUs.
     deps = [
