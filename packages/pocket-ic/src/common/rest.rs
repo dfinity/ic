@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
@@ -484,17 +485,31 @@ pub enum SubnetKind {
 
 impl SubnetKind {
     pub fn is_named(self) -> bool {
-        match self {
-            SubnetKind::NNS
-            | SubnetKind::SNS
-            | SubnetKind::II
-            | SubnetKind::Fiduciary
-            | SubnetKind::Bitcoin
-            | SubnetKind::TestThresholdKeys => true,
-            SubnetKind::Application
-            | SubnetKind::CloudEngine
-            | SubnetKind::System
-            | SubnetKind::VerifiedApplication => false,
+        NamedSubnet::iter().any(|n| SubnetKind::from(n) == self)
+    }
+}
+
+/// Named subnets have a fixed canister ID range on the IC mainnet and at most one
+/// instance per PocketIC instance.
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, EnumIter)]
+pub enum NamedSubnet {
+    NNS,
+    SNS,
+    II,
+    Fiduciary,
+    Bitcoin,
+    TestThresholdKeys,
+}
+
+impl From<NamedSubnet> for SubnetKind {
+    fn from(named: NamedSubnet) -> Self {
+        match named {
+            NamedSubnet::NNS => SubnetKind::NNS,
+            NamedSubnet::SNS => SubnetKind::SNS,
+            NamedSubnet::II => SubnetKind::II,
+            NamedSubnet::Fiduciary => SubnetKind::Fiduciary,
+            NamedSubnet::Bitcoin => SubnetKind::Bitcoin,
+            NamedSubnet::TestThresholdKeys => SubnetKind::TestThresholdKeys,
         }
     }
 }
@@ -822,35 +837,29 @@ impl SubnetStateConfig {
 }
 
 impl ExtendedSubnetConfigSet {
-    fn named_subnet_spec(&self, kind: SubnetKind) -> Option<SubnetSpec> {
-        match kind {
-            SubnetKind::NNS => self.nns.clone(),
-            SubnetKind::SNS => self.sns.clone(),
-            SubnetKind::II => self.ii.clone(),
-            SubnetKind::Fiduciary => self.fiduciary.clone(),
-            SubnetKind::Bitcoin => self.bitcoin.clone(),
-            SubnetKind::TestThresholdKeys => self.test_threshold_keys.clone(),
-            SubnetKind::Application
-            | SubnetKind::CloudEngine
-            | SubnetKind::System
-            | SubnetKind::VerifiedApplication => {
-                panic!(
-                    "named_subnet_spec called with non-named subnet kind {:?}",
-                    kind
-                )
-            }
+    fn named_subnet_spec(&self, named: NamedSubnet) -> Option<SubnetSpec> {
+        match named {
+            NamedSubnet::NNS => self.nns.clone(),
+            NamedSubnet::SNS => self.sns.clone(),
+            NamedSubnet::II => self.ii.clone(),
+            NamedSubnet::Fiduciary => self.fiduciary.clone(),
+            NamedSubnet::Bitcoin => self.bitcoin.clone(),
+            NamedSubnet::TestThresholdKeys => self.test_threshold_keys.clone(),
         }
     }
 
     // Return the configured named subnets in order.
     #[allow(clippy::type_complexity)]
     pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
-        use SubnetKind::*;
-        [NNS, SNS, II, Fiduciary, Bitcoin, TestThresholdKeys]
-            .into_iter()
-            .filter_map(|kind| {
-                self.named_subnet_spec(kind)
-                    .map(|spec| (kind, spec.get_state_path(), spec.get_instruction_config()))
+        NamedSubnet::iter()
+            .filter_map(|named| {
+                self.named_subnet_spec(named).map(|spec| {
+                    (
+                        SubnetKind::from(named),
+                        spec.get_state_path(),
+                        spec.get_instruction_config(),
+                    )
+                })
             })
             .collect()
     }
