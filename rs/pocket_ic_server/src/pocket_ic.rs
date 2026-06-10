@@ -2774,6 +2774,10 @@ impl PocketIcSubnets {
         let default_canister_id: CanisterId = PrincipalId(default_effective_canister_id)
             .try_into()
             .unwrap();
+        // The default effective canister ID is used as the routing target for canister
+        // creation calls that don't specify an explicit subnet (provisional API with ic_00
+        // as effective ID, or no effective principal). Deleting its subnet would break
+        // all such calls.
         if let Some((_, default_subnet_id)) = self.routing_table.lookup_entry(default_canister_id)
             && default_subnet_id == subnet_id
         {
@@ -2837,7 +2841,8 @@ impl PocketIcSubnets {
         // Drop the StateMachine, waiting until no other Arc holders remain.
         let state_machine = subnet.state_machine.clone();
         drop(subnet);
-        drop_state_machine(state_machine);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
+        drop_state_machine(state_machine, deadline);
 
         Ok(())
     }
@@ -2877,8 +2882,7 @@ pub struct PocketIc {
     default_effective_canister_id: Principal,
 }
 
-fn drop_state_machine(state_machine: Arc<StateMachine>) {
-    let start = std::time::Instant::now();
+fn drop_state_machine(state_machine: Arc<StateMachine>, deadline: std::time::Instant) {
     let mut state_machine = Some(state_machine);
     loop {
         match Arc::try_unwrap(state_machine.take().unwrap()) {
@@ -2891,7 +2895,7 @@ fn drop_state_machine(state_machine: Arc<StateMachine>) {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         }
-        if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
+        if std::time::Instant::now() > deadline {
             panic!("Timed out while dropping StateMachine.");
         }
     }
@@ -2921,9 +2925,10 @@ impl Drop for PocketIc {
             .collect();
         self.subnets.clear();
         // for every StateMachine, wait until nobody else has an Arc to that StateMachine
-        // and then drop that StateMachine
+        // and then drop that StateMachine; the deadline is shared across all StateMachines
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
         for state_machine in state_machines {
-            drop_state_machine(state_machine);
+            drop_state_machine(state_machine, deadline);
         }
     }
 }
