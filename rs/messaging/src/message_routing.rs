@@ -52,7 +52,8 @@ use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{
-    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Gauge, Histogram, HistogramTimer, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    IntGaugeVec,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
@@ -85,6 +86,8 @@ const STATUS_QUEUE_FULL: &str = "queue_full";
 const STATUS_SUCCESS: &str = "success";
 
 const PHASE_LOAD_STATE: &str = "load_state";
+const PHASE_READ_REGISTRY: &str = "read_registry";
+const PHASE_GARBAGE_COLLECT: &str = "garbage_collect";
 const PHASE_COMMIT: &str = "commit";
 
 /// Label for message kind: "request" or "response".
@@ -526,6 +529,12 @@ impl MessageRoutingMetrics {
             batch_time
         );
     }
+
+    pub fn start_phase_timer(&self, phase: &str) -> HistogramTimer {
+        self.process_batch_phase_duration
+            .with_label_values(&[phase])
+            .start_timer()
+    }
 }
 
 impl DroppedMessageMetrics for MessageRoutingMetrics {
@@ -697,15 +706,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             log,
             malicious_flags,
         }
-    }
-
-    /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
-    /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
-        self.metrics
-            .process_batch_phase_duration
-            .with_label_values(&[phase])
-            .observe(since.elapsed().as_secs_f64());
     }
 
     /// Reads registry contents required by `BatchProcessorImpl::process_batch()`.
@@ -1321,7 +1321,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let since = Instant::now();
-        let _process_batch_start = since;
+        let load_state_timer = self.metrics.start_phase_timer(PHASE_LOAD_STATE);
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1380,10 +1380,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.metadata.subnet_split_from = None;
         }
-        self.observe_phase_duration(PHASE_LOAD_STATE, &since);
+        load_state_timer.observe_duration();
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
 
+        let read_registry_timer = self.metrics.start_phase_timer(PHASE_READ_REGISTRY);
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
@@ -1412,14 +1413,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&failed_blockmaker.to_string()])
                 .inc();
         }
-
         state
             .metadata
             .blockmaker_metrics_time_series
             .observe(batch.time, &batch.blockmaker_metrics);
+        read_registry_timer.observe_duration();
 
         let batch_summary = batch.batch_summary.clone();
-
         let batch_number = batch.batch_number;
         let mut state_after_round = self.state_machine.execute_round(
             state,
@@ -1431,6 +1431,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
+
+        let garbage_collect_timer = self.metrics.start_phase_timer(PHASE_GARBAGE_COLLECT);
         // Prune any orphaned canister priorities.
         state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
@@ -1451,18 +1453,18 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         #[cfg(feature = "malicious_code")]
-        if let Some(delay) = self.malicious_flags.delay_execution(_process_batch_start) {
+        if let Some(delay) = self.malicious_flags.delay_execution(since) {
             info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
         }
+        garbage_collect_timer.observe_duration();
 
-        let phase_since = Instant::now();
-
+        let commit_timer = self.metrics.start_phase_timer(PHASE_COMMIT);
         self.state_manager.commit_and_certify(
             state_after_round,
             certification_scope,
             batch_summary,
         );
-        self.observe_phase_duration(PHASE_COMMIT, &phase_since);
+        commit_timer.observe_duration();
 
         self.metrics
             .process_batch_duration
