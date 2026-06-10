@@ -7,8 +7,9 @@ use tracing_subscriber::{
     Layer,
     filter::LevelFilter,
     fmt::{
-        FmtContext, format,
+        FmtContext,
         format::{FormatEvent, FormatFields, Writer},
+        writer::MakeWriterExt,
     },
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -65,22 +66,27 @@ fn syslog_identifier() -> String {
     syslog_identifier_from_arg0(arg0.as_deref())
 }
 
-/// Initialize tracing, using journald if available and falling back to stderr.
+/// Initialize tracing, using journald+stderr if journald is available and falling back to just stderr.
+/// Logs with TRACE level.
 pub fn init_logging() {
     init_logging_with_level(Level::TRACE);
 }
 
-/// Initialize tracing, using journald if available and falling back to stderr.
+/// Initialize tracing, using journald+stderr if journald is available and falling back to just stderr.
 pub fn init_logging_with_level(max_level: Level) {
     let level_filter = LevelFilter::from_level(max_level);
 
     match tracing_journald::layer() {
         Ok(layer) => tracing_subscriber::registry()
             .with(layer.with_filter(level_filter))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr.with_max_level(max_level)),
+            )
             .init(),
         Err(_) => tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
-            .with_max_level(max_level)
+            .with_max_level(level_filter)
             .init(),
     }
 }
@@ -95,7 +101,7 @@ pub fn init_kmsg_logging() {
                 tracing_subscriber::fmt::layer()
                     .event_format(KmsgFormatter {
                         identifier: identifier.clone(),
-                        inner: format()
+                        inner: tracing_subscriber::fmt::format()
                             .without_time()
                             .with_target(false)
                             .with_level(false)
@@ -113,7 +119,7 @@ pub fn init_kmsg_logging() {
                 tracing_subscriber::fmt::layer()
                     .event_format(KmsgFormatter {
                         identifier,
-                        inner: format()
+                        inner: tracing_subscriber::fmt::format()
                             .without_time()
                             .with_target(false)
                             .with_level(false)

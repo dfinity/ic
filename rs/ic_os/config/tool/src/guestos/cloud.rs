@@ -4,14 +4,13 @@ use std::{
     time::Duration,
 };
 
+use ::reqwest::Method;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use config_types::GuestOSConfig;
-
 use reqwest::header::{HeaderMap, HeaderValue};
-
-use ::reqwest::Method;
 use serde_json::Value;
 use strum::{Display, EnumString};
+use tracing::info;
 
 /// URL of the metadata server
 const METADATA_URL: &str = "http://169.254.169.254";
@@ -27,7 +26,7 @@ pub enum CloudType {
 impl CloudType {
     /// Discovers the cloud type by making a request to the metadata server
     pub fn discover() -> Result<Self, Error> {
-        let mut retries = 30;
+        let mut retries = 120;
 
         let resp = loop {
             match reqwest::blocking::get(METADATA_URL) {
@@ -38,7 +37,7 @@ impl CloudType {
                         return Err(anyhow!("unable to discover cloud type: retries exhausted"));
                     }
 
-                    println!("Unable to contact metadata server (retries left {retries}): {e:#}");
+                    info!("Unable to contact metadata server (retries left {retries}): {e:#}");
                     std::thread::sleep(Duration::from_secs(1));
                 }
             }
@@ -50,12 +49,20 @@ impl CloudType {
     /// Tries to fetch the GuestOS config from the cloud's metadata service
     pub fn obtain_config(&self) -> Result<GuestOSConfig, Error> {
         let json = match self {
-            Self::Aws => reqwest::blocking::get(format!("{METADATA_URL}/latest/user-data"))
-                .context("unable to execute request")?
-                .bytes()
-                .context("unable to fetch config JSON")?
-                .to_vec(),
+            Self::Aws => {
+                let mut req = reqwest::blocking::Request::new(
+                    Method::GET,
+                    format!("{METADATA_URL}/latest/user-data").parse().unwrap(),
+                );
+                *req.timeout_mut() = Some(Duration::from_secs(30));
 
+                reqwest::blocking::Client::new()
+                    .execute(req)
+                    .context("unable to execute request")?
+                    .bytes()
+                    .context("unable to fetch config JSON")?
+                    .to_vec()
+            }
             Self::Gcp => {
                 let mut req = reqwest::blocking::Request::new(
                     Method::GET,
@@ -63,6 +70,7 @@ impl CloudType {
                         .parse()
                         .unwrap(),
                 );
+                *req.timeout_mut() = Some(Duration::from_secs(30));
                 req.headers_mut()
                     .insert("Metadata-Flavor", "Google".try_into().unwrap());
 
@@ -76,6 +84,7 @@ impl CloudType {
 
             Self::Azure => {
                 let mut req = reqwest::blocking::Request::new(Method::GET, format!("{METADATA_URL}/metadata/instance/compute/userData?api-version=2025-04-07&format=text").parse().unwrap());
+                *req.timeout_mut() = Some(Duration::from_secs(30));
                 req.headers_mut()
                     .insert("Metadata", "true".try_into().unwrap());
 
@@ -108,6 +117,7 @@ impl CloudType {
                         .parse()
                         .unwrap(),
                 );
+                *req.timeout_mut() = Some(Duration::from_secs(30));
                 req.headers_mut()
                     .insert("Metadata", "true".try_into().unwrap());
 
