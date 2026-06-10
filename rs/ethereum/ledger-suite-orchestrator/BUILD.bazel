@@ -35,8 +35,7 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/ic-ethereum-types",
-            "//packages/ic-http-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/crypto/sha2",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
@@ -75,7 +74,6 @@ rust_test(
     crate = ":ledger_suite_orchestrator",
     deps = [
         # Keep sorted.
-        ":ledger_suite_orchestrator",
         "@crate_index//:assert_matches",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
@@ -113,6 +111,7 @@ rust_test(
             "templates/dashboard.html",
         ],
         crate_name = "ic_ledger_suite_orchestrator_canister" + name_suffix,
+        hidden_endpoints = "hidden_endpoints.conf",
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
@@ -165,7 +164,7 @@ rust_ic_test(
         # Keep sorted.
         ":ledger_suite_orchestrator",
         "//packages/ic-http-types",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/ledger_suite/icrc1/ledger",

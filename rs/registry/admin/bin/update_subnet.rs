@@ -13,7 +13,7 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_types::SubnetId;
+use ic_types::{PrincipalId, SubnetId};
 use registry_canister::mutations::do_update_subnet;
 use std::collections::BTreeMap;
 use std::{collections::HashSet, path::PathBuf};
@@ -174,6 +174,12 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// on the NNS subnet.
     #[clap(long, num_args(1..))]
     ssh_backup_access: Option<Vec<String>>,
+
+    /// If set, replaces the subnet's admin list with the given principals
+    /// (passing zero principals clears the list). When unset, the existing
+    /// admin list is left unchanged.
+    #[clap(long, num_args(0..))]
+    pub subnet_admins: Option<Vec<PrincipalId>>,
 
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
@@ -374,6 +380,7 @@ impl ProposeToUpdateSubnetCmd {
 
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
+            subnet_admins: self.subnet_admins.clone(),
             max_number_of_canisters: self.max_number_of_canisters,
 
             chain_key_config,
@@ -443,6 +450,7 @@ mod tests {
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -481,6 +489,7 @@ mod tests {
             resource_limits: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             max_number_of_canisters: None,
         }
     }
@@ -556,6 +565,7 @@ mod tests {
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id, subnet_record),
             do_update_subnet::UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(do_update_subnet::ChainKeyConfig {
                     // Note the order is not important so long as it is deterministic. As a matter
                     // of fact, the order is lexicographic, as the implementation uses `BTreeSet`.
@@ -666,6 +676,7 @@ mod tests {
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id, subnet_record),
             do_update_subnet::UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(do_update_subnet::ChainKeyConfig {
                     key_configs: vec![
                         do_update_subnet::KeyConfig {
@@ -757,6 +768,7 @@ mod tests {
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id, subnet_record),
             do_update_subnet::UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(do_update_subnet::ChainKeyConfig {
                     key_configs: vec![
                         // Existed before, now being updated.
@@ -847,6 +859,7 @@ mod tests {
             do_update_subnet::UpdateSubnetPayload {
                 resource_limits: expected_resource_limits
                     .map(|resource_limits| resource_limits.into()),
+                subnet_admins: None,
                 ..make_empty_update_payload(subnet_id)
             },
         );

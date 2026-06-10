@@ -36,7 +36,7 @@ message Summary {
   uint64 next_interval_length = 3;
   uint64 height = 4;
   repeated NiDkgConfig configs = 7;
-  repeated InitialDkgAttemptCount initial_dkg_attempts = 9;
+  repeated RemoteDkgAttemptCount remote_dkg_attempts = 9;
   repeated CallbackIdedNiDkgTranscript transcripts_for_remote_subnets = 10;
   repeated NiDkgTranscript current_transcripts = 11;
   repeated NiDkgTranscript next_transcripts = 12;
@@ -76,7 +76,7 @@ message NiDkgConfig {
   NiDkgTranscript resharing_transcript = 8;
 }
 
-message InitialDkgAttemptCount {
+message RemoteDkgAttemptCount {
   bytes target_id = 1;
   uint32 attempt_no = 2;
 }

@@ -2,26 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/types/types",
-    "@crate_index//:macaddr",
-    "@crate_index//:serde",
-    "@crate_index//:serde_with",
-    "@crate_index//:strum",
-    "@crate_index//:thiserror",
-    "@crate_index//:url",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:serde_json",
-]
-
-MACRO_DEPENDENCIES = [
-    "@crate_index//:securefmt",
-]
-
 rust_library(
     name = "config_types",
     srcs = glob(
@@ -29,18 +9,32 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "config_types",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        "@crate_index//:securefmt",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
         "//rs/orchestrator:__pkg__",
     ],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/types",
+        "@crate_index//:macaddr",
+        "@crate_index//:serde",
+        "@crate_index//:serde_with",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
     name = "config_types_test",
     crate = ":config_types",
     # You may add other deps that are specific to the test configuration
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:serde_json",
+    ],
 )

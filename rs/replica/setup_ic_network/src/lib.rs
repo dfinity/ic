@@ -47,9 +47,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse, CanisterHttpResponseArtifact},
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpRequest, CanisterHttpResponse,
+        CanisterHttpResponseArtifact,
+    },
     consensus::{
         CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage, dkg,
         idkg::IDkgMessage,
@@ -63,7 +66,7 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::{mpsc::Sender, watch};
+use tokio::sync::mpsc::Sender;
 use tower_http::trace::TraceLayer;
 
 /// This limit is used to protect against a malicious peer advertising many ingress messages.
@@ -314,8 +317,12 @@ impl AbortableBroadcastChannels {
     }
 }
 
-pub type CanisterHttpAdapterClient =
-    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+pub type CanisterHttpAdapterClient = Box<
+    dyn NonBlockingChannel<
+            CanisterHttpRequest,
+            Response = (CanisterHttpResponse, CanisterHttpPaymentReceipt),
+        > + Send,
+>;
 
 /// The function constructs a P2P instance. Currently, it constructs all the
 /// artifact pools and the Consensus/P2P time source. Artifact
@@ -353,7 +360,6 @@ pub fn setup_consensus_and_p2p(
     cycles_account_manager: Arc<CyclesAccountManager>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
-    max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
     Sender<UnvalidatedArtifactMutation<SignedIngress>>,
@@ -457,7 +463,6 @@ pub fn setup_consensus_and_p2p(
         cycles_account_manager,
         registry_poll_delay_duration_ms,
         canister_http_adapter_client,
-        max_certified_height_tx,
         time_source,
     )
 }
@@ -491,7 +496,6 @@ fn start_consensus(
     cycles_account_manager: Arc<CyclesAccountManager>,
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
-    max_certified_height_tx: watch::Sender<Height>,
     time_source: Arc<dyn TimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
@@ -602,7 +606,6 @@ fn start_consensus(
         Arc::clone(&consensus_pool_cache) as Arc<_>,
         metrics_registry.clone(),
         log.clone(),
-        max_certified_height_tx,
     );
     join_handles.push(create_artifact_handler(
         abortable_broadcast_channels.certifier,
@@ -616,6 +619,9 @@ fn start_consensus(
         abortable_broadcast_channels.dkg,
         ic_consensus_dkg::DkgImpl::new(
             node_id,
+            subnet_id,
+            Arc::clone(&registry_client),
+            Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
             dkg_key_manager,

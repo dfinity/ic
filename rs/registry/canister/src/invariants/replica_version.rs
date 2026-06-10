@@ -2,19 +2,17 @@ use std::collections::BTreeSet;
 
 use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-    get_api_boundary_node_records_from_snapshot, get_subnet_ids_from_snapshot,
-    get_value_from_snapshot,
+    get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::{
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    subnet::v1::SubnetRecord,
+    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key,
+    make_replica_version_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
 
@@ -23,8 +21,7 @@ use prost::Message;
 ///
 /// For each replica version that is either referred to in a SubnetRecord
 /// of a subnet listed in the subnet list, that is in use by an API boundary node,
-/// that is used by the unassigned nodes, or that is contained
-/// the BlessedReplicaVersions-List, the following is checked:
+/// or that is used by the unassigned nodes, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
 /// * Each URL is well-formed.
@@ -45,30 +42,26 @@ pub(crate) fn check_replica_version_invariants(
     }
     versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
-    let blessed_version_ids = snapshot
-        .get(make_blessed_replica_versions_key().as_bytes())
-        .map(|bytes| {
-            let version_list = BlessedReplicaVersions::decode(bytes.as_slice()).unwrap();
-            version_list.blessed_version_ids
-        })
-        .unwrap_or_default();
+    let elected_version_ids = get_all_replica_version_records(snapshot)
+        .into_iter()
+        .map(|(k, _)| k);
 
-    let num_blessed = blessed_version_ids.len();
-    let blessed_set = BTreeSet::from_iter(blessed_version_ids);
+    let num_elected = elected_version_ids.len();
+    let elected_set = BTreeSet::from_iter(elected_version_ids);
     assert!(
-        blessed_set.len() == num_blessed,
-        "A version was blessed multiple times."
+        elected_set.len() == num_elected,
+        "A version was elected multiple times."
     );
     assert!(
-        blessed_set.is_superset(&versions_in_use),
-        "Using a version that isn't blessed. Blessed versions: {blessed_set:?}, in use: {versions_in_use:?}."
+        elected_set.is_superset(&versions_in_use),
+        "Using a version that isn't elected. Elected versions: {elected_set:?}, in use: {versions_in_use:?}."
     );
     assert!(
-        blessed_set.iter().all(|v| !v.trim().is_empty()),
-        "Blessed an empty version ID."
+        elected_set.iter().all(|v| !v.trim().is_empty()),
+        "Elected an empty version ID."
     );
 
-    for version in blessed_set {
+    for version in elected_set {
         let r = get_replica_version_record(snapshot, version);
 
         // Check whether release package URLs (update image) and corresponding hash are well-formed.
@@ -127,58 +120,53 @@ mod tests {
     use ic_protobuf::registry::replica_version::v1::{
         GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
     };
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_transport::{delete, insert, pb::v1::RegistryMutation, upsert};
     use ic_types::ReplicaVersion;
     use prost::Message;
 
     const MOCK_HASH: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
     const MOCK_URL: &str = "http://release_package.tar.gz";
 
-    fn check_bless_version(versions: Vec<String>) {
+    fn elect_version_mutations(versions: Vec<String>) -> Vec<RegistryMutation> {
+        versions
+            .into_iter()
+            .map(|v| {
+                let value = ReplicaVersionRecord {
+                    release_package_sha256_hex: "".to_string(),
+                    release_package_urls: Vec::new(),
+                    guest_launch_measurements: None,
+                };
+
+                insert(
+                    make_replica_version_key(v).as_bytes(),
+                    value.encode_to_vec(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    #[should_panic(expected = "Elected an empty version ID.")]
+    fn panic_when_electing_empty_version() {
         let registry = invariant_compliant_registry(0);
 
-        let key = make_blessed_replica_versions_key();
-        let value = BlessedReplicaVersions {
-            blessed_version_ids: versions,
-        }
-        .encode_to_vec();
+        let mutations = elect_version_mutations(vec!["".into()]);
 
-        let mutation = vec![insert(key.as_bytes(), value)];
-        registry.check_global_state_invariants(&mutation);
+        registry.check_global_state_invariants(&mutations);
     }
 
     #[test]
-    #[should_panic(expected = "Blessed an empty version ID.")]
-    fn panic_when_blessing_empty_version() {
-        check_bless_version(vec![ReplicaVersion::default().into(), "".into()]);
+    #[should_panic(expected = "Elected an empty version ID.")]
+    fn panic_when_electing_whitespace_version() {
+        let registry = invariant_compliant_registry(0);
+
+        let mutations = elect_version_mutations(vec!["  ".into()]);
+
+        registry.check_global_state_invariants(&mutations);
     }
 
     #[test]
-    #[should_panic(expected = "Blessed an empty version ID.")]
-    fn panic_when_blessing_whitespace_version() {
-        check_bless_version(vec![ReplicaVersion::default().into(), "  ".into()]);
-    }
-
-    #[test]
-    #[should_panic(expected = "A version was blessed multiple times.")]
-    fn panic_when_blessing_same_version_twice() {
-        check_bless_version(vec!["version_a".into(), "version_a".into()]);
-    }
-
-    #[test]
-    #[should_panic(expected = "Using a version that isn't blessed.")]
-    fn panic_when_retiring_a_version_in_use() {
-        check_bless_version(vec![]);
-    }
-
-    #[test]
-    #[should_panic(expected = "Could not find replica version: unknown")]
-    fn panic_when_blessing_unknown_version() {
-        check_bless_version(vec![ReplicaVersion::default().into(), "unknown".into()]);
-    }
-
-    #[test]
-    #[should_panic(expected = "Using a version that isn't blessed.")]
+    #[should_panic(expected = "Using a version that isn't elected.")]
     fn panic_when_using_unelected_version() {
         let registry = invariant_compliant_registry(0);
 
@@ -195,53 +183,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Using a version that isn't blessed.")]
-    fn panic_when_retiring_unassigned_nodes_version() {
-        let mut registry = invariant_compliant_registry(0);
-
-        let replica_version_id = "unassigned_version".to_string();
-        let replica_version = ReplicaVersionRecord {
-            release_package_sha256_hex: "".to_string(),
-            release_package_urls: vec![],
-            guest_launch_measurements: None,
-        };
-        let blessed_replica_version = BlessedReplicaVersions {
-            blessed_version_ids: vec![ReplicaVersion::default().into(), replica_version_id.clone()],
-        };
-        let unassigned_nodes_config = UnassignedNodesConfigRecord {
-            ssh_readonly_access: vec![],
-            replica_version: replica_version_id.clone(),
-        };
-
-        let init = vec![
-            insert(
-                make_replica_version_key(replica_version_id).as_bytes(),
-                replica_version.encode_to_vec(),
-            ),
-            upsert(
-                make_blessed_replica_versions_key().as_bytes(),
-                blessed_replica_version.encode_to_vec(),
-            ),
-            insert(
-                make_unassigned_nodes_config_record_key(),
-                unassigned_nodes_config.encode_to_vec(),
-            ),
-        ];
-        registry.maybe_apply_mutation_internal(init);
-
-        let key = make_blessed_replica_versions_key();
-
-        let value = BlessedReplicaVersions {
-            blessed_version_ids: vec![ReplicaVersion::default().into()],
-        }
-        .encode_to_vec();
-
-        let mutation = vec![insert(key.as_bytes(), value)];
-        registry.check_global_state_invariants(&mutation);
-    }
-
-    #[test]
-    #[should_panic(expected = "Using a version that isn't blessed.")]
+    #[should_panic(expected = "Using a version that isn't elected.")]
     fn panic_when_using_unelected_unassigned_version() {
         let registry = invariant_compliant_registry(0);
 
@@ -253,6 +195,51 @@ mod tests {
         .encode_to_vec();
 
         let mutation = vec![insert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_retiring_a_version_in_use() {
+        let registry = invariant_compliant_registry(0);
+
+        let mutation = vec![delete(
+            make_replica_version_key(ReplicaVersion::default()).as_bytes(),
+        )];
+        registry.check_global_state_invariants(&mutation);
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_retiring_unassigned_nodes_version() {
+        let mut registry = invariant_compliant_registry(0);
+
+        let replica_version_id = "unassigned_version".to_string();
+        let replica_version = ReplicaVersionRecord {
+            release_package_sha256_hex: "".to_string(),
+            release_package_urls: vec![],
+            guest_launch_measurements: None,
+        };
+        let unassigned_nodes_config = UnassignedNodesConfigRecord {
+            ssh_readonly_access: vec![],
+            replica_version: replica_version_id.clone(),
+        };
+
+        let init = vec![
+            insert(
+                make_replica_version_key(&replica_version_id).as_bytes(),
+                replica_version.encode_to_vec(),
+            ),
+            insert(
+                make_unassigned_nodes_config_record_key(),
+                unassigned_nodes_config.encode_to_vec(),
+            ),
+        ];
+        registry.maybe_apply_mutation_internal(init);
+
+        let mutation = vec![delete(
+            make_replica_version_key(replica_version_id).as_bytes(),
+        )];
         registry.check_global_state_invariants(&mutation);
     }
 
@@ -268,6 +255,7 @@ mod tests {
                     measurement: vec![0x42; 48],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("foo=bar".to_string()),
+                        vcpu_type: None,
                     }),
                 }],
             }),

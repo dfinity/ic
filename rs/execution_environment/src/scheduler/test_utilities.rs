@@ -1,7 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
-    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -9,7 +8,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig},
+    subnet_config::{SchedulerConfig, SubnetConfig, SubnetSecurity},
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
@@ -39,9 +38,10 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, NumWasmPages,
-    ReplicatedState,
+    OutputRequest, ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     metadata_state::testing::NetworkTopologyTesting,
+    metrics::ReplicatedStateMetrics,
     num_bytes_try_from,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
@@ -60,10 +60,8 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus},
-    messages::{
-        CallContextId, Ingress, MessageId, NO_DEADLINE, Request, RequestOrResponse, Response,
-    },
-    methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
+    messages::{CallContextId, Ingress, MessageId, NO_DEADLINE, RequestOrResponse, Response},
+    methods::{FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, ECDSAOutcalls, HTTPOutcalls,
@@ -112,25 +110,26 @@ pub(crate) struct SchedulerTest {
     round_summary: Option<ExecutionRoundSummary>,
     /// The amount of cycles that new canisters have by default.
     initial_canister_cycles: Cycles,
-    /// The id of the user that sends ingress messages.
+    /// The ID of the user that sends ingress messages.
     user_id: UserId,
-    /// The id of a canister that is guaranteed to be xnet.
+    /// The ID of a canister that is guaranteed to be XNet.
     xnet_canister_id: CanisterId,
     /// The actual scheduler.
     scheduler: SchedulerImpl,
     /// The fake Wasm executor.
     wasm_executor: Arc<TestWasmExecutor>,
-    /// Registry Execution Settings.
     registry_settings: RegistryExecutionSettings,
-    /// Metrics Registry.
     metrics_registry: MetricsRegistry,
-    /// Chain key subnet public keys.
+    /// Replicated state metrics, updated by `SchedulerTest` after every round.
+    ///
+    /// These used to be updated by the scheduler, but state instrumentation was
+    /// moved into the State Manager.
+    state_metrics: ReplicatedStateMetrics,
     chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     /// Available pre-signatures.
     idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
     /// Version of the running replica, not the registry's Entry
     replica_version: ReplicaVersion,
-    /// Hypervisor config.
     hypervisor_config: HypervisorConfig,
 }
 
@@ -144,7 +143,7 @@ impl std::fmt::Debug for SchedulerTest {
                 &self
                     .state()
                     .canister_states()
-                    .values()
+                    .all_values()
                     .map(|state| state.compute_allocation().as_percent())
                     .collect::<Vec<_>>(),
             )
@@ -167,6 +166,10 @@ impl SchedulerTest {
 
     pub fn metrics_registry(&self) -> &MetricsRegistry {
         &self.metrics_registry
+    }
+
+    pub fn state_metrics(&self) -> &ReplicatedStateMetrics {
+        &self.state_metrics
     }
 
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
@@ -198,11 +201,13 @@ impl SchedulerTest {
         &self.scheduler
     }
 
+    #[cfg(debug_assertions)]
     pub fn was_fully_executed(&self, canister_id: CanisterId) -> bool {
         self.state()
-            .canister_priority(&canister_id)
-            .last_full_execution_round
-            == self.last_round()
+            .metadata
+            .subnet_schedule
+            .fully_executed_canisters
+            .contains(&canister_id)
     }
 
     pub fn xnet_canister_id(&self) -> CanisterId {
@@ -593,6 +598,18 @@ impl SchedulerTest {
             round_type,
             self.registry_settings(),
         );
+
+        // Explicitly observe the Replicated State metrics after every round. This used
+        // to be done by the scheduler, so there are a number of tests depending on
+        // various state metrics, but instrumentation was moved into the State Manager.
+        // So we "manually" update the metrics after every round.
+        self.state_metrics.observe(
+            state.metadata.own_subnet_id,
+            &state,
+            self.round.get().into(),
+            &self.scheduler.log,
+        );
+
         self.state = Some(state);
         self.check_invariants();
         self.increment_round();
@@ -655,6 +672,7 @@ impl SchedulerTest {
                 self.state.as_mut().unwrap(),
                 subnet_size,
                 ExecutionRound::from(0),
+                ExecutionRoundType::CheckpointRound,
             )
     }
 
@@ -736,6 +754,19 @@ impl SchedulerTest {
         )
     }
 
+    pub fn canister_base_cost(
+        &self,
+        bytes: NumBytes,
+        duration: Duration,
+    ) -> CompoundCycles<ic_types_cycles::Memory> {
+        self.scheduler.cycles_account_manager.canister_base_cost(
+            bytes,
+            duration,
+            self.subnet_size(),
+            self.state.as_ref().unwrap().get_own_cost_schedule(),
+        )
+    }
+
     pub fn compute_allocation_cost(
         &self,
         compute_allocation: ComputeAllocation,
@@ -749,6 +780,12 @@ impl SchedulerTest {
                 self.subnet_size(),
                 self.state.as_ref().unwrap().get_own_cost_schedule(),
             )
+    }
+
+    pub fn duration_between_allocation_charges(&self) -> Duration {
+        self.scheduler
+            .cycles_account_manager
+            .duration_between_allocation_charges()
     }
 
     pub(crate) fn deliver_pre_signatures(
@@ -806,7 +843,8 @@ pub(crate) struct SchedulerTestBuilder {
 impl Default for SchedulerTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+        let scheduler_config =
+            SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
         let mut hypervisor_config = config.embedders_config;
         hypervisor_config.create_execution_state_base_cost = NumInstructions::from(0);
@@ -845,7 +883,8 @@ impl SchedulerTestBuilder {
     }
 
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+        let scheduler_config =
+            SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
         Self {
             subnet_type,
             scheduler_config,
@@ -978,7 +1017,7 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
-        let mut subnet_config = SubnetConfig::new(self.subnet_type);
+        let mut subnet_config = SubnetConfig::new(self.subnet_type, SubnetSecurity::None);
         subnet_config.scheduler_config = self.scheduler_config.clone();
 
         for key_id in &self.master_public_key_ids {
@@ -1076,7 +1115,6 @@ impl SchedulerTestBuilder {
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
             self.hypervisor_config.clone(),
-            self.own_subnet_id,
             execution_services.ingress_history_writer,
             execution_services.execution_environment,
             execution_services.cycles_account_manager,
@@ -1084,8 +1122,11 @@ impl SchedulerTestBuilder {
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
+            config.log_memory_store_feature,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
+
+        let state_metrics = ReplicatedStateMetrics::new(&self.metrics_registry);
 
         SchedulerTest {
             state: Some(state),
@@ -1099,6 +1140,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,
+            state_metrics,
             chain_key_subnet_public_keys,
             idkg_pre_signatures: BTreeMap::new(),
             replica_version: self.replica_version,
@@ -1266,7 +1308,6 @@ impl WasmExecutor for TestWasmExecutor {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        _canister_root: PathBuf,
         canister_id: CanisterId,
         _compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
@@ -1426,7 +1467,6 @@ impl TestWasmExecutorCore {
             exported_functions.push(WasmMethod::System(system_task));
         }
         let execution_state = ExecutionState::new(
-            Default::default(),
             execution_state::WasmBinary::new(canister_module),
             ExportedFunctions::new(exported_functions.into_iter().collect()),
             Memory::new_for_testing(),
@@ -1497,38 +1537,27 @@ impl TestWasmExecutorCore {
                 system_state.cost_schedule(),
             );
         let deadline = NO_DEADLINE;
-        let callback = system_state
-            .register_callback(Callback {
-                call_context_id,
-                respondent: receiver,
-                cycles_sent: Cycles::zero(),
-                prepayment_for_response_execution,
-                prepayment_for_response_transmission,
-                prepayment_for_call_transmission,
-                on_reply: closure.clone(),
-                on_reject: closure,
-                on_cleanup: None,
-                deadline,
-            })
-            .map_err(|err| err.to_string())?;
-        let request = Request {
+        let request = OutputRequest {
             receiver,
-            sender,
-            sender_reply_callback: callback,
             payment: Cycles::zero(),
+            deadline,
+            sender,
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
             metadata: Default::default(),
-            deadline,
+            call_context_id,
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
+            prepayment_for_call_transmission,
+            on_reply: closure.clone(),
+            on_reject: closure,
+            on_cleanup: None,
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             request,
-            prepayment_for_response_execution,
-            prepayment_for_response_transmission,
         ) {
-            system_state.unregister_callback(callback);
             return Err(format!("Failed pushing request {req:?} to output queue."));
         }
         self.messages.insert(call_message_id, call.other_side);

@@ -1,11 +1,12 @@
 use crate::service::DiskEncryptionKeyExchangeServiceImpl;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::TrustedExecutionEnvironmentConfig;
-use guest_upgrade_shared::DEFAULT_SERVER_PORT;
 use ic_interfaces_registry::RegistryClient;
-use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_types::ReplicaVersion;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -39,6 +40,12 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
     vsock_client: Box<dyn VSockClient + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
+    store_device_path: PathBuf,
+    store_luks_header_path: PathBuf,
+    /// If true, the server will send the Store LUKS header to the client.
+    /// Only false in unit tests testing backwards compatibility.
+    // TODO: Remove when all deployed GuestOS versions support sending the Store LUKS header.
+    send_luks_header: bool,
     port: u16,
     success_timeout: Duration,
 }
@@ -48,28 +55,12 @@ impl DiskEncryptionKeyExchangeServerAgent {
         handle: Handle,
         vsock_client: Box<dyn VSockClient + Send + Sync>,
         sev_firmware_factory: SevFirmwareFactory,
-        trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
-        registry_client: Arc<dyn RegistryClient>,
-    ) -> Self {
-        Self {
-            runtime_handle: handle,
-            vsock_client,
-            sev_firmware_factory,
-            sev_root_certificate_verification: SevRootCertificateVerification::Verify,
-            trusted_execution_environment_config,
-            registry_client,
-            port: DEFAULT_SERVER_PORT,
-            success_timeout: DEFAULT_SUCCESS_TIMEOUT,
-        }
-    }
-
-    pub fn new_for_testing(
-        handle: Handle,
-        vsock_client: Box<dyn VSockClient + Send + Sync>,
-        sev_firmware_factory: SevFirmwareFactory,
         sev_root_certificate_verification: SevRootCertificateVerification,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
         registry_client: Arc<dyn RegistryClient>,
+        store_device_path: PathBuf,
+        store_luks_header_path: PathBuf,
+        send_luks_header: bool,
         port: u16,
         success_timeout: Duration,
     ) -> Self {
@@ -80,12 +71,21 @@ impl DiskEncryptionKeyExchangeServerAgent {
             sev_root_certificate_verification,
             trusted_execution_environment_config,
             registry_client,
+            store_device_path,
+            store_luks_header_path,
+            send_luks_header,
             port,
             success_timeout,
         }
     }
 
-    pub async fn exchange_keys(&self) -> Result<(), DiskEncryptionKeyExchangeError> {
+    /// Runs the key exchange flow for upgrading to `replica_version`.
+    /// Note that the implementation does not verify that `replica_version` is an elected version,
+    /// it is the caller's responsibility to select the right target version.
+    pub async fn exchange_keys(
+        &self,
+        replica_version: &ReplicaVersion,
+    ) -> Result<(), DiskEncryptionKeyExchangeError> {
         // Channel to communicate the success status of the key exchange.
         let (status_sender, mut status_receiver) = watch::channel(Ok(()));
 
@@ -96,22 +96,18 @@ impl DiskEncryptionKeyExchangeServerAgent {
                 ))
             })?;
 
-        let registry_version = self.registry_client.get_latest_version();
-        let blessed_measurements = self
-            .registry_client
-            .get_blessed_guest_launch_measurements(registry_version)
-            .map_err(|err| {
-                DiskEncryptionKeyExchangeError::ServerStartError(format!(
-                    "Failed to get blessed measurements: {err}"
-                ))
-            })?;
+        let expected_measurements = self.fetch_launch_measurements(replica_version)?;
+
         let upgrade_service = Arc::new(DiskEncryptionKeyExchangeServiceImpl::new(
             self.sev_firmware_factory.clone(),
             self.sev_root_certificate_verification,
             certified_key.key_pair.public_key_der(),
             self.trusted_execution_environment_config.clone(),
+            self.store_device_path.clone(),
+            self.store_luks_header_path.clone(),
+            self.send_luks_header,
             status_sender,
-            blessed_measurements,
+            expected_measurements,
         ));
 
         // Start the server that the Upgrade VM can connect to for getting the keys.
@@ -145,5 +141,36 @@ impl DiskEncryptionKeyExchangeServerAgent {
                 self.success_timeout
             ))),
         }
+    }
+
+    fn fetch_launch_measurements(
+        &self,
+        replica_version: &ReplicaVersion,
+    ) -> Result<Vec<Vec<u8>>, DiskEncryptionKeyExchangeError> {
+        let registry_version = self.registry_client.get_latest_version();
+        let expected_measurements = self
+            .registry_client
+            .get_replica_version_record_from_version_id(replica_version, registry_version)
+            .map_err(|err| {
+                DiskEncryptionKeyExchangeError::ServerStartError(format!(
+                    "Failed to get replica version record for {replica_version}: {err}"
+                ))
+            })?
+            .ok_or_else(|| {
+                DiskEncryptionKeyExchangeError::ServerStartError(format!(
+                    "Replica version record for {replica_version} not found in registry"
+                ))
+            })?
+            .guest_launch_measurements
+            .ok_or_else(|| {
+                DiskEncryptionKeyExchangeError::ServerStartError(format!(
+                    "Replica version {replica_version} does not have guest launch measurements"
+                ))
+            })?
+            .guest_launch_measurements
+            .into_iter()
+            .map(|measurement| measurement.measurement)
+            .collect();
+        Ok(expected_measurements)
     }
 }

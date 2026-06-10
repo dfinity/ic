@@ -4,7 +4,7 @@ Types for calling [the IC management canister][1].
 
 This module is a direct translation from its Candid interface description.
 
-[1]: https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-management-canister
+[1]: https://docs.internetcomputer.org/references/management-canister/
 
 ## Correctness
 
@@ -14,7 +14,7 @@ The test defines a dummy Canister covering all Management Canister entry points 
 
 It then asserts the equality of the dummy canister's interface with the specified interface in [`ic.did`](tests/ic.did).
 
-The [`ic.did`](tests/ic.did) is sourced from the [Internet Computer Interface Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid).
+The [`ic.did`](tests/ic.did) is sourced from the [Internet Computer Interface Specification](https://docs.internetcomputer.org/references/management-canister/#candid-interface).
 
 Some methods are excluded (commented out) as follows:
 - Bitcoin API: These functionalities are planned to migrate from the Management Canister to the [Bitcoin Canister](https://github.com/dfinity/bitcoin-canister).

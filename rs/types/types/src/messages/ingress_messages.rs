@@ -16,9 +16,9 @@ use crate::{
 use ic_error_types::{ErrorCode, UserError};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, CanisterMetricsArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
@@ -670,6 +670,10 @@ pub fn extract_effective_canister_id(
             }
         }
         Ok(Method::RenameCanister) => match RenameCanisterArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::CanisterMetrics) => match CanisterMetricsArgs::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },

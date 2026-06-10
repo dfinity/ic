@@ -1,3 +1,4 @@
+use grub::BootAlternative;
 use std::process::Command;
 
 pub const RECOVERY_LAUNCHER_PATH: &str = "/opt/ic/bin/guestos-recovery-launcher.sh";
@@ -33,33 +34,96 @@ pub fn build_recovery_upgrader_command(mode: &str, args: &[String]) -> RecoveryU
     RecoveryUpgraderCommand { args: full_args }
 }
 
-pub fn build_recovery_upgrader_prep_command(
-    version: &str,
-    recovery_hash_prefix: &str,
-) -> RecoveryUpgraderCommand {
-    build_recovery_upgrader_command(
-        "prep",
-        &[
-            format!("version={version}"),
-            format!("recovery-hash-prefix={recovery_hash_prefix}"),
-        ],
-    )
+fn maybe_add_wipe_var_partition(args: &mut Vec<String>, wipe_var_partition: bool) {
+    if wipe_var_partition {
+        args.push("wipe-var-partition".to_string());
+    }
 }
 
-pub fn build_recovery_upgrader_install_command() -> RecoveryUpgraderCommand {
-    build_recovery_upgrader_command("install", &[])
+pub fn build_recovery_upgrader_prep_command(
+    version: &str,
+    target_boot_alternative: BootAlternative,
+    recovery_hash_prefix: &str,
+    wipe_var_partition: bool,
+) -> RecoveryUpgraderCommand {
+    let mut args = vec![
+        format!("version={version}"),
+        format!("target-boot-alternative={target_boot_alternative}"),
+        format!("recovery-hash-prefix={recovery_hash_prefix}"),
+    ];
+    maybe_add_wipe_var_partition(&mut args, wipe_var_partition);
+    build_recovery_upgrader_command("prep", &args)
+}
+
+pub fn build_recovery_upgrader_install_command(
+    wipe_var_partition: bool,
+) -> RecoveryUpgraderCommand {
+    let mut args = Vec::new();
+    maybe_add_wipe_var_partition(&mut args, wipe_var_partition);
+    build_recovery_upgrader_command("install", &args)
 }
 
 /// Convenience helper to perform a single-shot run (prep + install) without TUI confirmation.
 pub fn build_recovery_upgrader_run_command(
     version: &str,
     recovery_hash_prefix: &str,
+    target_boot_alternative: &str,
+    wipe_var_partition: bool,
 ) -> RecoveryUpgraderCommand {
-    build_recovery_upgrader_command(
-        "run",
-        &[
-            format!("version={version}"),
-            format!("recovery-hash-prefix={recovery_hash_prefix}"),
-        ],
-    )
+    let mut args = vec![
+        format!("version={version}"),
+        format!("recovery-hash-prefix={recovery_hash_prefix}"),
+        format!("target-boot-alternative={target_boot_alternative}"),
+    ];
+    maybe_add_wipe_var_partition(&mut args, wipe_var_partition);
+    build_recovery_upgrader_command("run", &args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prep_command_includes_target_boot_alternative_and_empty_recovery_hash_prefix() {
+        let command = build_recovery_upgrader_prep_command("aabbcc", BootAlternative::B, "", false);
+
+        let shell = command.to_shell_string();
+        assert!(shell.contains("mode=prep"));
+        assert!(shell.contains("version=aabbcc"));
+        assert!(shell.contains("target-boot-alternative=B"));
+        assert!(shell.contains("recovery-hash-prefix="));
+    }
+
+    #[test]
+    fn prep_command_includes_recovery_hash_prefix_when_enabled() {
+        let command =
+            build_recovery_upgrader_prep_command("aabbcc", BootAlternative::A, "123abc", true);
+
+        let shell = command.to_shell_string();
+        assert!(shell.contains("mode=prep"));
+        assert!(shell.contains("version=aabbcc"));
+        assert!(shell.contains("target-boot-alternative=A"));
+        assert!(shell.contains("recovery-hash-prefix=123abc"));
+        assert!(shell.contains("wipe-var-partition"));
+    }
+
+    #[test]
+    fn install_command_includes_wipe_var_partition_flag_when_requested() {
+        let command = build_recovery_upgrader_install_command(true);
+
+        let shell = command.to_shell_string();
+        assert!(shell.contains("mode=install"));
+        assert!(shell.contains("wipe-var-partition"));
+    }
+
+    #[test]
+    fn run_command_includes_wipe_var_partition_flag_when_requested() {
+        let command = build_recovery_upgrader_run_command("aabbcc", "123abc", "B", true);
+
+        let shell = command.to_shell_string();
+        assert!(shell.contains("mode=run"));
+        assert!(shell.contains("recovery-hash-prefix=123abc"));
+        assert!(shell.contains("target-boot-alternative=B"));
+        assert!(shell.contains("wipe-var-partition"));
+    }
 }

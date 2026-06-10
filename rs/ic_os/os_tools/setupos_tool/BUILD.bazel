@@ -2,36 +2,28 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/ic_os/config/tool:config_lib",
-    "//rs/ic_os/config/types:config_types",
-    "//rs/ic_os/logging",
-    "//rs/ic_os/networking/deterministic_ips",
-    "//rs/ic_os/networking/network",
-    "//rs/ic_os/utils",
-    "//rs/registry/keys",
-    "//rs/registry/nns_data_provider",
-    "//rs/registry/transport",
-    "@crate_index//:anyhow",
-    "@crate_index//:clap",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing",
-    "@crate_index//:url",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_binary(
     name = "setupos_tool",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "setupos_tool",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/ic_os/config/tool:config_lib",
+        "//rs/ic_os/config/types:config_types",
+        "//rs/ic_os/logging",
+        "//rs/ic_os/networking/deterministic_ips",
+        "//rs/ic_os/networking/network",
+        "//rs/ic_os/utils",
+        "//rs/registry/keys",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/transport",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:tokio",
+        "@crate_index//:tracing",
+        "@crate_index//:url",
+    ],
 )

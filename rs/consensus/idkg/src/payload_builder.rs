@@ -367,6 +367,8 @@ fn create_summary_payload_helper(
     idkg_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut idkg_summary, block_reader)?;
 
+    idkg_summary.empty_signature_agreements_flag = true;
+
     Ok(Some(idkg_summary))
 }
 
@@ -619,6 +621,8 @@ pub(crate) fn create_data_payload_helper(
         log,
     )?;
 
+    idkg_payload.empty_signature_agreements_flag = true;
+
     Ok(Some(idkg_payload))
 }
 
@@ -781,7 +785,6 @@ mod tests {
                 vec![],
                 BTreeMap::new(),
                 BTreeMap::new(),
-                Vec::new(),
                 RegistryVersion::from(0),
                 Height::from(100),
                 Height::from(100),

@@ -18,7 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, SystemState,
     canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
-    metadata_state::subnet_call_context_manager::{PreSignatureStash, StopCanisterCall},
+    metadata_state::subnet_call_context_manager::PreSignatureStash,
     metadata_state::testing::NetworkTopologyTesting,
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
@@ -29,14 +29,13 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
-use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
     CanisterId, CountBytes, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, Transform},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
+        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
         RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
@@ -834,6 +833,12 @@ fn get_canister_status_from_another_canister_when_memory_low() {
                 .real()
                 .get())
             / one_gib
+            + test
+                .cycles_account_manager()
+                .base_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .real()
+                .get()
+                * seconds_per_day
     );
 }
 
@@ -1749,50 +1754,6 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
             ErrorCode::CanisterNotFound,
             format!("Canister {canister_id_2} migrated during a subnet split"),
         ))
-    );
-}
-
-// Verifies that `remove_orphaned_stop_canister_calls` removes `StopCanisterCall`s from
-// `SubnetCallContextManager` that have no corresponding `StopCanisterContext`
-// in the target canister, simulating the bug fixed in commit 52e7b89.
-#[test]
-fn cleanup_orphaned_stop_canister_calls() {
-    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
-
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-
-    // Simulate the pre-52e7b89 bug: push a StopCanisterCall for a Running canister
-    // without a corresponding StopCanisterContext in the target canister.
-    let time = test.time();
-    test.state_mut()
-        .metadata
-        .subnet_call_context_manager
-        .push_stop_canister_call(StopCanisterCall {
-            call: CanisterCall::Ingress(Arc::new(IngressBuilder::new().build())),
-            effective_canister_id: canister_id,
-            time,
-        });
-
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len(),
-        1
-    );
-
-    // remove_orphaned_stop_canister_calls should remove the orphaned call since there
-    // is no matching StopCanisterContext in the target canister.
-    test.state_mut().remove_orphaned_stop_canister_calls();
-
-    assert_eq!(
-        test.state()
-            .metadata
-            .subnet_call_context_manager
-            .stop_canister_calls_len(),
-        0
     );
 }
 
@@ -3226,86 +3187,114 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
 
 #[test]
 fn execute_canister_http_request() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_caller(own_subnet, caller_canister)
-        .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_cost_schedule(cost_schedule)
+            .with_manual_execution()
+            .build();
 
-    // Create payload of the request.
-    let url = "https://".to_string();
-    let response_size_limit = 1000_u64;
-    let transform_method_name = "transform".to_string();
-    let transform_context = vec![0, 1, 2];
-    let args = CanisterHttpRequestArgs {
-        url: url.clone(),
-        max_response_bytes: Some(response_size_limit),
-        headers: BoundedHttpHeaders::new(vec![]),
-        body: None,
-        method: HttpMethod::GET,
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: caller_canister.get().0,
-                method: transform_method_name.clone(),
+        let caller_canister = test.universal_canister().unwrap();
+        // Create payload of the request.
+        let url = "https://".to_string();
+        let response_size_limit = 1000_u64;
+        let transform_method_name = "transform".to_string();
+        let transform_context = vec![0, 1, 2];
+        let args = CanisterHttpRequestArgs {
+            url: url.clone(),
+            max_response_bytes: Some(response_size_limit),
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method: HttpMethod::GET,
+            transform: Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: caller_canister.get().0,
+                    method: transform_method_name.clone(),
+                }),
+                context: transform_context.clone(),
             }),
-            context: transform_context.clone(),
-        }),
-        is_replicated: None,
-        pricing_version: None,
-    };
+            is_replicated: None,
+            pricing_version: None,
+        };
 
-    // Create request to HTTP_REQUEST method.
-    let payment = Cycles::new(1_000_000_000);
-    let payload = args.encode();
-    test.inject_call_to_ic00(Method::HttpRequest, payload, payment);
-    test.execute_all();
-    // Check that the SubnetCallContextManager contains the request.
-    let canister_http_request_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .canister_http_request_contexts;
-    assert_eq!(canister_http_request_contexts.len(), 1);
+        // Create request to HTTP_REQUEST method.
+        let payment = Cycles::new(1_000_000_000);
+        let payload = args.encode();
+        let call_to_management_canister = wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::HttpRequest,
+                call_args().other_side(payload.clone()),
+                payment,
+            )
+            .build();
 
-    let http_request_context = canister_http_request_contexts
-        .get(&CallbackId::from(0))
-        .unwrap();
-    assert_eq!(http_request_context.url, url);
-    assert_eq!(
-        http_request_context.transform,
-        Some(Transform {
-            method_name: transform_method_name,
-            context: transform_context,
-        })
-    );
-    assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
-    assert_eq!(http_request_context.request.sender, caller_canister);
-    let fee = test.http_request_fee(
-        http_request_context.variable_parts_size(),
-        Some(NumBytes::from(response_size_limit)),
-    );
-    assert_eq!(http_request_context.request.payment, payment - fee.real());
-
-    assert_eq!(
-        fee.nominal(),
-        test.state()
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_http_outcalls()
-    );
-
-    assert_eq!(
-        fee.nominal(),
-        *test
+        let (message_id, _) =
+            test.ingress_raw(caller_canister, "update", call_to_management_canister);
+        test.execute_all();
+        // Check that the SubnetCallContextManager contains the request
+        // and the ingress message is in processing state.
+        let canister_http_request_contexts = &test
             .state()
             .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_use_case()
-            .get(&CyclesUseCase::HTTPOutcalls)
-            .unwrap()
-    );
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        assert_eq!(http_request_context.url, url);
+        assert_eq!(
+            http_request_context.transform,
+            Some(Transform {
+                method_name: transform_method_name,
+                context: transform_context,
+            })
+        );
+        assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
+        assert_eq!(http_request_context.request.sender, caller_canister);
+        let fee = test.http_request_fee(
+            http_request_context.variable_parts_size(),
+            Some(NumBytes::from(response_size_limit)),
+        );
+        assert_eq!(http_request_context.request.payment, payment - fee.real());
+
+        assert_eq!(
+            fee.nominal(),
+            test.state()
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_http_outcalls()
+        );
+
+        assert_eq!(
+            fee.nominal(),
+            *test
+                .state()
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_by_use_case()
+                .get(&CyclesUseCase::HTTPOutcalls)
+                .unwrap()
+        );
+
+        assert_eq!(
+            fee.nominal(),
+            *test
+                .canister_state(caller_canister)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_as_counters()
+                .get(&CyclesUseCase::HTTPOutcalls)
+                .unwrap()
+        );
+    }
 }
 
 #[test]
@@ -4102,6 +4091,14 @@ fn replicated_query_can_burn_cycles() {
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+    let burned_cycles_as_counters = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases_as_counters()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles_as_counters, burned_cycles);
 }
 
 #[test]
@@ -4142,6 +4139,282 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::BurnedCycles)
+            .is_none()
+    );
+}
+
+#[test]
+fn canister_init_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    let init_payload = wasm().cycles_burn128(cycles_to_burn).build();
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), init_payload)
+        .unwrap();
+
+    // Canister loses `cycles_to_burn` from its balance (in addition to execution cost).
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    // The burned cycles are accounted for in the canister's metrics.
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn canister_post_upgrade_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+        .unwrap();
+    let post_upgrade_payload = wasm().cycles_burn128(cycles_to_burn).build();
+    test.upgrade_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        post_upgrade_payload,
+    )
+    .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn canister_pre_upgrade_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_pre_upgrade(wasm().cycles_burn128(cycles_to_burn))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn reply_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().reply())
+                    .on_reply(wasm().cycles_burn128(cycles_to_burn).reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn reject_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().trap())
+                    .on_reject(wasm().cycles_burn128(cycles_to_burn).reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn cleanup_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    // The reply callback traps, triggering the cleanup callback.
+    // The ingress fails because the reply callback trapped.
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().reply())
+                    .on_reply(wasm().trap())
+                    .on_cleanup(wasm().cycles_burn128(cycles_to_burn)),
+            )
+            .build(),
+    )
+    .unwrap_err();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn heartbeat_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().cycles_burn128(cycles_to_burn))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]
@@ -4174,9 +4447,31 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             )
             .build();
 
+        let instruction_consumption_initial_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+        let execution_cost_initial = test.canister_execution_cost(a_id);
+
         let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
         // Canister A sends the message to canister B.
         test.execute_message(a_id);
+        let instruction_consumption_after_message_execution_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+        let execution_cost_after_message = test.canister_execution_cost(a_id);
+        assert_eq!(
+            instruction_consumption_after_message_execution_counters,
+            instruction_consumption_initial_counters
+                + (execution_cost_after_message - execution_cost_initial).nominal(),
+        );
         test.induct_messages();
         test.execute_message(b_id);
 
@@ -4200,7 +4495,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         }
 
         // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
-        // before receiving a response on canister A.
+        // before receiving a response on canister A for gauges.
         let transmission_consumption_before_response = *test
             .canister_state(a_id)
             .system_state
@@ -4219,6 +4514,32 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         assert_gt!(transmission_consumption_before_response.get(), 0);
         assert_gt!(instruction_consumption_before_response.get(), 0);
 
+        // // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
+        // before receiving a response on canister A for counters.
+        let transmission_consumption_before_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instruction_consumption_before_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+
+        assert_eq!(
+            transmission_consumption_before_response_counters,
+            NominalCycles::zero()
+        );
+        assert_eq!(
+            instruction_consumption_after_message_execution_counters,
+            instruction_consumption_before_response_counters,
+        );
+
         // Canister A executed the response.
         test.induct_messages();
         test.execute_message(a_id);
@@ -4236,12 +4557,15 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
         let transmission_cost = test.call_fee("update", &b_callback) + test.reply_fee(&b_callback);
 
-        let execution_cost = test.canister_execution_cost(a_id);
+        let execution_cost_after_response = test.canister_execution_cost(a_id);
 
         // Check that canister A's balance is updated correctly.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
-            initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
+            initial_cycles
+                - execution_cost_after_response.real()
+                - transmission_cost.real()
+                - transferred_cycles
         );
 
         assert_eq!(
@@ -4268,6 +4592,21 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
+        let transmission_consumption_after_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instruction_consumption_after_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+
         // Check that consumed cycles are correct for both use cases.
         assert_eq!(
             transmission_consumption_after_response,
@@ -4276,7 +4615,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
         assert_eq!(
             instruction_consumption_after_response,
-            execution_cost.nominal(),
+            execution_cost_after_response.nominal(),
         );
 
         // Consumed cycles after the response should be smaller than before
@@ -4288,6 +4627,28 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         assert_lt!(
             instruction_consumption_after_response,
             instruction_consumption_before_response
+        );
+
+        // Check that consumed cycles are correct for both use cases for counter metrics.
+        assert_eq!(
+            transmission_consumption_after_response_counters,
+            transmission_consumption_before_response_counters + transmission_cost.nominal(),
+        );
+
+        assert_eq!(
+            instruction_consumption_after_response_counters,
+            instruction_consumption_before_response_counters
+                + (execution_cost_after_response - execution_cost_after_message).nominal(),
+        );
+
+        // Both the gauge and counter metrics should show the same consumption.
+        assert_eq!(
+            transmission_consumption_after_response,
+            transmission_consumption_after_response_counters,
+        );
+        assert_eq!(
+            instruction_consumption_after_response,
+            instruction_consumption_after_response_counters,
         );
 
         // Check that canister B's balance is updated correctly.
@@ -4356,7 +4717,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
 fn test_canister_settings_log_visibility_default_controllers() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     // Act.
     let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
@@ -4373,7 +4734,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
     // Act.
     let canister_id = test
         .create_canister_with_settings(
-            Cycles::new(1_000_000_000),
+            Cycles::new(1_000_000_000_000),
             ic00::CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(LogVisibilityV2::Public)
                 .build(),
@@ -4391,7 +4752,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
 fn test_canister_settings_log_visibility_set_to_public() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     // Act.
     test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();

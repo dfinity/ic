@@ -10,9 +10,11 @@ use ic_management_canister_types::{
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use ic_utils::interfaces::ManagementCanister;
+use pocket_ic::SubnetMetrics;
 use pocket_ic::{
-    DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
-    PocketIcState, RejectCode, StartServerParams, Time,
+    CreateCanisterParams, CreateCanisterPlacement, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
+    Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterCyclesCostSchedule, CanisterHttpReply,
         CanisterHttpResponse, CanisterIdRange, CreateInstanceResponse, ExtendedSubnetConfigSet,
@@ -142,15 +144,6 @@ fn test_create_canister_with_id() {
 }
 
 #[test]
-#[should_panic(expected = "is out of cycles")]
-fn test_install_canister_with_no_cycles() {
-    let pic = PocketIc::new();
-    let canister_id = pic.create_canister();
-    let wasm = b"\x00\x61\x73\x6d\x01\x00\x00\x00".to_vec();
-    pic.install_canister(canister_id, wasm.clone(), vec![], None);
-}
-
-#[test]
 #[should_panic(expected = "not found")]
 fn test_canister_routing_not_found() {
     let pic = PocketIc::new();
@@ -219,6 +212,94 @@ fn test_create_canister_with_not_mainnet_id_panics() {
         None,
         Principal::from_slice(&[0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01]),
     );
+}
+
+#[test]
+fn test_create_canister_with_params_default() {
+    let pic = PocketIc::new();
+    let canister_id = pic
+        .create_canister_with_params(None, CreateCanisterParams::default())
+        .unwrap();
+    // Default cycles balance is 100T.
+    assert_eq!(pic.cycle_balance(canister_id), 100_000_000_000_000);
+}
+
+#[test]
+fn test_create_canister_with_params_cycles() {
+    let pic = PocketIc::new();
+    let cycles = 42_000_000_000_000_u128;
+    let canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                cycles: Some(cycles),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(pic.cycle_balance(canister_id), cycles);
+}
+
+#[test]
+fn test_create_canister_with_params_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_fiduciary_subnet()
+        .build();
+    let topology = pic.topology();
+    let fidu_subnet_id = topology.get_fiduciary().unwrap();
+    let canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                placement: Some(CreateCanisterPlacement::SubnetId(fidu_subnet_id)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), fidu_subnet_id);
+}
+
+#[test]
+fn test_create_canister_with_params_canister_id() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let actual_canister_id = pic
+        .create_canister_with_params(
+            None,
+            CreateCanisterParams {
+                placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(actual_canister_id, canister_id);
+    assert_eq!(
+        pic.get_subnet(canister_id).unwrap(),
+        pic.topology().get_nns().unwrap()
+    );
+}
+
+#[test]
+fn test_create_canister_with_params_duplicate_id_fails() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+    let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+    let res = pic.create_canister_with_params(
+        None,
+        CreateCanisterParams {
+            placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+            ..Default::default()
+        },
+    );
+    assert!(res.is_ok());
+    let res = pic.create_canister_with_params(
+        None,
+        CreateCanisterParams {
+            placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+            ..Default::default()
+        },
+    );
+    assert!(res.is_err());
 }
 
 #[test]
@@ -1649,26 +1730,36 @@ fn subnet_metrics() {
 
     deploy_counter_canister(&pic);
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    fn get_subnet_metrics(pic: &PocketIc, subnet_id: Principal) -> SubnetMetrics {
+        // Advance 10 rounds, to ensure that `canister_state_bytes` (only recomputed
+        // every 10 rounds) is updated.
+        for _ in 0..10 {
+            pic.tick();
+        }
+        pic.get_subnet_metrics(subnet_id).unwrap()
+    }
+
+    pic.tick();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 
     let canister_id = deploy_counter_canister(&pic);
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 17) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 18));
 
     pic.uninstall_canister(canister_id, None).unwrap();
     pic.stop_canister(canister_id, None).unwrap();
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 
     pic.delete_canister(canister_id, None).unwrap();
 
-    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    let metrics = get_subnet_metrics(&pic, app_subnet);
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
@@ -3539,4 +3630,186 @@ fn cloud_engine_default_effective_canister_id() {
     let default_effective_canister_id: Principal =
         topology.default_effective_canister_id.clone().into();
     assert_eq!(effective_canister_id, default_effective_canister_id);
+}
+
+#[test]
+fn test_delete_subnet() {
+    // Create a PocketIC instance with two application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let subnet_id_1 = pic.topology().get_app_subnets()[0];
+    let subnet_id_2 = pic.topology().get_app_subnets()[1];
+    assert_ne!(subnet_id_1, subnet_id_2);
+
+    // Deploy test canisters on both subnets.
+    let canister_1 = pic.create_canister_on_subnet(None, None, subnet_id_1);
+    pic.add_cycles(canister_1, INIT_CYCLES);
+    pic.install_canister(canister_1, test_canister_wasm(), vec![], None);
+
+    let canister_2 = pic.create_canister_on_subnet(None, None, subnet_id_2);
+    pic.add_cycles(canister_2, INIT_CYCLES);
+    pic.install_canister(canister_2, test_canister_wasm(), vec![], None);
+
+    // (1) Verify that ingress message and inter-canister call to canister_2 work.
+    let reply = pic
+        .update_call(
+            canister_2,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+        .expect("ingress call to canister_2 failed before subnet deletion");
+    assert_eq!(Decode!(&reply, String).unwrap(), canister_2.to_string());
+
+    let reply = pic
+        .update_call(
+            canister_1,
+            Principal::anonymous(),
+            "call_and_get_rejection_code",
+            Encode!(&canister_2).unwrap(),
+        )
+        .expect("inter-canister call via canister_1 failed before subnet deletion");
+    assert_eq!(Decode!(&reply, u32).unwrap(), 0);
+
+    // (2) Delete subnet_2.
+    pic.delete_subnet(subnet_id_2);
+
+    // (3) Verify that ingress message to canister_2 fails after subnet deletion.
+    // The server rejects the message with a 4xx HTTP status (BadIngressMessage), causing the client to panic.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.update_call(
+            canister_2,
+            Principal::anonymous(),
+            "whoami",
+            encode_one(()).unwrap(),
+        )
+    }));
+    assert!(
+        result.is_err(),
+        "ingress call to canister_2 should fail after subnet deletion"
+    );
+
+    // (4) Verify that inter-canister call to canister_2 fails with DestinationInvalid (3).
+    let reply = pic
+        .update_call(
+            canister_1,
+            Principal::anonymous(),
+            "call_and_get_rejection_code",
+            Encode!(&canister_2).unwrap(),
+        )
+        .expect("inter-canister call via canister_1 should succeed");
+    assert_eq!(
+        Decode!(&reply, u32).unwrap(),
+        RejectCode::DestinationInvalid as u32
+    );
+}
+
+#[test]
+fn test_delete_default_effective_canister_id_subnet_fails() {
+    // Create a PocketIC instance with one NNS subnet and two application subnets.
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let topology = pic.topology();
+    let default_effective_canister_id =
+        Principal::from(topology.default_effective_canister_id.clone());
+
+    // Identify which app subnet contains the default effective canister ID.
+    let default_subnet_id = topology
+        .get_subnet(default_effective_canister_id)
+        .expect("default effective canister ID must belong to a subnet");
+    let other_subnet_id = topology
+        .get_app_subnets()
+        .into_iter()
+        .find(|&id| id != default_subnet_id)
+        .expect("there must be a second app subnet");
+
+    // The app subnet containing the default effective canister ID cannot be deleted.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(default_subnet_id);
+    }));
+    assert!(
+        result.is_err(),
+        "deleting the subnet containing the default effective canister ID should fail"
+    );
+
+    // The other app subnet can be deleted.
+    pic.delete_subnet(other_subnet_id);
+    assert_eq!(pic.topology().get_app_subnets(), vec![default_subnet_id]);
+}
+
+#[test]
+fn test_delete_named_subnet_fails() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_fiduciary_subnet()
+        .build();
+
+    let nns_subnet_id = pic.topology().get_nns().unwrap();
+    let fiduciary_subnet_id = pic.topology().get_fiduciary().unwrap();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(nns_subnet_id);
+    }));
+    assert!(result.is_err(), "deleting NNS subnet should fail");
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(fiduciary_subnet_id);
+    }));
+    assert!(result.is_err(), "deleting fiduciary subnet should fail");
+}
+
+#[test]
+fn test_delete_root_app_subnet_fails() {
+    // Create a PocketIC instance with a single application subnet.
+    // The first subnet created becomes the root subnet and cannot be deleted.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    let app_subnet_id = pic.topology().get_app_subnets()[0];
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pic.delete_subnet(app_subnet_id);
+    }));
+    assert!(result.is_err(), "deleting the root app subnet should fail");
+}
+
+#[test]
+fn test_delete_subnet_state_dir() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path = state_dir.path().to_path_buf();
+
+    let pic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path.clone())
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let subnet_dirs_count = || {
+        std::fs::read_dir(&state_dir_path)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .count()
+    };
+
+    let subnet_ids = pic.topology().get_app_subnets();
+    assert_eq!(subnet_ids.len(), 2);
+    // On Windows, the state_dir is only synced back from the WSL-native state directory on drop.
+    #[cfg(not(windows))]
+    assert_eq!(subnet_dirs_count(), 2);
+
+    pic.delete_subnet(subnet_ids[1]);
+    assert_eq!(pic.topology().get_app_subnets(), vec![subnet_ids[0]]);
+
+    // Drop to flush state to disk.
+    drop(pic);
+
+    // After deletion, only the remaining subnet's state directory should exist.
+    assert_eq!(subnet_dirs_count(), 1);
 }

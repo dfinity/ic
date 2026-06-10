@@ -33,7 +33,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:ac24f205995a1c36921bb8606e0ee16b8b26d73be7dd0cac786c6882f3569680
+      image: ghcr.io/dfinity/ic-build@sha256:55273ed5dc904e737bec678c8e7705aba76cc4b8b039574d5485f1d95d0193d3
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -42,7 +42,7 @@ jobs:
         name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          fetch-depth: ${{ case(github.event_name == 'pull_request', 256, 0) }}
           ref: ${{ inputs.commit-sha }}
       - name: Filter fuzzer related files
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
@@ -207,7 +207,7 @@ jobs:
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
       # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
       # when `release-build == 'true'` but not otherwise.
-      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
+      name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 150
@@ -386,6 +386,7 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
+            --config=flaky_retry \
             --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
             --build_tests_only \
             "${bazel_test_targets[@]}"

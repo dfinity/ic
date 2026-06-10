@@ -41,14 +41,7 @@ ALL_BINARIES = {
 # test binaries or binaries using test utils
 TESTONLY_BINARIES = [
     # Keep sorted
-    "e2e-test-driver",
-    "ic-admin",
-    "ic-boundary",
-    "ic-https-outcalls-adapter",
     "ic-nns-init",
-    "ic-prep",
-    "ic-test-state-machine",
-    "pocket-ic",
     "replicated-state-test",
     "state-layout-test",
     "types-test",
@@ -88,8 +81,7 @@ TEST_BINARIES = [
     binary = ALL_BINARIES[name],
 ) for name in TEST_BINARIES]
 
-# all targets below are tesonly because the targets violating the testonly flag
-# would error at this point
+# targets below use testonly conditionally for the remaining test-only binaries
 
 [
     genrule(

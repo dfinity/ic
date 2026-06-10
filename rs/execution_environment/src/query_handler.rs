@@ -11,7 +11,7 @@ mod tests;
 use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
     CanisterManager,
-    canister_logs::fetch_canister_logs,
+    canister_logs::fetch_canister_logs_response,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
@@ -57,8 +57,8 @@ use tower::{Service, util::BoxCloneService};
 pub(crate) use self::query_scheduler::QueryScheduler;
 use crate::execution::common::validate_subnet_admin;
 use ic_management_canister_types_private::{
-    CanisterIdRange, CanisterIdRecord, EmptyBlob, FetchCanisterLogsRequest, ListCanistersResponse,
-    Payload, QueryMethod,
+    CanisterIdRange, CanisterIdRecord, CanisterMetricsArgs, EmptyBlob, FetchCanisterLogsRequest,
+    ListCanistersResponse, Payload, QueryMethod,
 };
 use ic_registry_routing_table::canister_id_into_u64;
 
@@ -197,7 +197,7 @@ impl InternalHttpQueryHandler {
                     }
                 }
                 let mut canisters: Vec<CanisterIdRange> = Vec::new();
-                for id in state.canister_states().keys() {
+                for id in state.canister_states().all_keys() {
                     let id_u64 = canister_id_into_u64(*id);
                     match canisters.last_mut() {
                         Some(last)
@@ -234,13 +234,27 @@ impl InternalHttpQueryHandler {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
                     let since = Instant::now(); // Start logging execution time.
-                    let response = fetch_canister_logs(
-                        query.source(),
-                        state.get_ref(),
-                        FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.log_memory_store_feature,
-                    )?;
-                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    let args = FetchCanisterLogsRequest::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let result = Ok(WasmResult::Reply(
+                        fetch_canister_logs_response(
+                            query.source(),
+                            canister,
+                            args,
+                            self.config.log_memory_store_feature,
+                        )
+                        .map_err(UserError::from)?,
+                    ));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),
@@ -286,6 +300,33 @@ impl InternalHttpQueryHandler {
                         self.list_canisters(state.get_ref(), &caller, &query.method_payload);
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::ListCanisters,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
+                }
+                Ok(QueryMethod::CanisterMetrics) => {
+                    let args = CanisterMetricsArgs::decode(&query.method_payload)?;
+                    let canister_id = args.get_canister_id();
+                    let canister =
+                        state
+                            .get_ref()
+                            .canister_state(&canister_id)
+                            .ok_or_else(|| {
+                                UserError::new(
+                                    ErrorCode::CanisterNotFound,
+                                    format!("Canister {canister_id} not found"),
+                                )
+                            })?;
+                    let since = Instant::now(); // Start logging execution time.
+                    let response = self.canister_manager.get_canister_metrics(
+                        query.source(),
+                        canister,
+                        state.get_ref().get_own_subnet_admins(),
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::CanisterMetrics,
                         since.elapsed().as_secs_f64(),
                         &result,
                     );

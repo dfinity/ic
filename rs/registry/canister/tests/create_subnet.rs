@@ -15,8 +15,10 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
-use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::get_value;
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::decode_registry_value;
+use ic_nns_constants::{
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -37,10 +39,7 @@ use ic_registry_subnet_features::{
     ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::{
-    pb::v1::{RegistryAtomicMutateRequest, high_capacity_registry_get_value_response::Content},
-    upsert,
-};
+use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
 use pocket_ic::PocketIcBuilder;
@@ -152,7 +151,18 @@ fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
 }
 
 #[tokio::test]
-async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
+async fn test_governance_canister_can_create_a_subnet() {
+    create_subnet_succeeds_when_called_by(GOVERNANCE_CANISTER_ID.get()).await;
+}
+
+#[tokio::test]
+async fn test_engine_controller_can_create_a_subnet() {
+    create_subnet_succeeds_when_called_by(ENGINE_CONTROLLER_CANISTER_ID.get()).await;
+}
+
+/// Verifies that `caller` is authorized to call `create_subnet` and that doing
+/// so actually adds a new subnet to the registry.
+async fn create_subnet_succeeds_when_called_by(caller: PrincipalId) {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
@@ -173,16 +183,16 @@ async fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 
     let payload = make_create_subnet_payload(node_ids.clone());
 
-    // Create a subnet via governance
+    // Create a subnet via the authorized caller
     pocket_ic
         .update_call(
             REGISTRY_CANISTER_ID.get().0,
-            GOVERNANCE_CANISTER_ID.get().0,
+            caller.0,
             "create_subnet",
             Encode!(&payload).unwrap(),
         )
         .await
-        .expect("create_subnet call via governance should succeed");
+        .expect("create_subnet call by an authorized caller should succeed");
 
     // Verify a new subnet appeared in the subnet list
     let updated_subnet_list_record =
@@ -411,20 +421,6 @@ fn test_accepted_proposal_with_vetkd_gets_keys_from_other_subnet() {
         name: "foo-bar".to_string(),
     });
     test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
-}
-
-async fn decode_registry_value<T: Message + Default>(
-    pocket_ic: &pocket_ic::nonblocking::PocketIc,
-    key: impl AsRef<str>,
-) -> T {
-    let response = get_value(pocket_ic, key, None).await.unwrap();
-    let bytes = match response.content.unwrap() {
-        Content::Value(bytes) => bytes,
-        Content::LargeValueChunkKeys(_) => {
-            panic!("Unexpected large value chunk keys in registry response")
-        }
-    };
-    T::decode(bytes.as_slice()).unwrap()
 }
 
 fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {

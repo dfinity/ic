@@ -14,13 +14,11 @@
 // their node operator principals must be added to the registry through a proposal (with enough node
 // allowance).
 //
-// If you do not want the testnet to be public, it is recommended to create it with
-// `--set-required-host-features=dc=zh1` to be deployed physically closer to the backup pod.
 // Note that the NNS backup is over 15GB so it will require around 3 minutes to download, 15 minutes
 // to unpack and 59G of disk space.
 //
 // ```
-// $ ict testnet create mainnet_nns_state --verbose --set-required-host-features=dc=zh1 -- --test_tmpdir=./mainnet_nns_state
+// $ ict testnet create mainnet_nns_state --verbose -- --test_tmpdir=./mainnet_nns_state
 // ```
 //
 // Additional configuration:

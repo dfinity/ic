@@ -3,39 +3,6 @@ load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
-    "//rs/rust_canisters/on_wire",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:rand",
-    "@crate_index//:rand_pcg",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/canister_client/sender",
-    "//rs/rust_canisters/canister_test",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/test_utilities",
-    "//rs/test_utilities/identity",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_ic_bench(
     name = "json_bench",
     testonly = True,
@@ -48,68 +15,141 @@ rust_ic_bench(
         "JSON_WASM_PATH": "$(rootpath :json)",
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests/",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/canister_client/sender",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "//rs/test_utilities",
+        "//rs/test_utilities/identity",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:criterion",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "json",
     srcs = ["src/json.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test/empty.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "inter_canister_error_handling",
     srcs = ["src/inter_canister_error_handling.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test/empty.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "nan_canonicalized",
     srcs = ["src/nan_canonicalized.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test/empty.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "stable",
     srcs = ["src/stable.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test/empty.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "time",
     srcs = ["src/time.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test/empty.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_canister(
     name = "panics",
     srcs = ["src/panics.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test/empty.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_ic_test_suite(
     name = "tests_test",
     srcs = glob(["test/**/*.rs"]),
-    aliases = ALIASES,
     data = [
         ":inter_canister_error_handling",
         ":json",
@@ -129,6 +169,26 @@ rust_ic_test_suite(
         "INTER_CANISTER_ERROR_HANDLING_WASM_PATH": "$(rootpath :inter_canister_error_handling)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/canister_client/sender",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_json",
+        "//rs/rust_canisters/on_wire",
+        "//rs/test_utilities",
+        "//rs/test_utilities/identity",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:criterion",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:rand",
+        "@crate_index//:rand_pcg",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+    ],
 )

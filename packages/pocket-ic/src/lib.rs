@@ -69,7 +69,7 @@ use candid::{
 use flate2::read::GzDecoder;
 pub use ic_management_canister_types::{
     CanisterId, CanisterInstallMode, CanisterLogRecord, CanisterSettings, CanisterStatusResult,
-    Snapshot,
+    EnvironmentVariable, Snapshot,
 };
 pub use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
@@ -104,11 +104,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "13.0.0";
-const MAX_SERVER_VERSION: &str = "14";
+const MIN_SERVER_VERSION: &str = "14.0.0";
+const MAX_SERVER_VERSION: &str = "15";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "13.0.0";
+pub const LATEST_SERVER_VERSION: &str = "14.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -572,6 +572,26 @@ impl TryFrom<Time> for SystemTime {
             ))
         }
     }
+}
+
+/// Specifies where to place a newly created canister.
+#[derive(Clone, Debug)]
+pub enum CreateCanisterPlacement {
+    /// Place the canister on the given subnet.
+    SubnetId(SubnetId),
+    /// Create the canister with the given specific canister ID.
+    CanisterId(CanisterId),
+}
+
+/// Parameters for [`PocketIc::create_canister_with_params`].
+#[derive(Clone, Debug, Default)]
+pub struct CreateCanisterParams {
+    /// Initial cycles balance; defaults to 100T if `None`.
+    pub cycles: Option<u128>,
+    /// Canister settings; defaults to default canister settings if `None`.
+    pub settings: Option<CanisterSettings>,
+    /// Canister placement (subnet or specific canister ID); a random application subnet is chosen if `None`.
+    pub placement: Option<CreateCanisterPlacement>,
 }
 
 /// Main entry point for interacting with PocketIC.
@@ -1098,6 +1118,7 @@ impl PocketIc {
     }
 
     /// Create a canister with default settings as the anonymous principal.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn create_canister(&self) -> CanisterId {
         let runtime = self.runtime.clone();
@@ -1105,6 +1126,7 @@ impl PocketIc {
     }
 
     /// Create a canister with optional custom settings and a sender.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub fn create_canister_with_settings(
         &self,
@@ -1120,6 +1142,7 @@ impl PocketIc {
     }
 
     /// Creates a canister with a specific canister ID and optional custom settings.
+    /// The canister is created with 100T cycles.
     /// Returns an error if the canister ID is already in use.
     /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
@@ -1142,6 +1165,7 @@ impl PocketIc {
     }
 
     /// Create a canister on a specific subnet with optional custom settings.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, subnet_id = %subnet_id.to_string()))]
     pub fn create_canister_on_subnet(
         &self,
@@ -1153,6 +1177,24 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .create_canister_on_subnet(sender, settings, subnet_id)
+                .await
+        })
+    }
+
+    /// Create a canister with optional cycles, settings, and placement.
+    /// The placement specifies either a target subnet or a specific canister ID.
+    /// Defaults to 100T cycles if `params.cycles` is `None`.
+    /// Returns an error if the specified canister ID is already in use.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn create_canister_with_params(
+        &self,
+        sender: Option<Principal>,
+        params: CreateCanisterParams,
+    ) -> Result<CanisterId, String> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .create_canister_with_params(sender, params)
                 .await
         })
     }
@@ -1436,6 +1478,13 @@ impl PocketIc {
     pub fn canister_exists(&self, canister_id: CanisterId) -> bool {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.canister_exists(canister_id).await })
+    }
+
+    /// Deletes a subnet. Panics if the subnet does not exist or is a named subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub fn delete_subnet(&self, subnet_id: SubnetId) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.delete_subnet(subnet_id).await })
     }
 
     /// Returns the subnet ID of the canister if the canister exists.
@@ -2468,25 +2517,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 13.0.0")
+            check_pocketic_server_version("pocket-ic 14.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 13 0 0")
+            check_pocketic_server_version("pocket-ic-server 14 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 12.0.0")
+            check_pocketic_server_version("pocket-ic-server 13.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 13.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 13.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 13.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 14.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 14.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 14.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 14.0.0")
+            check_pocketic_server_version("pocket-ic-server 15.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );

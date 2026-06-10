@@ -43,6 +43,8 @@ enum PayloadValidationError {
     InvalidCanisterIdRanges(WellFormedError),
     SourceSubnetHalted,
     SourceSubnetIsRentalSubnet,
+    InitialDkgSubnetDoesNotExist(SubnetId),
+    InitialDkgSubnetMustNotBeSourceSubnet,
 }
 
 /// For now we only support splitting application subnets. Splitting system subnets is not allowed.
@@ -64,6 +66,7 @@ impl Registry {
     ///    subnet is being split.
     pub async fn split_subnet(&mut self, payload: SplitSubnetPayload) -> Result<(), String> {
         let pre_call_registry_version = self.latest_version();
+        let initial_dkg_subnet_id = payload.initial_dkg_subnet_id;
 
         let (mut source_subnet_record, ranges_to_migrate) = self
             .validate_subnet_splitting_payload(&payload, pre_call_registry_version)
@@ -117,7 +120,7 @@ impl Registry {
             let request = SetupInitialDKGArgs::new(
                 nodes,
                 RegistryVersion::new(pre_call_registry_version),
-                None, // Initial DKG request is handled by the NNS subnet
+                initial_dkg_subnet_id,
             );
             let raw_response = call(
                 CanisterId::ic_00(),
@@ -242,6 +245,21 @@ impl Registry {
     ) -> Result<(SubnetRecord, CanisterIdRanges), PayloadValidationError> {
         if !is_subnet_splitting_enabled() {
             return Err(PayloadValidationError::NotEnabled);
+        }
+
+        if let Some(initial_dkg_subnet_id) = payload.initial_dkg_subnet_id {
+            if initial_dkg_subnet_id == payload.source_subnet_id {
+                return Err(PayloadValidationError::InitialDkgSubnetMustNotBeSourceSubnet);
+            }
+
+            if self
+                .get_subnet(initial_dkg_subnet_id, registry_version)
+                .is_err()
+            {
+                return Err(PayloadValidationError::InitialDkgSubnetDoesNotExist(
+                    initial_dkg_subnet_id,
+                ));
+            }
         }
 
         let source_subnet_record = self
@@ -405,6 +423,9 @@ pub struct SplitSubnetPayload {
     pub destination_canister_ranges: Vec<CanisterIdRange>,
     pub destination_node_ids: Vec<NodeId>,
     pub source_subnet_id: SubnetId,
+    /// Optional subnet that should handle `setup_initial_dkg`.
+    /// If not set, the request is handled by the NNS subnet.
+    pub initial_dkg_subnet_id: Option<SubnetId>,
 }
 
 impl std::fmt::Display for PayloadValidationError {
@@ -465,6 +486,15 @@ impl std::fmt::Display for PayloadValidationError {
                 write!(
                     f,
                     "The payload contains invalid canister ID ranges: {error:?}"
+                )
+            }
+            PayloadValidationError::InitialDkgSubnetDoesNotExist(subnet_id) => {
+                write!(f, "Initial DKG subnet '{subnet_id}' does not exist")
+            }
+            PayloadValidationError::InitialDkgSubnetMustNotBeSourceSubnet => {
+                write!(
+                    f,
+                    "Initial DKG subnet must be different from the source subnet being split"
                 )
             }
         }
@@ -725,6 +755,26 @@ mod tests {
         },
         Err(PayloadValidationError::SourceSubnetHalted)
     )]
+    #[case::initial_dkg_subnet_is_source_subnet(
+        SubnetInfo {
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            initial_dkg_subnet_id: Some(SUBNET_1),
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::InitialDkgSubnetMustNotBeSourceSubnet)
+    )]
+    #[case::initial_dkg_subnet_does_not_exist(
+        SubnetInfo {
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            initial_dkg_subnet_id: Some(SUBNET_2),
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::InitialDkgSubnetDoesNotExist(SUBNET_2))
+    )]
     fn payload_validation_test(
         #[case] source_subnet_info: SubnetInfo,
         #[case] payload: SplitSubnetPayload,
@@ -747,6 +797,7 @@ mod tests {
             destination_canister_ranges: payload.destination_canister_ranges,
             destination_node_ids: payload_node_ids,
             source_subnet_id: payload.source_subnet_id,
+            initial_dkg_subnet_id: payload.initial_dkg_subnet_id,
         };
 
         let validation_result = registry
@@ -791,6 +842,7 @@ mod tests {
             }],
             destination_node_ids: vec![NODE_2, NODE_3],
             source_subnet_id: SUBNET_1,
+            initial_dkg_subnet_id: None,
         }
     }
 

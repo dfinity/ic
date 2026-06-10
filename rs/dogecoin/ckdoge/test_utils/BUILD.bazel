@@ -18,7 +18,7 @@ rust_library(
         "//packages/canlog",
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/bitcoin/adapter/test_utils",
         "//rs/dogecoin/ckdoge/minter:ckdoge_minter_lib",

@@ -1,3 +1,4 @@
+use ic_consensus_dkg::metrics::DkgPayloadStats;
 use ic_consensus_idkg::{
     metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
     utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
@@ -12,6 +13,7 @@ use ic_types::{
     Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
+    crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
@@ -114,6 +116,7 @@ pub(crate) struct BlockStats {
     pub block_height: u64,
     pub block_time: Time,
     pub block_context_certified_height: u64,
+    pub dkg_stats: DkgPayloadStats,
     pub idkg_stats: Option<IDkgPayloadStats>,
 }
 
@@ -124,6 +127,7 @@ impl From<&Block> for BlockStats {
             block_height: block.height().get(),
             block_time: block.context.time,
             block_context_certified_height: block.context.certified_height.get(),
+            dkg_stats: DkgPayloadStats::from(block.payload.as_ref()),
             idkg_stats: block.payload.as_ref().as_idkg().map(IDkgPayloadStats::from),
         }
     }
@@ -168,6 +172,10 @@ pub(crate) struct FinalizerMetrics {
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
+    pub dkg_remote_transcript_attempts_size: IntGauge,
+    pub dkg_remote_transcript_attempts_sum: IntGauge,
+    pub dkg_dealings_included: IntCounterVec,
+    pub dkg_remote_transcripts_delivered: IntCounterVec,
     // idkg payload related metrics
     pub master_key_transcripts_created: IntCounterVec,
     pub idkg_available_pre_signatures: IntGaugeVec,
@@ -211,6 +219,24 @@ impl FinalizerMetrics {
             finalization_certified_state_difference: metrics_registry.int_gauge(
                 "consensus_finalization_certified_state_difference",
                 "The height difference between the finalized tip and the referenced certified state",
+            ),
+            dkg_remote_transcript_attempts_size: metrics_registry.int_gauge(
+                "consensus_dkg_remote_transcript_attempts_size",
+                "Size of remote DKG attempts map for delivered summary payloads",
+            ),
+            dkg_remote_transcript_attempts_sum: metrics_registry.int_gauge(
+                "consensus_dkg_remote_transcript_attempts_sum",
+                "Sum of remote DKG attempts map values for delivered summary payloads",
+            ),
+            dkg_dealings_included: metrics_registry.int_counter_vec(
+                "consensus_dkg_dealings_included_total",
+                "Number of DKG dealings delivered in data payloads by tag and target subnet",
+                &["tag", "target_subnet"],
+            ),
+            dkg_remote_transcripts_delivered: metrics_registry.int_counter_vec(
+                "consensus_dkg_remote_transcripts_delivered_total",
+                "Number of remote DKG transcripts included in delivered data payloads by tag",
+                &["tag"],
             ),
             ingress_messages_delivered: metrics_registry.histogram(
                 "consensus_ingress_messages_delivered",
@@ -303,6 +329,28 @@ impl FinalizerMetrics {
         self.finalization_certified_state_difference.set(
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
+        let dkg = &block_stats.dkg_stats;
+        if let Some(size) = dkg.remote_dkg_attempts_map_size {
+            self.dkg_remote_transcript_attempts_size.set(size as i64);
+        }
+        if let Some(total) = dkg.remote_dkg_attempts_map_sum {
+            self.dkg_remote_transcript_attempts_sum.set(total as i64);
+        }
+        for ((tag, target_subnet), count) in &dkg.dealings_included {
+            let target_str = match target_subnet {
+                NiDkgTargetSubnet::Local => "local".to_string(),
+                NiDkgTargetSubnet::Remote(_) => "remote".to_string(),
+            };
+            self.dkg_dealings_included
+                .with_label_values(&[format!("{tag:?}"), target_str])
+                .inc_by(*count as u64);
+        }
+        for (tag, count) in &dkg.remote_transcripts_delivered {
+            self.dkg_remote_transcripts_delivered
+                .with_label_values(&[format!("{tag:?}")])
+                .inc_by(*count as u64);
+        }
+
         self.canister_http_success_delivered
             .with_label_values(&["fully_replicated"])
             .inc_by(batch_stats.canister_http.responses as u64);

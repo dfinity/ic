@@ -19,7 +19,7 @@ use ic_registry_local_registry::LocalRegistry;
 use crate::driver::{
     constants::SSH_USERNAME,
     farm::{DnsRecord, DnsRecordType, HostFeature},
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResourceOverrides},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResourceOverrides},
     ic_gateway_vm::{HasIcGatewayVm, Playnet},
     log_events,
     nested::HasNestedVms,
@@ -151,11 +151,6 @@ impl PrometheusVm {
         self.universal_vm = self
             .universal_vm
             .with_resource_overrides(vm_resource_overrides);
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.universal_vm = self.universal_vm.with_vm_allocation(vm_allocation);
         self
     }
 
