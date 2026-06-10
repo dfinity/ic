@@ -1307,7 +1307,7 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.metadata.is_reject = !bad_share.content.is_reject();
+                    bad_share.content.metadata.is_reject = !bad_share.content.metadata.is_reject;
 
                     let artifact_with_mismatched_is_reject = CanisterHttpResponseArtifact {
                         share: bad_share,
@@ -3171,7 +3171,7 @@ pub mod test {
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
                     let mut bad_share = share.clone();
-                    bad_share.content.metadata.is_reject = !bad_share.content.is_reject();
+                    bad_share.content.metadata.is_reject = !bad_share.content.metadata.is_reject;
 
                     canister_http_pool.insert(UnvalidatedArtifact {
                         message: CanisterHttpResponseArtifact {

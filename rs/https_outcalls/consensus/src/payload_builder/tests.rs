@@ -2601,7 +2601,7 @@ fn flexible_invalid_is_reject_mismatch() {
 
     setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
         let mut entry = flexible_response(42, 0, b"data");
-        entry.proof.content.metadata.is_reject = !entry.proof.content.is_reject();
+        entry.proof.content.metadata.is_reject = !entry.proof.content.metadata.is_reject;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
@@ -4595,7 +4595,7 @@ fn flexible_error_too_many_rejects_is_reject_mismatch() {
     setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
         let entry_ok = flexible_reject_response(callback_id.get(), 0);
         let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.metadata.is_reject = !entry_bad.proof.content.is_reject();
+        entry_bad.proof.content.metadata.is_reject = !entry_bad.proof.content.metadata.is_reject;
 
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
