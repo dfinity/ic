@@ -27,7 +27,7 @@ fn test_remove_subnet_local_registry_records() {
     use std::collections::{BTreeMap, HashMap, HashSet};
     use std::sync::Arc;
 
-    let seed = [42u8; 32];
+    let seed = [42_u8; 32];
     let mut node_rng = StdRng::from_seed(seed);
     let nodes: Vec<super::StateMachineNode> = (0..4)
         .map(|_| super::StateMachineNode::new(&mut node_rng))
