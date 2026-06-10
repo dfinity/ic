@@ -77,21 +77,25 @@ pub async fn validate_request(
         return Err(ValidationError::SameSubnet(Reserved));
     }
 
-    // 2. Are the migrated and replaced canisters on cloud engine subnets?
-    // It is safe to perform this check before acquiring locks because the fact that
-    // neither the migrated nor the replaced canister is on a cloud engine subnet
-    // cannot change later.
-    let migrated_canister_subnet = get_subnet_for_canister(migrated_canister).await?;
-    let replaced_canister_subnet = get_subnet_for_canister(replaced_canister).await?;
-    if get_subnet(migrated_canister_subnet).await? == SubnetType::CloudEngine {
-        return Err(ValidationError::CloudEngineSubnet {
-            subnet: migrated_canister_subnet,
-        });
-    }
-    if get_subnet(replaced_canister_subnet).await? == SubnetType::CloudEngine {
-        return Err(ValidationError::CloudEngineSubnet {
-            subnet: replaced_canister_subnet,
-        });
+    // The scope ensures that `migrated_canister_subnet` and `replaced_canister_subnet`
+    // cannot be used below (step 6 re-fetches the subnets after acquiring the locks).
+    {
+        // 2. Are the migrated and replaced canisters on cloud engine subnets?
+        // It is safe to perform this check before acquiring locks because the fact that
+        // neither the migrated nor the replaced canister is on a cloud engine subnet
+        // cannot change later.
+        let migrated_canister_subnet = get_subnet_for_canister(migrated_canister).await?;
+        let replaced_canister_subnet = get_subnet_for_canister(replaced_canister).await?;
+        if get_subnet(migrated_canister_subnet).await? == SubnetType::CloudEngine {
+            return Err(ValidationError::CloudEngineSubnet {
+                subnet: migrated_canister_subnet,
+            });
+        }
+        if get_subnet(replaced_canister_subnet).await? == SubnetType::CloudEngine {
+            return Err(ValidationError::CloudEngineSubnet {
+                subnet: replaced_canister_subnet,
+            });
+        }
     }
 
     // We check if the caller is authorized (i.e.,
