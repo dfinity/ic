@@ -1075,10 +1075,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_non_replicated() {
 
     let (response, metadata) = test_response_and_metadata(callback_id.get());
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
-    proof
-        .proof
-        .signatures
-        .insert(delegated_node_id, proof_signature_with_excess_refund());
+    add_signer_with_excess_refund_to_proof(&mut proof, delegated_node_id);
 
     assert_payload_rejected_for_excess_refund(
         4,
@@ -1102,10 +1099,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_fully_replicated() {
     let (response, metadata) = test_response_and_metadata(callback_id.get());
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
     for node in 0..num_nodes as u64 {
-        proof
-            .proof
-            .signatures
-            .insert(node_test_id(node), proof_signature_with_excess_refund());
+        add_signer_with_excess_refund_to_proof(&mut proof, node_test_id(node));
     }
 
     assert_payload_rejected_for_excess_refund(
@@ -1683,13 +1677,19 @@ fn share_with_excess_refund(
     )
 }
 
-/// Builds an aggregated-proof signature entry whose payment receipt claims a
-/// refund exceeding the default per-replica allowance.
-fn proof_signature_with_excess_refund() -> CanisterHttpResponseSignature {
-    CanisterHttpResponseSignature {
-        payment_receipt: receipt_exceeding_allowance(),
-        signature: BasicSigOf::new(BasicSig(vec![])),
-    }
+/// Inserts a fake signature for `signer` together with a payment receipt whose
+/// refund exceeds the default per-replica allowance into an aggregated proof.
+fn add_signer_with_excess_refund_to_proof(
+    proof: &mut CanisterHttpResponseWithConsensus,
+    signer: NodeId,
+) {
+    proof.proof.signatures.insert(
+        signer,
+        CanisterHttpResponseSignature {
+            payment_receipt: receipt_exceeding_allowance(),
+            signature: BasicSigOf::new(BasicSig(vec![])),
+        },
+    );
 }
 
 /// Configures a payload builder with `num_nodes` nodes and the given request
@@ -2567,7 +2567,7 @@ fn flexible_invalid_content_size_mismatch() {
         let mut entry = flexible_response(42, 0, b"data");
         let expected_size = entry.response.content.count_bytes() as u32;
         entry.proof.content.metadata.content_size = expected_size.wrapping_add(1);
-        let wrong_size = entry.proof.content.content_size();
+        let wrong_size = entry.proof.content.metadata.content_size;
 
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,

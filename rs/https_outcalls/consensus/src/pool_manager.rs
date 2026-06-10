@@ -3482,10 +3482,6 @@ pub mod test {
                     registry,
                     ..
                 } = dependencies(pool_config.clone(), 5);
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
 
                 // Use a context with a small per-replica allowance.
                 let request = CanisterHttpRequestContext {
@@ -3552,11 +3548,9 @@ pub mod test {
                     timestamp: UNIX_EPOCH,
                 });
 
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
-                    shim,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
                     crypto,
                     pool.get_cache(),
                     replica_config,

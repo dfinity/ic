@@ -608,6 +608,7 @@ mod tests {
     use super::*;
     use crate::exhaustive::ExhaustiveSet;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_types_cycles::Cycles;
 
     /// Tests that a roundtrip of protobuf conversions for `CanisterHttpResponse`
     /// works correctly.
@@ -631,7 +632,6 @@ mod tests {
     /// works correctly, both with and without a full response.
     #[test]
     fn canister_http_response_artifact_conversion() {
-        use ic_types_cycles::Cycles;
         let signer = NodeId::from(PrincipalId::new_node_test_id(2));
         let share = Signed {
             content: CanisterHttpResponseReceiptShare {
