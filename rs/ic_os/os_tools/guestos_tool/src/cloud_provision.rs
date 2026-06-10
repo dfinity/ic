@@ -89,7 +89,7 @@ pub fn obtain_guestos_config() -> Result<GuestOSConfig, Error> {
             Err(e) => {
                 retries -= 1;
                 if retries == 0 {
-                    bail!("unable to obtain config: reties exhausted");
+                    bail!("unable to obtain config: retries exhausted");
                 }
 
                 info!("Unable to obtain GuestOS config (retries left: {retries}): {e:#}");

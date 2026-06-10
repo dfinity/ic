@@ -9,7 +9,6 @@ use tracing_subscriber::{
     fmt::{
         FmtContext,
         format::{FormatEvent, FormatFields, Writer},
-        writer::MakeWriterExt,
     },
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -81,7 +80,8 @@ pub fn init_logging_with_level(max_level: Level) {
             .with(layer.with_filter(level_filter))
             .with(
                 tracing_subscriber::fmt::layer()
-                    .with_writer(std::io::stderr.with_max_level(max_level)),
+                    .with_writer(std::io::stderr)
+                    .with_filter(level_filter),
             )
             .init(),
         Err(_) => tracing_subscriber::fmt()

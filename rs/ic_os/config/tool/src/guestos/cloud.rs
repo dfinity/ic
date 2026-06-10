@@ -15,6 +15,9 @@ use tracing::info;
 /// URL of the metadata server
 const METADATA_URL: &str = "http://169.254.169.254";
 
+/// Timeout for HTTP calls
+const TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Type of the cloud that we provision from
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumString)]
 pub enum CloudType {
@@ -29,7 +32,11 @@ impl CloudType {
         let mut retries = 120;
 
         let resp = loop {
-            match reqwest::blocking::get(METADATA_URL) {
+            let mut req =
+                reqwest::blocking::Request::new(Method::GET, METADATA_URL.parse().unwrap());
+            *req.timeout_mut() = Some(TIMEOUT);
+
+            match reqwest::blocking::Client::new().execute(req) {
                 Ok(v) => break v,
                 Err(e) => {
                     retries -= 1;
@@ -54,7 +61,7 @@ impl CloudType {
                     Method::GET,
                     format!("{METADATA_URL}/latest/user-data").parse().unwrap(),
                 );
-                *req.timeout_mut() = Some(Duration::from_secs(30));
+                *req.timeout_mut() = Some(TIMEOUT);
 
                 reqwest::blocking::Client::new()
                     .execute(req)
@@ -70,7 +77,7 @@ impl CloudType {
                         .parse()
                         .unwrap(),
                 );
-                *req.timeout_mut() = Some(Duration::from_secs(30));
+                *req.timeout_mut() = Some(TIMEOUT);
                 req.headers_mut()
                     .insert("Metadata-Flavor", "Google".try_into().unwrap());
 
@@ -84,7 +91,7 @@ impl CloudType {
 
             Self::Azure => {
                 let mut req = reqwest::blocking::Request::new(Method::GET, format!("{METADATA_URL}/metadata/instance/compute/userData?api-version=2025-04-07&format=text").parse().unwrap());
-                *req.timeout_mut() = Some(Duration::from_secs(30));
+                *req.timeout_mut() = Some(TIMEOUT);
                 req.headers_mut()
                     .insert("Metadata", "true".try_into().unwrap());
 
@@ -117,7 +124,7 @@ impl CloudType {
                         .parse()
                         .unwrap(),
                 );
-                *req.timeout_mut() = Some(Duration::from_secs(30));
+                *req.timeout_mut() = Some(TIMEOUT);
                 req.headers_mut()
                     .insert("Metadata", "true".try_into().unwrap());
 
