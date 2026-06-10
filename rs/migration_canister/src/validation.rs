@@ -77,13 +77,12 @@ pub async fn validate_request(
         return Err(ValidationError::SameSubnet(Reserved));
     }
 
-    // 2. Are the migrated and replaced canisters on the same subnet?
+    // 2. Are the migrated and replaced canisters on cloud engine subnets?
+    // It is safe to perform this check before acquiring locks because the fact that
+    // neither the migrated nor the replaced canister is on a cloud engine subnet
+    // cannot change later.
     let migrated_canister_subnet = get_subnet_for_canister(migrated_canister).await?;
     let replaced_canister_subnet = get_subnet_for_canister(replaced_canister).await?;
-    if migrated_canister_subnet == replaced_canister_subnet {
-        return Err(ValidationError::SameSubnet(Reserved));
-    }
-    // 3. Are the migrated and replaced canisters on cloud engine subnets?
     if get_subnet(migrated_canister_subnet).await? == SubnetType::CloudEngine {
         return Err(ValidationError::CloudEngineSubnet {
             subnet: migrated_canister_subnet,
@@ -101,10 +100,10 @@ pub async fn validate_request(
     // to prevent unauthorized callers from acquiring the lock
     // and blocking authorized callers from performing canister migration.
 
-    // 4. Is the caller controller of the migrated canister?
+    // 3. Is the caller controller of the migrated canister?
     let migrated_canister_status =
         check_controllers_and_get_status(migrated_canister, caller).await?;
-    // 5. Is the caller controller of the replaced canister?
+    // 4. Is the caller controller of the replaced canister?
     let replaced_canister_status =
         check_controllers_and_get_status(replaced_canister, caller).await?;
 
@@ -122,7 +121,7 @@ pub async fn validate_request(
         });
     };
 
-    // 6. Is any of these canisters already in a migration process?
+    // 5. Is any of these canisters already in a migration process?
     for request in list_by(|_| true) {
         if let Some(id) = request
             .request()
@@ -130,6 +129,12 @@ pub async fn validate_request(
         {
             return Err(ValidationError::MigrationInProgress { canister: id });
         }
+    }
+    // 6. Are the migrated and replaced canisters on the same subnet?
+    let migrated_canister_subnet = get_subnet_for_canister(migrated_canister).await?;
+    let replaced_canister_subnet = get_subnet_for_canister(replaced_canister).await?;
+    if migrated_canister_subnet == replaced_canister_subnet {
+        return Err(ValidationError::SameSubnet(Reserved));
     }
     // 7. Is the migrated canister stopped?
     if migrated_canister_status.status != CanisterStatusType::Stopped {
