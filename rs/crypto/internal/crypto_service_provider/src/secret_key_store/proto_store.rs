@@ -176,6 +176,34 @@ impl ProtoSecretKeyStore {
             return Err(cleanup_errors);
         }
 
+        self.zeroize_or_unlink_old_file()
+    }
+
+    /// Disposes of `old_proto_file_to_zeroize` during cleanup, whether after a
+    /// successful write, or when cleaning up stale files during startup.
+    ///
+    /// If `old_proto_file_to_zeroize` and `proto_file` share an inode, zeroing would
+    /// overwrite the live keystore — so just unlink the extra link. The new content
+    /// has already been written into that inode, so there is no separate old-inode
+    /// copy left to scrub. Otherwise, zero-and-delete the old file as usual. If
+    /// `old_proto_file_to_zeroize` does not exist (e.g. the first write to a fresh
+    /// keystore, or there is nothing left to clean up at startup), this is a no-op.
+    ///
+    /// Inode sharing is not expected on filesystems where `rename(2)` atomically
+    /// swaps the destination directory entry to a new inode (Linux ext4 / xfs /
+    /// btrfs, tmpfs, …), but has been observed on virtiofs bind mounts (Docker
+    /// Desktop on macOS), where `rename(2)` reuses the destination inode.
+    fn zeroize_or_unlink_old_file(&self) -> Result<(), Vec<CleanupError>> {
+        let old_file_exists = self.old_proto_file_to_zeroize.try_exists().map_err(|err| {
+            vec![CleanupError::OldFileExistenceDetermination {
+                old_sks_file: self.old_proto_file_to_zeroize.to_string_lossy().to_string(),
+                source: err,
+            }]
+        })?;
+        if !old_file_exists {
+            return Ok(());
+        }
+
         let are_same_file = ic_sys::fs::are_hard_links_to_the_same_inode(
             &self.proto_file,
             &self.old_proto_file_to_zeroize,
@@ -233,8 +261,10 @@ impl ProtoSecretKeyStore {
         let write_result = self.write_secret_keys_to_disk(secret_keys);
         if write_result.is_ok() {
             // Use the previously created hard link to zeroize and delete the old keystore file.
-            let overwrite_result =
-                overwrite_file_with_zeroes_and_delete_if_it_exists(&self.old_proto_file_to_zeroize);
+            // Note: must guard against `proto_file` and `old_proto_file_to_zeroize` sharing an
+            // inode after the rename in `write_secret_keys_to_disk` — otherwise zeroing would
+            // clobber the file we just wrote. See `zeroize_or_unlink_old_file` for details.
+            let overwrite_result = self.zeroize_or_unlink_old_file();
             cleanup_result = combine_cleanup_results(cleanup_result, overwrite_result);
         };
         self.log_cleanup_errors_and_observe_metrics(cleanup_result);

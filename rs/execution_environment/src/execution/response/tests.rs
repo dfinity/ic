@@ -98,8 +98,18 @@ fn execute_response_refunds_cycles() {
 
         // Canister A calls canister B.
         let cycles_sent = Cycles::new(1_000_000);
+        let b_callback = wasm()
+            .accept_cycles(cycles_sent / 2_u64)
+            .message_payload()
+            .append_and_reply()
+            .build();
         let wasm_payload = wasm()
-            .call_with_cycles(b_id, "update", call_args(), cycles_sent)
+            .call_with_cycles(
+                b_id,
+                "update",
+                call_args().other_side(b_callback.clone()),
+                cycles_sent,
+            )
             .build();
 
         // Enqueue ingress message to canister A and execute it.
@@ -107,16 +117,11 @@ fn execute_response_refunds_cycles() {
         assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
         test.execute_message(a_id);
 
-        // Create response from canister B to canister A.
-        let response = ResponseBuilder::new()
-            .originator(a_id)
-            .respondent(b_id)
-            .originator_reply_callback(CallbackId::from(1))
-            .refund(cycles_sent / 2_u64)
-            .build();
-        let response_payload_size = response.payload_size_bytes();
+        // Execute message on B.
+        test.induct_messages();
+        test.execute_message(b_id);
 
-        // Execute response.
+        // Execute response on A.
         let balance_before = test.canister_state(a_id).system_state.balance();
         let consumed_cycles_before = *test
             .canister_state(a_id)
@@ -125,8 +130,16 @@ fn execute_response_refunds_cycles() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
+        let consumed_cycles_before_counter = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
         let instructions_before = test.canister_executed_instructions(a_id);
-        test.execute_response(a_id, response);
+        test.induct_messages();
+        test.execute_message(a_id);
         let instructions_after = test.canister_executed_instructions(a_id);
         let instructions_executed = instructions_after - instructions_before;
         let balance_after = test.canister_state(a_id).system_state.balance();
@@ -135,6 +148,13 @@ fn execute_response_refunds_cycles() {
             .system_state
             .canister_metrics()
             .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let consumed_cycles_after_counter = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_as_counters()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
 
@@ -146,7 +166,7 @@ fn execute_response_refunds_cycles() {
         let prepayment_for_response_transmission =
             mgr.prepayment_for_response_transmission(test.subnet_size(), cost_schedule);
         let actual_response_transmission_fee = mgr.xnet_call_bytes_transmitted_fee(
-            response_payload_size,
+            NumBytes::from(b_callback.len() as u64),
             test.subnet_size(),
             cost_schedule,
         );
@@ -177,6 +197,13 @@ fn execute_response_refunds_cycles() {
             consumed_cycles_after,
             consumed_cycles_before - response_transmission_refund.nominal(),
         );
+        assert_eq!(
+            consumed_cycles_after_counter,
+            consumed_cycles_before_counter
+                + (test.call_fee("update", &b_callback) + actual_response_transmission_fee)
+                    .nominal(),
+        );
+        assert_eq!(consumed_cycles_after, consumed_cycles_after_counter);
     }
 }
 
@@ -2728,10 +2755,10 @@ fn cycles_balance_changes_applied_correctly() {
         .with_instruction_limit(20_000_000_000)
         .build();
     let a_id = test
-        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(20_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(301_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(400_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2784,7 +2811,7 @@ fn test_cycles_burn() {
     let canister_memory_usage = NumBytes::from(1_000_000);
     let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
-    let amount = 1_000_000_000;
+    let amount = 100_000_000_000;
     let mut balance = Cycles::new(amount);
     let amount_to_burn = Cycles::new(amount / 10);
 
@@ -2823,7 +2850,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         Cycles::zero(),
     );
 
-    let amount = 1_000_000_000;
+    let amount = 100_000_000_000;
     let mut balance = Cycles::new(amount);
 
     let burned = test.cycles_account_manager().cycles_burn(

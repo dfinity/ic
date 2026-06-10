@@ -78,7 +78,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-ic-xrc-types = "1.0.0"
+ic-xrc-types = { workspace = true }
 maplit = "1.0.2"
 num-traits = { workspace = true }
 registry-canister = { path = "../../registry/canister" }

@@ -248,6 +248,14 @@ impl Registry {
                     initial_dkg_subnet_id
                 );
             }
+        } else if self.get_default_initial_dkg_subnet_id()
+            == Some(SubnetId::from(payload.subnet_id))
+        {
+            panic!(
+                "{LOG_PREFIX}The subnet being recovered ({}) is the default initial DKG subnet; \
+                `initial_dkg_subnet_id` must be set explicitly to a different subnet.",
+                payload.subnet_id,
+            );
         }
 
         let Some(initial_chain_key_config) = &payload.chain_key_config else {
@@ -896,6 +904,38 @@ mod test {
         let mut payload = get_default_recover_subnet_payload(subnet_id);
         payload.initial_dkg_subnet_id = Some(subnet_test_id(9999));
 
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    #[test]
+    #[should_panic(expected = "is the default initial DKG subnet")]
+    fn do_recover_subnet_should_panic_if_recovered_subnet_is_default_initial_dkg_subnet() {
+        use crate::mutations::do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload;
+
+        let mut registry = invariant_compliant_registry(0);
+
+        // Set up a subnet so we can use it both as the recovery target and as
+        // the configured default initial DKG subnet.
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let subnet_id = subnet_test_id(1000);
+        let node_id = *node_ids_and_dkg_pks.keys().next().unwrap();
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let subnet_record = get_invariant_compliant_subnet_record(vec![node_id]);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &node_ids_and_dkg_pks,
+        ));
+
+        // Configure the default initial DKG subnet to be the same subnet we
+        // are about to recover.
+        registry.do_set_default_initial_dkg_subnet(SetDefaultInitialDkgSubnetPayload {
+            subnet_id: Some(subnet_id.get()),
+        });
+
+        let payload = get_default_recover_subnet_payload(subnet_id);
         futures::executor::block_on(registry.do_recover_subnet(payload));
     }
 

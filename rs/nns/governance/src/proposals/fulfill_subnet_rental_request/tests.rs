@@ -22,6 +22,7 @@ fn test_validate_fulfill_subnet_rental_request() {
             .map(|_| new_subnet_id())
             .collect(),
         replica_version_id: "60fb469c46e44e6071193a3314cc442044fcf17a".to_string(),
+        initial_dkg_subnet_id: None,
     };
 
     // Sad cases.

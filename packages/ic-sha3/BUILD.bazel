@@ -2,20 +2,13 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", 
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:sha3",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:hex",
-]
-
 rust_library(
     name = "ic-sha3",
     srcs = glob(["src/**/*.rs"]),
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:sha3",
+    ],
 )
 
 rust_test(
@@ -32,7 +25,12 @@ rust_test_suite(
         "test_resources/SHAKE256ShortMsg_subset.rsp",
         "test_resources/SHAKE256VariableOut_subset.rsp",
     ],
-    deps = [":ic-sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":ic-sha3",
+        "@crate_index//:hex",
+        "@crate_index//:sha3",
+    ],
 )
 
 rust_doc(
@@ -43,5 +41,10 @@ rust_doc(
 rust_doc_test(
     name = "doc_test",
     crate = ":ic-sha3",
-    deps = [":ic-sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":ic-sha3",
+        "@crate_index//:hex",
+        "@crate_index//:sha3",
+    ],
 )

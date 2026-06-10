@@ -5,7 +5,9 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
+use ic_config::subnet_config::{
+    CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetSecurity,
+};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
@@ -26,16 +28,12 @@ fn only_charge_for_allocation_after_specified_duration() {
     let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
     test.set_time(initial_time);
 
-    let time_between_batches = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges()
-        / 2;
+    let time_between_batches = test.duration_between_allocation_charges() / 2;
 
     // Just enough memory to cost us one cycle per second.
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
-            CyclesAccountManagerConfig::application_subnet()
+            CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
                 .gib_storage_per_second_fee
                 .get(),
         )
@@ -56,8 +54,9 @@ fn only_charge_for_allocation_after_specified_duration() {
     );
 
     // Don't charge because the time since the last charge is too small.
+    // Checkpoint round, to force charging for storage.
     test.set_time(initial_time + time_between_batches);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::CheckpointRound);
 
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
@@ -65,13 +64,60 @@ fn only_charge_for_allocation_after_specified_duration() {
     );
 
     // The time of the current batch is now long enough that allocation charging
-    // should be triggered.
+    // should be triggered. Checkpoint round, to force charging for storage.
     test.set_time(initial_time + 2 * time_between_batches);
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.execute_round(ExecutionRoundType::CheckpointRound);
     assert_eq!(
         test.canister_state(canister).system_state.balance().get(),
-        initial_cycles - 10,
+        initial_cycles
+            - 10
+            - test
+                .canister_base_cost(NumBytes::from(bytes_per_cycle), time_between_batches * 2,)
+                .real()
+                .get(),
     );
+}
+
+#[test]
+fn charging_happens_on_average_once_every_charge_interval_rounds() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    // Charging handles time=0 as a special case, so it should be set to some
+    // non-zero time.
+    let initial_time = Time::from_nanos_since_unix_epoch(1_000_000_000_000);
+    test.set_time(initial_time);
+
+    // A canister with a memory allocation and plenty of cycles, so that every
+    // charge reduces the balance but the canister is never uninstalled.
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+    );
+
+    // Advance time by a full charge duration every round, so that a charge is
+    // always due whenever charging is attempted (every `CHARGE_INTERVAL_ROUNDS`
+    // rounds).
+    let charge_duration = test.duration_between_allocation_charges();
+
+    const NUM_ROUNDS: u64 = 1_000;
+    let mut num_charges = 0;
+    for _ in 0..NUM_ROUNDS {
+        test.advance_time(charge_duration);
+        let balance_before = test.canister_state(canister).system_state.balance();
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        if test.canister_state(canister).system_state.balance() < balance_before {
+            num_charges += 1;
+        }
+    }
+
+    // Even though enough time has passed to charge in every round, the canister
+    // was only charged once every `CHARGE_INTERVAL_ROUNDS` rounds, i.e. on
+    // average once every 50 rounds.
+    assert_eq!(num_charges, NUM_ROUNDS / CHARGE_INTERVAL_ROUNDS);
 }
 
 #[test]
@@ -106,7 +152,7 @@ fn charging_for_message_memory_works() {
 
     // Send an ingress that triggers an inter-canister call. Because of the scheduler
     // configuration, we can only execute the ingress message but not the
-    // inter-canister message so this remain in the canister's input queue.
+    // inter-canister message so this remains in the canister's input queue.
     test.send_ingress(
         canister,
         ingress(1).call(other_side(canister, 1), on_response(1)),
@@ -116,10 +162,7 @@ fn charging_for_message_memory_works() {
 
     // Set time to at least one interval between charges to trigger a charge
     // because of message memory consumption.
-    let charge_duration = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let charge_duration = test.duration_between_allocation_charges();
     test.set_time(initial_time + charge_duration);
     test.charge_for_resource_allocations();
 
@@ -129,6 +172,9 @@ fn charging_for_message_memory_works() {
     assert_eq!(
         canister_state.system_state.balance(),
         balance_before
+            - test
+                .canister_base_cost(canister_state.memory_usage(), charge_duration)
+                .real()
             - test
                 .memory_cost(
                     canister_state.message_memory_usage().total(),
@@ -173,10 +219,7 @@ fn charging_for_logging_memory_works() {
 
     // Set time to at least one interval between charges to trigger a charge
     // because of log memory consumption.
-    let charge_duration = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let charge_duration = test.duration_between_allocation_charges();
     test.set_time(initial_time + charge_duration);
     test.charge_for_resource_allocations();
 
@@ -186,6 +229,9 @@ fn charging_for_logging_memory_works() {
     assert_eq!(
         canister_state.system_state.balance(),
         balance_before
+            - test
+                .canister_base_cost(canister_state.memory_usage(), charge_duration)
+                .real()
             - test
                 .memory_cost(
                     canister_state.log_memory_store_memory_usage(),
@@ -212,15 +258,10 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             None,
         );
     }
-    test.set_time(
-        initial_time
-            + test
-                .scheduler()
-                .cycles_account_manager
-                .duration_between_allocation_charges(),
-    );
+    test.set_time(initial_time + test.duration_between_allocation_charges());
 
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    // Checkpoint round, to force charging for storage.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
 
     for canister in test.state().canisters_iter() {
         assert!(canister.execution_state.is_none());
@@ -270,10 +311,7 @@ fn open_call_contexts_produce_reject_responses_when_out_of_cycles() {
         .system_state
         .set_balance(Cycles::zero());
 
-    let duration_between_allocation_charges = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let duration_between_allocation_charges = test.duration_between_allocation_charges();
     test.set_time(initial_time + duration_between_allocation_charges);
 
     test.charge_for_resource_allocations();
@@ -328,10 +366,7 @@ fn dont_charge_allocations_for_paused_canisters() {
         .task_queue
         .enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
 
-    let duration_between_allocation_charges = test
-        .scheduler()
-        .cycles_account_manager
-        .duration_between_allocation_charges();
+    let duration_between_allocation_charges = test.duration_between_allocation_charges();
     test.set_time(T0 + duration_between_allocation_charges);
 
     test.charge_for_resource_allocations();
@@ -339,7 +374,9 @@ fn dont_charge_allocations_for_paused_canisters() {
     fn assert_balance_change(test: &SchedulerTest, canister: CanisterId, duration: Duration) {
         assert_eq!(
             test.canister_state(canister).system_state.balance(),
-            INITIAL_CYCLES - test.memory_cost(MEMORY_ALLOCATION, duration).real()
+            INITIAL_CYCLES
+                - test.memory_cost(MEMORY_ALLOCATION, duration).real()
+                - test.canister_base_cost(MEMORY_ALLOCATION, duration).real()
         );
     }
     // Balance has changed for the canister with no paused execution.
@@ -397,7 +434,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
@@ -447,15 +484,10 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     );
 
     // Uninstall canister due to `out_of_cycles`.
-    test.set_time(
-        initial_time
-            + 1000
-                * test
-                    .scheduler()
-                    .cycles_account_manager
-                    .duration_between_allocation_charges(),
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.set_time(initial_time + 1000 * test.duration_between_allocation_charges());
+    // Checkpoint round, to force charging for storage.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
     assert_eq!(
         test.scheduler()
             .metrics
@@ -515,7 +547,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
@@ -583,15 +615,10 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     );
 
     // Trigger canister `out_of_cycles`.
-    test.set_time(
-        initial_time
-            + 1000
-                * test
-                    .scheduler()
-                    .cycles_account_manager
-                    .duration_between_allocation_charges(),
-    );
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    test.set_time(initial_time + 1000 * test.duration_between_allocation_charges());
+    // Checkpoint round, to force charging for storage.
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
     assert_eq!(
         test.scheduler()
             .metrics

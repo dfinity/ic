@@ -839,11 +839,11 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 
 /// Generates an SEV-SNP attestation package for node registration.
 ///
-/// This function checks if SEV is active and if so, generates an attestation package
+/// This function checks if TEE is enabled and if so, generates an attestation package
 /// with the NodeRegistration custom data namespace. The attestation report can be
 /// verified by the registry canister to extract and store the chip_id.
 ///
-/// Returns `None` if SEV is not active or if attestation package generation fails.
+/// Returns `None` if TEE is not enabled or if attestation package generation fails.
 #[cfg(target_os = "linux")]
 fn generate_node_registration_attestation(
     log: &ReplicaLogger,
@@ -854,31 +854,31 @@ fn generate_node_registration_attestation(
     use der::asn1::OctetStringRef;
     use sev::firmware::guest::Firmware;
     use sev_guest::attestation_package::generate_attestation_package;
-    use sev_guest::is_sev_active;
+    use sev_guest::is_tee_enabled;
 
-    // Check if SEV is active
-    let is_sev_active = match is_sev_active() {
+    // Check if TEE is enabled
+    let is_tee_enabled = match is_tee_enabled() {
         Ok(active) => active,
         Err(err) => {
             info!(
                 log,
-                "Failed to check if SEV is active, assuming it is not: {:?}", err
+                "Failed to check if TEE is enabled, assuming it is not: {:?}", err
             );
             return None;
         }
     };
 
-    if !is_sev_active {
+    if !is_tee_enabled {
         info!(
             log,
-            "SEV is not active, skipping node registration attestation"
+            "TEE is not enabled, skipping node registration attestation"
         );
         return None;
     }
 
     info!(
         log,
-        "SEV is active, generating node registration attestation package"
+        "TEE is enabled, generating node registration attestation package"
     );
 
     // Read the GuestOS config to get the trusted execution environment config

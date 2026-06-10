@@ -10,6 +10,7 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
+use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResourceOverrides,
 };
@@ -44,9 +45,13 @@ pub const MAINNET_NODE_VM_RESOURCE_OVERRIDES: VmResourceOverrides = VmResourceOv
     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(192)),
     ..VmResourceOverrides::const_default()
 };
+/// Request to be deployed in `zh1` by default to be physically closer to the backup pod.
+pub fn mainnet_node_required_host_features() -> Vec<HostFeature> {
+    vec![HostFeature::DC("zh1".to_string())]
+}
 
-// Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
-// NNS_STATE_ON_BACKUP_POD environment variable.
+/// Default path to the mainnet NNS state tarball on the backup pod. Can be overridden through the
+/// NNS_STATE_ON_BACKUP_POD environment variable.
 const NNS_STATE_ON_BACKUP_POD: &str =
     "dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst";
 
@@ -148,6 +153,7 @@ async fn setup_async(env: TestEnv, dkg_interval: Option<u64>) {
     let env_clone = env.clone();
     let deploy_gateway_task = tokio::task::spawn_blocking(move || {
         IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+            .with_required_host_features(mainnet_node_required_host_features())
             .start(&env_clone)
             .expect("Failed to setup ic-gateway");
 
@@ -282,6 +288,7 @@ async fn setup_recovered_nns(
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
             max_duplicity: None,
@@ -645,8 +652,9 @@ async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     let logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
 
-    ProposalWithMainnetState::bless_replica_version(
+    ProposalWithMainnetState::elect_replica_version(
         nns_node,
+        &env.topology_snapshot(),
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),
@@ -801,6 +809,7 @@ fn setup_ic(env: TestEnv) {
 
     InternetComputer::new()
         .with_resource_overrides(MAINNET_NODE_VM_RESOURCE_OVERRIDES)
+        .with_required_host_features(mainnet_node_required_host_features())
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .with_api_boundary_nodes(1)
         .with_unassigned_nodes(1)
@@ -853,9 +862,9 @@ fn write_sh_lib(env: &TestEnv, NeuronId(neuron_id): NeuronId, http_gateway: &Url
     info!(logger, "source {canonical_sh_lib_path:?}");
 }
 
-// Overwrite the local store of the test environment with the new one, corresponding to the
-// recovered NNS. Any topology snapshot taken after this will reflect the new topology. This means
-// it will contain all mainnet subnets and nodes.
+/// Overwrite the local store of the test environment with the new one, corresponding to the
+/// recovered NNS. Any topology snapshot taken after this will reflect the new topology. This means
+/// it will contain all mainnet subnets and nodes.
 async fn patch_env_local_store(env: &TestEnv) {
     let local_store_path = env
         .get_path(PATH_RECOVERY_WORKING_DIR)
@@ -893,8 +902,8 @@ async fn patch_env_local_store(env: &TestEnv) {
         .unwrap();
 }
 
-// Overwrite the root public key of the test environment with the new one, corresponding to the
-// recovered NNS. This enables future nested VMs to register using the correct root public key.
+/// Overwrite the root public key of the test environment with the new one, corresponding to the
+/// recovered NNS. This enables future nested VMs to register using the correct root public key.
 fn patch_env_root_public_key(env: &TestEnv) {
     std::fs::copy(
         env.get_path(PATH_RECOVERED_NNS_PUBLIC_KEY_PEM),
@@ -903,9 +912,9 @@ fn patch_env_root_public_key(env: &TestEnv) {
     .unwrap();
 }
 
-// Remove large files inside the test environment that are no longer needed to speed up the
-// transition between `setup` and following `test` tasks, since every `test` task will copy the
-// `setup` test environment to a new location.
+/// Remove large files inside the test environment that are no longer needed to speed up the
+/// transition between `setup` and following `test` tasks, since every `test` task will copy the
+/// `setup` test environment to a new location.
 fn remove_large_files(env: &TestEnv) {
     let mut rm = Command::new("rm");
     rm.arg("-rf")

@@ -9,10 +9,7 @@ use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
-    RequestAndResponseTransmission,
-};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom},
@@ -333,12 +330,6 @@ impl From<&Callback> for pb::Callback {
             call_context_id: item.call_context_id.get(),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
-            prepayment_for_response_execution: Some(
-                item.prepayment_for_response_execution.real().into(),
-            ),
-            prepayment_for_response_transmission: Some(
-                item.prepayment_for_response_transmission.real().into(),
-            ),
             prepayment_for_response_execution_compound: Some(
                 item.prepayment_for_response_execution.into(),
             ),
@@ -374,44 +365,18 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
-        // cost_schedule should ideally be read from the checkpoint, however there
-        // is no easy access to it here (will need to be propagated from `StateManager`).
-        // Given that the current state is that the values for `Cycles` and `NominalCycles`
-        // should still match and that they should be 0 on `Free` schedule, we can use `Normal`
-        // without any loss (to maintain values on subnets with `Normal` schedule).
-        // This code will be removed anyway when the new fields are set and the old fields
-        // containing just `Cycles` can be retired.
-        let cost_schedule = CanisterCyclesCostSchedule::Normal;
-        let prepayment_for_response_execution =
-            match value.prepayment_for_response_execution_compound {
-                Some(value) => CompoundCycles::try_from(value)?,
-                None => CompoundCycles::new(
-                    try_from_option_field(
-                        value.prepayment_for_response_execution,
-                        "Callback::prepayment_for_response_execution",
-                    )?,
-                    cost_schedule,
-                ),
-            };
-        let prepayment_for_response_transmission =
-            match value.prepayment_for_response_transmission_compound {
-                Some(value) => CompoundCycles::try_from(value)?,
-                None => CompoundCycles::new(
-                    try_from_option_field(
-                        value.prepayment_for_response_transmission,
-                        "Callback::prepayment_for_response_transmission",
-                    )?,
-                    cost_schedule,
-                ),
-            };
-        let prepayment_for_call_transmission = match value.prepayment_for_call_transmission {
-            Some(value) => CompoundCycles::try_from(value)?,
-            // Temporary code until the change is deployed and the field starts
-            // being populated in checkpoints. If no "old" callbacks exist,
-            // this can be changed to fail on `None` instead and always
-            // expect to find some value.
-            None => CompoundCycles::new(Cycles::zero(), cost_schedule),
-        };
+        let prepayment_for_response_execution = try_from_option_field(
+            value.prepayment_for_response_execution_compound,
+            "Callback::prepayment_for_response_execution",
+        )?;
+        let prepayment_for_response_transmission = try_from_option_field(
+            value.prepayment_for_response_transmission_compound,
+            "Callback::prepayment_for_response_transmission",
+        )?;
+        let prepayment_for_call_transmission = try_from_option_field(
+            value.prepayment_for_call_transmission,
+            "Callback::prepayment_for_call_transmission",
+        )?;
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),

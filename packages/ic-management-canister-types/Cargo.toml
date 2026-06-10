@@ -1,6 +1,6 @@
 [package]
 name = "ic-management-canister-types"
-version = "0.7.1"
+version = "0.8.0"
 authors.workspace = true
 edition.workspace = true
 description = "Types for calling the IC management canister"

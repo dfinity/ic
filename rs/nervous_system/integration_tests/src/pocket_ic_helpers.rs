@@ -1260,9 +1260,14 @@ pub mod nns {
 
     pub mod registry {
         use ic_registry_transport::{
-            deserialize_get_value_response, pb::v1::HighCapacityRegistryGetValueResponse,
+            deserialize_get_value_response,
+            pb::v1::{
+                HighCapacityRegistryGetValueResponse,
+                high_capacity_registry_get_value_response::Content,
+            },
             serialize_get_value_request,
         };
+        use prost::Message;
         use registry_canister::mutations::{
             do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
             do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
@@ -1328,6 +1333,34 @@ pub mod nns {
 
                     response
                 })
+        }
+
+        /// Fetch a registry value by key and decode it as a protobuf message.
+        ///
+        /// # Panics
+        ///
+        /// Panics if the registry response contains chunked large value keys
+        /// instead of a direct value.
+        pub async fn decode_registry_value<T: Message + Default>(
+            pocket_ic: &PocketIc,
+            key: impl AsRef<str>,
+        ) -> T {
+            let key = key.as_ref();
+            let response = get_value(pocket_ic, key, None).await.unwrap_or_else(|err| {
+                panic!("failed to fetch registry value for key `{key}`: {err:?}")
+            });
+            let bytes = match response
+                .content
+                .unwrap_or_else(|| panic!("registry response for key `{key}` had no content"))
+            {
+                Content::Value(bytes) => bytes,
+                Content::LargeValueChunkKeys(_) => {
+                    panic!("unexpected large value chunk keys for key `{key}`")
+                }
+            };
+            T::decode(bytes.as_slice()).unwrap_or_else(|err| {
+                panic!("failed to decode registry value for key `{key}`: {err}")
+            })
         }
     }
 

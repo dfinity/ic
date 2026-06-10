@@ -5,10 +5,11 @@ use crate::{
     payload_builder::{
         parse::bytes_to_payload,
         utils::{
-            FlexibleFindResult, estimate_response_with_consensus_size, find_flexible_result,
-            find_fully_replicated_response, find_non_replicated_response,
+            FlexibleFindResult, ResponseShareSigInput, estimate_response_with_consensus_size,
+            find_flexible_result, find_fully_replicated_response, find_non_replicated_response,
             group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
-            validate_flexible_response_with_proof, validate_response_share,
+            response_share_sig_inputs, validate_flexible_response_with_proof,
+            validate_response_share,
         },
     },
 };
@@ -393,7 +394,7 @@ impl CanisterHttpPayloadBuilderImpl {
         }
     }
 
-    fn validate_canister_http_payload_impl(
+    pub fn validate_canister_http_payload_impl(
         &self,
         height: Height,
         payload: &CanisterHttpPayload,
@@ -574,6 +575,12 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         };
 
+        // Accumulates the signature-verification inputs of every flexible /
+        // divergence response share in the payload, so that all of them can be
+        // checked in a single batched multi-message verification call at the
+        // very end.
+        let mut sig_inputs: Vec<ResponseShareSigInput> = Vec::new();
+
         for response in &payload.divergence_responses {
             let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                 .shares
@@ -589,15 +596,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            for share in response.shares.iter() {
-                self.crypto
-                    .verify(share, consensus_registry_version)
-                    .map_err(|err| {
-                        CanisterHttpPayloadValidationError::InvalidArtifact(
-                            InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
-                        )
-                    })?;
-            }
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(&response.shares));
 
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
@@ -679,7 +679,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     flex_committee,
                     &mut seen_signers,
                     consensus_registry_version,
-                    &*self.crypto,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -691,6 +690,11 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
             }
+
+            // Defer signature verification.
+            sig_inputs.extend(response_share_sig_inputs(
+                group.responses.iter().map(|r| &r.proof),
+            ));
         }
 
         // Validate flexible errors
@@ -741,7 +745,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             consensus_registry_version,
-                            &*self.crypto,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -764,6 +767,11 @@ impl CanisterHttpPayloadBuilderImpl {
                             },
                         );
                     }
+
+                    // Defer signature verification.
+                    sig_inputs.extend(response_share_sig_inputs(
+                        reject_responses.iter().map(|r| &r.proof),
+                    ));
                 }
                 FlexibleCanisterHttpError::ResponsesTooLarge {
                     all_seen_shares,
@@ -801,10 +809,12 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             consensus_registry_version,
-                            &*self.crypto,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
+
+                    // Defer signature verification.
+                    sig_inputs.extend(response_share_sig_inputs(all_seen_shares));
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -841,6 +851,17 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
             }
+        }
+
+        // Batch-verify the signatures of the deferred shares.
+        if !sig_inputs.is_empty() {
+            self.crypto
+                .verify_basic_sig_batch_multi_msg(&sig_inputs, consensus_registry_version)
+                .map_err(|err| {
+                    CanisterHttpPayloadValidationError::InvalidArtifact(
+                        InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),
+                    )
+                })?;
         }
 
         Ok(())
