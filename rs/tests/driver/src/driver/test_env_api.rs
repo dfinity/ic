@@ -1471,7 +1471,7 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
+            // GROUP_TTL should be enough for the setup task to allocate the group on SystemTestBackend::Farm
             // Afterwards, the group's TTL should be bumped via a keepalive task
             let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
@@ -2918,7 +2918,7 @@ where
         let log = env.logger();
         if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
             panic!(
-                "LocalBackend: acquire_playnet_certificate is not supported (no TLS playnet); guard the caller with InfraProvider"
+                "LocalBackend: acquire_playnet_certificate is not supported (no TLS playnet); guard the caller with SystemTestBackend::Farm"
             );
         }
         let farm_base_url = self.get_farm_url().unwrap();
