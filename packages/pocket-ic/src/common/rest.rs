@@ -485,7 +485,7 @@ pub enum SubnetKind {
 
 impl SubnetKind {
     pub fn is_named(self) -> bool {
-        NamedSubnet::iter().any(|n| SubnetKind::from(n) == self)
+        NamedSubnet::try_from(self).is_ok()
     }
 }
 
@@ -510,6 +510,27 @@ impl From<NamedSubnet> for SubnetKind {
             NamedSubnet::Fiduciary => SubnetKind::Fiduciary,
             NamedSubnet::Bitcoin => SubnetKind::Bitcoin,
             NamedSubnet::TestThresholdKeys => SubnetKind::TestThresholdKeys,
+        }
+    }
+}
+
+/// The exhaustive match over `SubnetKind` enforces structural consistency: adding a new
+/// `SubnetKind` variant is a compile error until it is explicitly placed in either the named
+/// or unnamed arm here and in `From<NamedSubnet> for SubnetKind`.
+impl TryFrom<SubnetKind> for NamedSubnet {
+    type Error = ();
+    fn try_from(kind: SubnetKind) -> Result<Self, Self::Error> {
+        match kind {
+            SubnetKind::NNS => Ok(NamedSubnet::NNS),
+            SubnetKind::SNS => Ok(NamedSubnet::SNS),
+            SubnetKind::II => Ok(NamedSubnet::II),
+            SubnetKind::Fiduciary => Ok(NamedSubnet::Fiduciary),
+            SubnetKind::Bitcoin => Ok(NamedSubnet::Bitcoin),
+            SubnetKind::TestThresholdKeys => Ok(NamedSubnet::TestThresholdKeys),
+            SubnetKind::Application
+            | SubnetKind::CloudEngine
+            | SubnetKind::System
+            | SubnetKind::VerifiedApplication => Err(()),
         }
     }
 }
