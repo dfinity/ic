@@ -7,7 +7,7 @@ package(default_visibility = ["//rs/tests:__subpackages__"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/bitcoin/adapter/test_utils",
     "//rs/bitcoin/checker:btc_checker_lib",
     "//rs/bitcoin/ckbtc/agent",

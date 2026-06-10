@@ -1,5 +1,5 @@
 use crate::{
-    common::LOG_PREFIX, mutations::common::check_replica_version_is_blessed, registry::Registry,
+    common::LOG_PREFIX, mutations::common::check_replica_version_is_elected, registry::Registry,
 };
 
 use candid::{CandidType, Deserialize};
@@ -19,7 +19,7 @@ impl Registry {
     ) {
         println!("{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: {payload:?}");
 
-        check_replica_version_is_blessed(self, &payload.replica_version_id);
+        check_replica_version_is_elected(self, &payload.replica_version_id);
 
         // Get the subnet record
         let subnet_key = make_subnet_record_key(SubnetId::from(payload.subnet_id));
@@ -51,7 +51,7 @@ impl Registry {
 /// The argument of a command to update the replica version of a single subnet
 /// to a specific version.
 ///
-/// The replica will be mutated only if the given version is, indeed, blessed.
+/// The replica will be mutated only if the given version is, indeed, elected.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct DeployGuestosToAllSubnetNodesPayload {
     /// The subnet to update.

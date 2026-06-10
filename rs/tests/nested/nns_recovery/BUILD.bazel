@@ -65,16 +65,20 @@ system_test_nns(
 #     bazel \
 #         test \
 #         --test_timeout=7200 \  # 2 hours
-#         --test_arg=--set-required-host-features=dc=zh1 \
-#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state
+#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate
 #
 # You should use `--test_timeout=7200` because the test is expected to take a very long time.
-# You should use `--test_arg=--set-required-host-features=dc=zh1` because the test fetches mainnet test
-# data from a location close to the `zh1` data center.
 # You should also have your `SSH_AUTH_SOCK` environment variable set, and the corresponding SSH agent
 # should be running and have permission to fetch mainnet test data.
 system_test_nns(
     name = "nr_large_with_mainnet_state",
+    colocated_test_driver_vm_forward_ssh_agent = True,
+    colocated_test_driver_vm_required_host_features = ["dc=zh1"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": None,
+        "memory_kibibytes": None,
+        "boot_image_minimal_size_gibibytes": 128,
+    },
     enable_head_nns_variant = False,
     env = ENV,
     env_inherit = ["SSH_AUTH_SOCK"],

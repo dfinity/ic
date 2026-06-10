@@ -28,20 +28,10 @@ rust_library(
     ],
 )
 
-system_test_nns(
-    name = "upgrade_downgrade_app_subnet_test",
-    colocated_test_driver_vm_resources = {
-        "vcpus": 24,
-    },
-    env = MAINNET_ENV,
-    guestos = "mainnet_nns",
-    guestos_update = True,
-    tags = [
-        "colocate",
-        "long_test",
-    ],
-    test_timeout = "eternal",
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+rust_binary(
+    name = "upgrade_downgrade_app_test_bin",
+    testonly = True,
+    srcs = ["upgrade_downgrade_app_subnet_test.rs"],
     deps = [
         # Keep sorted.
         ":common",
@@ -59,15 +49,43 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "upgrade_downgrade_nns_subnet_test",
+    name = "upgrade_downgrade_app_subnet_test",
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
+    env = MAINNET_ENV,
+    guestos = "mainnet_app",
+    guestos_update = True,
+    tags = [
+        "colocate",
+        "long_test",
+    ],
+    test_driver_target = ":upgrade_downgrade_app_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+)
+
+system_test_nns(
+    name = "upgrade_downgrade_old_app_subnet_test",
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
     env = MAINNET_ENV,
     guestos = "mainnet_nns",
     guestos_update = True,
     tags = [
+        "colocate",
         "long_test",
     ],
+    test_driver_target = ":upgrade_downgrade_app_test_bin",
     test_timeout = "eternal",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+)
+
+rust_binary(
+    name = "upgrade_downgrade_nns_test_bin",
+    testonly = True,
+    srcs = ["upgrade_downgrade_nns_subnet_test.rs"],
     deps = [
         # Keep sorted.
         ":common",
@@ -80,47 +98,76 @@ system_test_nns(
     ],
 )
 
-rust_binary(
-    name = "upgrade_test_bin",
-    testonly = True,
-    srcs = ["upgrade_app_subnet_test.rs"],
-    crate_name = "ic_systest_upgrade_app_subnet",
-    deps = [
-        # Keep sorted.
-        ":common",
-        "//rs/registry/subnet_features",
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/tecdsa/utils",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
+system_test_nns(
+    name = "upgrade_downgrade_nns_subnet_test",
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
+    env = MAINNET_ENV,
+    guestos = "mainnet_app",
+    guestos_update = True,
+    tags = [
+        "colocate",
+        "long_test",
     ],
+    test_driver_target = ":upgrade_downgrade_nns_test_bin",
+    test_timeout = "eternal",
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
-    name = "upgrade_app_subnet_test",
+    name = "upgrade_downgrade_old_nns_subnet_test",
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
     env = MAINNET_ENV,
     guestos = "mainnet_nns",
     guestos_update = True,
     tags = [
-        "long_test",  # since it takes longer than 5 minutes.
+        "colocate",
+        "long_test",
     ],
-    test_driver_target = ":upgrade_test_bin",
-    test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
+    test_driver_target = ":upgrade_downgrade_nns_test_bin",
+    test_timeout = "eternal",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
 )
 
-system_test_nns(
-    name = "downgrade_app_subnet_test",
-    env = MAINNET_ENV,
-    guestos_update = "mainnet_nns",
-    tags = [
-        "long_test",  # since it takes longer than 5 minutes.
+rust_binary(
+    name = "upgrade_downgrade_unassigned_test_bin",
+    testonly = True,
+    srcs = ["upgrade_downgrade_unassigned_nodes_test.rs"],
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
     ],
-    test_driver_target = ":upgrade_test_bin",
-    test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+)
+
+system_test_nns(
+    name = "upgrade_downgrade_unassigned_nodes_test",
+    env = MAINNET_ENV,
+    guestos = "mainnet_app",
+    guestos_update = True,
+    tags = [
+        "long_test",
+    ],
+    test_driver_target = ":upgrade_downgrade_unassigned_test_bin",
+)
+
+system_test_nns(
+    name = "upgrade_downgrade_old_unassigned_nodes_test",
+    env = MAINNET_ENV,
+    guestos = "mainnet_nns",
+    guestos_update = True,
+    tags = [
+        "long_test",
+    ],
+    test_driver_target = ":upgrade_downgrade_unassigned_test_bin",
 )
 
 system_test_nns(
@@ -131,28 +178,6 @@ system_test_nns(
     ],
     deps = [
         # Keep sorted.
-        "//rs/nns/common",
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:slog",
-    ],
-)
-
-system_test_nns(
-    name = "unassigned_node_upgrade_test",
-    guestos_update = "test",
-    tags = [
-        "long_test",
-    ],
-    deps = [
-        # Keep sorted.
-        "//rs/canister_client",
-        "//rs/nervous_system/common/test_keys",
-        "//rs/nns/common",
-        "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",

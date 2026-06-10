@@ -258,10 +258,14 @@ impl Firewall {
         }
     }
 
+    /// Get TCP and UDP firewall rules to whitelist node IP addresses for the protocol
+    /// communication, based on the node reward type.
+    /// Rules are returned in the order of priority (higher priority rules are returned first). TCP
+    /// and UDP rules are returned separately.
     fn get_node_whitelisting_rules(
         &mut self,
         registry_version: RegistryVersion,
-    ) -> (FirewallRule, FirewallRule, FirewallRule) {
+    ) -> (Vec<FirewallRule>, Vec<FirewallRule>) {
         // First, get all the registry versions between the latest CUP and the latest version
         // in the registry inclusive.
         let registry_versions = self.get_registry_versions(registry_version);
@@ -318,28 +322,56 @@ impl Firewall {
 
         info!(
             self.logger,
-            "Whitelisting node IP addresses ({} v4 and {} v6) on the firewall",
+            "Whitelisting ({} v4, {} v6 out of {} v4, {} v6 total) node IP addresses on the firewall",
             whitelisted_ipv4s.len(),
-            whitelisted_ipv6s.len()
+            whitelisted_ipv6s.len(),
+            all_ipv4s.len(),
+            all_ipv6s.len(),
         );
 
-        // Build a UDP and TCP rule to whitelist all v4 and v6 IP addresses of whitelisted nodes.
-        let tcp_node_whitelisting_rule = FirewallRule {
+        // Build TCP and UDP rules to open ports to whitelisted nodes only.
+        let whitelisted_nodes_tcp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: whitelisted_ipv4s.clone(),
             ipv6_prefixes: whitelisted_ipv6s.clone(),
-            ports: self.replica_config.tcp_ports_for_node_whitelist.clone(),
+            ports: self
+                .replica_config
+                .whitelisted_nodes_tcp_ports_whitelist
+                .clone(),
             action: FirewallAction::Allow as i32,
-            comment: "Automatic node whitelisting".to_string(),
+            comment: "Automatic whitelisted nodes whitelisting".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
+        };
+        let whitelisted_nodes_udp_whitelisting_rule = FirewallRule {
+            ipv4_prefixes: whitelisted_ipv4s,
+            ipv6_prefixes: whitelisted_ipv6s,
+            ports: self
+                .replica_config
+                .whitelisted_nodes_udp_ports_whitelist
+                .clone(),
+            action: FirewallAction::Allow as i32,
+            comment: "Automatic whitelisted nodes whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
 
-        let udp_node_whitelisting_rule = FirewallRule {
-            ipv4_prefixes: whitelisted_ipv4s.clone(),
-            ipv6_prefixes: whitelisted_ipv6s.clone(),
-            ports: self.replica_config.udp_ports_for_node_whitelist.clone(),
+        // Build TCP and UDP rules to open ports to all nodes in the network.
+        let all_nodes_tcp_whitelisting_rule = FirewallRule {
+            ipv4_prefixes: all_ipv4s.clone(),
+            ipv6_prefixes: all_ipv6s.clone(),
+            ports: self.replica_config.all_nodes_tcp_ports_whitelist.clone(),
             action: FirewallAction::Allow as i32,
-            comment: "Automatic node whitelisting".to_string(),
+            comment: "Automatic all nodes whitelisting".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
+        };
+
+        let all_nodes_udp_whitelisting_rule = FirewallRule {
+            ipv4_prefixes: all_ipv4s.clone(),
+            ipv6_prefixes: all_ipv6s.clone(),
+            ports: self.replica_config.all_nodes_udp_ports_whitelist.clone(),
+            action: FirewallAction::Allow as i32,
+            comment: "Automatic all nodes whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
@@ -354,11 +386,11 @@ impl Firewall {
         // that are not supposed to be used by ic-http-adapter.
         info!(
             self.logger,
-            "Blacklisting node IP addresses ({} v4 and {} v6) for ic-http-adapter on the firewall",
+            "Blacklisting ({} v4 and {} v6) node IP addresses for ic-http-adapter on the firewall",
             all_ipv4s.len(),
             all_ipv6s.len()
         );
-        let ic_http_adapter_rule = FirewallRule {
+        let tcp_ic_http_adapter_rule = FirewallRule {
             ipv4_prefixes: all_ipv4s,
             ipv6_prefixes: all_ipv6s,
             ports: self.replica_config.ports_for_http_adapter_blacklist.clone(),
@@ -369,9 +401,16 @@ impl Firewall {
         };
 
         (
-            tcp_node_whitelisting_rule,
-            udp_node_whitelisting_rule,
-            ic_http_adapter_rule,
+            vec![
+                // Insert the ic-http-adapter rule at the top of the list (highest priority)
+                tcp_ic_http_adapter_rule,
+                whitelisted_nodes_tcp_whitelisting_rule,
+                all_nodes_tcp_whitelisting_rule,
+            ],
+            vec![
+                whitelisted_nodes_udp_whitelisting_rule,
+                all_nodes_udp_whitelisting_rule,
+            ],
         )
     }
 
@@ -511,13 +550,11 @@ impl Firewall {
             // In addition to any explicit firewall rules we might apply, we also ALWAYS whitelist
             // all nodes in the registry on the ports used by the protocol
             Role::AssignedReplica(_) | Role::UnassignedReplica => {
-                let (tcp_node_whitelisting_rule, udp_node_whitelisting_rule, ic_http_adapter_rule) =
+                let (more_tcp_rules, more_udp_rules) =
                     self.get_node_whitelisting_rules(registry_version);
                 // Insert the whitelisting rules at the top of the list (highest priority)
-                tcp_rules.insert(0, tcp_node_whitelisting_rule);
-                udp_rules.insert(0, udp_node_whitelisting_rule);
-                // Insert the ic-http-adapter rule at the top of the list (highest priority)
-                tcp_rules.insert(0, ic_http_adapter_rule);
+                tcp_rules = more_tcp_rules.into_iter().chain(tcp_rules).collect();
+                udp_rules = more_udp_rules.into_iter().chain(udp_rules).collect();
 
                 self.replica_config.insert_rules(tcp_rules, udp_rules)
             }
@@ -752,6 +789,10 @@ fn compile_rules(
                 // Do not produce rules with empty prefix list
                 return None;
             }
+            if !template.contains("<<PORTS>>") || rule.ports.is_empty() {
+                // Do not produce rules with empty port list
+                return None;
+            }
             if template.contains("<<USER>>")
                 && (rule.user.is_none() || rule.user.as_ref().unwrap().is_empty())
             {
@@ -969,8 +1010,10 @@ mod tests {
             ipv4_user_output_rule_template: "".to_string(),
             ipv6_user_output_rule_template: "".to_string(),
             default_rules: vec![],
-            tcp_ports_for_node_whitelist: vec![],
-            udp_ports_for_node_whitelist: vec![],
+            whitelisted_nodes_tcp_ports_whitelist: vec![],
+            whitelisted_nodes_udp_ports_whitelist: vec![],
+            all_nodes_tcp_ports_whitelist: vec![],
+            all_nodes_udp_ports_whitelist: vec![],
             ports_for_http_adapter_blacklist: vec![],
             max_simultaneous_connections_per_ip_address,
         };

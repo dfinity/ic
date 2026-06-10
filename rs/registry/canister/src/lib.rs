@@ -4,6 +4,7 @@ pub mod common;
 pub mod flags;
 pub mod get_node_operators_and_dcs_of_node_provider;
 pub mod get_node_providers_monthly_xdr_rewards;
+pub mod get_subnet;
 pub mod init;
 pub mod mutations;
 pub mod pb;
@@ -12,5 +13,5 @@ pub mod registry;
 pub mod registry_lifecycle;
 pub mod storage;
 
-mod invariants;
+pub(crate) mod invariants;
 mod rate_limits;

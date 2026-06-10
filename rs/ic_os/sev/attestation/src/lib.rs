@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 
 pub mod attestation_package;
+pub mod attestation_report;
 pub mod custom_data;
 mod proto_gen;
 

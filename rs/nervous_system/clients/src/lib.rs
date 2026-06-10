@@ -2,6 +2,7 @@ pub mod canister_id_record;
 pub mod canister_metadata;
 pub mod canister_status;
 pub mod delete_canister;
+pub mod exchange_rate_canister_client;
 pub mod ledger_client;
 pub mod load_canister_snapshot;
 pub mod management_canister_client;

@@ -1,4 +1,4 @@
-use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
+use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
@@ -8,32 +8,27 @@ use ic_embedders::wasmtime_embedder::system_api::{
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, HypervisorResult, PerformanceCounterType,
-    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
+    SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState, testing::CanisterQueuesTesting,
-};
+use ic_replicated_state::testing::{CanisterQueuesTesting, OutputRequestBuilder};
+use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::{
-    ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
-    messages::RequestBuilder,
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    CanisterTimer, CountBytes, MAX_STABLE_MEMORY_IN_BYTES, NumInstructions, PrincipalId, SubnetId,
-    Time,
+    CanisterTimer, NumInstructions, PrincipalId, SubnetId, Time,
     canister_log::CanisterLogMetrics,
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
-    methods::{Callback, WasmClosure},
-    time::{self, UNIX_EPOCH},
+    time::UNIX_EPOCH,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::{
@@ -613,7 +608,7 @@ fn api_availability_test(
         }
         SystemApiCallId::GlobalTimerSet => {
             assert_api_availability(
-                |mut api| api.ic0_global_timer_set(time::UNIX_EPOCH),
+                |mut api| api.ic0_global_timer_set(UNIX_EPOCH),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -1502,7 +1497,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 /// it clamps the amount to the available cycles minus freeze threshold.
 #[test]
 fn cycles_burn128_clamps_to_available_cycles() {
-    const INITIAL_CYCLES: Cycles = Cycles::new(1000);
+    const INITIAL_CYCLES: Cycles = Cycles::new(200_000);
 
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -1562,7 +1557,9 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
     let wasm_custom_sections_available_memory_before =
         subnet_available_memory.get_wasm_custom_sections_memory();
-    let system_state = SystemStateBuilder::default().build();
+    let system_state = SystemStateBuilder::default()
+        .initial_cycles(Cycles::new(20_000_000_000_000))
+        .build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_parameters = execution_parameters(api_type.execution_mode());
@@ -1615,205 +1612,6 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     );
 }
 
-const GIB: i64 = 1 << 30;
-
-fn helper_test_on_low_wasm_memory(
-    wasm_memory_threshold: NumBytes,
-    wasm_memory_limit: Option<NumBytes>,
-    memory_allocation: Option<NumBytes>,
-    grow_memory_size: i64,
-    grow_wasm_memory: bool,
-    start_status: OnLowWasmMemoryHookStatus,
-    expected_status: OnLowWasmMemoryHookStatus,
-) {
-    let wasm_page_size = 64 << 10;
-    let subnet_available_memory_bytes = 20 * GIB;
-    let subnet_available_memory =
-        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
-
-    let mut state_builder = SystemStateBuilder::default()
-        .wasm_memory_threshold(wasm_memory_threshold)
-        .wasm_memory_limit(wasm_memory_limit)
-        .empty_task_queue_with_on_low_wasm_memory_hook_status(start_status)
-        .initial_cycles(Cycles::from(10_000_000_000_000_000_u128));
-
-    if let Some(memory_allocation) = memory_allocation {
-        state_builder = state_builder.memory_allocation(memory_allocation);
-    };
-
-    let mut system_state = state_builder.build();
-
-    let api_type = ApiTypeBuilder::build_update_api();
-    let mut execution_parameters = execution_parameters(api_type.execution_mode());
-    execution_parameters.memory_allocation = system_state.memory_allocation;
-    execution_parameters.wasm_memory_limit = system_state.wasm_memory_limit;
-
-    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
-        &system_state,
-        CyclesAccountManagerBuilder::new().build(),
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters.compute_allocation,
-        execution_parameters.canister_guaranteed_callback_quota,
-        Default::default(),
-        api_type.caller(),
-        api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
-    );
-
-    let mut api = SystemApiImpl::new(
-        api_type,
-        sandbox_safe_system_state,
-        CANISTER_CURRENT_MEMORY_USAGE,
-        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
-        execution_parameters,
-        subnet_available_memory,
-        &EmbeddersConfig::default(),
-        Memory::new_for_testing(),
-        NumWasmPages::from(0),
-        Rc::new(DefaultOutOfInstructionsHandler::default()),
-        no_op_logger(),
-    );
-
-    let additional_wasm_pages = (grow_memory_size as u64).div_ceil(wasm_page_size as u64);
-
-    if grow_wasm_memory {
-        api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
-    } else {
-        api.try_grow_stable_memory(
-            0,
-            additional_wasm_pages,
-            MAX_STABLE_MEMORY_IN_BYTES,
-            StableMemoryApi::Stable64,
-        )
-        .unwrap();
-    }
-
-    let system_state_modifications = api.take_system_state_modifications();
-    system_state_modifications
-        .apply_changes(
-            UNIX_EPOCH,
-            &mut system_state,
-            &default_network_topology(),
-            subnet_test_id(1),
-            false,
-            &NoOpMetrics {},
-            &no_op_logger(),
-        )
-        .unwrap();
-
-    assert_eq!(system_state.task_queue.peek_hook_status(), expected_status);
-}
-
-#[test]
-fn test_on_low_wasm_memory_grow_wasm_memory_all_status_changes() {
-    let wasm_memory_threshold = NumBytes::new(GIB as u64);
-    let wasm_memory_limit = Some(NumBytes::new(3 * GIB as u64));
-    let memory_allocation = None;
-    // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
-    let max_allowed_wasm_memory = 2 * GIB;
-    let grow_wasm_memory = true;
-
-    // Hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Hook condition is satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::Ready,
-    );
-
-    // Hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::Ready,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Hook condition is satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::Ready,
-        OnLowWasmMemoryHookStatus::Ready,
-    );
-
-    // Hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::Executed,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Hook condition is satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::Executed,
-        OnLowWasmMemoryHookStatus::Executed,
-    );
-}
-
-#[test]
-fn test_on_low_wasm_memory_without_memory_limit() {
-    // When memory limit is not set, the default Wasm memory limit is 4 GIB.
-    let wasm_memory_threshold = NumBytes::new(GIB as u64);
-    // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
-    let max_allowed_wasm_memory = 3 * GIB;
-    let wasm_memory_limit = None;
-    let memory_allocation = None;
-    let grow_wasm_memory = true;
-
-    // Hook condition is not satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-    );
-
-    // Hook condition is satisfied.
-    helper_test_on_low_wasm_memory(
-        wasm_memory_threshold,
-        wasm_memory_limit,
-        memory_allocation,
-        max_allowed_wasm_memory + 1,
-        grow_wasm_memory,
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
-        OnLowWasmMemoryHookStatus::Ready,
-    );
-}
-
 #[test]
 fn push_output_request_respects_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
@@ -1828,7 +1626,7 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_parameters = execution_parameters(api_type.execution_mode());
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -1841,20 +1639,6 @@ fn push_output_request_respects_memory_limits() {
         CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id();
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            canister_test_id(0),
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            NO_DEADLINE,
-        ))
-        .unwrap();
     let mut api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -1869,22 +1653,13 @@ fn push_output_request_respects_memory_limits() {
         no_op_logger(),
     );
 
-    let req = RequestBuilder::default()
+    let req = OutputRequestBuilder::default()
         .sender(own_canister_id)
-        .sender_reply_callback(callback_id)
         .build();
 
     // First push succeeds with or without message memory usage accounting, as the
     // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
-    assert_eq!(
-        0,
-        api.push_output_request(
-            req.clone(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
-    );
+    assert_eq!(0, api.push_output_request(req.clone()).unwrap());
 
     // Nothing is consumed for execution memory.
     assert_eq!(api.get_allocated_bytes().get(), 0);
@@ -1901,12 +1676,7 @@ fn push_output_request_respects_memory_limits() {
     // And the second push fails.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(
-            req,
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
+        api.push_output_request(req).unwrap()
     );
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
@@ -1949,7 +1719,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_parameters = execution_parameters(api_type.execution_mode());
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -1962,20 +1732,6 @@ fn push_output_request_oversized_request_memory_limits() {
         CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id();
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            canister_test_id(0),
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            NO_DEADLINE,
-        ))
-        .unwrap();
     let mut api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -1991,21 +1747,15 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Oversized payload larger than available memory.
-    let req = RequestBuilder::default()
+    let req = OutputRequestBuilder::default()
         .sender(own_canister_id)
-        .sender_reply_callback(callback_id)
         .method_payload(vec![13; 4 * MAX_RESPONSE_COUNT_BYTES])
         .build();
 
     // Not enough memory to push the request.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(
-            req,
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
+        api.push_output_request(req).unwrap()
     );
 
     // Memory usage unchanged.
@@ -2016,7 +1766,7 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Slightly smaller, still oversized request.
-    let req = RequestBuilder::default()
+    let req = OutputRequestBuilder::default()
         .sender(own_canister_id)
         .method_payload(vec![13; 2 * MAX_RESPONSE_COUNT_BYTES])
         .build();
@@ -2024,15 +1774,7 @@ fn push_output_request_oversized_request_memory_limits() {
     assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
 
     // Pushing succeeds.
-    assert_eq!(
-        0,
-        api.push_output_request(
-            req,
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
-    );
+    assert_eq!(0, api.push_output_request(req).unwrap());
 
     // `req_size_bytes` are consumed.
     assert_eq!(0, api.get_allocated_bytes().get());
@@ -2074,7 +1816,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
     assert_eq!(
         api.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(1))
             .unwrap(),
-        time::UNIX_EPOCH
+        UNIX_EPOCH
     );
     assert_eq!(
         api.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(2))

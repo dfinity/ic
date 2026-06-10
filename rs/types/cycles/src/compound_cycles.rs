@@ -87,10 +87,6 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
         let nominal = NominalCycles::new_private(amount.get());
         let real = match (use_case, cost_schedule) {
             (_, CanisterCyclesCostSchedule::Normal)
-            // NonConsumed represents the amounts attached on inter-canister
-            // calls and it's removed from a canister's balance regardless of
-            // cost_schedule.
-            | (CyclesUseCase::NonConsumed, CanisterCyclesCostSchedule::Free)
             // BurnedCycles represents the amount requested explicitly to be
             // burned via `ic0.cyles_burn` and it's removed from the balance
             // regardless of cost_schedule. 

@@ -6,7 +6,7 @@
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
 use candid::{CandidType, Deserialize, Principal};
-use futures::future::join_all;
+use futures::future::select_all;
 use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
 use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::{heartbeat, query, update};
@@ -228,10 +228,11 @@ async fn fanout() {
         }
     }
 
-    let results = join_all(futures).await;
+    while !futures.is_empty() {
+        let (result, _, remaining_futures) = select_all(futures).await;
+        futures = remaining_futures;
 
-    for res in results {
-        match res {
+        match result {
             Ok(response) => match response.candid::<Reply>() {
                 Ok(reply) => {
                     let elapsed = Duration::from_nanos(time() - reply.time_nanos);

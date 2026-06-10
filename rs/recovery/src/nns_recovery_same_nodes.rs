@@ -1,6 +1,6 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
-    cli::{consent_given, print_height_info, read_optional, read_optional_data_location},
+    cli::{consent_given, print_height_info, read, read_data_location, read_optional},
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -63,8 +63,8 @@ pub enum StepType {
     /// a "target replay height" in this step. This target height should be chosen such that it is
     /// below the height causing the panic, but above or equal to the height of the last certification
     /// (share).
-    /// This step will also add ingress messages to the registry canister to: (optionally) add and
-    /// bless an upgrade version, and update the NNS subnet record to point to this new version.
+    /// This step will also add ingress messages to the registry canister to: (optionally) add
+    /// an upgrade version, and update the NNS subnet record to point to this new version.
     /// ic-replay will stop at the given height (+ the added heights for the ingress messages) and
     /// create a checkpoint, which will then be used to create the recovery CUP.
     ICReplay,
@@ -134,9 +134,9 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub upgrade_image_launch_measurements_path: Option<PathBuf>,
 
-    /// Whether to add and bless the upgrade version before upgrading the subnet to it.
+    /// Whether to add the upgrade version before upgrading the subnet to it.
     #[clap(long)]
-    pub add_and_bless_upgrade_version: Option<bool>,
+    pub add_upgrade_version: Option<bool>,
 
     #[clap(long)]
     /// The replay will stop at this height and make a checkpoint.
@@ -246,10 +246,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         match step_type {
             StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
-                    self.params.admin_access_location = read_optional_data_location(
+                    self.params.admin_access_location = Some(read_data_location(
                         &self.logger,
                         "Enter state download/upload location (admin access required) [local/<ipv6>]:",
-                    );
+                    ));
                 }
             }
             _ => {}
@@ -265,10 +265,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         self.params.subnet_id,
                     );
 
-                    self.params.download_pool_node = read_optional(
+                    self.params.download_pool_node = Some(read(
                         &self.logger,
                         "Enter consensus pool download IP (backup access required):",
-                    );
+                    ));
                 }
             }
 
@@ -296,11 +296,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
                 };
                 if self.params.upgrade_version.is_some()
-                    && self.params.add_and_bless_upgrade_version.is_none()
+                    && self.params.add_upgrade_version.is_none()
                 {
-                    self.params.add_and_bless_upgrade_version = Some(consent_given(
+                    self.params.add_upgrade_version = Some(consent_given(
                         &self.logger,
-                        "Add and bless the upgrade version before upgrading the subnet?",
+                        "Add the upgrade version before upgrading the subnet?",
                     ));
                 }
 
@@ -429,7 +429,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         url,
                         hash,
                         measurements,
-                        params.add_and_bless_upgrade_version == Some(true),
+                        params.add_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),
                     )?))

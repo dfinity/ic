@@ -314,6 +314,10 @@ where
     read_type(logger, prompt, FromStr::from_str)
 }
 
+pub fn read_data_location(logger: &Logger, prompt: &str) -> DataLocation {
+    read_type(logger, prompt, data_location_from_str)
+}
+
 /// Read an input of the generic type by applying the given deserialization function.
 fn read_type<T, E: Display>(
     logger: &Logger,

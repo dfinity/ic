@@ -54,7 +54,10 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::{
+    call::{AsyncCall, SyncCall},
+    interfaces::{ManagementCanister, management_canister::CanisterLogRecord},
+};
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
     Tokens, tokens_from_proto,
@@ -794,6 +797,16 @@ impl<'a> MessageCanister<'a> {
         self.try_read_msg()
             .await
             .unwrap_or_else(|err| panic!("Could not read message: {err}"))
+    }
+
+    pub async fn fetch_logs(&self) -> Vec<CanisterLogRecord> {
+        let mgr = ManagementCanister::create(self.agent);
+        mgr.fetch_canister_logs(&self.canister_id)
+            .call()
+            .await
+            .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
+            .0
+            .canister_log_records
     }
 }
 

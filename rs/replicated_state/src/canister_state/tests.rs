@@ -1,15 +1,12 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use super::*;
 use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
 use crate::canister_state::canister_snapshots::CanisterSnapshots;
-use crate::canister_state::execution_state::CustomSection;
-use crate::canister_state::execution_state::CustomSectionType;
-use crate::canister_state::execution_state::WasmMetadata;
-use crate::canister_state::system_state::testing::SystemStateTesting;
+use crate::canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata};
+use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
 };
@@ -67,14 +64,12 @@ fn default_input_response(callback_id: CallbackId, deadline: CoarseTime) -> Resp
         .build()
 }
 
-fn default_output_request() -> Arc<Request> {
-    Arc::new(
-        RequestBuilder::default()
-            .sender(CANISTER_ID)
-            .receiver(OTHER_CANISTER_ID)
-            .payment(Cycles::new(3))
-            .build(),
-    )
+fn default_output_request() -> OutputRequest {
+    OutputRequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(OTHER_CANISTER_ID)
+        .payment(Cycles::new(3))
+        .build()
 }
 
 fn mock_metrics() -> IntCounter {
@@ -111,37 +106,10 @@ impl CanisterStateFixture {
     }
 
     fn make_callback_to(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
-        let call_context_id = self
-            .canister_state
-            .system_state
-            .new_call_context(
-                CallOrigin::CanisterUpdate(
-                    CANISTER_ID,
-                    CallbackId::from(1),
-                    NO_DEADLINE,
-                    String::from(""),
-                ),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-                Default::default(),
-                None,
-            )
-            .unwrap();
         self.canister_state
             .system_state
-            .register_callback(Callback::new(
-                call_context_id,
-                respondent,
-                Cycles::zero(),
-                CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
-                CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
-                CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
-                WasmClosure::new(0, 2),
-                WasmClosure::new(0, 2),
-                None,
-                deadline,
-            ))
-            .unwrap()
+            .with_callback(respondent, deadline)
+            .0
     }
 
     fn push_input(
@@ -325,7 +293,7 @@ fn canister_state_push_input_guaranteed_response_no_matching_callback() {
     // Reserve a slot in the input queue.
     fixture.with_input_slot_reservation();
     // Pushing an input response with a mismatched callback should fail.
-    let response = default_input_response(CallbackId::from(1), NO_DEADLINE).into();
+    let response = default_input_response(CallbackId::from(13), NO_DEADLINE).into();
     assert_matches!(
         fixture.push_input(
             response,
@@ -345,7 +313,7 @@ fn canister_state_push_input_best_effort_response_no_matching_callback() {
     // Reserve a slot in the input queue.
     fixture.with_input_slot_reservation();
     // Push a best-effort input response with a nonexistent callback.
-    let response = default_input_response(CallbackId::from(1), SOME_DEADLINE).into();
+    let response = default_input_response(CallbackId::from(13), SOME_DEADLINE).into();
     assert!(
         !fixture
             .push_input(
@@ -484,31 +452,28 @@ fn canister_state_induct_messages_to_self_best_effort_duplicate_of_paused_respon
 fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline: CoarseTime) {
     let mut fixture = CanisterStateFixture::new();
 
-    // Pair of request and response to self.
-    let callback_id = fixture.make_callback_to(CANISTER_ID, deadline);
-    let request = RequestBuilder::default()
+    // Request to self.
+    let request = OutputRequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(CANISTER_ID)
-        .sender_reply_callback(callback_id)
         .deadline(deadline)
         .payment(Cycles::new(2))
         .build();
-    let response = ResponseBuilder::default()
-        .originator(CANISTER_ID)
-        .respondent(CANISTER_ID)
-        .originator_reply_callback(callback_id)
-        .deadline(deadline)
-        .refund(Cycles::new(1))
-        .build();
 
     // Make two input queue slot reservations (for response and duplicate).
+    let mut callback_id = None;
     for _ in 0..2 {
-        fixture
-            .canister_state
-            .push_output_request(request.clone().into(), UNIX_EPOCH)
-            .unwrap();
+        callback_id = Some(
+            fixture
+                .canister_state
+                .push_output_request(request.clone(), UNIX_EPOCH)
+                .unwrap(),
+        );
         fixture.pop_output().unwrap();
     }
+    // Convert the `OutputRequest` to a `Request`.
+    let callback_id = callback_id.unwrap();
+    let request = request.into_request(callback_id);
 
     // And an output queue slot reservation, for the duplicate.
     assert!(
@@ -523,6 +488,13 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
     fixture.canister_state.pop_input().unwrap();
 
     // Enqueue the inbound response.
+    let response = ResponseBuilder::default()
+        .originator(CANISTER_ID)
+        .respondent(CANISTER_ID)
+        .originator_reply_callback(callback_id)
+        .deadline(deadline)
+        .refund(Cycles::new(1))
+        .build();
     assert!(
         fixture
             .push_input(
@@ -696,7 +668,6 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
-        Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
@@ -813,7 +784,9 @@ fn canister_state_push_output_request_mismatched_sender() {
     fixture
         .canister_state
         .push_output_request(
-            Arc::new(RequestBuilder::default().sender(OTHER_CANISTER_ID).build()),
+            OutputRequestBuilder::default()
+                .sender(OTHER_CANISTER_ID)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();
@@ -1049,7 +1022,6 @@ fn canister_state_canister_log_record_round_trip() {
 #[test]
 fn execution_state_test_partial_eq() {
     let state_1 = ExecutionState::new(
-        Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),
         Memory::new_for_testing(),
@@ -1059,14 +1031,6 @@ fn execution_state_test_partial_eq() {
     );
 
     assert_eq!(state_1, state_1.clone());
-
-    assert_eq!(
-        ExecutionState {
-            canister_root: PathBuf::new(),
-            ..state_1.clone()
-        },
-        state_1
-    );
 
     assert_eq!(ExecutionState { ..state_1.clone() }, state_1);
 

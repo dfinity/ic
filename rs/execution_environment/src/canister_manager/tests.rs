@@ -5,7 +5,7 @@ use crate::{
         CanisterManager, CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult,
         InstallCodeContext, MAX_SLICE_SIZE_BYTES, WasmSource, uninstall_canister,
     },
-    canister_settings::CanisterSettings,
+    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
@@ -20,13 +20,13 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        LOG_MEMORY_STORE_FEATURE, LOG_MEMORY_STORE_FEATURE_ENABLED,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
-    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
+    subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig, SubnetSecurity},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
@@ -40,9 +40,9 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    CanisterInstallMode, CanisterInstallModeV2, CanisterMetricsResult, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
-    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
+    ClearChunkStoreArgs, CreateCanisterArgs, CyclesConsumed, EmptyBlob, EnvironmentVariable, IC_00,
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
     OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
@@ -92,7 +92,9 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
+    BurnedCycles, CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
+    CyclesUseCase, HTTPOutcalls, IngressInduction, Instructions, Memory, NominalCycles,
+    NominalCyclesTesting, RequestAndResponseTransmission, Uninstall,
 };
 use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
@@ -323,6 +325,7 @@ fn canister_manager_config(
         MAX_ENVIRONMENT_VARIABLES,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        LOG_MEMORY_STORE_FEATURE,
     )
 }
 
@@ -403,7 +406,6 @@ fn install_code(
         None,
         old_canister,
         time,
-        "NOT_USED".into(),
         &network_topology,
         execution_parameters,
         round_limits,
@@ -2320,7 +2322,14 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
 
     // Give the new canister a relatively small number of cycles so it doesn't have
     // enough to be installed.
-    let canister_id = test.create_canister(Cycles::new(100));
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::new(100),
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        )
+        .unwrap();
 
     let err = test
         .install_code_v2(InstallCodeArgsV2::new(
@@ -2830,6 +2839,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     let certified_data = vec![42];
     let mut original_canister = CanisterStateBuilder::new()
         .with_canister_id(canister_id)
+        .with_cycles(Cycles::new(15_000_000_000_000))
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
         .with_certified_data(certified_data.clone())
@@ -3171,13 +3181,24 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller)
         .build();
-    for _ in 0..1_000 {
+    let payload = CreateCanisterArgs {
+        settings: Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        ),
+        sender_canister_version: None,
+    }
+    .encode();
+    for i in 1..=1_000 {
         test.inject_call_to_ic00(
             Method::CreateCanister,
-            EmptyBlob.encode(),
+            payload.clone(),
             test.canister_creation_fee().real(),
         );
-        test.execute_all();
+        if i % 500 == 0 {
+            test.execute_all();
+        }
     }
     assert_eq!(test.state().num_canisters() as u64, 1_000);
 }
@@ -4666,6 +4687,7 @@ fn update_settings_can_set_reserved_cycles_limit() {
             CYCLES,
             CanisterSettingsArgsBuilder::new()
                 .with_reserved_cycles_limit(1)
+                .with_log_memory_limit(0)
                 .build(),
         )
         .unwrap();
@@ -4919,16 +4941,6 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     // Assert that canister history memory was non empty.
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(initial_canister_history_memory_usage, 0);
-    let initial_log_memory_store_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage()
-        .get();
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        // Assert that canister log memory store memory was non empty.
-        assert_gt!(initial_log_memory_store_memory_usage, 0);
-    } else {
-        assert_eq!(initial_log_memory_store_memory_usage, 0);
-    }
 
     test.uninstall_code(canister_id).unwrap();
 
@@ -4940,23 +4952,15 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
         final_canister_history_memory_usage,
         initial_canister_history_memory_usage
     );
-    // Assert that canister log memory store memory was cleared.
-    let final_log_memory_store_memory_usage = test
-        .canister_state(canister_id)
-        .log_memory_store_memory_usage()
-        .get();
-    assert_eq!(final_log_memory_store_memory_usage, 0);
 
     let extra_subnet_available_memory_usage =
         final_subnet_available_memory as i64 - initial_subnet_available_memory as i64;
     let extra_canister_history_memory_usage =
         final_canister_history_memory_usage as i64 - initial_canister_history_memory_usage as i64;
-    let extra_canister_log_memory_store_memory_usage =
-        final_log_memory_store_memory_usage as i64 - initial_log_memory_store_memory_usage as i64;
-    // Assert that subnet available memory usage has opposite sign to canister memory usage.
+    // Assert that subnet available memory change has opposite sign to canister history memory change.
     assert_eq!(
         -extra_subnet_available_memory_usage,
-        extra_canister_history_memory_usage + extra_canister_log_memory_store_memory_usage
+        extra_canister_history_memory_usage
     );
 }
 
@@ -5408,6 +5412,287 @@ fn upload_chunk_increases_subnet_heap_delta() {
     );
 }
 
+// Creates a canister with `initial_log_limit`, installs the universal canister,
+// emits log messages via debug_print, and returns the test environment together
+// with the canister id, the number of log bytes stored, and the heap delta
+// accumulated so far.
+fn setup_canister_log_heap_delta_test(
+    initial_log_limit: u64,
+) -> (ExecutionTest, CanisterId, NumBytes, NumBytes) {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    // Message content chosen so that each stored record is 2120 bytes
+    // (20-byte LogRecord header + 2100-byte content).  Two records occupy
+    // 4240 bytes, which exceeds one OS page (4096 bytes = DATA_CAPACITY_MIN),
+    // so a buffer with only one page of data capacity can hold exactly one
+    // of the two records.
+    const MSG: &[u8] = &[b'x'; 2100];
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(initial_log_limit)
+                .build(),
+        )
+        .unwrap();
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(MSG).debug_print(MSG).reply().build(),
+    )
+    .unwrap();
+    let log_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert!(log_bytes_used > NumBytes::from(0));
+    let heap_delta_before = test.state().metadata.heap_delta_estimate;
+
+    (test, canister_id, log_bytes_used, heap_delta_before)
+}
+
+// log_memory_limit not set → would_resize not called → heap delta increase = 0.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_none() {
+    const MIB: u64 = 1024 * 1024;
+    let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
+        setup_canister_log_heap_delta_test(MIB);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(100)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before);
+}
+
+// log_memory_limit set to current size → would_resize = false → heap delta increase = 0.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_unchanged() {
+    const MIB: u64 = 1024 * 1024;
+    let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
+        setup_canister_log_heap_delta_test(MIB);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before);
+}
+
+// log_memory_limit decreased (but large enough to retain all records) →
+// would_resize = true → post-resize bytes_used = pre-resize bytes_used
+// → heap delta increase = bytes_used.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_decreased() {
+    const MIB: u64 = 1024 * 1024;
+    let (mut test, canister_id, log_bytes_used, heap_delta_before) =
+        setup_canister_log_heap_delta_test(2 * MIB);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate - heap_delta_before,
+        log_bytes_used,
+    );
+}
+
+// log_memory_limit decreased to zero → would_resize = true → store deallocated
+// → post-resize bytes_used = 0 → heap delta increase = 0.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_decreased_to_zero() {
+    const MIB: u64 = 1024 * 1024;
+    let (mut test, canister_id, _log_bytes_used, heap_delta_before) =
+        setup_canister_log_heap_delta_test(MIB);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, heap_delta_before,);
+}
+
+// log_memory_limit decreased so that only one of two records fits →
+// would_resize = true, oldest record evicted →
+// heap delta increase = post-resize bytes_used < pre-resize bytes_used.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_decreased_record_dropped() {
+    // Each stored record is 2120 bytes (20-byte header + 2100-byte content).
+    // 2120 < 4096 ≤ 2 × 2120 so exactly one record fits after downsizing to one page.
+    const RECORD_SIZE: u64 = (20 + 2100) as u64;
+    // Initial limit: two pages, comfortably holding both records (4240 bytes).
+    let (mut test, canister_id, log_bytes_used, heap_delta_before) =
+        setup_canister_log_heap_delta_test(2 * 4096);
+    assert_eq!(log_bytes_used, NumBytes::new(2 * RECORD_SIZE));
+
+    // Downsize to one page (4096 bytes): the oldest record is evicted so the
+    // newer one fits, leaving exactly RECORD_SIZE bytes in the store.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(4096)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    let post_resize_bytes_used = NumBytes::new(
+        test.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used() as u64,
+    );
+    assert_eq!(post_resize_bytes_used, NumBytes::new(RECORD_SIZE));
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate - heap_delta_before,
+        post_resize_bytes_used,
+    );
+}
+
+// log_memory_limit increased → would_resize = true → all records preserved
+// → post-resize bytes_used = pre-resize bytes_used → heap delta increase = bytes_used.
+#[test]
+fn update_settings_heap_delta_log_memory_limit_increased() {
+    const MIB: u64 = 1024 * 1024;
+    let (mut test, canister_id, log_bytes_used, heap_delta_before) =
+        setup_canister_log_heap_delta_test(MIB);
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(2 * MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args).unwrap();
+
+    assert_eq!(
+        test.state().metadata.heap_delta_estimate - heap_delta_before,
+        log_bytes_used,
+    );
+}
+
+#[test]
+fn update_settings_fails_when_heap_delta_rate_limited() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+    const LIMIT: NumBytes = NumBytes::new(10 * MIB);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_heap_delta_rate_limit(LIMIT)
+        .with_log_memory_store_feature_enabled()
+        .build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(2 * MIB)
+                .build(),
+        )
+        .unwrap();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Ensure the log store is non-empty so resize would rewrite log data.
+    const MSG: &[u8] = &[b'x'; 2100];
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(MSG).reply().build(),
+    )
+    .unwrap();
+
+    test.canister_state_mut(canister_id)
+        .scheduler_state
+        .heap_delta_debit = LIMIT;
+
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, args)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterHeapDeltaRateLimited,
+            &format!("Canister {canister_id} is heap delta rate limited: current delta debit is 10485760, but limit is 10485760"),
+        );
+}
+
+// Canister creation without log_memory_limit → first-time log store allocation
+// must not contribute to heap delta.
+#[test]
+fn create_canister_heap_delta_log_memory_limit_default() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    test.create_canister(CYCLES);
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
+// Canister creation with explicit log_memory_limit → first-time log store
+// allocation must not contribute to heap delta.
+#[test]
+fn create_canister_heap_delta_log_memory_limit_explicit() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MIB: u64 = 1024 * 1024;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_log_memory_store_feature_enabled()
+        .build();
+    test.create_canister_with_settings(
+        CYCLES,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(MIB)
+            .build(),
+    )
+    .unwrap();
+
+    assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
+}
+
 #[test]
 fn upload_chunk_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
@@ -5582,7 +5867,8 @@ fn empty_canister_memory_usage() {
 /// This test checks that the wasm chunk store is accounted for then.
 #[test]
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
-    let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
+    let subnet_config =
+        ic_config::subnet_config::SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
     // Initialize subnet with enough memory for one chunk but not two.
     assert_lt!(EMPTY_CANISTER_MEMORY_USAGE, wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
@@ -7313,7 +7599,9 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         .create_canister_with_cycles(
             canister_change_origin_from_principal(&sender),
             Some(123),
-            CanisterSettings::default(),
+            CanisterSettingsBuilder::new()
+                .with_log_memory_limit(NumBytes::new(0))
+                .build(),
             None,
             &mut state,
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
@@ -7353,7 +7641,9 @@ fn create_canister_with_specified_id(
     let creation_result = canister_manager.create_canister_with_cycles(
         canister_change_origin_from_principal(&creator),
         Some(123),
-        CanisterSettings::default(),
+        CanisterSettingsBuilder::new()
+            .with_log_memory_limit(NumBytes::new(0))
+            .build(),
         Some(specified_id),
         &mut state,
         &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
@@ -7554,8 +7844,15 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
         .system_state
         .set_balance(Cycles::new(2_000_000_000_000_000));
 
-    // Create a canister with default settings.
-    let args = CreateCanisterArgs::default();
+    // Create a canister with no compute allocation.
+    let args = CreateCanisterArgs {
+        settings: Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(0)
+                .build(),
+        ),
+        sender_canister_version: None,
+    };
     let create_canister = wasm()
         .call_with_cycles(
             CanisterId::ic_00(),
@@ -7572,6 +7869,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     // Create a canister with zero compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_compute_allocation(0)
+        .with_log_memory_limit(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -7594,6 +7892,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_compute_allocation(10)
+        .with_log_memory_limit(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -7642,7 +7941,13 @@ fn create_canister_checks_freezing_threshold_for_compute_allocation() {
         .build();
 
     let err = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
+        .create_canister_with_settings(
+            Cycles::new(1_000_000_000_000),
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(50)
+                .with_log_memory_limit(0)
+                .build(),
+        )
         .unwrap_err();
 
     assert!(
@@ -7825,6 +8130,71 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
 }
 
 #[test]
+fn create_canister_reverts_round_limits_on_failure() {
+    // In validate_and_update_canister_settings, compute_allocation_used is
+    // incremented and subnet_available_memory is decremented before
+    // reserve_cycles is called for memory allocation.
+    // Setting reserved_cycles_limit=0 with non-zero memory_allocation ensures
+    // reserve_cycles fails (ReservedCyclesLimitExceededInMemoryAllocation) after
+    // both round_limits fields were already updated.
+    // The caller must revert both from the round_limits snapshot.
+    let subnet_id = subnet_test_id(1);
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .build();
+    let mut state = initial_state(subnet_id, false);
+    // Use zero threshold so that storage_reservation_cycles is non-zero for
+    // any memory allocation, causing reserve_cycles to fail when
+    // reserved_cycles_limit is 0.
+    let subnet_memory_saturation = ResourceSaturation::new(0, 0, 100_000_000_000);
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
+
+    let initial_compute_allocation_used = round_limits.compute_allocation_used;
+    let initial_subnet_available_memory =
+        round_limits.subnet_available_memory.get_execution_memory();
+
+    let sender = canister_test_id(1).get();
+    let err = canister_manager
+        .create_canister_with_cycles(
+            canister_change_origin_from_principal(&sender),
+            Some(100_000_000_000_000),
+            CanisterSettingsBuilder::new()
+                .with_compute_allocation(ComputeAllocation::try_from(50_u64).unwrap())
+                .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
+                .with_reserved_cycles_limit(Cycles::zero())
+                .build(),
+            None,
+            &mut state,
+            &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
+            MAX_NUMBER_OF_CANISTERS,
+            &mut round_limits,
+            subnet_memory_saturation,
+            SMALL_APP_SUBNET_MAX_SIZE,
+            &no_op_counter(),
+        )
+        .unwrap_err();
+
+    assert_matches!(
+        err,
+        CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation { .. }
+    );
+    assert_eq!(
+        round_limits.compute_allocation_used,
+        initial_compute_allocation_used,
+    );
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
+        initial_subnet_available_memory,
+    );
+}
+
+#[test]
 fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const CAPACITY: u64 = 20_000_000_000;
@@ -7890,6 +8260,7 @@ fn create_canister_can_set_reserved_cycles_limit() {
     // empty canister is zero, setting the reserved cycles limit should succeed.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_reserved_cycles_limit(1)
+        .with_log_memory_limit(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -8170,6 +8541,9 @@ fn assert_subnet_admin_actions_can_be_performed(mut test: ExecutionTest, caniste
     let status = test.canister_status(canister_id).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
 
+    // ...canister metrics can be retrieved...
+    test.canister_metrics(canister_id).unwrap();
+
     // ...code can be uninstalled...
     test.uninstall_code(canister_id).unwrap();
     assert_eq!(test.canister_state(canister_id).execution_state, None);
@@ -8279,6 +8653,15 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
     assert!(err.description().contains(&format!(
         "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
     )));
+    // ...or canister metrics cannot be retrieved...
+    let err = test.canister_metrics(canister_id).unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
 
     // ...or code be uninstalled...
     let err = test.uninstall_code(canister_id).unwrap_err();
@@ -8352,4 +8735,129 @@ fn subnet_admin_cannot_install_code() {
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
+}
+
+fn assert_canister_metrics_can_be_retrieved(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    cost_schedule: CanisterCyclesCostSchedule,
+) {
+    // Set dummy values for consumed cycles in the canister state.
+    let memory_cycles = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(memory_cycles);
+
+    // `Instructions` follow the prepay/refund flow where metrics are updated
+    // only during the refund step.
+    let instructions_cycles = CompoundCycles::<Instructions>::new(Cycles::new(2), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(instructions_cycles);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .refund_cycles(
+            instructions_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::new(0), cost_schedule),
+        );
+
+    let ingress_induction_cycles =
+        CompoundCycles::<IngressInduction>::new(Cycles::new(3), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(ingress_induction_cycles);
+
+    let compute_allocation_cycles =
+        CompoundCycles::<ic_types_cycles::ComputeAllocation>::new(Cycles::new(4), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(compute_allocation_cycles);
+
+    let canister_creation_cycles =
+        CompoundCycles::<CanisterCreation>::new(Cycles::new(5), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(canister_creation_cycles);
+
+    let uninstall_cycles = CompoundCycles::<Uninstall>::new(Cycles::new(6), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(uninstall_cycles);
+
+    // `RequestAndResponseTransmission` follow the prepay/refund flow where
+    // metrics are updated only during the refund step.
+    let request_and_response_transmission_cycles =
+        CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(8), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(request_and_response_transmission_cycles);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .refund_cycles(
+            request_and_response_transmission_cycles,
+            CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(0), cost_schedule),
+        );
+
+    let http_outcalls_cycles = CompoundCycles::<HTTPOutcalls>::new(Cycles::new(9), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .observe_consumed_cycles_for_https_outcall(http_outcalls_cycles.nominal());
+
+    let burned_cycles = CompoundCycles::<BurnedCycles>::new(Cycles::new(10), cost_schedule);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .consume_cycles(burned_cycles);
+
+    let expected_cycles_consumed = CyclesConsumed::new(
+        memory_cycles.nominal(),
+        compute_allocation_cycles.nominal(),
+        ingress_induction_cycles.nominal(),
+        // Instructions will include both the "fake" value set as well as the cost
+        // of executing `canister_metrics` for the canister.
+        instructions_cycles.nominal() + test.canister_execution_cost(canister_id).nominal(),
+        request_and_response_transmission_cycles.nominal(),
+        uninstall_cycles.nominal(),
+        canister_creation_cycles.nominal(),
+        http_outcalls_cycles.nominal(),
+        burned_cycles.nominal(),
+    );
+    let expected_metrics = CanisterMetricsResult::new(expected_cycles_consumed);
+
+    // The canister_metrics endpoint should return the correct values for consumed cycles.
+    let result = test.canister_metrics(canister_id).unwrap();
+    assert_eq!(result, expected_metrics);
+}
+
+#[test]
+fn can_retrieve_canister_metrics_for_canister_free_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Free;
+    let subnet_admin = user_test_id(42);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Switch user id so the request comes from the subnet admin
+    // who should not be a controller.
+    test.set_user_id(subnet_admin);
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .controllers()
+            .contains(subnet_admin.get_ref())
+    );
+
+    assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
+}
+
+#[test]
+fn can_retrieve_canister_metrics_for_canister_normal_schedule() {
+    let cost_schedule = CanisterCyclesCostSchedule::Normal;
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(cost_schedule)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+
+    assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
 }

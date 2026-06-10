@@ -76,8 +76,8 @@ pub struct WebAuthnEnvelope {
 }
 
 impl WebAuthnEnvelope {
-    pub fn challenge(&self) -> Vec<u8> {
-        self.challenge.clone()
+    pub fn challenge(&self) -> &[u8] {
+        &self.challenge
     }
 }
 
@@ -97,7 +97,7 @@ impl TryFrom<&WebAuthnSignature> for WebAuthnEnvelope {
         };
 
         let mut signed_bytes = signature.authenticator_data.0.clone();
-        signed_bytes.append(&mut Sha256::hash(&signature.client_data_json.0.clone()[..]).to_vec());
+        signed_bytes.extend_from_slice(&Sha256::hash(&signature.client_data_json.0));
 
         Ok(WebAuthnEnvelope {
             client_data_json: signature.client_data_json.0.clone(),
@@ -110,8 +110,8 @@ impl TryFrom<&WebAuthnSignature> for WebAuthnEnvelope {
 }
 
 impl SignedBytesWithoutDomainSeparator for WebAuthnEnvelope {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.signed_bytes.clone()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.signed_bytes);
     }
 }
 
@@ -143,6 +143,8 @@ mod tests {
             hex!("2f1b671a93f444b8ec77e0211f9624c9c2612182b864f0d4ac9d335f5b4fe5020100000053")
                 .to_vec()
         );
-        assert_eq!(result.as_signed_bytes_without_domain_separator().to_vec(), hex!("2f1b671a93f444b8ec77e0211f9624c9c2612182b864f0d4ac9d335f5b4fe50201000000537f91225ffff1e2912a0f8ca7a0ef61df01ae3d8898fca283036239259bab4f82").to_vec());
+        let mut signed_bytes = Vec::new();
+        result.write_signed_bytes_without_domain_separator(&mut signed_bytes);
+        assert_eq!(signed_bytes, hex!("2f1b671a93f444b8ec77e0211f9624c9c2612182b864f0d4ac9d335f5b4fe50201000000537f91225ffff1e2912a0f8ca7a0ef61df01ae3d8898fca283036239259bab4f82").to_vec());
     }
 }
