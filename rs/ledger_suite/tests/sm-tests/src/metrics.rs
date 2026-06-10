@@ -459,16 +459,28 @@ pub fn assert_archiving_histogram_records_failure<T>(
         transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
     }
 
+    // A failed archiving attempt does not remove the blocks, so the archive
+    // trigger condition persists and archiving re-fires on subsequent rounds,
+    // failing each time. The counter therefore reflects the number of failed
+    // attempts (>= 1), not a single distinct failure. This matches the
+    // pre-existing per-attempt semantics of `increment_archiving_failure_metric`.
     let failures = parse_metric(&env, ledger_id, "ledger_archiving_failures");
-    assert_eq!(
-        failures, 1,
-        "Expected ledger_archiving_failures == 1 after a failed archiving attempt, got {failures}"
+    assert!(
+        failures >= 1,
+        "Expected ledger_archiving_failures >= 1 after a failed archiving attempt, got {failures}"
     );
 
+    // `record_archiving_stats` runs on both the Ok and Err branches of
+    // `archive_blocks`, so each failed attempt also adds a duration observation.
     let archiving_runs = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+    assert!(
+        archiving_runs >= 1,
+        "Expected the archiving duration histogram to record the failed run(s), got count {archiving_runs}"
+    );
     assert_eq!(
-        archiving_runs, 1,
-        "Expected the archiving duration histogram to record the failed run, got count {archiving_runs}"
+        archiving_runs, failures,
+        "Every failed archiving attempt should record both a failure and a duration observation, \
+         got {archiving_runs} duration observations vs {failures} failures"
     );
 }
 
