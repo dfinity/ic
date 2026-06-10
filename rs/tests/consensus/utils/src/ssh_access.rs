@@ -209,6 +209,7 @@ pub fn get_update_subnet_payload_with_keys(
         max_number_of_canisters: None,
         ssh_readonly_access: readonly_keys,
         ssh_backup_access: backup_keys,
+        subnet_admins: None,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,

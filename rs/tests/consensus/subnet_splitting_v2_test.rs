@@ -47,7 +47,6 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
 use slog::info;
@@ -837,7 +836,7 @@ async fn wait_for_cup_with_subnet_id(
                     )
                 }
                 Ok(cup)
-                    if cup.signature.signer.target_subnet == NiDkgTargetSubnet::Local
+                    if cup.signature.signer.target_subnet.is_local()
                         && cup.signature.signer.dealer_subnet == subnet_id =>
                 {
                     Ok(())

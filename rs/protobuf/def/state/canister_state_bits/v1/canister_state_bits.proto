@@ -64,6 +64,8 @@ message WasmClosure {
 
 message Callback {
   reserved 6;
+  reserved 8;
+  reserved 9;
 
   uint64 call_context_id = 1;
   WasmClosure on_reply = 2;
@@ -71,13 +73,9 @@ message Callback {
   WasmClosure on_cleanup = 4;
   state.queues.v1.Cycles cycles_sent = 5;
   types.v1.CanisterId respondent = 7;
-  state.queues.v1.Cycles prepayment_for_response_execution = 8;
-  state.queues.v1.Cycles prepayment_for_response_transmission = 9;
   // If non-zero, this is a best-effort call.
   uint32 deadline_seconds = 10;
-  // To replace `prepayment_for_response_execution`.
   state.queues.v1.CompoundCycles prepayment_for_response_execution_compound = 11;
-  // To replace `prepayment_for_response_transmission`.
   state.queues.v1.CompoundCycles prepayment_for_response_transmission_compound = 12;
   state.queues.v1.CompoundCycles prepayment_for_call_transmission = 13;
 }
@@ -212,6 +210,7 @@ message ExecutionTask {
 
   message AbortedExecution {
     reserved 2;
+    reserved 4;
 
     message AbortedResponse {
       state.queues.v1.Response response = 7;
@@ -226,26 +225,20 @@ message ExecutionTask {
     }
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
-    state.queues.v1.Cycles prepaid_execution_cycles = 4;
-    // The execution cost that has already been charged from the canister.
-    // Retried execution does not have to pay for it again.
-    // This field will replace the existing `prepaid_execution_cycles`.
     state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 7;
   }
 
   message AbortedInstallCode {
+    reserved 3;
+
     oneof message {
       state.queues.v1.Request request = 1;
       ingress.v1.Ingress ingress = 2;
     }
-    // The execution cost that has already been charged from the canister.
-    // Retried execution does not have to pay for it again.
-    state.queues.v1.Cycles prepaid_execution_cycles = 3;
     reserved "request_id";
     optional uint64 call_id = 4;
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
-    // Will replace the existing `prepaid_execution_cycles`.
     state.queues.v1.CompoundCycles prepaid_execution_compound_cycles = 5;
   }
 
@@ -256,6 +249,8 @@ message ExecutionTask {
 }
 
 enum CyclesUseCase {
+  reserved 11;
+
   CYCLES_USE_CASE_UNSPECIFIED = 0;
   CYCLES_USE_CASE_MEMORY = 1;
   CYCLES_USE_CASE_COMPUTE_ALLOCATION = 2;
@@ -267,7 +262,6 @@ enum CyclesUseCase {
   CYCLES_USE_CASE_ECDSA_OUTCALLS = 8;
   CYCLES_USE_CASE_HTTP_OUTCALLS = 9;
   CYCLES_USE_CASE_DELETED_CANISTERS = 10;
-  CYCLES_USE_CASE_NON_CONSUMED = 11;
   CYCLES_USE_CASE_BURNED_CYCLES = 12;
   CYCLES_USE_CASE_SCHNORR_OUTCALLS = 13;
   CYCLES_USE_CASE_VET_KD = 14;
@@ -436,7 +430,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 65
+// Next ID: 68
 message CanisterStateBits {
   reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
 
@@ -506,6 +500,11 @@ message CanisterStateBits {
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.
   uint64 next_canister_log_record_idx = 44;
+  // Whether the one-time migration from CanisterLog to LogMemoryStore has
+  // already been performed for this canister.
+  bool log_memory_store_migrated = 66;
+  // The persistent high-water mark for log record indexing in LogMemoryStore.
+  uint64 log_memory_store_persistent_next_idx = 67;
   // The Wasm memory limit. This is a field in developer-visible canister
   // settings that allows the developer to limit the usage of the Wasm memory
   // by the canister to leave some room in 4GiB for upgrade calls.

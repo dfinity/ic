@@ -409,6 +409,7 @@ system_test_nns(
     ],
     test_driver_target = ":consensus_performance_bin",
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
@@ -438,6 +439,7 @@ system_test_nns(
     ],
     test_driver_target = ":consensus_performance_bin",
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
@@ -487,6 +489,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     deps = [
         # Keep sorted.
         "//rs/registry/canister",

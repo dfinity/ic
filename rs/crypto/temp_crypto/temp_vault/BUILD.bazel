@@ -2,23 +2,15 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/internal/crypto_service_provider",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "temp_vault",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_temp_crypto_vault",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/internal/crypto_service_provider",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )

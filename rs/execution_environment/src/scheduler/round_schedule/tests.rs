@@ -22,7 +22,7 @@ use itertools::Itertools;
 use maplit::btreeset;
 use more_asserts::{assert_gt, assert_le};
 use proptest::prelude::*;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 /// Fixture for testing `RoundSchedule` in isolation: a `RoundSchedule` and a
@@ -47,19 +47,21 @@ impl RoundScheduleFixture {
     /// Creates a new fixture with a sensible `RoundSchedule` default (4 cores,
     /// large heap delta rate limit), and an empty `ReplicatedState`.
     fn new() -> Self {
-        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        let current_round = ExecutionRound::new(1);
-        let metrics = SchedulerMetrics::new(&MetricsRegistry::new());
-        let logger = ic_logger::replica_logger::test_logger(Some(slog::Level::Info));
-        let round_schedule =
-            RoundScheduleBuilder::new().build(&mut state, current_round, &metrics, &logger);
+        Self::with_round_schedule(RoundScheduleBuilder::new().build())
+    }
+
+    /// Creates a new fixture with the given `RoundSchedule` and an empty
+    /// `ReplicatedState`.
+    fn with_round_schedule(round_schedule: RoundSchedule) -> Self {
+        let registry = MetricsRegistry::new();
+        let metrics = SchedulerMetrics::new(&registry);
         Self {
             round_schedule,
-            state,
-            current_round,
+            state: ReplicatedState::new(subnet_test_id(1), SubnetType::Application),
+            current_round: ExecutionRound::new(1),
             next_canister_id: 0,
             metrics,
-            logger,
+            logger: ic_logger::replica_logger::test_logger(Some(slog::Level::Info)),
         }
     }
 
@@ -92,40 +94,15 @@ impl RoundScheduleFixture {
         canister_id
     }
 
-    /// Creates a new `RoundSchedule` around the current `state`.
-    fn start_round(
-        &mut self,
-        current_round: ExecutionRound,
-        round_schedule_builder: RoundScheduleBuilder,
-    ) {
-        self.current_round = current_round;
-        self.round_schedule = round_schedule_builder.build(
-            &mut self.state,
-            current_round,
-            &self.metrics,
-            &self.logger,
-        );
-    }
-
-    /// Creates a new `RoundSchedule` around the current `state` and calls
-    /// `RoundSchedule::start_iteration` on it.
-    fn start_iteration(&mut self, is_first_iteration: bool) -> IterationSchedule {
-        self.round_schedule = RoundScheduleBuilder::new().build(
-            &mut self.state,
-            self.current_round,
-            &self.metrics,
-            &self.logger,
-        );
-
-        self.start_iteration_only(is_first_iteration)
-    }
-
     /// Calls `RoundSchedule::start_iteration`, mutating canister priorities and
     /// returning the iteration schedule.
-    fn start_iteration_only(&mut self, is_first_iteration: bool) -> IterationSchedule {
-        let iteration = self
-            .round_schedule
-            .start_iteration(&mut self.state, is_first_iteration);
+    fn start_iteration(&mut self, is_first_iteration: bool) -> IterationSchedule {
+        let iteration = self.round_schedule.start_iteration(
+            &mut self.state,
+            is_first_iteration,
+            &self.metrics,
+            &self.logger,
+        );
 
         // `IterationSchedule` sanity checks.
         assert_eq!(
@@ -171,7 +148,7 @@ impl RoundScheduleFixture {
                 core.into_iter()
                     .map(|cs| {
                         let id = cs.canister_id();
-                        all_canisters.insert(id, cs);
+                        all_canisters.insert(cs);
                         id
                     })
                     .collect()
@@ -321,7 +298,6 @@ impl RoundScheduleFixture {
             SystemMethod::CanisterHeartbeat,
         )]));
         self.canister_state(&canister_id).execution_state = Some(ExecutionState::new(
-            "NOT_USED".into(),
             WasmBinary::new(CanisterModule::new(vec![])),
             exports,
             Memory::new_for_testing(),
@@ -367,13 +343,13 @@ impl RoundScheduleFixture {
         &mut self,
         executed_canisters: &BTreeSet<CanisterId>,
         canisters_with_completed_messages: &BTreeSet<CanisterId>,
-        low_cycle_balance_canisters: &BTreeSet<CanisterId>,
+        canisters_with_zero_instruction_executions: &BTreeSet<CanisterId>,
     ) {
         self.round_schedule.end_iteration(
             &mut self.state,
             executed_canisters,
             canisters_with_completed_messages,
-            low_cycle_balance_canisters,
+            canisters_with_zero_instruction_executions,
             self.current_round,
         );
     }
@@ -415,24 +391,13 @@ impl RoundScheduleBuilder {
         self
     }
 
-    fn build(
-        self,
-        state: &mut ReplicatedState,
-        current_round: ExecutionRound,
-        metrics: &SchedulerMetrics,
-        logger: &ReplicaLogger,
-    ) -> RoundSchedule {
-        RoundSchedule::apply_scheduling_strategy(
-            state,
+    fn build(self) -> RoundSchedule {
+        RoundSchedule::new(
             self.cores,
             self.heap_delta_rate_limit,
             FlagStatus::Enabled,
             self.install_code_rate_limit,
             FlagStatus::Enabled,
-            current_round,
-            ExecutionRound::new(u64::MAX / 2),
-            metrics,
-            logger,
         )
     }
 }
@@ -622,17 +587,14 @@ fn start_iteration_long_executions_first_cores() {
 /// `fully_executed_canisters`.
 #[test]
 fn start_iteration_first_iteration_fully_executed() {
-    let mut fixture = RoundScheduleFixture::new();
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
     let first_long = fixture.canister_with_long_execution();
     let first_new = fixture.canister_with_input();
     let second_long = fixture.canister_with_long_execution();
     let second_new = fixture.canister_with_input();
 
-    fixture.start_round(
-        ExecutionRound::new(1),
-        RoundScheduleBuilder::new().with_cores(2),
-    );
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
 
     assert!(fixture.fully_executed_canisters().contains(&first_long));
     assert!(fixture.fully_executed_canisters().contains(&first_new));
@@ -698,9 +660,7 @@ fn start_iteration_later_iteration_exclude_completed_long() {
 
     fixture.remove_long_execution(canister_a);
     fixture.push_input(canister_a);
-    let iter2 = fixture
-        .round_schedule
-        .start_iteration(&mut fixture.state, false);
+    let iter2 = fixture.start_iteration(false);
 
     assert!(
         !iter2.schedule.contains(&canister_a),
@@ -712,17 +672,16 @@ fn start_iteration_later_iteration_exclude_completed_long() {
 #[test]
 fn start_iteration_with_heap_delta_rate_limit() {
     let limit = ic_base_types::NumBytes::new(1000);
-    let mut fixture = RoundScheduleFixture::new();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(
+        RoundScheduleBuilder::new()
+            .with_heap_delta_rate_limit(limit)
+            .build(),
+    );
     let canister_id = fixture.canister_with_input();
     fixture.add_heap_delta_debit(canister_id, limit);
 
     for is_first_iteration in [true, false] {
-        fixture.start_round(
-            ExecutionRound::new(1),
-            RoundScheduleBuilder::new().with_heap_delta_rate_limit(limit),
-        );
-
-        let iteration = fixture.start_iteration_only(is_first_iteration);
+        let iteration = fixture.start_iteration(is_first_iteration);
 
         // Canister is rate-limited so not in the iteration schedule.
         assert!(iteration.is_empty());
@@ -734,17 +693,16 @@ fn start_iteration_with_heap_delta_rate_limit() {
 #[test]
 fn start_iteration_with_install_code_rate_limit() {
     let limit = NumInstructions::new(1000);
-    let mut fixture = RoundScheduleFixture::new();
+    let round_schedule = RoundScheduleBuilder::new()
+        .with_install_code_rate_limit(limit)
+        .build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
+
     let canister_id = fixture.canister_with_input();
     fixture.add_install_code_debit(canister_id, limit);
 
     for is_first_iteration in [true, false] {
-        fixture.start_round(
-            ExecutionRound::new(1),
-            RoundScheduleBuilder::new().with_install_code_rate_limit(limit),
-        );
-
-        let iteration = fixture.start_iteration_only(is_first_iteration);
+        let iteration = fixture.start_iteration(is_first_iteration);
 
         // Canister is rate-limited so not in the iteration schedule.
         assert!(iteration.is_empty());
@@ -758,18 +716,22 @@ fn start_iteration_with_install_code_rate_limit() {
 /// a full round). Later iterations in the same round must not charge it again.
 #[test]
 fn start_iteration_first_iteration_charges_rate_limited_canisters() {
-    let mut fixture = RoundScheduleFixture::new();
+    let heap_delta_limit = ic_base_types::NumBytes::new(1000);
+    let install_code_limit = NumInstructions::new(2000);
+    let round_schedule = RoundScheduleBuilder::new()
+        .with_heap_delta_rate_limit(heap_delta_limit)
+        .with_install_code_rate_limit(install_code_limit)
+        .build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
 
     // A heap delta rate-limited canister with a non-trivial starting AP, so we can
     // verify the exact 100% decrement.
-    let heap_delta_limit = ic_base_types::NumBytes::new(1000);
     let heap_delta = fixture.canister_with_input();
     fixture.add_heap_delta_debit(heap_delta, heap_delta_limit);
     *fixture.canister_priority_mut(heap_delta) = priority(40);
 
     // An install code rate-limited canister with a non-trivial starting AP, so we
     // can verify the exact 100% decrement.
-    let install_code_limit = NumInstructions::new(2000);
     let install_code = fixture.canister_with_input();
     fixture.add_install_code_debit(install_code, install_code_limit);
     *fixture.canister_priority_mut(install_code) = priority(50);
@@ -778,15 +740,8 @@ fn start_iteration_first_iteration_charges_rate_limited_canisters() {
     let control = fixture.canister_with_input();
     *fixture.canister_priority_mut(control) = priority(60);
 
-    fixture.start_round(
-        ExecutionRound::new(1),
-        RoundScheduleBuilder::new()
-            .with_heap_delta_rate_limit(heap_delta_limit)
-            .with_install_code_rate_limit(install_code_limit),
-    );
-
     for is_first_iteration in [true, false] {
-        fixture.start_iteration_only(is_first_iteration);
+        fixture.start_iteration(is_first_iteration);
 
         assert!(fixture.rate_limited_canisters().contains(&heap_delta));
         assert!(fixture.rate_limited_canisters().contains(&install_code));
@@ -810,21 +765,44 @@ fn start_iteration_first_iteration_charges_rate_limited_canisters() {
     }
 }
 
+/// start_iteration drops idle canisters (no inputs or heap delta / install
+/// code debits) with 0-100 accumulated priority from the subnet schedule.
+#[test]
+fn start_iteration_idle_between_0_and_100_dropped_from_schedule() {
+    let mut fixture = RoundScheduleFixture::new();
+
+    // Simulate a bunch of idle canisters with varying AP.
+    let ap_minus_1 = fixture.canister();
+    *fixture.canister_priority_mut(ap_minus_1) = priority(-1);
+    let ap_0 = fixture.canister();
+    *fixture.canister_priority_mut(ap_0) = priority(0);
+    let ap_99 = fixture.canister();
+    *fixture.canister_priority_mut(ap_99) = priority(99);
+    let ap_101 = fixture.canister();
+    *fixture.canister_priority_mut(ap_101) = priority(101);
+
+    fixture.start_iteration(true);
+
+    // `start_iteration()` drops idle canisters with 0-100 AP.
+    assert!(!fixture.has_canister_priority(&ap_0));
+    assert!(!fixture.has_canister_priority(&ap_99));
+    // But retains canisters with AP < 0 and AP > 100.
+    assert_eq!(fixture.canister_priority(&ap_minus_1), &priority(-1));
+    assert_eq!(fixture.canister_priority(&ap_101), &priority(101));
+}
+
 #[test]
 #[should_panic]
 fn start_iteration_scheduler_compute_allocation_invariant_broken() {
-    let mut fixture = RoundScheduleFixture::new();
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
     let canister_id = fixture.canister_with_input();
     fixture
         .canister_state(&canister_id)
         .system_state
         .compute_allocation = ComputeAllocation::try_from(100).unwrap();
 
-    fixture.start_round(
-        ExecutionRound::new(1),
-        RoundScheduleBuilder::new().with_cores(2),
-    );
-    let iteration = fixture.start_iteration_only(true);
+    let iteration = fixture.start_iteration(true);
 
     // Without debug_assertions, the canister would be scheduled normally.
     assert_eq!(iteration.schedule.as_slice(), &[canister_id]);
@@ -881,8 +859,7 @@ fn end_iteration_sets_long_execution_start_round() {
     let mut fixture = RoundScheduleFixture::new();
     let canister_id = fixture.canister_with_input();
 
-    fixture.start_round(ExecutionRound::new(1), RoundScheduleBuilder::new());
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
 
     // Replace the input with a long execution.
     fixture.pop_input(canister_id);
@@ -932,10 +909,10 @@ fn end_iteration_resets_long_execution_start_round_for_completed_messages() {
     );
 }
 
-/// end_iteration resets `long_execution_start_round` for canisters with low
-/// cycle balance.
+/// end_iteration resets `long_execution_start_round` for canisters with zero
+/// instruction executions.
 #[test]
-fn end_iteration_resets_long_execution_start_round_for_low_cycle_balance() {
+fn end_iteration_resets_long_execution_start_round_for_zero_instruction_execution_canisters() {
     let mut fixture = RoundScheduleFixture::new();
     fixture.current_round = ExecutionRound::new(13);
 
@@ -945,7 +922,7 @@ fn end_iteration_resets_long_execution_start_round_for_low_cycle_balance() {
 
     // Canister runs out of cycles: the long execution terminates...
     fixture.remove_long_execution(canister_id);
-    // ...and end_iteration is called with the canister as having low cycle balance.
+    // ...and end_iteration is called with the canister as having executed a zero instruction input.
     fixture.end_iteration(&btreeset! {}, &btreeset! {}, &btreeset! {canister_id});
 
     // `long_execution_start_round` was reset.
@@ -1034,7 +1011,8 @@ fn advance_long_execution_preserves_long_execution_start_round() {
 /// finish_round).
 #[test]
 fn finish_round_fully_executed_get_executed_rounds_bumped() {
-    let mut fixture = RoundScheduleFixture::new();
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
 
     let long = fixture.canister_with_long_execution();
     let new = fixture.canister_with_input();
@@ -1045,10 +1023,8 @@ fn finish_round_fully_executed_get_executed_rounds_bumped() {
     const NEW_AP: AccumulatedPriority = AccumulatedPriority::new(110 * MULTIPLIER);
     fixture.canister_priority_mut(new).accumulated_priority = NEW_AP;
 
-    let current_round = ExecutionRound::new(1);
-    fixture.start_round(current_round, RoundScheduleBuilder::new().with_cores(2));
-
-    fixture.start_iteration_only(true);
+    fixture.current_round = ExecutionRound::new(1);
+    fixture.start_iteration(true);
     fixture.end_iteration(&btreeset! {long, new}, &btreeset! {new}, &btreeset! {});
     assert_eq!(fixture.fully_executed_canisters(), &btreeset! {long, new});
 
@@ -1058,7 +1034,10 @@ fn finish_round_fully_executed_get_executed_rounds_bumped() {
     let long_priority = fixture.canister_priority(&long);
     assert_eq!(long_priority.accumulated_priority, LONG_AP);
     assert_eq!(long_priority.executed_rounds, 2);
-    assert_eq!(long_priority.last_full_execution_round, current_round);
+    assert_eq!(
+        long_priority.last_full_execution_round,
+        fixture.current_round
+    );
 
     // New execution canister was charged 100 AP.
     let new_priority = fixture.canister_priority(&new);
@@ -1067,14 +1046,18 @@ fn finish_round_fully_executed_get_executed_rounds_bumped() {
         NEW_AP - ONE_HUNDRED_PERCENT
     );
     assert_eq!(new_priority.executed_rounds, 0);
-    assert_eq!(new_priority.last_full_execution_round, current_round);
+    assert_eq!(
+        new_priority.last_full_execution_round,
+        fixture.current_round
+    );
 }
 
 /// finish_round grants scheduled canisters their compute allocation and
 /// calls observe_round_scheduled() on metrics.
 #[test]
 fn finish_round_scheduled_get_compute_allocation_and_metrics() {
-    let mut fixture = RoundScheduleFixture::new();
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
     // Add three canisters so the one we check is not in the first two (not fully
     // executed), so it does not get executed_rounds bumped, which would reduce its
     // accumulated priority.
@@ -1090,10 +1073,7 @@ fn finish_round_scheduled_get_compute_allocation_and_metrics() {
     let canister_b = canister_with_compute_allocation(20);
     let canister_c = canister_with_compute_allocation(10);
 
-    let current_round = ExecutionRound::new(1);
-    fixture.start_round(current_round, RoundScheduleBuilder::new().with_cores(2));
-
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
     let all = btreeset! {canister_a, canister_b, canister_c};
     fixture.end_iteration(&all, &all, &btreeset! {});
     assert_eq!(
@@ -1157,7 +1137,7 @@ fn finish_round_charge_first_slice_of_new_long_execution() {
         .canister_priority_mut(canister_id)
         .accumulated_priority = INITIAL_AP;
 
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
 
     // Consume the input, replacing it with a long execution.
     fixture.pop_input(canister_id);
@@ -1209,7 +1189,7 @@ fn finish_round_in_flight_long_execution_no_charge() {
     const INITIAL_AP: AccumulatedPriority = AccumulatedPriority::new(50 * MULTIPLIER);
     priority.accumulated_priority = INITIAL_AP;
 
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
     fixture.end_iteration(&btreeset! {canister_id}, &btreeset! {}, &btreeset! {});
 
     fixture.finish_round();
@@ -1258,6 +1238,74 @@ fn finish_round_charges_for_executed_rounds() {
     );
 }
 
+/// finish_round burns down to zero the positive AP of idle canisters (no inputs
+/// or heap delta / install code debits).
+#[test]
+fn finish_round_burns_down_idle_canister_accumulated_priority() {
+    let mut fixture = RoundScheduleFixture::new();
+    fixture.start_iteration(true);
+    fixture.end_iteration(&btreeset! {}, &btreeset! {}, &btreeset! {});
+
+    // A bunch of idle canisters with varying AP.
+    let ap_minus_1 = fixture.canister();
+    *fixture.canister_priority_mut(ap_minus_1) = priority(-1);
+    let ap_0 = fixture.canister();
+    *fixture.canister_priority_mut(ap_0) = priority(0);
+    let ap_99 = fixture.canister();
+    *fixture.canister_priority_mut(ap_99) = priority(99);
+    let ap_101 = fixture.canister();
+    *fixture.canister_priority_mut(ap_101) = priority(101);
+
+    fixture.finish_round();
+
+    // Nothing changes for canisters with AP <= 0.
+    assert_eq!(fixture.canister_priority(&ap_minus_1), &priority(-1));
+    assert!(fixture.has_canister_priority(&ap_0));
+    assert_eq!(fixture.canister_priority(&ap_0), &priority(0));
+    // Canisters with 0 < AP < 100 have their AP burned down to 0.
+    assert!(fixture.has_canister_priority(&ap_99));
+    assert_eq!(fixture.canister_priority(&ap_99), &priority(0));
+    // Canisters with AP >= 100 have 100 AP burned.
+    assert_eq!(fixture.canister_priority(&ap_101), &priority(1));
+}
+
+/// On a mostly idle subnet, idle canisters with positive AP must not capture
+/// the free compute that should go to actively executing canisters: otherwise,
+/// the active canister can never burn its negative AP back to zero, and the
+/// idle canister never drops out of the subnet schedule.
+///
+/// Starts from a steady state (`sum(AP) == 0`) with one canister executing
+/// every round and one strictly idle canister, and checks that within a small
+/// number of rounds the idle canister's AP burns down enough for it to be
+/// dropped from the subnet schedule.
+#[test]
+fn finish_round_idle_positive_ap_does_not_capture_free_compute() {
+    let mut fixture = RoundScheduleFixture::new();
+
+    // A canister that executes every round and starts with a negative AP.
+    let active = fixture.canister();
+    fixture.push_input(active);
+    *fixture.canister_priority_mut(active) = priority(-300);
+
+    // An idle canister with a matching positive AP, so that `sum(AP) == 0`.
+    let idle = fixture.canister();
+    *fixture.canister_priority_mut(idle) = priority(300);
+
+    for round in 1..=5 {
+        fixture.round_schedule = RoundScheduleBuilder::new().build();
+        fixture.current_round = ExecutionRound::new(round);
+
+        fixture.start_iteration(true);
+        fixture.end_iteration(&btreeset! {active}, &btreeset! {active}, &btreeset! {});
+        fixture.finish_round();
+    }
+
+    // `idle`'s AP got burned down and it was dropped from the subnet schedule.
+    assert!(!fixture.has_canister_priority(&idle));
+    // `active` is still scheduled.
+    assert!(fixture.has_canister_priority(&active));
+}
+
 /// finish_round applies an exponential decay to AP values outside the
 /// `[AP_ROUNDS_MIN, AP_ROUNDS_MAX]` window, in both directions; values inside
 /// the window are left untouched.
@@ -1292,18 +1340,26 @@ fn finish_round_exponential_decay() {
     let mut fixture = RoundScheduleFixture::new();
 
     // A canister below AP_MIN.
-    let below_min_canister = fixture.canister();
+    let below_min_canister = fixture.canister_with_input();
     *fixture.canister_priority_mut(below_min_canister) = priority(LOW_AP_PERCENT);
     // 4 canisters above AP_MAX. With only one, the post-decay sum would be negative
     // (HIGH_DECAYED_PERCENT < |LOW_DECAYED_PERCENT|) and the free-compute
     // distribution would adjust the AP of `below_min_canister`.
     let above_max_canisters: Vec<_> = (0..4)
         .map(|_| {
-            let id = fixture.canister();
+            let id = fixture.canister_with_input();
             *fixture.canister_priority_mut(id) = priority(HIGH_AP_PERCENT);
             id
         })
         .collect();
+
+    // Record all canisters as scheduled, so they don't get treated as idle (and
+    // have 100 AP burned down).
+    fixture.round_schedule.scheduled_canisters = above_max_canisters.iter().cloned().collect();
+    fixture
+        .round_schedule
+        .scheduled_canisters
+        .insert(below_min_canister);
 
     fixture.finish_round();
 
@@ -1340,6 +1396,9 @@ fn check_finish_round_free_compute_grants(executed_rounds: i64, expected_aps: [i
         fixture.set_compute_allocation(id, COMPUTE_ALLOCATIONS[i]);
         // Add the canister to the subnet schedule with default (0) priority.
         fixture.canister_priority_mut(id);
+        // Mark the canister as scheduled, so it doesn't get treated as idle (and has
+        // 100 AP burned down).
+        fixture.round_schedule.scheduled_canisters.insert(id);
         id
     });
 
@@ -1454,22 +1513,25 @@ fn finish_round_grant_heap_delta_and_install_code_credits() {
             .get_sample_sum(),
         200.0
     );
+
+    // The next round / iteration drops `canister_b` from the schedule.
+    fixture.start_iteration(true);
+    assert!(fixture.has_canister_priority(&canister_a));
+    assert!(!fixture.has_canister_priority(&canister_b));
 }
 
 /// After `finish_round`, a canister with a pending heartbeat task receives
 /// the same accumulated priority as a canister with a pending input.
 #[test]
 fn finish_round_heartbeat_treated_same_as_input() {
-    let mut fixture = RoundScheduleFixture::new();
-    let current_round = ExecutionRound::new(1);
+    let round_schedule = RoundScheduleBuilder::new().with_cores(2).build();
+    let mut fixture = RoundScheduleFixture::with_round_schedule(round_schedule);
 
     let canister_a = fixture.canister_with_input();
     let canister_b = fixture.canister_with_input();
     fixture.set_heartbeat_export(canister_b);
 
-    fixture.start_round(current_round, RoundScheduleBuilder::new().with_cores(2));
-
-    fixture.start_iteration_only(true);
+    fixture.start_iteration(true);
     fixture.pop_input(canister_a);
     fixture.pop_input(canister_b);
     fixture.end_iteration(
@@ -1767,6 +1829,10 @@ prop_compose! {
 ///
 /// Only does one iteration per round. And one message or slice per canister.
 /// But this is sufficient to approximate the full range of scheduler behavior.
+///
+/// `debug_canister_idx` is a mechanism that enables verbose debugging output
+/// for a specific canister and for the scheduler state as a whole every round.
+/// Set to `Some(canister_idx)` to enable debug output.
 fn run_multi_round_simulation(
     scheduler_cores: usize,
     num_rounds: usize,
@@ -1827,16 +1893,14 @@ fn run_multi_round_simulation(
         }
 
         // --- Start round ---
-        let current_round = ExecutionRound::new(round as u64);
-        fixture.start_round(
-            current_round,
-            RoundScheduleBuilder::new()
-                .with_cores(scheduler_cores)
-                .with_heap_delta_rate_limit(HEAP_DELTA_RATE_LIMIT),
-        );
+        fixture.round_schedule = RoundScheduleBuilder::new()
+            .with_cores(scheduler_cores)
+            .with_heap_delta_rate_limit(HEAP_DELTA_RATE_LIMIT)
+            .build();
+        fixture.current_round = ExecutionRound::new(round as u64);
 
         // --- start_iteration ---
-        let iteration = fixture.start_iteration_only(true);
+        let iteration = fixture.start_iteration(true);
 
         // --- Simulate core assignment and execution ---
         let core_schedules = fixture.partition_to_cores(&iteration);
@@ -1959,6 +2023,24 @@ fn run_multi_round_simulation(
         }
     }
 
+    if debug_canister_idx.is_some() {
+        println!(
+            "executed rounds: {:?}",
+            sims.iter().map(|s| s.full_rounds).collect::<Vec<_>>()
+        );
+        println!(
+            "canister priorities: {:?}",
+            sims.iter()
+                .map(|sim| fixture
+                    .state
+                    .canister_priority(&sim.canister_id)
+                    .accumulated_priority
+                    .get()
+                    / MULTIPLIER)
+                .collect::<Vec<_>>()
+        );
+    }
+
     (fixture.state, sims)
 }
 
@@ -1969,23 +2051,8 @@ fn assert_multi_round_invariants(
     scheduler_cores: usize,
     num_rounds: usize,
     total_compute_allocation: usize,
-    expected_efficiency_percent: usize,
+    expected_long_execution_efficiency_percent: usize,
 ) -> Result<(), TestCaseError> {
-    println!(
-        "executed rounds: {:?}",
-        sims.iter().map(|s| s.full_rounds).collect::<Vec<_>>()
-    );
-    println!(
-        "canister priorities: {:?}",
-        sims.iter()
-            .map(|sim| state
-                .canister_priority(&sim.canister_id)
-                .accumulated_priority
-                .get()
-                / MULTIPLIER)
-            .collect::<Vec<_>>()
-    );
-
     // The sum of accumulated priorities should be zero (or slightly positive, in
     // case e.g. we just distributed compute allocation after not having executed
     // anything this round).
@@ -2039,7 +2106,11 @@ fn assert_multi_round_invariants(
                 .archetype
                 .expected_full_rounds(num_rounds, free_compute_per_canister);
 
-            expected_rounds = expected_rounds * expected_efficiency_percent / 100;
+            if sim.archetype.has_long_execution {
+                expected_rounds =
+                    expected_rounds * expected_long_execution_efficiency_percent / 100;
+            }
+
             prop_assert!(
                 executed_rounds + credit_rounds + 1 >= expected_rounds,
                 "canister {i}: executed_rounds {executed_rounds} + credit_rounds {credit_rounds} < expected_rounds {expected_rounds}"
@@ -2067,18 +2138,19 @@ fn multi_round_priority_invariants(
     let (state, sims) =
         run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
 
-    // Expect 80%+ efficient scheduling with a mix of long and short executions.
+    // Expect 90%+ efficient scheduling of long executions.
     //
-    // This is due to idle canisters consuming free compute on rounds where not all
-    // cores are busy, reducing free compute available to active canisters.
-    let expected_efficiency_percent = 80;
+    // Because long executions are prioritized for throughput (in-progress ones get
+    // prioritized over new ones); and due to AP exponential decay; long executions
+    // are scheduled less efficiently.
+    let expected_long_execution_efficiency_percent = 90;
     assert_multi_round_invariants(
         &state,
         &sims,
         scheduler_cores,
         num_rounds,
         total_compute_allocation,
-        expected_efficiency_percent,
+        expected_long_execution_efficiency_percent,
     )?;
 }
 
@@ -2114,14 +2186,14 @@ fn multi_round_all_active_short_executions(
     let (state, sims) =
         run_multi_round_simulation(scheduler_cores, num_rounds, &archetype_configs, None);
 
-    // Expect 100% efficient scheduling with short executions only.
-    let expected_efficiency_percent = 100;
+    // No-op, we already expect 100% efficient scheduling of short executions.
+    let expected_long_execution_efficiency_percent = 100;
     assert_multi_round_invariants(
         &state,
         &sims,
         scheduler_cores,
         num_rounds,
         total_compute_allocation as usize,
-        expected_efficiency_percent,
+        expected_long_execution_efficiency_percent,
     )?;
 }

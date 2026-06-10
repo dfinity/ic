@@ -1,48 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
-
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/consensus/utils",
-    "//rs/interfaces",
-    "//rs/interfaces/adapter_client",
-    "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/protobuf",
-    "//rs/registry/helpers",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/utils",
-    "@crate_index//:candid",
-    "@crate_index//:hex",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand",
-    "@crate_index//:slog",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/artifact_pool",
-    "//rs/consensus/mocks",
-    "//rs/interfaces/mocks",
-    "//rs/registry/subnet_features",
-    "//rs/test_utilities",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:mockall",
-    "@crate_index//:proptest",
-    "@crate_index//:rand_chacha",
-]
 
 rust_library(
     name = "consensus",
@@ -56,7 +15,29 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/consensus/utils",
+        "//rs/interfaces",
+        "//rs/interfaces/adapter_client",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:prometheus",
+        "@crate_index//:rand",
+        "@crate_index//:slog",
+    ],
 )
 
 rust_doc(
@@ -69,5 +50,67 @@ rust_test(
     timeout = "long",
     crate = ":consensus",
     crate_features = ["proptest"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/artifact_pool",
+        "//rs/consensus/mocks",
+        "//rs/consensus/utils",
+        "//rs/interfaces",
+        "//rs/interfaces/adapter_client",
+        "//rs/interfaces/mocks",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:mockall",
+        "@crate_index//:prometheus",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_bench(
+    name = "payload_validation_bench",
+    testonly = True,
+    srcs = ["benches/payload_validation.rs"],
+    pin_cpu = True,
+    deps = [
+        # Keep sorted.
+        ":consensus",
+        "//rs/config",
+        "//rs/consensus/mocks",
+        "//rs/crypto/temp_crypto",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/subnet_features",
+        "//rs/test_utilities",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+    ],
 )

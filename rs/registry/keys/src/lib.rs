@@ -19,6 +19,11 @@ const SUBNET_LIST_KEY: &str = "subnet_list";
 /// far, the root subnet happens to host the NNS canisters and the registry in
 /// particular.
 pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
+/// The subnet id of the subnet to which `SetupInitialDKG` management canister
+/// calls are routed by default (i.e., when no subnet id is specified
+/// explicitly in the request). If unset, `SetupInitialDKG` requests without
+/// an explicit subnet id are routed to the calling subnet (NNS).
+pub const DEFAULT_INITIAL_DKG_SUBNET_ID_KEY: &str = "default_initial_dkg_subnet_id";
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
 
@@ -85,6 +90,12 @@ pub fn make_subnet_list_record_key() -> String {
 
 pub fn make_unassigned_nodes_config_record_key() -> String {
     UNASSIGNED_NODES_CONFIG_RECORD_KEY.to_string()
+}
+
+/// Returns the key whose payload is the [`SubnetId`] of the subnet to which
+/// `SetupInitialDKG` management canister calls are routed by default.
+pub fn make_default_initial_dkg_subnet_id_key() -> String {
+    DEFAULT_INITIAL_DKG_SUBNET_ID_KEY.to_string()
 }
 
 /// Makes a key for a ReplicaVersion registry entry.

@@ -59,6 +59,7 @@ pub struct NnsCanisters<'a> {
     pub nns_ui: Canister<'a>,
     pub sns_wasms: Canister<'a>,
     pub migration: Canister<'a>,
+    pub engine_controller: Canister<'a>,
 
     // Optional canisters.
     pub subnet_rental: Option<Canister<'a>>,
@@ -107,6 +108,7 @@ impl NnsCanisters<'_> {
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
         let mut subnet_rental = Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID);
         let mut migration = Canister::new(runtime, MIGRATION_CANISTER_ID);
+        let mut engine_controller = Canister::new(runtime, ENGINE_CONTROLLER_CANISTER_ID);
 
         // Install code into canisters (pass init argument/payload).
         // Registry and Governance need to first or the process hangs,
@@ -131,6 +133,10 @@ impl NnsCanisters<'_> {
                 }
             },
             install_migration_canister(&mut migration),
+            install_engine_controller_canister(
+                &mut engine_controller,
+                init_payloads.engine_controller.clone(),
+            ),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -153,6 +159,7 @@ impl NnsCanisters<'_> {
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             subnet_rental.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            engine_controller.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -172,6 +179,7 @@ impl NnsCanisters<'_> {
             sns_wasms,
             subnet_rental: init_payloads.subnet_rental.map(|()| subnet_rental),
             migration,
+            engine_controller,
         }
     }
 
@@ -231,6 +239,10 @@ impl NnsCanisters<'_> {
             .create_canister_at_id_max_cycles_with_retries(MIGRATION_CANISTER_ID.get())
             .await
             .unwrap();
+        let mut engine_controller = runtime
+            .create_canister_at_id_max_cycles_with_retries(ENGINE_CONTROLLER_CANISTER_ID.get())
+            .await
+            .unwrap();
 
         let mut subnet_rental = init_payloads.subnet_rental.as_ref().map(|_not_used| {
             block_on(async {
@@ -266,6 +278,10 @@ impl NnsCanisters<'_> {
                 }
             },
             install_migration_canister(&mut migration),
+            install_engine_controller_canister(
+                &mut engine_controller,
+                init_payloads.engine_controller.clone(),
+            ),
         );
 
         eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
@@ -294,6 +310,7 @@ impl NnsCanisters<'_> {
                 }
             },
             migration.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            engine_controller.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -312,6 +329,7 @@ impl NnsCanisters<'_> {
             sns_wasms,
             subnet_rental,
             migration,
+            engine_controller,
         }
     }
 
@@ -823,6 +841,42 @@ pub async fn install_migration_canister(canister: &mut Canister<'_>) {
 pub async fn set_up_migration_canister(runtime: &'_ Runtime) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_migration_canister(&mut canister).await;
+    canister
+}
+
+/// Engine controller canister init args.
+///
+/// Re-declared here because the canister crate is binary-only (no library
+/// surface to import from). The candid layout must match
+/// `rs/engine_controller/engine_controller.did` exactly.
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct EngineControllerInitArgs {
+    pub authorized_caller: Option<Principal>,
+    pub initial_dkg_subnet_id: Option<Principal>,
+}
+
+/// Compiles the engine controller canister and installs it.
+///
+/// If `args` is `None`, the canister is installed with a candid-encoded
+/// `null` so that it falls back to its hard-coded defaults (authorized
+/// caller and initial DKG subnet id). Otherwise the supplied args are
+/// candid-encoded and used. An empty byte payload would trap because the
+/// candid init signature is `(opt EngineControllerInitArgs)`.
+pub async fn install_engine_controller_canister(
+    canister: &mut Canister<'_>,
+    args: Option<EngineControllerInitArgs>,
+) {
+    let init_args = Encode!(&args).unwrap();
+    install_rust_canister(canister, "engine-controller-canister", &[], Some(init_args)).await;
+}
+
+/// Creates and installs the engine controller canister.
+pub async fn set_up_engine_controller_canister(
+    runtime: &'_ Runtime,
+    args: Option<EngineControllerInitArgs>,
+) -> Canister<'_> {
+    let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
+    install_engine_controller_canister(&mut canister, args).await;
     canister
 }
 

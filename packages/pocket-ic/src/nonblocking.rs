@@ -13,8 +13,8 @@ use crate::common::rest::{
 #[cfg(windows)]
 use crate::wsl_path;
 use crate::{
-    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams,
-    TickConfigs, Time, copy_dir, start_server,
+    CreateCanisterParams, CreateCanisterPlacement, IngressStatusResult, PocketIcBuilder,
+    PocketIcState, RejectResponse, StartServerParams, TickConfigs, Time, copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -1048,54 +1048,35 @@ impl PocketIc {
     }
 
     /// Create a canister with default settings as the anonymous principal.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id))]
     pub async fn create_canister(&self) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::None,
-            Principal::anonymous(),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterWithCyclesArgs {
-                settings: None,
-                amount: Some(0_u64.into()),
-                specified_id: None,
-                sender_canister_version: None,
-            },),
-        )
-        .await
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
+        self.create_canister_with_params(None, CreateCanisterParams::default())
+            .await
+            .unwrap()
     }
 
     /// Create a canister with optional custom settings and a sender.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, settings = ?settings, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
     pub async fn create_canister_with_settings(
         &self,
         sender: Option<Principal>,
         settings: Option<CanisterSettings>,
     ) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::None,
-            sender.unwrap_or(Principal::anonymous()),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterWithCyclesArgs {
+        self.create_canister_with_params(
+            sender,
+            CreateCanisterParams {
                 settings,
-                amount: Some(0_u64.into()),
-                specified_id: None,
-                sender_canister_version: None,
-            },),
+                ..Default::default()
+            },
         )
         .await
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
+        .unwrap()
     }
 
     /// Creates a canister with a specific canister ID and optional custom settings.
+    /// The canister is created with 100T cycles.
     /// Returns an error if the canister ID is already in use.
     /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
@@ -1109,30 +1090,19 @@ impl PocketIc {
         settings: Option<CanisterSettings>,
         canister_id: CanisterId,
     ) -> Result<CanisterId, String> {
-        let res = call_candid_as(
-            self,
-            Principal::management_canister(),
-            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
-            sender.unwrap_or(Principal::anonymous()),
-            "provisional_create_canister_with_cycles",
-            (ProvisionalCreateCanisterWithCyclesArgs {
+        self.create_canister_with_params(
+            sender,
+            CreateCanisterParams {
                 settings,
-                specified_id: Some(canister_id),
-                amount: Some(0_u64.into()),
-                sender_canister_version: None,
-            },),
+                placement: Some(CreateCanisterPlacement::CanisterId(canister_id)),
+                ..Default::default()
+            },
         )
         .await
-        .map(|(x,)| x);
-        match res {
-            Ok(CanisterIdRecord {
-                canister_id: actual_canister_id,
-            }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{e:?}")),
-        }
     }
 
     /// Create a canister on a specific subnet with optional custom settings.
+    /// The canister is created with 100T cycles.
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, subnet_id = %subnet_id.to_string()))]
     pub async fn create_canister_on_subnet(
         &self,
@@ -1140,23 +1110,56 @@ impl PocketIc {
         settings: Option<CanisterSettings>,
         subnet_id: SubnetId,
     ) -> CanisterId {
-        let CanisterIdRecord { canister_id } = call_candid_as(
+        self.create_canister_with_params(
+            sender,
+            CreateCanisterParams {
+                settings,
+                placement: Some(CreateCanisterPlacement::SubnetId(subnet_id)),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    /// Create a canister with optional cycles, settings, and placement.
+    /// The placement specifies either a target subnet or a specific canister ID.
+    /// Defaults to 100T cycles if `params.cycles` is `None`.
+    /// Returns an error if the specified canister ID is already in use.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn create_canister_with_params(
+        &self,
+        sender: Option<Principal>,
+        params: CreateCanisterParams,
+    ) -> Result<CanisterId, String> {
+        let cycles = params.cycles.unwrap_or(100_000_000_000_000);
+        let (effective_principal, specified_id) = match params.placement {
+            None => (RawEffectivePrincipal::None, None),
+            Some(CreateCanisterPlacement::SubnetId(subnet_id)) => (
+                RawEffectivePrincipal::SubnetId(subnet_id.as_slice().to_vec()),
+                None,
+            ),
+            Some(CreateCanisterPlacement::CanisterId(canister_id)) => (
+                RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+                Some(canister_id),
+            ),
+        };
+        call_candid_as::<_, (CanisterIdRecord,)>(
             self,
             Principal::management_canister(),
-            RawEffectivePrincipal::SubnetId(subnet_id.as_slice().to_vec()),
+            effective_principal,
             sender.unwrap_or(Principal::anonymous()),
             "provisional_create_canister_with_cycles",
             (ProvisionalCreateCanisterWithCyclesArgs {
-                settings,
-                amount: Some(0_u64.into()),
-                specified_id: None,
+                settings: params.settings,
+                amount: Some(cycles.into()),
+                specified_id,
                 sender_canister_version: None,
             },),
         )
         .await
-        .map(|(x,)| x)
-        .unwrap();
-        canister_id
+        .map(|(x,)| x.canister_id)
+        .map_err(|e| format!("{e:?}"))
     }
 
     /// Upload a WASM chunk to the WASM chunk store of a canister.
@@ -1595,6 +1598,19 @@ impl PocketIc {
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub async fn canister_exists(&self, canister_id: CanisterId) -> bool {
         self.get_subnet(canister_id).await.is_some()
+    }
+
+    /// Deletes a subnet. Panics if the subnet does not exist or is a named subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub async fn delete_subnet(&self, subnet_id: SubnetId) {
+        let endpoint = "update/delete_subnet";
+        self.post::<(), RawSubnetId>(
+            endpoint,
+            RawSubnetId {
+                subnet_id: subnet_id.as_slice().to_vec(),
+            },
+        )
+        .await;
     }
 
     /// Returns the subnet ID of the canister if the canister exists.

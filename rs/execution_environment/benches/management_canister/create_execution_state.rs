@@ -18,12 +18,8 @@ fn run_benchmark(
     let canister_id = canister_test_id(1);
     c.bench_function(name, |b| {
         b.iter_batched(
-            || {
-                let exec_test = ExecutionTestBuilder::new().build();
-                let tmpdir = tempfile::TempDir::new().unwrap();
-                (exec_test, tmpdir)
-            },
-            |(exec_test, tmpdir)| {
+            || ExecutionTestBuilder::new().build(),
+            |exec_test| {
                 let exec_env = exec_test.execution_environment();
                 let hypervisor = exec_env.hypervisor_for_testing();
                 let mut round_limits = RoundLimits {
@@ -39,7 +35,6 @@ fn run_benchmark(
                 };
                 let _ = hypervisor.create_execution_state(
                     CanisterModule::new(wasm.clone()),
-                    tmpdir.path().to_path_buf(),
                     canister_id,
                     &mut round_limits,
                     compilation_cost_handling,

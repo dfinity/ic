@@ -27,10 +27,10 @@ type canister_settings = record {
     reserved_cycles_limit : opt nat;
     log_visibility : opt log_visibility;
     log_memory_limit : opt nat;
+    snapshot_visibility : opt snapshot_visibility;
     wasm_memory_limit : opt nat;
     wasm_memory_threshold : opt nat;
     environment_variables : opt vec environment_variable;
-    snapshot_visibility : opt snapshot_visibility;
 };
 
 type definite_canister_settings = record {
@@ -41,10 +41,10 @@ type definite_canister_settings = record {
     reserved_cycles_limit : nat;
     log_visibility : log_visibility;
     log_memory_limit : nat;
+    snapshot_visibility : snapshot_visibility;
     wasm_memory_limit : nat;
     wasm_memory_threshold : nat;
     environment_variables : vec environment_variable;
-    snapshot_visibility : snapshot_visibility;
 };
 
 type change_origin = variant {
@@ -347,7 +347,7 @@ type deposit_cycles_args = record {
 type http_request_args = record {
     url : text;
     max_response_bytes : opt nat64;
-    method : variant { get; head; post };
+    method : variant { get; head; post; put; delete; patch };
     headers : vec http_header;
     body : opt blob;
     transform : opt record {
@@ -446,6 +446,15 @@ type subnet_info_result = record {
     registry_version : nat64;
 };
 
+type canister_id_range = record {
+    start : canister_id;
+    end : canister_id;
+};
+
+type list_canisters_result = record {
+    canisters : vec canister_id_range;
+};
+
 type provisional_create_canister_with_cycles_args = record {
     amount : opt nat;
     settings : opt canister_settings;
@@ -516,6 +525,26 @@ type canister_log_record = record {
 
 type fetch_canister_logs_result = record {
     canister_log_records : vec canister_log_record;
+};
+
+type cycles_consumed = record {
+    memory : nat;
+    compute_allocation : nat;
+    ingress_induction : nat;
+    instructions : nat;
+    request_and_response_transmission : nat;
+    uninstall : nat;
+    canister_creation : nat;
+    http_outcalls : nat;
+    burned_cycles : nat;
+};
+
+type canister_metrics_args = record {
+    canister_id : canister_id;
+};
+
+type canister_metrics_result = record {
+    cycles_consumed : cycles_consumed;
 };
 
 type read_canister_snapshot_metadata_args = record {
@@ -673,6 +702,7 @@ service ic : {
 
     // subnet info
     subnet_info : (subnet_info_args) -> (subnet_info_result);
+    list_canisters : () -> (list_canisters_result) query;
 
     // provisional interfaces for the pre-ledger world
     provisional_create_canister_with_cycles : (provisional_create_canister_with_cycles_args) -> (provisional_create_canister_with_cycles_result);
@@ -690,4 +720,7 @@ service ic : {
 
     // canister logging
     fetch_canister_logs : (fetch_canister_logs_args) -> (fetch_canister_logs_result) query;
+
+    // canister metrics
+    canister_metrics : (canister_metrics_args) -> (canister_metrics_result) query;
 };

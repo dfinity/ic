@@ -21,6 +21,7 @@ ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-metrics-encoder = "1"
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
@@ -33,7 +34,7 @@ lazy_static = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 
-ic-xrc-types = "1.0.0"
+ic-xrc-types = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }

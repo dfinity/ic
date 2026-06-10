@@ -14,8 +14,9 @@ use linux_kernel_command_line::KernelCommandLine;
 use recovery::extract_and_verify_recovery_rootfs_hash;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::Path;
+use std::process::ExitCode;
 use std::str::FromStr;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use verity::veritysetup;
 
 /// Opens the root filesystem with dm-verity verification.
@@ -25,9 +26,20 @@ use verity::veritysetup;
 /// command line. If that fails, it falls back reading and verifying an alternative GuestOS
 /// proposal which allows booting from a recovery root filesystem.
 #[cfg(target_os = "linux")]
-fn main() -> Result<()> {
+fn main() -> ExitCode {
     init_kmsg_logging();
+    // Returning Result from main would write the result to stderr, but we want to write it to
+    // kmsg, so wrap it.
+    if let Err(e) = main_() {
+        error!("{e:#}");
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
 
+#[cfg(target_os = "linux")]
+fn main_() -> Result<()> {
     // We should be very careful about erroring out before the run() call. We should not block
     // the regular (non-recovery) code path just because some dependency for the recovery
     // code path has failed.

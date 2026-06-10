@@ -1,18 +1,18 @@
 /* tag::catalog[]
-Title:: Fault tolerance test for Http requests
+Title:: Fault tolerance test for HTTP requests
 
-Goal:: Ensure HTTP requests can be made from canisters while a 1 of 3 nodes fail.
+Goal:: Ensure HTTP requests can be made from canisters while 1 of 3 nodes fails.
 
 Runbook::
-1. Instantiate an IC with one applications subnet with the HTTP feature enabled.
+1. Instantiate an IC with one application subnet with the HTTP feature enabled.
 2. Install NNS canisters
 3. Install the proxy canister
-4. Spawn task to continuously send http requests.
+4. Spawn a task to continuously send HTTP requests.
 5. Kill one of the nodes.
 6. Query proxy canister and verify state is restored.
 
 Success::
-1. Http requests succeed in environment where nodes fail.
+1. HTTP requests succeed in an environment where nodes fail.
 
 end::catalog[] */
 #![allow(deprecated)]
@@ -76,9 +76,9 @@ pub fn test(env: TestEnv) {
         .unwrap()
         .nodes();
 
-    // Select node that should be killed during test.
+    // Select the node that should be killed during the test.
     let killed_app_endpoint = app_nodes.next().expect("no Application nodes.");
-    // Select endpoint that will stay healthy throughout test.
+    // Select the endpoint that will stay healthy throughout the test.
     let healthy_app_endpoint = app_nodes.next().expect("no Application nodes.");
 
     let app_runtime = util::runtime_from_url(
@@ -86,7 +86,7 @@ pub fn test(env: TestEnv) {
         healthy_app_endpoint.effective_canister_id(),
     );
 
-    // Wait for all endpoints to be ready
+    // Wait for all endpoints to be ready.
     for endpoint in topology
         .subnets()
         .flat_map(|subnet| subnet.nodes())
@@ -95,7 +95,7 @@ pub fn test(env: TestEnv) {
         endpoint.await_status_is_healthy().unwrap();
     }
 
-    info!(&logger, "All IC endpoints reachable over http.");
+    info!(&logger, "All IC endpoints are reachable over HTTP.");
 
     let agent = rt.block_on(util::assert_create_agent(
         healthy_app_endpoint.get_public_url().as_str(),
@@ -137,8 +137,8 @@ pub fn test(env: TestEnv) {
             CanisterId::unchecked_from_principal(PrincipalId::from(cid)),
         );
 
-        // Proxy requests store request responses made in a HashMap that
-        // is indexed by url. We generate http requests to httpbin/anything/{n},
+        // Proxy requests store responses in a HashMap indexed by URL.
+        // We generate HTTP requests to httpbin/anything/{n},
         // which just returns n. All of these requests will be stored in the proxy
         // canister and we will later check that all of these were successful.
         let mut n = 0;
@@ -172,16 +172,16 @@ pub fn test(env: TestEnv) {
                 )
                 .await
                 .expect("Failed to call proxy canister");
-            info!(&log, "Continuous http request {}: {:?}", n, reply);
+            info!(&log, "Continuous HTTP request {}: {:?}", n, reply);
             n += 1;
             requests_c.store(n, Ordering::SeqCst);
         }
     });
 
-    info!(&logger, "Killing one of the node now.");
+    info!(&logger, "Killing one of the nodes now.");
     killed_app_endpoint.vm().kill();
 
-    // Wait the node is actually killed
+    // Wait until the node is actually killed.
     let http_client = reqwest::blocking::ClientBuilder::new()
         .build()
         .expect("Could not build reqwest client.");
@@ -197,14 +197,14 @@ pub fn test(env: TestEnv) {
         RETRY_BACKOFF,
         || match http_client.get(killed_app_endpoint_url.clone()).send() {
             Ok(_) => bail!("Node not yet killed"),
-            Err(_) => Ok("Node not yet killed"),
+            Err(_) => Ok(()),
         }
     )
     .expect("Failed to kill node.");
     info!(&logger, "Node successfully killed");
 
-    // Recover the killed node and observe it caught up on state
-    info!(&logger, "Restarting the killed node now.");
+    // Recover the killed node and observe that it catches up on state.
+    info!(&logger, "Restarting the killed node.");
     killed_app_endpoint.vm().start();
     let healthy_runtime = &util::runtime_from_url(
         healthy_app_endpoint.get_public_url(),
@@ -215,8 +215,8 @@ pub fn test(env: TestEnv) {
         CanisterId::unchecked_from_principal(PrincipalId::from(cid)),
     );
 
-    // Wait the node is actually killed
-    info!(&logger, "Waiting for killed node to recover.");
+    // Wait until the killed node has recovered.
+    info!(&logger, "Waiting for the killed node to recover.");
     let http_client = reqwest::blocking::ClientBuilder::new()
         .build()
         .expect("Could not build reqwest client.");
@@ -230,32 +230,32 @@ pub fn test(env: TestEnv) {
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || match http_client.get(killed_app_endpoint_url.clone()).send() {
-            Ok(_) => Ok("Node has recovered"),
-            Err(e) => bail!("Killed not is not yet healthy {e}"),
+            Ok(_) => Ok(()),
+            Err(e) => bail!("Killed node is not healthy yet: {e}"),
         }
     )
     .expect("Failed to restart killed node.");
     info!(&logger, "Killed node successfully recovered.");
 
-    // Make sure that we do at least one additional backgroundi request. This is needed
-    // to make sure that a potential timeout (consensus) issue is collected in the proxy canister.
+    // Make sure we make at least one additional background request.
+    // This ensures a potential consensus timeout issue is collected in the proxy canister.
     let current_requests_num = requests.load(Ordering::SeqCst);
     ic_system_test_driver::retry_with_msg!(
-        "checking if one additional background http request has been made",
+        "Checking whether one additional background HTTP request has been made",
         env.logger(),
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || {
-            if current_requests_num + 1 == requests.load(Ordering::SeqCst) {
+            if requests.load(Ordering::SeqCst) > current_requests_num {
                 Ok(())
             } else {
-                bail!("Waiting for one additional background http request.")
+                bail!("Waiting for one additional background HTTP request.")
             }
         }
     )
-    .expect("Failed to do additional http request after node restart.");
+    .expect("Failed to make an additional HTTP request after node restart.");
 
-    // Verify that all stored http responses are successful.
+    // Verify that all stored HTTP responses are successful.
     rt.block_on(async {
         info!(
             &logger,
@@ -278,10 +278,10 @@ pub fn test(env: TestEnv) {
             match waited_query {
                 Some(Ok(queried)) if queried.status == 200 && !queried.body.is_empty() => continue,
                 Some(Ok(queried)) => {
-                    panic!("Unexpected http response {queried:?}.")
+                    panic!("Unexpected HTTP response {queried:?}.")
                 }
                 Some(Err(e)) => {
-                    panic!("Http request failed {e:?}.")
+                    panic!("HTTP request failed {e:?}.")
                 }
                 None => {
                     panic!("Request was not made by proxy canister.")
@@ -291,7 +291,7 @@ pub fn test(env: TestEnv) {
     });
 
     info!(&logger, "All requests returned 200. Success.",);
-    // now that restarted node is verified returning previous HTTP request correctly,
+    // Now that the restarted node is verified to return previous HTTP requests correctly,
     // we can abort the continued HTTP calls.
     continuous_http_calls.abort();
 }

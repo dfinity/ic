@@ -15,7 +15,7 @@ use hyper_util::rt::TokioIo;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
+use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
@@ -49,6 +49,9 @@ pub struct DiskEncryptionKeyExchangeClientAgent {
     sev_root_certificate_verification: SevRootCertificateVerification,
     crypto_ops: Box<dyn DiskCryptoOps>,
 }
+
+// Allow 32MB ingress messages - we need 16MB for the LUKS header
+const MAX_INCOMING_MESSAGE_SIZE: usize = 32 * 1024 * 1024;
 
 impl DiskEncryptionKeyExchangeClientAgent {
     pub fn new(
@@ -172,10 +175,10 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context("Server attestation report is missing")?;
 
         let registry_version = self.nns_registry_client.get_latest_version();
-        let blessed_measurements = self
+        let elected_measurements = self
             .nns_registry_client
-            .get_blessed_guest_launch_measurements(registry_version)
-            .map_err(|e| anyhow!("Failed to get blessed measurements from registry: {e}"))?;
+            .get_guest_launch_measurements(registry_version)
+            .map_err(|e| anyhow!("Failed to get elected measurements from registry: {e}"))?;
 
         // Verify the server's attestation report. This is to ensure that the key comes from a
         // trusted source. Without this check, an attacker could start with a malicious GuestOS,
@@ -185,7 +188,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             server_attestation_package,
             self.sev_root_certificate_verification,
         )
-        .verify_measurement(&blessed_measurements)
+        .verify_measurement(&elected_measurements)
         .verify_custom_data(&custom_data)
         .verify_chip_id(&[my_attestation_report.chip_id])
         .context("Server attestation report verification failed")?;
@@ -297,7 +300,8 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context("Failed to connect to server")?;
 
         Ok((
-            DiskEncryptionKeyExchangeServiceClient::new(channel),
+            DiskEncryptionKeyExchangeServiceClient::new(channel)
+                .max_decoding_message_size(MAX_INCOMING_MESSAGE_SIZE),
             server_public_key_der,
         ))
     }

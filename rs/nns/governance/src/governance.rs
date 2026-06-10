@@ -78,6 +78,9 @@ use crate::{
         sum_weighted_voting_power,
     },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
+    timer_tasks::{
+        MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70, MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -108,8 +111,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    GetMaturityModulationResponse, GetNeuronIndexRequest, GetPendingProposalsRequest,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronResponse, MaturityModulation as ApiMaturityModulation,
     NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
@@ -269,7 +273,9 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 /// canisters). (Such rewards come in the form of minted ICP.)
 pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = ONE_MONTH_SECONDS;
 
-const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> =
+    MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70 as i32
+        ..=MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70 as i32;
 
 /// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
 /// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
@@ -294,16 +300,6 @@ pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_PROPOSE_SECONDS: u64 = 6 * ONE_MONTH_
 // The maximum dissolve delay allowed for a neuron.
 pub const MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70: u64 = 8 * ONE_YEAR_SECONDS;
 pub const MAX_DISSOLVE_DELAY_SECONDS_POST_MISSION_70: u64 = 2 * ONE_YEAR_SECONDS;
-
-// Minimum dissolve delay that qualifies a neuron to be a member of the eight year gang
-// during a second round of induction.
-pub const RELAXED_EIGHT_YEAR_GANG_MIN_DISSOLVE_DELAY_SECONDS: u64 =
-    MAX_DISSOLVE_DELAY_SECONDS_PRE_MISSION_70 - 2 * ONE_DAY_SECONDS;
-
-// To avoid giving the eight year gang bonus to newly staked ICP, for a neuron
-// to qualify in the second round of induction into the eight year gang,
-// its ICP must not be newly staked. This defines "sufficiently old staked ICP".
-pub const RELAXED_EIGHT_YEAR_GANG_MAX_AGING_SINCE_TIMESTAMP_SECONDS: u64 = 1_774_828_800;
 
 /// Returns the maximum dissolve delay allowed for a neuron. After the flag is enabled, we can
 /// replace `max_dissolve_delay_seconds()` with `MAX_DISSOLVE_DELAY_SECONDS` and set
@@ -1362,9 +1358,6 @@ impl Governance {
             rate_limiter: new_rate_limiter(),
         };
 
-        // A one-time data migration.
-        governance.maybe_set_eight_year_gang_bonus_base();
-
         // Clamp all neuron dissolve delays to the Mission 70 maximum exactly once.
         // The snapshot serves as the idempotency guard: if it's already populated,
         // clamping has already run and we must not overwrite the pre-clamp record.
@@ -1383,33 +1376,6 @@ impl Governance {
         }
 
         governance
-    }
-
-    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
-        let strict_done = &mut self.heap_data.eight_year_gang_bonus_migration_done;
-        if *strict_done {
-            self.maybe_set_relaxed_eight_year_gang_bonus_base_e8s_or_panic();
-            return;
-        }
-
-        self.neuron_store
-            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
-
-        *strict_done = true;
-    }
-
-    fn maybe_set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(&mut self) {
-        let relaxed_done = &mut self.heap_data.relaxed_eight_year_gang_bonus_migration_done;
-        if *relaxed_done {
-            return;
-        }
-
-        self.neuron_store
-            .set_relaxed_eight_year_gang_bonus_base_e8s_or_panic(
-                &self.heap_data.neuron_id_to_pre_clamp_dissolve_state,
-            );
-
-        *relaxed_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2243,20 +2209,17 @@ impl Governance {
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount_bytes = if let Some(memo) = memo {
-            ledger::compute_neuron_split_subaccount_bytes(parent_neuron.controller(), memo)
-        } else {
-            self.randomness.random_byte_array()?
-        };
-        let to_subaccount = Subaccount(to_subaccount_bytes);
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
+        let to_subaccount = if let Some(memo) = memo {
+            let to_subaccount = Subaccount(ledger::compute_neuron_split_subaccount_bytes(
+                parent_neuron.controller(),
+                memo,
             ));
-        }
+            self.neuron_store
+                .ensure_subaccount_available(to_subaccount)?
+        } else {
+            self.neuron_store
+                .new_neuron_subaccount(&mut *self.randomness)?
+        };
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
@@ -2711,21 +2674,18 @@ impl Governance {
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
 
-        // use provided sub-account if any, otherwise generate a random one.
+        // Use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
-            None => Subaccount(self.randomness.random_byte_array()?),
+            None => self
+                .neuron_store
+                .new_neuron_subaccount(&mut *self.randomness)?,
             Some(nonce_val) => {
-                ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
+                let to_subaccount =
+                    ledger::compute_neuron_staking_subaccount(child_controller, nonce_val);
+                self.neuron_store
+                    .ensure_subaccount_available(to_subaccount)?
             }
         };
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
-            ));
-        }
 
         let created_timestamp_seconds = self.env.now();
         let dissolve_and_spawn_at_timestamp_seconds =
@@ -3013,14 +2973,8 @@ impl Governance {
             child_controller,
             disburse_to_neuron.nonce,
         ));
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
-            ));
-        }
+        self.neuron_store
+            .ensure_subaccount_available(to_subaccount)?;
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
@@ -6470,7 +6424,11 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
+        let maturity_modulation = match self
+            .heap_data
+            .maturity_modulation
+            .as_ref()
+            .and_then(|m| m.current_value_permyriad)
         {
             None => return,
             Some(value) => value,
@@ -6479,8 +6437,11 @@ impl Governance {
         // Sanity check that the maturity modulation returned is within bounds.
         if !VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE.contains(&maturity_modulation) {
             println!(
-                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [-500, 500], actually is: {}",
-                LOG_PREFIX, maturity_modulation
+                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [{}, {}], actually is: {}",
+                LOG_PREFIX,
+                MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+                MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70,
+                maturity_modulation
             );
             return;
         }
@@ -8061,6 +8022,16 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+
+    /// Returns the current maturity modulation, as defined by Mission 70.
+    pub fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        GetMaturityModulationResponse {
+            maturity_modulation: self
+                .heap_data
+                .maturity_modulation
+                .map(ApiMaturityModulation::from),
+        }
     }
 }
 

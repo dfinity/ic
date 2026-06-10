@@ -2,14 +2,15 @@ use super::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
 use ic_base_types::InternalAddress;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
+use ic_replicated_state::OutputRequest;
 use ic_types::Time;
 use ic_types::{
     CanisterId, NumBytes, PrincipalId,
-    messages::{CallContextId, NO_DEADLINE, Request},
-    methods::{Callback, WasmClosure},
+    messages::{CallContextId, NO_DEADLINE},
+    methods::WasmClosure,
     time::CoarseTime,
 };
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
+use ic_types_cycles::Cycles;
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -202,15 +203,9 @@ impl RequestInPrep {
     }
 }
 
-pub(crate) struct RequestWithPrepayment {
-    pub request: Request,
-    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
-    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
-}
-
-/// Turns a `RequestInPrep` into a `Request`.
+/// Turns a `RequestInPrep` into an `OutputRequest`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn into_request(
+pub(crate) fn into_output_request(
     RequestInPrep {
         sender,
         callee,
@@ -228,7 +223,7 @@ pub(crate) fn into_request(
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     _logger: &ReplicaLogger,
     time: Time,
-) -> HypervisorResult<RequestWithPrepayment> {
+) -> HypervisorResult<OutputRequest> {
     let destination_canister = CanisterId::unchecked_from_principal(callee);
 
     let payload_size = (method_name.len() + method_payload.len()) as u64;
@@ -270,30 +265,23 @@ pub(crate) fn into_request(
         NO_DEADLINE
     };
 
-    let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
+    let req = OutputRequest {
+        receiver: destination_canister,
+        payment: cycles,
+        deadline,
+        sender,
+        method_name,
+        method_payload,
+        metadata: sandbox_safe_system_state.request_metadata.clone(),
         call_context_id,
-        destination_canister,
-        cycles,
         prepayment_for_response_execution,
         prepayment_for_response_transmission,
         prepayment_for_call_transmission,
         on_reply,
         on_reject,
         on_cleanup,
-        deadline,
-    ))?;
-
-    let req = Request {
-        sender,
-        receiver: destination_canister,
-        method_name,
-        method_payload,
-        sender_reply_callback: callback_id,
-        payment: cycles,
-        metadata: sandbox_safe_system_state.request_metadata.clone(),
-        deadline,
     };
-    // We cannot call `Request::payload_size_bytes()` before constructing the
+    // We cannot call `OutputRequest::payload_size_bytes()` before constructing the
     // request, so ensure our separate calculation matches the actual size.
     debug_assert_eq!(
         req.payload_size_bytes().get(),
@@ -301,11 +289,7 @@ pub(crate) fn into_request(
         "Inconsistent request payload size calculation"
     );
 
-    Ok(RequestWithPrepayment {
-        request: req,
-        prepayment_for_response_execution,
-        prepayment_for_call_transmission,
-    })
+    Ok(req)
 }
 
 #[cfg(test)]

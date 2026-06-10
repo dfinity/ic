@@ -6,15 +6,15 @@ Goal:: Orchestrator can download the release package, even when the replica vers
 contains many faulty and only one valid URLs download URLs.
 
 Description::
-We deploy a fast single node subnet. Then, we make a proposal and bless a replica version
+We deploy a fast single node subnet. Then, we make a proposal and elect a replica version
 with one valid and multiple invalid download URLs. Then, we propose to upgrade the replica
-version of that subnet to the newly blessed version. We expect that the orchestrator can
+version of that subnet to the newly elected version. We expect that the orchestrator can
 download the release image via the valid URL.
 
 Runbook::
 . Deploy an IC with a single-node root subnet.
-. Bless the test replica version with multiple URLs, among which only one is correct.
-. Upgrade the replica version of the subnet to the newly blessed replica version.
+. Elect the test replica version with multiple URLs, among which only one is correct.
+. Upgrade the replica version of the subnet to the newly elected replica version.
 
 Success::
 . The replica restarts, which is a sign of the node having downloaded and verified the new
@@ -25,8 +25,8 @@ end::catalog[] */
 use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version_with_urls,
-    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
+    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
+    elect_replica_version_with_urls, get_assigned_replica_version,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -80,10 +80,11 @@ fn test(env: TestEnv) {
 
     info!(
         logger,
-        "Blessing the test replica version with multiple URLs: {:?}", release_package_urls
+        "Electing the test replica version with multiple URLs: {:?}", release_package_urls
     );
-    block_on(bless_replica_version_with_urls(
+    block_on(elect_replica_version_with_urls(
         &nns_node,
+        &env.topology_snapshot(),
         &target_version,
         release_package_urls,
         get_guestos_update_img_sha256(),

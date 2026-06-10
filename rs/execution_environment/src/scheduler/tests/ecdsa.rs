@@ -13,6 +13,7 @@ use ic_types::Height;
 use ic_types::batch::AvailablePreSignatures;
 use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId};
 use ic_types::messages::CallbackId;
+use std::collections::BTreeMap;
 
 fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
     let canister_id = test.create_canister();

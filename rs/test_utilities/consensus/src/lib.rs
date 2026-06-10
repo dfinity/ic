@@ -1,19 +1,30 @@
 pub mod batch;
+pub mod dkg;
 pub mod fake;
 pub mod idkg;
 
 use assert_matches::assert_matches;
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
 };
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_protobuf::types::v1 as pb;
+use ic_replicated_state::{
+    ReplicatedState,
+    metadata_state::subnet_call_context_manager::{
+        SetupInitialDkgContext, SignWithThresholdContext,
+    },
+};
+use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_types::{
     Height, Time,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload,
+        certification::Certification,
         dkg::DkgSummary,
         idkg::{IDkgBlockReader, IDkgStats, RequestId},
     },
@@ -23,11 +34,92 @@ use ic_types::{
         crypto_hash,
         threshold_sig::ni_dkg::NiDkgTag,
     },
+    messages::CallbackId,
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
-use std::{fmt::Debug, sync::RwLock, time::Duration};
+use std::{
+    fmt::Debug,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
+
+#[derive(Clone)]
+pub struct FakeCertifiedStateSnapshot {
+    pub height: Height,
+    pub state: Arc<ReplicatedState>,
+}
+
+impl FakeCertifiedStateSnapshot {
+    pub fn get_labeled_state(&self) -> Labeled<Arc<ReplicatedState>> {
+        Labeled::new(self.height, self.state.clone())
+    }
+
+    pub fn inc_height_by(&mut self, height: u64) -> Height {
+        self.height += Height::from(height);
+        self.height
+    }
+}
+
+impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+    type State = ReplicatedState;
+
+    fn get_state(&self) -> &Self::State {
+        &self.state
+    }
+
+    fn get_height(&self) -> Height {
+        self.height
+    }
+
+    fn read_certified_state_with_exclusion(
+        &self,
+        _paths: &LabeledTree<()>,
+        _exclusion: Option<&MatchPatternPath>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        None
+    }
+}
+
+/// Builds a [`FakeCertifiedStateSnapshot`] whose replicated state has the
+/// given `sign_with_threshold_contexts` and `setup_initial_dkg_contexts`
+/// installed in its subnet call context manager. Callback IDs are assigned
+/// sequentially and are unique across both context types, matching production
+/// behaviour.
+pub fn fake_state_with_contexts<S, D>(
+    height: Height,
+    signature_contexts: S,
+    setup_initial_dkg_contexts: D,
+) -> FakeCertifiedStateSnapshot
+where
+    S: IntoIterator<Item = SignWithThresholdContext>,
+    D: IntoIterator<Item = SetupInitialDkgContext>,
+{
+    let mut callback_ids = 0..;
+    let mut next_callback_id = || CallbackId::from(callback_ids.next().unwrap());
+
+    let mut state: ReplicatedState = ReplicatedStateBuilder::default().build();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_threshold_contexts = signature_contexts
+        .into_iter()
+        .map(|c| (next_callback_id(), c))
+        .collect();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .setup_initial_dkg_contexts = setup_initial_dkg_contexts
+        .into_iter()
+        .map(|c| (next_callback_id(), c))
+        .collect();
+
+    FakeCertifiedStateSnapshot {
+        height,
+        state: Arc::new(state),
+    }
+}
 
 #[macro_export]
 macro_rules! assert_changeset_matches_pattern {

@@ -1,6 +1,6 @@
 use crate::invariants::common::{
     InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-    get_all_hostos_version_records, get_node_records_from_snapshot, get_value_from_snapshot,
+    get_all_hostos_version_records, get_all_node_records, get_value_from_snapshot,
 };
 
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
@@ -55,8 +55,8 @@ fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> Ho
 /// Returns the list of HostOS versions where each version is referred to
 /// by at least one node.
 fn get_all_hostos_versions_of_nodes(snapshot: &RegistrySnapshot) -> Vec<String> {
-    get_node_records_from_snapshot(snapshot)
-        .values()
-        .filter_map(|node_record| node_record.hostos_version_id.clone())
+    get_all_node_records(snapshot)
+        .into_values()
+        .filter_map(|node_record| node_record.hostos_version_id)
         .collect()
 }

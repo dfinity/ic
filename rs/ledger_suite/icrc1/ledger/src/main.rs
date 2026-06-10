@@ -1,13 +1,12 @@
-#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
 use candid::Principal;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export, log};
-use ic_cdk::api::stable::StableReader;
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk::init;
+use ic_cdk::stable::StableReader;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::{
@@ -130,7 +129,7 @@ fn init(args: LedgerArgument) {
             );
         }
     }
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 }
 
 fn init_state(init_args: InitArgs) {
@@ -169,9 +168,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     post_upgrade_internal(args);
     // Set the certified data to the root hash of the ledger state, using the correct ICRC-3 labels.
     // This cannot be called in `post_upgrade_internal`, since that is benchmarked using
-    // canbench, and canbench calls functions as non-replicated queries, and `set_certified_data`
+    // canbench, and canbench calls functions as non-replicated queries, and `certified_data_set`
     // cannot be called in non-replicated queries.
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 }
 
 fn post_upgrade_internal(args: Option<LedgerArgument>) {
@@ -288,12 +287,12 @@ fn log_message(msg: &str) {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -302,7 +301,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
     w.encode_gauge(
         "ledger_cycle_balance",
         cycle_balance,
@@ -565,7 +564,7 @@ async fn execute_transfer(
 
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
@@ -679,7 +678,7 @@ fn execute_transfer_not_async(
 #[update]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     let from_account = Account {
-        owner: ic_cdk::api::caller(),
+        owner: ic_cdk::api::msg_caller(),
         subaccount: arg.from_subaccount,
     };
     execute_transfer(
@@ -705,7 +704,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[update]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     let spender_account = Account {
-        owner: ic_cdk::api::caller(),
+        owner: ic_cdk::api::msg_caller(),
         subaccount: arg.spender_subaccount,
     };
     execute_transfer(
@@ -773,7 +772,7 @@ fn supported_standards() -> Vec<StandardRecord> {
         },
         StandardRecord {
             name: "ICRC-21".to_string(),
-            url: "https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md".to_string(),
+            url: "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md".to_string(),
         },
         StandardRecord {
             name: "ICRC-103".to_string(),
@@ -896,11 +895,11 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 
 #[update]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
+    let block_idx = icrc2_approve_not_async(ic_cdk::api::msg_caller(), arg)?;
 
     // NB. we need to set the certified data before the first async call to make sure that the
     // blockchain state agrees with the certificate while archiving is in progress.
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
@@ -993,8 +992,8 @@ fn icrc152_mint_not_async(
 
 #[update]
 async fn icrc152_mint(args: Icrc152MintArgs) -> Result<Nat, Icrc152MintError> {
-    let block_idx = icrc152_mint_not_async(ic_cdk::api::caller(), args)?;
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    let block_idx = icrc152_mint_not_async(ic_cdk::api::msg_caller(), args)?;
+    ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
 }
@@ -1091,8 +1090,8 @@ fn icrc152_burn_not_async(
 
 #[update]
 async fn icrc152_burn(args: Icrc152BurnArgs) -> Result<Nat, Icrc152BurnError> {
-    let block_idx = icrc152_burn_not_async(ic_cdk::api::caller(), args)?;
-    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+    let block_idx = icrc152_burn_not_async(ic_cdk::api::msg_caller(), args)?;
+    ic_cdk::api::certified_data_set(Access::with_ledger(Ledger::root_hash));
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
 }
@@ -1194,7 +1193,7 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
-    let caller_principal = ic_cdk::api::caller();
+    let caller_principal = ic_cdk::api::msg_caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
     let token_name = icrc1_name();
@@ -1218,7 +1217,7 @@ fn is_ledger_ready() -> bool {
 #[query]
 fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
     let from_account = arg.from_account.unwrap_or_else(|| Account {
-        owner: ic_cdk::api::caller(),
+        owner: ic_cdk::api::msg_caller(),
         subaccount: None,
     });
     let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());

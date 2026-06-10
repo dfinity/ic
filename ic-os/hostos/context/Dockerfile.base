@@ -20,7 +20,7 @@
 # First build stage:
 # - Download 3rd party tools
 #
-FROM ubuntu:24.04 AS download
+FROM ubuntu:26.04 AS download
 
 USER root:root
 
@@ -37,36 +37,18 @@ RUN cd /tmp/ && \
     echo "c46e5b6f53948477ff3a19d97c58307394a29fe64a01905646f026ddc32cb65b  node_exporter-1.10.2.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
 
-# Download pre-built QEMU 10.2 (Ubuntu 24.04 comes with only version 8)
-# Note: file name is confusing but it's actually QEMU 10.2
-RUN cd /tmp/ && \
-    curl -L -O https://github.com/dfinity/sev-snp-deps/releases/download/qemu-02944cc/qemu_10-1_amd64.deb && \
-    echo "d9a6c76e2a58db9a504e24dc652b05c24b85a0c343842a94327d0707308ecef6  qemu_10-1_amd64.deb" > qemu.sha256 && \
-    sha256sum -c qemu.sha256
-
 #
 # Second build stage:
-# - Download and cache minimal Ubuntu Server 24.04 LTS Docker image.
+# - Download and cache minimal Ubuntu Server 26.04 LTS Docker image.
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
 #
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 USER root:root
 
-ARG CPU_SUPPORT
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
-ENV DEBIAN_FRONTEND=noninteractive
-
-COPY --from=download /tmp/qemu_10-1_amd64.deb /tmp/
-RUN dpkg -i /tmp/qemu_10-1_amd64.deb && rm /tmp/qemu_10-1_amd64.deb
-
-# Add future release, as opt-in targets
-RUN echo "deb http://archive.ubuntu.com/ubuntu plucky main universe restricted multiverse" >> /etc/apt/sources.list.d/future.list && \
-    echo "Package: *" >> /etc/apt/preferences && \
-    echo "Pin: release n=plucky" >> /etc/apt/preferences && \
-    echo "Pin-Priority: -10" >> /etc/apt/preferences
 
 # For the prod image, just use packages.common to define the packages installed
 # on target.
@@ -75,10 +57,8 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu plucky main universe restricted m
 ARG PACKAGE_FILES=packages.common
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
-# NODE-1718: libvirt-daemon-config-network must be installed early to avoid a broken dependency ordering
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install libvirt-daemon-config-network && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
 

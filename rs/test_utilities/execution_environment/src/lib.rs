@@ -5,7 +5,7 @@ use ic_config::{
     execution_environment::Config,
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
-    subnet_config::SubnetConfig,
+    subnet_config::{SubnetConfig, SubnetSecurity},
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -1620,7 +1620,8 @@ impl ExecutionTest {
                     )
                     .nominal()
             }
-            Ok(Method::UploadChunk)
+            Ok(Method::UpdateSettings)
+            | Ok(Method::UploadChunk)
             | Ok(Method::TakeCanisterSnapshot)
             | Ok(Method::ReadCanisterSnapshotData)
             | Ok(Method::UploadCanisterSnapshotMetadata)
@@ -1815,7 +1816,7 @@ impl ExecutionTest {
         let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
-        let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
+        let canister_ids: Vec<CanisterId> = canisters.all_keys().copied().collect();
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1861,7 +1862,7 @@ impl ExecutionTest {
                 };
                 executed_any = true;
             }
-            canisters.insert(canister_id, canister);
+            canisters.insert(canister);
         }
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
@@ -1894,12 +1895,12 @@ impl ExecutionTest {
         let mut canister = canisters.remove(&canister_id).unwrap();
         match canister.next_execution() {
             NextExecution::None => {
-                canisters.insert(canister_id, canister);
+                canisters.insert(canister);
                 state.put_canister_states(canisters);
                 self.state = Some(state);
             }
             NextExecution::ContinueInstallCode => {
-                canisters.insert(canister_id, canister);
+                canisters.insert(canister);
                 state.put_canister_states(canisters);
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
@@ -2006,7 +2007,7 @@ impl ExecutionTest {
                         ExecutionRound::from(0),
                     );
                 };
-                canisters.insert(canister_id, canister);
+                canisters.insert(canister);
                 state.put_canister_states(canisters);
                 self.state = Some(state);
             }
@@ -2205,11 +2206,12 @@ impl ExecutionTest {
     pub fn checkpoint_canister_memories(&mut self) {
         let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
         let mut new_checkpoint_files = vec![];
-        for canister_state in self.state_mut().canisters_iter_mut() {
+        let state = self.state_mut();
+        state.canisters_for_each_mut(|_id, canister_state| {
             let canister_state = Arc::make_mut(canister_state);
-            let es = match canister_state.execution_state.as_mut() {
-                Some(es) => es,
-                None => break,
+            let Some(es) = canister_state.execution_state.as_mut() else {
+                // Nothing to checkpoint for a canister without an execution state.
+                return;
             };
 
             // Handle heap memory
@@ -2248,7 +2250,7 @@ impl ExecutionTest {
                 PageMap::open(Box::new(base_only_storage_layout(path)), factory).unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
-        }
+        });
         self.checkpoint_files.extend(new_checkpoint_files);
     }
 
@@ -2375,7 +2377,7 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let mut subnet_config = SubnetConfig::new(subnet_type);
+        let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
         subnet_config.scheduler_config.scheduler_cores = 2;
         Self {
             execution_config: Config {
@@ -2468,7 +2470,7 @@ impl ExecutionTestBuilder {
         self.subnet_type = subnet_type;
         // If `subnet_type` is updated, then we need to update the subnet config
         // to match it.
-        self.subnet_config = SubnetConfig::new(subnet_type);
+        self.subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
         self
     }
 
@@ -2640,6 +2642,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
+        self
+    }
+
+    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
+        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
         self
     }
 

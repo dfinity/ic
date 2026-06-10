@@ -3,43 +3,35 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/types/management_canister_types",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_json",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_canister(
     name = "ecdsa-canister",
     srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":ecdsa.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )
 
 rust_test(
     name = "ecdsa_test",
     srcs = ["src/main.rs"],
-    aliases = ALIASES,
     data = ["ecdsa.did"],
     env = {
         "ECDSA_DID_PATH": "rs/rust_canisters/ecdsa/ecdsa.did",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
 )

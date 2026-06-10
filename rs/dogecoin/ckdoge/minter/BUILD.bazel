@@ -84,6 +84,7 @@ rust_test(
             # Keep sorted.
             ":ckdoge_minter_lib",
             "//packages/ic-http-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
