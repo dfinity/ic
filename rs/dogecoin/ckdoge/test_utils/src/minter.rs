@@ -373,8 +373,16 @@ impl MinterCanister {
                 Some(NNS_ROOT_PRINCIPAL),
             )
             .expect("BUG: failed to upgrade minter");
-        // run immediate tasks after upgrade, like refreshing fee percentiles.
-        self.env.tick();
+        // post_upgrade calls setup_tasks() which resets both ProcessLogic and RefreshFeePercentiles
+        // to T0. Tick 1 fires ProcessLogic; tick 2 fires RefreshFeePercentiles and starts its XNet
+        // call to the dogecoin canister; the remaining ticks let the round-trip complete so the
+        // timer is pushed to T0+360s before control returns. Without this, RefreshFeePercentiles
+        // would fire during the first DogecoinSyncGuard tick in a subsequent mine_blocks call,
+        // sending the fee-percentile request while the dogecoin canister is syncing blocks, which
+        // puts it in a "not fully synced" state that causes DogecoinSyncGuard to time out.
+        for _ in 0..20 {
+            self.env.tick();
+        }
     }
 }
 

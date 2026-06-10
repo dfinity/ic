@@ -188,6 +188,18 @@ impl Setup {
             );
         }
 
+        // After minter install, setup_tasks() schedules ProcessLogic and RefreshFeePercentiles at
+        // T0. If left unfired, RefreshFeePercentiles would fire during the first DogecoinSyncGuard
+        // tick in mine_blocks, sending a fee-percentile XNet call to the dogecoin canister while it
+        // is syncing new blocks. This puts the canister in a "not fully synced" state that prevents
+        // DogecoinSyncGuard from observing the target block height, causing a timeout.
+        // Tick 1 fires ProcessLogic; tick 2 fires RefreshFeePercentiles and starts the XNet call;
+        // the remaining ticks let the XNet round-trip complete. After this the timer is at T0+360s,
+        // far beyond any DogecoinSyncGuard window.
+        for _ in 0..20 {
+            env.tick();
+        }
+
         Self {
             env,
             doge_network,
