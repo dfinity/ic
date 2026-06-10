@@ -3,10 +3,11 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 use ic_protobuf::{
     registry::subnet::v1::{
         ResourceLimits as ResourceLimitsPb, SubnetFeatures as SubnetFeaturesPb,
-        SubnetRecord as SubnetRecordPb,
+        SubnetRecord as SubnetRecordPb, SubnetType as SubnetTypePb,
     },
     types::v1::PrincipalId as PrincipalIdPb,
 };
@@ -25,13 +26,26 @@ use std::collections::HashSet;
 /// This method is called by the governance canister, after a proposal
 /// for updating a new subnet has been accepted.
 impl Registry {
-    pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
-        println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
+    pub fn do_update_subnet(&mut self, caller: PrincipalId, payload: UpdateSubnetPayload) {
+        println!("{LOG_PREFIX}do_update_subnet: caller={caller}, payload={payload:?}");
+
+        let subnet_id = payload.subnet_id;
+
+        // The engine controller canister is only allowed to mutate CloudEngine
+        // subnets. Other authorized callers (governance) can update any subnet.
+        if caller == ENGINE_CONTROLLER_CANISTER_ID.get() {
+            let subnet_record = self.get_subnet_or_panic(subnet_id);
+            assert_eq!(
+                subnet_record.subnet_type,
+                i32::from(SubnetTypePb::CloudEngine),
+                "{LOG_PREFIX}do_update_subnet: engine controller may only update CloudEngine \
+                 subnets; subnet {subnet_id} has subnet_type {:?}",
+                subnet_record.subnet_type,
+            );
+        }
 
         self.validate_update_payload_chain_key_config(&payload);
         self.validate_update_sev_feature(&payload);
-
-        let subnet_id = payload.subnet_id;
 
         let new_subnet_record =
             merge_subnet_record(self.get_subnet_or_panic(subnet_id), payload.clone());
@@ -540,6 +554,7 @@ mod tests {
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
+    use ic_nns_constants::GOVERNANCE_CANISTER_ID;
     use ic_protobuf::registry::subnet::v1::{
         CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
@@ -935,7 +950,7 @@ mod tests {
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
         // Should panic because we are trying to enable a key that hasn't previously held it
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -990,7 +1005,7 @@ mod tests {
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1080,7 +1095,7 @@ mod tests {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     /// Returns an invariant-compliant Registry instance and an ID of a subnet
@@ -1158,7 +1173,7 @@ mod tests {
             sev_enabled: Some(true),
         });
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1175,7 +1190,7 @@ mod tests {
             sev_enabled: Some(false),
         });
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     /// Regression test: a payload with `features = Some(_)` but
@@ -1195,7 +1210,7 @@ mod tests {
             sev_enabled: None,
         });
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1210,7 +1225,7 @@ mod tests {
             sev_enabled: Some(true),
         });
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         let subnet_features = registry
             .get_subnet_or_panic(subnet_id)
@@ -1233,7 +1248,7 @@ mod tests {
         });
 
         // Should not panic because we are not changing SEV-related subnet features.
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1244,7 +1259,7 @@ mod tests {
         {
             let mut payload = make_empty_update_payload(subnet_id);
             payload.features = None;
-            registry.do_update_subnet(payload);
+            registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
         }
 
         // Enable non-SEV-related features that can be enabled after the subnet was created.
@@ -1255,7 +1270,7 @@ mod tests {
                 http_requests: true,
                 sev_enabled: None,
             });
-            registry.do_update_subnet(payload);
+            registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
         }
     }
 
@@ -1322,7 +1337,7 @@ mod tests {
 
         payload.chain_key_signing_enable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         // Make sure it's actually in the list of enabled chain keys.
         assert!(
@@ -1351,7 +1366,7 @@ mod tests {
 
         payload.chain_key_signing_disable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         // Ensure it's now removed from list of enabled subnets.
         assert!(
@@ -1438,7 +1453,7 @@ mod tests {
         payload.chain_key_signing_disable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
 
         // Should panic because we are trying to enable/disable same key
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1509,7 +1524,7 @@ mod tests {
             ..make_empty_update_payload(subnet_id)
         };
 
-        registry.do_update_subnet(payload.clone());
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload.clone());
 
         // Try to update the subnet by adding a new key and removing one of the existing keys
         let payload = UpdateSubnetPayload {
@@ -1521,7 +1536,7 @@ mod tests {
         };
 
         // Should panic because we are trying to delete an existing key
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1541,7 +1556,7 @@ mod tests {
             None,
         );
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1561,7 +1576,7 @@ mod tests {
             Some(99),
         );
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     fn update_subnet_payload_with_key_config(
@@ -1622,7 +1637,7 @@ mod tests {
         let mut payload = make_empty_update_payload(subnet_id);
         payload.subnet_admins = Some(vec![user1, user2]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         assert_eq!(
             registry.get_subnet_or_panic(subnet_id).subnet_admins,
@@ -1639,7 +1654,7 @@ mod tests {
         // First set an admin.
         let mut payload = make_empty_update_payload(subnet_id);
         payload.subnet_admins = Some(vec![user1]);
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
         assert_eq!(
             registry.get_subnet_or_panic(subnet_id).subnet_admins,
             vec![PrincipalIdPb::from(user1)],
@@ -1648,7 +1663,7 @@ mod tests {
         // Then clear it via Some(vec![]).
         let mut payload = make_empty_update_payload(subnet_id);
         payload.subnet_admins = Some(vec![]);
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
         assert_eq!(
             registry.get_subnet_or_panic(subnet_id).subnet_admins,
             Vec::<PrincipalIdPb>::new(),
@@ -1663,11 +1678,11 @@ mod tests {
 
         let mut payload = make_empty_update_payload(subnet_id);
         payload.subnet_admins = Some(vec![user1]);
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         // A subsequent update with `subnet_admins: None` must not change the list.
         let payload = make_empty_update_payload(subnet_id);
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
 
         assert_eq!(
             registry.get_subnet_or_panic(subnet_id).subnet_admins,
@@ -1688,7 +1703,7 @@ mod tests {
         let mut payload = make_empty_update_payload(subnet_id);
         payload.subnet_admins = Some(admins);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
     }
 
     #[test]
@@ -1703,6 +1718,93 @@ mod tests {
         let mut payload = make_empty_update_payload(subnet_id);
         payload.subnet_admins = Some(vec![*TEST_USER1_PRINCIPAL]);
 
-        registry.do_update_subnet(payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+    }
+
+    /// Builds a registry that already has a `CloudEngine` subnet, suitable
+    /// for exercising the engine-controller permission checks on
+    /// `do_update_subnet`.
+    fn make_registry_with_cloud_engine_subnet() -> (Registry, SubnetId) {
+        use crate::common::test_helpers::prepare_registry_with_nodes_and_reward_type;
+        use ic_protobuf::registry::node::v1::NodeRewardType;
+
+        let mut registry = invariant_compliant_registry(0);
+
+        // CloudEngine subnets require every node to have reward type 4.
+        let (mutate_request, node_ids_and_dkg_pks) =
+            prepare_registry_with_nodes_and_reward_type(1, 2, NodeRewardType::Type4);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let (first_node_id, first_dkg_pk) = node_ids_and_dkg_pks
+            .iter()
+            .next()
+            .expect("should contain at least one node ID");
+        let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
+        subnet_record.subnet_type = i32::from(SubnetType::CloudEngine);
+        // CloudEngine subnets run in "Free" cost mode.
+        subnet_record.canister_cycles_cost_schedule =
+            ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule::Free as i32;
+
+        let subnet_id = subnet_test_id(2000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+            &btreemap!(*first_node_id => first_dkg_pk.clone()),
+        ));
+
+        (registry, subnet_id)
+    }
+
+    #[test]
+    fn engine_controller_can_update_cloud_engine_subnet_admins() {
+        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
+
+        let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
+
+        let new_admins = vec![*TEST_USER1_PRINCIPAL, *TEST_USER2_PRINCIPAL];
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(new_admins.clone());
+
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        let stored: Vec<PrincipalId> = subnet_record
+            .subnet_admins
+            .into_iter()
+            .map(|p| PrincipalId::try_from(p.raw.as_slice()).unwrap())
+            .collect();
+        assert_eq!(stored, new_admins);
+    }
+
+    #[test]
+    #[should_panic(expected = "engine controller may only update CloudEngine subnets")]
+    fn engine_controller_cannot_update_non_cloud_engine_subnet() {
+        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
+
+        // Default fixture is an Application subnet.
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.subnet_admins = Some(vec![*TEST_USER1_PRINCIPAL]);
+
+        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+    }
+
+    #[test]
+    fn governance_is_not_restricted_to_cloud_engine_subnets() {
+        // Sanity check: governance must still be able to update non-CloudEngine
+        // subnets (it goes through the same code path now).
+        let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.max_number_of_canisters = Some(123);
+
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+
+        let subnet_record = registry.get_subnet_or_panic(subnet_id);
+        assert_eq!(subnet_record.max_number_of_canisters, 123);
     }
 }
