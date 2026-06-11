@@ -1878,9 +1878,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "engine controller may only update `subnet_admins` and `is_halted`"
-    )]
+    #[should_panic(expected = "engine controller may only update `subnet_admins` and `is_halted`")]
     fn engine_controller_cannot_update_disallowed_fields() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 

@@ -143,7 +143,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "engine controller may only deploy GuestOS to CloudEngine subnets")]
     fn engine_controller_cannot_deploy_to_non_cloud_engine_subnet() {
-        let (mut registry, subnet_id) = make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
+        let (mut registry, subnet_id) =
+            make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             ENGINE_CONTROLLER_CANISTER_ID.get(),
@@ -153,7 +154,8 @@ mod tests {
 
     #[test]
     fn governance_can_deploy_to_non_cloud_engine_subnet() {
-        let (mut registry, subnet_id) = make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
+        let (mut registry, subnet_id) =
+            make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             GOVERNANCE_CANISTER_ID.get(),
