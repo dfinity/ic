@@ -2,12 +2,25 @@
 Description=Reload nftables when the configuration changes
 # The orchestrator-generated nftables config uses the hostname "hostos" which
 # is resolved via the nss_icos NSS plugin. We must wait for name resolution to
-# be available, otherwise the nft reload fails with "Could not resolve hostname"
-# and the entire ruleset is discarded (nft is transactional).
+# be available, otherwise the nft load fails with "Could not resolve hostname".
 After=nss-lookup.target systemd-resolved.service
 Wants=nss-lookup.target
+# Allow the restarts configured below (Restart=on-failure with RestartSec=2)
+# to go on for up to ~60s before giving up and marking the unit as failed.
+StartLimitIntervalSec=300
+StartLimitBurst=30
 
 [Service]
 Type=oneshot
-ExecStartPre=/usr/sbin/nft flush ruleset
-ExecStart=systemctl reload nftables.service
+# The orchestrator-generated config starts with "flush ruleset" so flushing
+# the old ruleset and loading the new one happen in a single nft transaction:
+# if loading fails the previously active ruleset stays in effect instead of
+# leaving the node without a firewall (nft -f is transactional).
+ExecStart=/usr/sbin/nft -f /etc/nftables.conf
+# Loading can still fail transiently, e.g. when the "hostos" hostname cannot
+# be resolved yet early during boot. Since the load is atomic it is safe to
+# simply retry until it succeeds. If it keeps failing, the unit ends up in a
+# failed state, making the problem visible (e.g. to
+# //rs/tests/node:guestos_no_failed_systemd_units).
+Restart=on-failure
+RestartSec=2
