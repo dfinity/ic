@@ -160,6 +160,15 @@ build_container_filesystem = _icos_build_rule(
     },
 )
 
+# rules_foreign_cc exposes a tool's binaries (plus an include dir) under a single
+# target; pick out the binary we need by name. Mirrors the lookup done for
+# //:mkfs.ext4 in the ext4_image rule.
+def _find_tool(files, basename):
+    for f in files:
+        if f.basename == basename:
+            return f
+    fail("could not locate '{}' binary among tool outputs".format(basename))
+
 def _vfat_image_impl(ctx):
     args = []
     inputs = []
@@ -174,6 +183,10 @@ def _vfat_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    mkfs_fat = _find_tool(ctx.files._dosfstools, "mkfs.fat")
+    mtools = _find_tool(ctx.files._mtools, "mtools")
+    inputs.extend(ctx.files._dosfstools + ctx.files._mtools)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -183,6 +196,10 @@ def _vfat_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-fat",
+        mkfs_fat.path,
+        "--mtools",
+        mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -230,6 +247,16 @@ vfat_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_dosfstools": attr.label(
+            default = "//:mkfs.fat",
+            cfg = "exec",
+            allow_files = True,
+        ),
+        "_mtools": attr.label(
+            default = "//:mtools",
+            cfg = "exec",
+            allow_files = True,
+        ),
     },
 )
 
@@ -247,6 +274,11 @@ def _fat32_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    mkfs_fat = _find_tool(ctx.files._dosfstools, "mkfs.fat")
+    fatlabel = _find_tool(ctx.files._dosfstools, "fatlabel")
+    mtools = _find_tool(ctx.files._mtools, "mtools")
+    inputs.extend(ctx.files._dosfstools + ctx.files._mtools)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -256,6 +288,12 @@ def _fat32_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-fat",
+        mkfs_fat.path,
+        "--fatlabel",
+        fatlabel.path,
+        "--mtools",
+        mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -306,6 +344,16 @@ fat32_image = _icos_build_rule(
             default = "@zstd//:zstd_cli",
             executable = True,
             cfg = "exec",
+        ),
+        "_dosfstools": attr.label(
+            default = "//:mkfs.fat",
+            cfg = "exec",
+            allow_files = True,
+        ),
+        "_mtools": attr.label(
+            default = "//:mtools",
+            cfg = "exec",
+            allow_files = True,
         ),
     },
 )
