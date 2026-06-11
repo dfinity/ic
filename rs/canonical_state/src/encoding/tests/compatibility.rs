@@ -166,21 +166,68 @@ fn canonical_encoding_stream_header() {
     }
 }
 
-/// Canonical CBOR encoding (versions `V26` and above) of the same stream header
-/// as in `canonical_encoding_stream_header`, with an additional
-/// `EngineNotAllowed` reject signal:
+/// Canonical CBOR encoding (versions `V26` and above) of:
 ///
 /// ```no_run
-/// RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+///         RejectSignal::new(RejectReason::QueueFull, 251.into()),
+///         RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+///         RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+///         RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+///         RejectSignal::new(RejectReason::Unknown, 255.into()),
+///         RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
+///     ]
+///     .into(),
+///     flags: StreamFlags {
+///        deprecated_responses_only: true,
+///     },
+/// }
 /// ```
 ///
-/// Relative to the `V25` encoding, the reject signals map grows from `A7`
-/// (map(7)) to `A8` (map(8)) and gains the trailing field:
+/// Expected:
 ///
 /// ```text
-///    07    # field_index(RejectSignals::engine_not_allowed_deltas)
-///    81    # array(1)
-///       08 # unsigned(8)   (`signals_end` 256 - 248)
+/// A5          # map(5)
+///    00       # field_index(StreamHeader::begin)
+///    17       # unsigned(23)
+///    01       # field_index(StreamHeader::end)
+///    18 19    # unsigned(25)
+///    02       # field_index(StreamHeader::signals_end)
+///    19 0100  # unsigned(256)
+///    04       # field_index(StreamHeader::flags)
+///    01       # unsigned(1)
+///    05       # field_index(StreamHeader::reject_signals)
+///    A8       # map(8)
+///       00    # field_index(RejectSignals::canister_migrating_deltas)
+///       81    # array(1)
+///          07 # unsigned(7)
+///       01    # field_index(RejectSignals::canister_not_found_deltas)
+///       81    # array(1)
+///          06 # unsigned(6)
+///       02    # field_index(RejectSignals::canister_stopped_deltas)
+///       81    # array(1)
+///          02 # unsigned(2)
+///       03    # field_index(RejectSignals::canister_stopping_deltas)
+///       81    # array(1)
+///          03 # unsigned(3)
+///       04    # field_index(RejectSignals::queue_full_deltas)
+///       81    # array(1)
+///          05 # unsigned(5)
+///       05    # field_index(RejectSignals::out_of_memory_deltas)
+///       81    # array(1)
+///          04 # unsigned(4)
+///       06    # field_index(RejectSignals::unknown_deltas)
+///       81    # array(1)
+///          01 # unsigned(1)
+///       07    # field_index(RejectSignals::engine_not_allowed_deltas)
+///       81    # array(1)
+///          08 # unsigned(8)
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
@@ -213,43 +260,6 @@ fn canonical_encoding_stream_header_v26() {
             as_hex(&encode_stream_header(&header, certification_version))
         );
     }
-}
-
-/// Absent `EngineNotAllowed` signals, the `RejectSignals` introduced at
-/// certification version V26 must encode byte-for-byte identically to the
-/// pre-V26 `RejectSignalsV25`, so that the stream header hash is unchanged
-/// across the version boundary. A V25 encoding must likewise still decode into
-/// the new type.
-#[test]
-fn reject_signals_v26_compatible_with_v25() {
-    let new = types::RejectSignals {
-        canister_migrating_deltas: vec![7],
-        canister_not_found_deltas: vec![6],
-        canister_stopped_deltas: vec![2],
-        canister_stopping_deltas: vec![3],
-        queue_full_deltas: vec![5],
-        out_of_memory_deltas: vec![4],
-        unknown_deltas: vec![1],
-        engine_not_allowed_deltas: vec![],
-    };
-    let old = old_types::RejectSignalsV25 {
-        canister_migrating_deltas: vec![7],
-        canister_not_found_deltas: vec![6],
-        canister_stopped_deltas: vec![2],
-        canister_stopping_deltas: vec![3],
-        queue_full_deltas: vec![5],
-        out_of_memory_deltas: vec![4],
-        unknown_deltas: vec![1],
-    };
-
-    // The V26 `RejectSignals` with no engine signals encodes identically to V25.
-    let new_bytes = serde_cbor::ser::to_vec_packed(&new).unwrap();
-    let old_bytes = serde_cbor::ser::to_vec_packed(&old).unwrap();
-    assert_eq!(new_bytes, old_bytes);
-
-    // A V25 encoding still decodes into the new type, with no engine signals.
-    let decoded: types::RejectSignals = serde_cbor::de::from_slice(&old_bytes).unwrap();
-    assert!(decoded.engine_not_allowed_deltas.is_empty());
 }
 
 /// Canonical CBOR encoding of:

@@ -53,38 +53,6 @@ fn roundtrip_conversion_stream_header() {
     }
 }
 
-/// `EngineNotAllowed` reject signals must not be *encoded* below V26, but the decode path is
-/// version-agnostic and must read them back. `MAX_SUPPORTED_CERTIFICATION_VERSION` is V26.
-#[test]
-fn roundtrip_conversion_stream_header_with_engine_not_allowed_signal() {
-    use ic_types::xnet::{RejectSignal, StreamFlags, StreamHeader};
-
-    let header = StreamHeader::new(
-        23.into(),
-        25.into(),
-        256.into(),
-        vec![
-            RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
-            RejectSignal::new(RejectReason::Unknown, 255.into()),
-        ]
-        .into(),
-        StreamFlags::default(),
-    );
-
-    // Encoding is only permitted at V26; decoding does not depend on the certification version.
-    let decoded: StreamHeader = types::StreamHeader::from((&header, CertificationVersion::V26))
-        .try_into()
-        .unwrap();
-
-    assert_eq!(header, decoded);
-    assert!(
-        decoded
-            .reject_signals()
-            .iter()
-            .any(|signal| signal.reason == RejectReason::EngineNotAllowed)
-    );
-}
-
 /// Decoding a slice with unsupported flags should return an error but not panic.
 #[test]
 fn try_from_stream_header_with_unsupported_flags() {

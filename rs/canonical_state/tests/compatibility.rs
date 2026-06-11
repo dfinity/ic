@@ -3,9 +3,9 @@ use ic_canonical_state::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         CborProxyDecoder, CborProxyEncoder,
-        old_types::{RequestOrResponseV21, StreamHeaderV19, StreamMessageV22},
+        old_types::{RequestOrResponseV21, StreamHeaderV19, StreamHeaderV25, StreamMessageV22},
         types::{
-            StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV23,
+            StreamHeader as StreamHeaderV26, StreamMessage as StreamMessageV23,
             SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
     },
@@ -103,9 +103,18 @@ pub(crate) fn arb_invalid_versioned_stream_header(
 ) -> impl Strategy<Value = (StreamHeader, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         // Encoding a stream header with reject signal flavors other than `CanisterMigrating`
-        // before certification version 19 should panic.
+        // before certification version 19 should panic. `EngineNotAllowed` is excluded as it is
+        // only encodable from V26.
         (
-            arb_invalid_stream_header(/* min_signal_count */ 1, max_signal_count),
+            arb_invalid_stream_header(
+                /* min_signal_count */ 1,
+                max_signal_count,
+                /* with_reject_reasons */
+                RejectReason::all()
+                    .into_iter()
+                    .filter(|reason| *reason != RejectReason::EngineNotAllowed)
+                    .collect(),
+            ),
             Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION),
         ),
     ]
@@ -123,10 +132,16 @@ lazy_static! {
             |v| StreamHeaderV19::proxy_decode(v),
         ),
         VersionedEncoding::new(
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V25,
+            "StreamHeaderV25",
+            |v| StreamHeaderV25::proxy_encode(v),
+            |v| StreamHeaderV25::proxy_decode(v),
+        ),
+        VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
-            |v| StreamHeaderV21::proxy_encode(v),
-            |v| StreamHeaderV21::proxy_decode(v),
+            |v| StreamHeaderV26::proxy_encode(v),
+            |v| StreamHeaderV26::proxy_decode(v),
         ),
     ];
 }

@@ -245,6 +245,9 @@ mod tests {
             stream.push_reject_signal(RejectReason::OutOfMemory);
             stream.push_reject_signal(RejectReason::Unknown);
             stream.push_reject_signal(RejectReason::CanisterStopping);
+            if certification_version >= CertificationVersion::V26 {
+                stream.push_reject_signal(RejectReason::EngineNotAllowed);
+            }
 
             let loopback_stream = Stream::new(
                 StreamIndexedQueue::with_begin(StreamIndex::from(13)),
@@ -392,9 +395,7 @@ mod tests {
             "07797459A2F82D6F64628C0668C5BDB7F83447680DDB178208A40C2256409E8D",
             "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
             "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
-            // V26 adds `EngineNotAllowed` reject signals; absent any such signal the encoding is
-            // identical to V25, so the hash matches.
-            "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
+            "057FA1842C06C958F79C6394C54E12F9C9DCF5036D186EBBB9A49CDB4E3683BF",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 
