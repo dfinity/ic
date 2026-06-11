@@ -14781,6 +14781,7 @@ dependencies = [
  "maplit",
  "nix 0.24.3",
  "parking_lot",
+ "pprof",
  "prometheus",
  "proptest",
  "prost 0.13.5",
