@@ -1465,7 +1465,8 @@ fn allocate_testnet_to_local_dc_from_env() -> bool {
         "1" | "true" => true,
         "0" | "false" => false,
         _ => panic!(
-            "Invalid value {raw:?} for environment variable {ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR}"
+            "Invalid value {raw:?} for environment variable {ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR}: \
+             accepted values are \"1\", \"true\", \"0\" and \"false\""
         ),
     }
 }
