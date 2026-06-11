@@ -44,13 +44,16 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
     use ic_config::flag_status::FlagStatus;
     use ic_sys::PAGE_SIZE;
+    let cost = ic_config::subnet_config::SchedulerConfig::application_subnet()
+        .dirty_page_overhead
+        .get();
     const WASM_PAGE_SIZE: u64 = 65536;
     if EmbeddersConfig::default()
         .feature_flags
         .deterministic_memory_tracker
         == FlagStatus::Enabled
     {
-        n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
+        n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64) * cost
     } else {
         0
     }
@@ -1144,8 +1147,7 @@ fn test_subnet_size_execute_message_cost() {
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = config.reference_subnet_size;
     // The `inc` method writes to the heap (first access), so the deterministic
-    // memory tracker charges an extra 32 instructions in-band (accessed + dirty
-    // for 1 Wasm page) when enabled.
+    // memory tracker charges for accessed + dirty Wasm pages when enabled.
     let reference_instructions_cost =
         inc_instruction_cost(HypervisorConfig::default()) + deterministic_tracker_write_overhead(1);
     let reference_cost = calculate_execution_cost(
@@ -1154,10 +1156,15 @@ fn test_subnet_size_execute_message_cost() {
         reference_subnet_size,
     );
 
-    // Check default cost.
+    // Check default cost. The fixed part (1019) is the sum of the `inc` body's
+    // WASM instruction costs plus the system API overhead, while the dirty-page
+    // charge for the single heap write is derived from the subnet config.
+    let dirty_page_overhead = ic_config::subnet_config::SchedulerConfig::application_subnet()
+        .dirty_page_overhead
+        .get();
     assert_eq!(
         reference_instructions_cost,
-        2019 + deterministic_tracker_write_overhead(1)
+        1019 + dirty_page_overhead + deterministic_tracker_write_overhead(1)
     );
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
