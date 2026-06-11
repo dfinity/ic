@@ -149,8 +149,9 @@ use ic_types::{
         ValidationContext, XNetPayload,
     },
     canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseReceipt,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -270,6 +271,35 @@ pub fn add_global_registry_records(
         )
         .unwrap();
 
+    update_global_registry_records(
+        registry_version,
+        routing_table,
+        subnet_list,
+        chain_keys,
+        registry_data_provider.clone(),
+    );
+
+    // node rewards table
+    registry_data_provider
+        .add(
+            NODE_REWARDS_TABLE_KEY,
+            registry_version,
+            Some(NodeRewardsTable {
+                table: BTreeMap::new(),
+            }),
+        )
+        .unwrap();
+}
+
+/// Updates global registry records (routing table, subnet list, chain keys) at the given
+/// registry version. Used both during initial setup and after removing a subnet.
+pub fn update_global_registry_records(
+    registry_version: RegistryVersion,
+    routing_table: RoutingTable,
+    subnet_list: Vec<SubnetId>,
+    chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+) {
     // routing table record
     let pb_routing_table = PbRoutingTable::from(routing_table.clone());
     registry_data_provider
@@ -301,17 +331,6 @@ pub fn add_global_registry_records(
             )
             .unwrap();
     }
-
-    // node rewards table
-    registry_data_provider
-        .add(
-            NODE_REWARDS_TABLE_KEY,
-            registry_version,
-            Some(NodeRewardsTable {
-                table: BTreeMap::new(),
-            }),
-        )
-        .unwrap();
 }
 
 /// Adds initial registry records to the registry managed by the registry data provider:
@@ -1867,7 +1886,7 @@ impl StateMachine {
             .unwrap()
             .get_validated_shares()
             .filter_map(|share| {
-                if inducted.contains(&share.content.id) {
+                if inducted.contains(&share.content.id()) {
                     Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
                 } else {
                     None
@@ -2700,19 +2719,22 @@ impl StateMachine {
                 canister_id,
                 content: content.clone(),
             };
-            let response_metadata = CanisterHttpResponseMetadata {
-                id: CallbackId::from(request_id),
-                registry_version,
-                content_hash: ic_types::crypto::crypto_hash(&response),
-                content_size: content.count_bytes() as u32,
-                is_reject: content.is_reject(),
-                replica_version: ReplicaVersion::default(),
+            let receipt_share = CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: CallbackId::from(request_id),
+                    registry_version,
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    content_size: content.count_bytes() as u32,
+                    is_reject: content.is_reject(),
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt::default(),
             };
             let signature = CryptoReturningOk::default()
-                .sign(&response_metadata, node.node_id, registry_version)
+                .sign(&receipt_share, node.node_id, registry_version)
                 .unwrap();
             let share = Signed {
-                content: response_metadata,
+                content: receipt_share,
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
@@ -5115,7 +5137,7 @@ impl StateMachine {
             .read()
             .unwrap()
             .get_validated_shares()
-            .map(|share| share.content.id)
+            .map(|share| share.content.id())
             .collect();
         let state = self.state_manager.get_latest_state().take();
         state

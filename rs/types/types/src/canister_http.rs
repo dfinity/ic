@@ -44,7 +44,7 @@
 use crate::{
     CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
+    crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -67,7 +67,7 @@ use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     mem::size_of,
     time::Duration,
@@ -1081,15 +1081,117 @@ impl CountBytes for CanisterHttpResponseMetadata {
     }
 }
 
-impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {
+/// The content a single replica signs over: the shared
+/// [`CanisterHttpResponseMetadata`] together with that replica's own
+/// [`CanisterHttpPaymentReceipt`].
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseReceipt {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub payment_receipt: CanisterHttpPaymentReceipt,
+}
+
+impl CountBytes for CanisterHttpResponseReceipt {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            metadata,
+            payment_receipt,
+        } = self;
+        metadata.count_bytes() + payment_receipt.count_bytes()
+    }
+}
+
+impl CanisterHttpResponseReceipt {
+    pub fn id(&self) -> CallbackId {
+        self.metadata.id
+    }
+
+    pub fn content_hash(&self) -> &CryptoHashOf<CanisterHttpResponse> {
+        &self.metadata.content_hash
+    }
+
+    pub fn content_size(&self) -> u32 {
+        self.metadata.content_size
+    }
+
+    pub fn is_reject(&self) -> bool {
+        self.metadata.is_reject
+    }
+
+    pub fn registry_version(&self) -> RegistryVersion {
+        self.metadata.registry_version
+    }
+
+    pub fn replica_version(&self) -> &ReplicaVersion {
+        &self.metadata.replica_version
+    }
+
+    pub fn refund(&self) -> Cycles {
+        self.payment_receipt.refund
+    }
+}
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseReceipt {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
-/// A signature share of of [`CanisterHttpResponseMetadata`].
-pub type CanisterHttpResponseShare =
-    Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
+/// A single signer's contribution to an aggregated proof: the
+/// [`CanisterHttpPaymentReceipt`] that signer signed over, together with
+/// their basic signature on the corresponding
+/// [`CanisterHttpResponseReceipt`].
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseSignature {
+    pub payment_receipt: CanisterHttpPaymentReceipt,
+    pub signature: BasicSigOf<CanisterHttpResponseReceipt>,
+}
+
+impl CountBytes for CanisterHttpResponseSignature {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            payment_receipt,
+            signature,
+        } = self;
+        payment_receipt.count_bytes() + signature.get_ref().count_bytes()
+    }
+}
+
+/// An aggregated proof for a canister HTTP response with consensus.
+///
+/// Holds the shared [`CanisterHttpResponseMetadata`] together with, for
+/// each contributing signer, the [`CanisterHttpPaymentReceipt`] they
+/// signed over and their basic signature (see [`CanisterHttpResponseSignature`]).
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseProof {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub signatures: BTreeMap<NodeId, CanisterHttpResponseSignature>,
+}
+
+impl CountBytes for CanisterHttpResponseProof {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            metadata,
+            signatures,
+        } = self;
+        metadata.count_bytes()
+            + signatures
+                .values()
+                .map(|s| std::mem::size_of::<NodeId>() + s.count_bytes())
+                .sum::<usize>()
+    }
+}
+
+impl CanisterHttpResponseProof {
+    pub fn registry_version(&self) -> RegistryVersion {
+        self.metadata.registry_version
+    }
+}
+
+/// A signature share of [`CanisterHttpResponseReceipt`].
+pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 
 /// Contains a share and optionally the full response.
 ///
@@ -1115,10 +1217,6 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
 }
-
-/// A signature of of [`CanisterHttpResponseMetadata`].
-pub type CanisterHttpResponseProof =
-    Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
 #[cfg(test)]
 mod tests {
