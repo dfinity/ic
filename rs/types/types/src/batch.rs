@@ -41,6 +41,7 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_types_cycles::Cycles;
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
@@ -297,18 +298,36 @@ where
 
 /// Response to a subnet call that requires Consensus' involvement.
 ///
-/// Only holds the payload and callback ID, Execution populates other fields
-/// (originator, respondent, refund) from the incoming request.
+/// Only holds the payload and callback ID; Execution populates the originator
+/// and respondent from the incoming request.
+///
+/// For HTTP outcalls, `refund_shares` carries the per-replica refunds that the
+/// participating nodes signed over as part of the aggregated response proof.
+/// Execution sums them up to determine how many cycles to return to the caller.
+/// For all other consensus responses (e.g. threshold signatures, IDkg
+/// dealings) this is empty. The field is only used in-memory on the hop from
+/// the consensus queue to Execution and is intentionally not serialized.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ConsensusResponse {
     pub callback: CallbackId,
     pub payload: Payload,
+    pub refund_shares: Vec<(NodeId, Cycles)>,
 }
 
 impl ConsensusResponse {
     pub fn new(callback: CallbackId, payload: Payload) -> Self {
-        Self { callback, payload }
+        Self {
+            callback,
+            payload,
+            refund_shares: vec![],
+        }
+    }
+
+    /// Attaches the per-replica refund shares to this response.
+    pub fn with_refund_shares(mut self, refund_shares: Vec<(NodeId, Cycles)>) -> Self {
+        self.refund_shares = refund_shares;
+        self
     }
 }
 
@@ -340,6 +359,10 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
         Ok(Self {
             callback: rep.callback.into(),
             payload,
+            // `refund_shares` are not part of the wire format; they are only
+            // populated in-memory when building the consensus queue from an
+            // HTTP outcalls payload (see the canister_http payload builder).
+            refund_shares: vec![],
         })
     }
 }

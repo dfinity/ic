@@ -693,11 +693,11 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
-            SubnetMessage::Response(response) => {
+            SubnetMessage::ConsensusResponse(response) => {
                 let context = state
                     .metadata
                     .subnet_call_context_manager
-                    .retrieve_context(response.originator_reply_callback, &self.log);
+                    .retrieve_context(response.callback, &self.log);
                 return match context {
                     None => (state, ExecuteSubnetMessageResultType::Finished),
                     Some(context) => {
@@ -718,7 +718,7 @@ impl ExecutionEnvironment {
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
                                 cost_schedule,
-                                NumBytes::from(response.payload_size_bytes()),
+                                response.payload.size_bytes(),
                             );
 
                             self.metrics.observe_http_outcall_price_change(
@@ -737,7 +737,7 @@ impl ExecutionEnvironment {
                             info!(
                                 self.log,
                                 "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
-                                response.payload_size_bytes().get(),
+                                response.payload.size_bytes().get(),
                                 max_response_size,
                                 registry_settings.subnet_size,
                                 context.request.sender_reply_callback,
@@ -749,7 +749,7 @@ impl ExecutionEnvironment {
                         self.metrics.observe_subnet_message(
                             &request.method_name,
                             time_elapsed.as_secs_f64(),
-                            &match &response.response_payload {
+                            &match &response.payload {
                                 Payload::Data(_) => Ok(()),
                                 Payload::Reject(_) => Err(ErrorCode::CanisterRejectedMessage),
                             },
@@ -758,7 +758,7 @@ impl ExecutionEnvironment {
                         if let (
                             SubnetCallContext::SignWithThreshold(threshold_context),
                             Payload::Data(_),
-                        ) = (&context, &response.response_payload)
+                        ) = (&context, &response.payload)
                         {
                             *state
                                 .metadata
@@ -768,13 +768,21 @@ impl ExecutionEnvironment {
                                 .or_default() += 1;
                         }
 
+                        // Refund the cycles left unspent upfront (`request.payment`)
+                        // plus the per-replica refunds that the participating nodes
+                        // signed over. For non-HTTP responses `refund_shares` is empty,
+                        // so this preserves the previous behavior.
+                        let refund_shares_total: Cycles =
+                            response.refund_shares.iter().map(|(_, c)| *c).sum();
+                        let refund = request.payment + refund_shares_total;
+
                         state.push_subnet_output_response(
                             Response {
                                 originator: request.sender,
                                 respondent: CanisterId::from(self.own_subnet_id),
                                 originator_reply_callback: request.sender_reply_callback,
-                                refund: request.payment,
-                                response_payload: response.response_payload.clone(),
+                                refund,
+                                response_payload: response.payload.clone(),
                                 deadline: request.deadline,
                             }
                             .into(),
