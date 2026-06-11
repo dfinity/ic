@@ -136,27 +136,42 @@ impl Registry {
                 "{LOG_PREFIX}do_add_node: Node reward type is required."
             ))?;
 
-            let max_rewardable_nodes_same_type = *node_operator_record
-                .max_rewardable_nodes
-                .get(&(node_reward_type.to_string()))
-                .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
+            // TODO(NNS1-XXXX): Re-enable the max_rewardable_nodes quota check for
+            // type4.1-type4.4 once we no longer treat rewards of type4.5 as type1.1.
+            // For now, node providers may deploy arbitrarily many nodes of these
+            // types without being constrained by `max_rewardable_nodes`. Type4.5 is
+            // explicitly excluded from this exemption.
+            let bypass_max_rewardable_nodes_check = matches!(
+                node_reward_type,
+                NodeRewardType::Type4dot1
+                    | NodeRewardType::Type4dot2
+                    | NodeRewardType::Type4dot3
+                    | NodeRewardType::Type4dot4
+            );
 
-            let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
-                .into_iter()
-                .filter_map(|node| node.node_reward_type)
-                .filter(|t| t == &(node_reward_type as i32))
-                .count() as u32;
+            if !bypass_max_rewardable_nodes_check {
+                let max_rewardable_nodes_same_type = *node_operator_record
+                    .max_rewardable_nodes
+                    .get(&(node_reward_type.to_string()))
+                    .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
 
-            // Validate node operator's max_rewardable_nodes quota
-            if max_rewardable_nodes_same_type
-                <= num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type)
-            {
-                return Err(format!(
-                    "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}.\
-                    Number of nodes in the registry with {node_reward_type} type = {num_in_registry_same_type},\
-                    Number of removed nodes with same IP and same type = {num_removed_same_ip_same_type},\
-                    {node_reward_type} quota = {max_rewardable_nodes_same_type}"
-                ));
+                let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
+                    .into_iter()
+                    .filter_map(|node| node.node_reward_type)
+                    .filter(|t| t == &(node_reward_type as i32))
+                    .count() as u32;
+
+                // Validate node operator's max_rewardable_nodes quota
+                if max_rewardable_nodes_same_type
+                    <= num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type)
+                {
+                    return Err(format!(
+                        "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}.\
+                        Number of nodes in the registry with {node_reward_type} type = {num_in_registry_same_type},\
+                        Number of removed nodes with same IP and same type = {num_removed_same_ip_same_type},\
+                        {node_reward_type} quota = {max_rewardable_nodes_same_type}"
+                    ));
+                }
             }
         }
 
@@ -1121,6 +1136,72 @@ mod tests {
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
         registry
             .do_add_node_(payload.clone(), node_operator_id, now_system_time())
+            .unwrap();
+    }
+
+    #[test]
+    fn should_allow_arbitrarily_many_nodes_of_type4dot1_through_type4dot4() {
+        // TODO(NNS1-XXXX): Remove this test once we re-enable the
+        // max_rewardable_nodes quota check for type4.1-type4.4. See related TODO
+        // in `do_add_node_`.
+        for node_reward_type in [
+            NodeRewardType::Type4dot1,
+            NodeRewardType::Type4dot2,
+            NodeRewardType::Type4dot3,
+            NodeRewardType::Type4dot4,
+        ] {
+            let mut registry = invariant_compliant_registry(0);
+
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+            // Note: `max_rewardable_nodes` intentionally does NOT contain
+            // an entry for `node_reward_type` here, demonstrating that the
+            // quota does not apply for these types.
+            let node_operator_id = registry_add_node_operator_for_node(
+                &mut registry,
+                node_ids[0],
+                btreemap! {},
+            );
+
+            // Adding several nodes of this type should all succeed even
+            // though no quota is configured.
+            for i in 0..3u8 {
+                let (payload, _) = prepare_add_node_payload(10 + i, node_reward_type);
+                registry
+                    .do_add_node_(payload, node_operator_id, now_system_time())
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "do_add_node_ failed for {node_reward_type} on iteration {i}: {e}"
+                        )
+                    });
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "[Registry] do_add_node: Node Operator has reached max_rewardable_nodes quota for type4.5"
+    )]
+    fn should_panic_if_max_rewardable_nodes_is_exhausted_for_type4dot5() {
+        // type4.5 is explicitly excluded from the type4.1-type4.4 exemption
+        // because rewards of type4.5 are currently treated as type1.1. The
+        // standard max_rewardable_nodes quota check therefore still applies.
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id = registry_add_node_operator_for_node(
+            &mut registry,
+            node_ids[0],
+            btreemap! { NodeRewardType::Type4dot5 => 0 },
+        );
+
+        let (payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type4dot5);
+
+        registry
+            .do_add_node_(payload, node_operator_id, now_system_time())
             .unwrap();
     }
 
