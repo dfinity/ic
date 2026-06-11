@@ -75,43 +75,64 @@ fn test_implemented_interface_matches_declared_interface_exactly() {
 }
 
 #[test]
-fn ensure_only_subnet_admins_set_accepts_empty_payload() {
+fn ensure_only_allowed_fields_set_accepts_empty_payload() {
     // Pure no-op: no fields set at all. We don't actually want to allow this
     // in practice (the call would be useless), but the validator's job is
     // purely structural — it must accept any payload where the only mutated
-    // field is `subnet_admins`.
-    ensure_only_subnet_admins_set(&empty_update_payload())
+    // fields are the allowed ones.
+    ensure_only_allowed_fields_set(&empty_update_payload())
         .expect("an empty payload must pass the structural check");
 }
 
 #[test]
-fn ensure_only_subnet_admins_set_accepts_subnet_admins_only() {
+fn ensure_only_allowed_fields_set_accepts_subnet_admins_only() {
     let mut payload = empty_update_payload();
     payload.subnet_admins = Some(vec![PrincipalId::new_user_test_id(42)]);
-    ensure_only_subnet_admins_set(&payload).expect("subnet_admins-only payload must be allowed");
+    ensure_only_allowed_fields_set(&payload).expect("subnet_admins-only payload must be allowed");
 }
 
 #[test]
-fn ensure_only_subnet_admins_set_rejects_other_fields() {
+fn ensure_only_allowed_fields_set_accepts_is_halted() {
+    for is_halted in [true, false] {
+        let mut payload = empty_update_payload();
+        payload.is_halted = Some(is_halted);
+        ensure_only_allowed_fields_set(&payload)
+            .unwrap_or_else(|e| panic!("is_halted={is_halted} payload must be allowed: {e}"));
+    }
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_accepts_subnet_admins_and_is_halted() {
+    let mut payload = empty_update_payload();
+    payload.subnet_admins = Some(vec![PrincipalId::new_user_test_id(42)]);
+    payload.is_halted = Some(true);
+    ensure_only_allowed_fields_set(&payload)
+        .expect("subnet_admins + is_halted payload must be allowed");
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_rejects_other_fields() {
     let mut payload = empty_update_payload();
     payload.max_number_of_canisters = Some(100);
-    payload.is_halted = Some(true);
-    let err = ensure_only_subnet_admins_set(&payload).expect_err("should reject");
+    // `halt_at_cup_height` is intentionally *not* part of the allowed surface,
+    // even though it is halting-adjacent: only `is_halted` is.
+    payload.halt_at_cup_height = Some(true);
+    let err = ensure_only_allowed_fields_set(&payload).expect_err("should reject");
     assert!(
         err.contains("max_number_of_canisters"),
         "error must mention disallowed field: {err}"
     );
     assert!(
-        err.contains("is_halted"),
+        err.contains("halt_at_cup_height"),
         "error must mention disallowed field: {err}"
     );
 }
 
 #[test]
-fn ensure_only_subnet_admins_set_rejects_non_default_gossip_flag() {
+fn ensure_only_allowed_fields_set_rejects_non_default_gossip_flag() {
     let mut payload = empty_update_payload();
     payload.set_gossip_config_to_default = true;
-    let err = ensure_only_subnet_admins_set(&payload).expect_err("should reject");
+    let err = ensure_only_allowed_fields_set(&payload).expect_err("should reject");
     assert!(
         err.contains("set_gossip_config_to_default"),
         "error must mention the non-default bool: {err}"
