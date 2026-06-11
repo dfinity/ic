@@ -32,6 +32,7 @@
 
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
+use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
 use ic_canonical_state::lazy_tree_conversion::state_height_as_tree;
 use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
@@ -8357,6 +8358,7 @@ fn stream_store_encode_decode(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8386,6 +8388,7 @@ fn stream_store_decode_with_modified_hash_fails(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8418,6 +8421,7 @@ fn stream_store_decode_with_empty_witness_fails(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8447,6 +8451,7 @@ fn stream_store_decode_slice_push_additional_message(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8499,6 +8504,7 @@ fn stream_store_decode_slice_modify_message_begin(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8538,6 +8544,7 @@ fn stream_store_decode_slice_modify_signals_end(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8574,6 +8581,7 @@ fn stream_store_decode_slice_push_signal(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8612,6 +8620,7 @@ fn stream_store_decode_with_invalid_destination(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8642,6 +8651,7 @@ fn stream_store_decode_with_rejecting_verifier(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8674,6 +8684,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8703,6 +8714,7 @@ fn stream_store_encode_partial(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
     #[strategy(0..1000_usize)] byte_limit: usize,
@@ -8721,6 +8733,7 @@ fn stream_store_encode_partial_bad_indices(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
     #[strategy(0..1000_usize)] byte_limit: usize,

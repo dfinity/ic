@@ -166,6 +166,102 @@ fn canonical_encoding_stream_header() {
     }
 }
 
+/// Canonical CBOR encoding (versions `V26` and above) of:
+///
+/// ```no_run
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+///         RejectSignal::new(RejectReason::QueueFull, 251.into()),
+///         RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+///         RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+///         RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+///         RejectSignal::new(RejectReason::Unknown, 255.into()),
+///         RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
+///     ]
+///     .into(),
+///     flags: StreamFlags {
+///        deprecated_responses_only: true,
+///     },
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A5          # map(5)
+///    00       # field_index(StreamHeader::begin)
+///    17       # unsigned(23)
+///    01       # field_index(StreamHeader::end)
+///    18 19    # unsigned(25)
+///    02       # field_index(StreamHeader::signals_end)
+///    19 0100  # unsigned(256)
+///    04       # field_index(StreamHeader::flags)
+///    01       # unsigned(1)
+///    05       # field_index(StreamHeader::reject_signals)
+///    A8       # map(8)
+///       00    # field_index(RejectSignals::canister_migrating_deltas)
+///       81    # array(1)
+///          07 # unsigned(7)
+///       01    # field_index(RejectSignals::canister_not_found_deltas)
+///       81    # array(1)
+///          06 # unsigned(6)
+///       02    # field_index(RejectSignals::canister_stopped_deltas)
+///       81    # array(1)
+///          02 # unsigned(2)
+///       03    # field_index(RejectSignals::canister_stopping_deltas)
+///       81    # array(1)
+///          03 # unsigned(3)
+///       04    # field_index(RejectSignals::queue_full_deltas)
+///       81    # array(1)
+///          05 # unsigned(5)
+///       05    # field_index(RejectSignals::out_of_memory_deltas)
+///       81    # array(1)
+///          04 # unsigned(4)
+///       06    # field_index(RejectSignals::unknown_deltas)
+///       81    # array(1)
+///          01 # unsigned(1)
+///       07    # field_index(RejectSignals::engine_not_allowed_deltas)
+///       81    # array(1)
+///          08 # unsigned(8)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_stream_header_v26() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V26)
+    {
+        let header = StreamHeader::new(
+            23.into(),
+            25.into(),
+            256.into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+                RejectSignal::new(RejectReason::QueueFull, 251.into()),
+                RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+                RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+                RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+                RejectSignal::new(RejectReason::Unknown, 255.into()),
+                RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
+            ]
+            .into(),
+            StreamFlags {
+                deprecated_responses_only: true,
+            },
+        );
+
+        assert_eq!(
+            "A5 00 17 01 18 19 02 19 01 00 04 01 05 A8 00 81 07 01 81 06 02 81 02 03 81 03 04 81 05 05 81 04 06 81 01 07 81 08",
+            as_hex(&encode_stream_header(&header, certification_version))
+        );
+    }
+}
+
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
@@ -1910,21 +2006,25 @@ fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
 }
 
 fn reject_signals(
-    _certification_version: CertificationVersion,
+    certification_version: CertificationVersion,
 ) -> (VecDeque<RejectSignal>, StreamIndex) {
-    (
-        vec![
-            RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
-            RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
-            RejectSignal::new(RejectReason::CanisterStopped, 251.into()),
-            RejectSignal::new(RejectReason::CanisterStopping, 252.into()),
-            RejectSignal::new(RejectReason::QueueFull, 253.into()),
-            RejectSignal::new(RejectReason::OutOfMemory, 254.into()),
-            RejectSignal::new(RejectReason::Unknown, 255.into()),
-        ]
-        .into(),
-        256.into(),
-    )
+    let mut reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 251.into()),
+        RejectSignal::new(RejectReason::CanisterStopping, 252.into()),
+        RejectSignal::new(RejectReason::QueueFull, 253.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 254.into()),
+        RejectSignal::new(RejectReason::Unknown, 255.into()),
+    ];
+    // `EngineNotAllowed` signals are only encodable starting at V26.
+    if certification_version >= CertificationVersion::V26 {
+        reject_signals.push(RejectSignal::new(
+            RejectReason::EngineNotAllowed,
+            248.into(),
+        ));
+    }
+    (reject_signals.into(), 256.into())
 }
 
 fn request_message(certification_version: CertificationVersion) -> StreamMessage {
