@@ -231,6 +231,12 @@ def system_test(
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
+    # Make the test driver allocate the Farm testnet to the same DC as the
+    # machine running the test (the DC volatile status variable derived from
+    # NODE_NAME). This avoids slow cross-DC transfers of large images.
+    # No-op when the DC is unknown, e.g. when running locally.
+    env["ALLOCATE_TESTNET_TO_LOCAL_DC"] = "1"
+
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
