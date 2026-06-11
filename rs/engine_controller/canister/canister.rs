@@ -187,20 +187,22 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
     response
 }
 
-/// Validates that the only field set on the proxied `UpdateSubnetPayload` is
-/// `subnet_admins`. Every other `Option<_>` field must be `None`, and the
-/// single non-optional knob (`set_gossip_config_to_default`) must hold its
-/// default value (`false`). The required `subnet_id` is exempt because it
-/// merely identifies the target.
+/// Validates that the only fields set on the proxied `UpdateSubnetPayload`
+/// are the ones the engine controller is allowed to manage: `subnet_admins`
+/// and `is_halted` (subnet halting / unhalting). Every other `Option<_>`
+/// field must be `None`, and the single non-optional knob
+/// (`set_gossip_config_to_default`) must hold its default value (`false`).
+/// The required `subnet_id` is exempt because it merely identifies the target.
 ///
 /// This keeps the surface of `update_subnet` deliberately tiny: only the
 /// fields the engine controller is intended to manage flow through. Adding a
 /// new allowed field is a conscious, code-level decision.
-fn ensure_only_subnet_admins_set(payload: &UpdateSubnetPayload) -> Result<(), String> {
+fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), String> {
     let UpdateSubnetPayload {
         subnet_id: _,
-        // The single field we allow.
+        // The fields we allow.
         subnet_admins: _,
+        is_halted: _,
 
         max_ingress_bytes_per_message,
         max_ingress_bytes_per_block,
@@ -212,7 +214,6 @@ fn ensure_only_subnet_admins_set(payload: &UpdateSubnetPayload) -> Result<(), St
         dkg_dealings_per_block,
         start_as_nns,
         subnet_type,
-        is_halted,
         halt_at_cup_height,
         features,
         resource_limits,
@@ -260,7 +261,6 @@ fn ensure_only_subnet_admins_set(payload: &UpdateSubnetPayload) -> Result<(), St
     check_none!(dkg_dealings_per_block, "dkg_dealings_per_block");
     check_none!(start_as_nns, "start_as_nns");
     check_none!(subnet_type, "subnet_type");
-    check_none!(is_halted, "is_halted");
     check_none!(halt_at_cup_height, "halt_at_cup_height");
     check_none!(features, "features");
     check_none!(resource_limits, "resource_limits");
@@ -290,7 +290,7 @@ fn ensure_only_subnet_admins_set(payload: &UpdateSubnetPayload) -> Result<(), St
     } else {
         Err(format!(
             "Updating these fields via the engine controller is not allowed: {}. \
-             Only `subnet_admins` may be updated.",
+             Only `subnet_admins` and `is_halted` may be updated.",
             disallowed.join(", ")
         ))
     }
@@ -309,8 +309,8 @@ fn normalize_subnet_admins(admins: Vec<PrincipalId>) -> Vec<PrincipalId> {
 }
 
 /// Proxies to the registry's `update_subnet` endpoint. Only `subnet_admins`
-/// may be updated through this path; every other field must be left at its
-/// default value (`None` / `false`) or the call is rejected.
+/// and `is_halted` may be updated through this path; every other field must be
+/// left at its default value (`None` / `false`) or the call is rejected.
 ///
 /// The `subnet_admins` list is always normalized to include the engine
 /// controller's authorized caller (the super admin), so callers cannot
@@ -318,7 +318,7 @@ fn normalize_subnet_admins(admins: Vec<PrincipalId>) -> Vec<PrincipalId> {
 #[update]
 async fn update_subnet(payload: UpdateSubnetPayload) -> Result<(), String> {
     ensure_authorized()?;
-    ensure_only_subnet_admins_set(&payload)?;
+    ensure_only_allowed_fields_set(&payload)?;
 
     // Normalize `subnet_admins` so the super admin is always present.
     // The caller may omit the field entirely (no change requested), but if
