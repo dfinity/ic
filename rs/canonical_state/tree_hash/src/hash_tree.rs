@@ -1,12 +1,14 @@
-use crate::lazy_tree::{LazyFork, LazyTree};
+use crate::lazy_tree::{LazyFork, LazyTree, SubtreeId};
 use crypto::WitnessGenerationError;
 use ic_crypto_tree_hash::{
     self as crypto, Digest, Label, LabeledTree, WitnessBuilder, hasher::Hasher,
 };
+use ic_utils::iter::left_outer_join;
 use itertools::izip;
 use std::fmt;
 use std::iter::repeat_with;
 use std::ops::Range;
+use std::sync::Arc;
 
 /// The number of threads we use for building HashTree
 const NUMBER_OF_CERTIFICATION_THREADS: u32 = 16;
@@ -22,13 +24,14 @@ const EMPTY_HASH: Digest = Digest([
     0xcf, 0xfb, 0x6c, 0x47, 0xdb, 0xab, 0x21, 0x6e, 0x79, 0x30, 0xe8, 0x2f, 0x81, 0x90, 0xd1, 0x20,
 ]);
 
-/// 30 LSBs are used to store the index
-const INDEX_MASK: u32 = 0x3fff_ffff;
-/// 2 MSBs are used to store the node kind
-const KIND_MASK: u32 = 0xc000_0000;
-const LEAF_KIND: u32 = 0x4000_0000;
-const NODE_KIND: u32 = 0x8000_0000;
-const FORK_KIND: u32 = 0xc000_0000;
+/// 29 LSBs are used to store the index
+const INDEX_MASK: u32 = 0x1fff_ffff;
+/// 3 MSBs are used to store the node kind
+const KIND_MASK: u32 = 0xe000_0000;
+const LEAF_KIND: u32 = 0x2000_0000;
+const NODE_KIND: u32 = 0x4000_0000;
+const FORK_KIND: u32 = 0x6000_0000;
+const SUBTREE_KIND: u32 = 0x8000_0000;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum NodeKind {
@@ -36,19 +39,23 @@ enum NodeKind {
     Fork,
     Leaf,
     Node,
+    /// A self-contained, reusable subtree: a complete `Arc<HashTree>` plus the
+    /// [`SubtreeId`] of the source it was built from. An unchanged subtree's (equal
+    /// `SubtreeId`) `Arc<HashTree>` can be reused verbatim from a baseline tree.
+    /// See [`hash_lazy_tree_with_baseline`].
+    Subtree,
 }
 
-/// NodeId describe the position of a node in the HashTree data structure
+/// NodeId describe the position of a node in the `HashTree` data structure
 ///
-/// HashTree consists of several parallel vectors of vectors. The kind of node
-/// is node_id.kind(), the first index is node_id.bucket(), whereas the second
-/// index is node_id.index().
-///
-/// For example, the digest of a node_id with node_id.kind() = NodeKind::Fork can
-/// is stored at hash_tree.fork_digests[node_id.bucket()][node_id.index()]
+/// `HashTree` consists of several parallel vectors of vectors. The kind of node
+/// is `node_id.kind()`, the first index is `node_id.bucket()`, whereas the second
+/// index is `node_id.index()`. For example, the digest of a node_id with
+/// `node_id.kind() = NodeKind::Fork` is stored at
+/// `hash_tree.fork_digests[node_id.bucket()][node_id.index()]`.
 ///
 /// The reason for storing vectors of vectors is because it lends itself to parallelism
-/// when computing the HashTree.
+/// when computing the `HashTree`.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Default)]
 pub struct NodeId {
     bucket: u32,
@@ -62,12 +69,13 @@ impl fmt::Debug for NodeId {
             NodeKind::Fork => write!(f, "Fork({}, {})", self.bucket(), self.index()),
             NodeKind::Leaf => write!(f, "Leaf({}, {})", self.bucket(), self.index()),
             NodeKind::Node => write!(f, "Node({}, {})", self.bucket(), self.index()),
+            NodeKind::Subtree => write!(f, "Subtree({}, {})", self.bucket(), self.index()),
         }
     }
 }
 
 impl NodeId {
-    /// Constructs a node id for an empty tree.
+    /// Constructs a node ID for an empty tree.
     #[inline]
     fn empty() -> Self {
         Self {
@@ -76,7 +84,7 @@ impl NodeId {
         }
     }
 
-    /// Constructs a node id for a new Fork with the specified index.
+    /// Constructs a node ID for a new `Fork` with the specified index.
     #[inline]
     fn fork(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
         if idx > INDEX_MASK as usize {
@@ -91,7 +99,7 @@ impl NodeId {
         }
     }
 
-    /// Constructs a node id for a new Leaf with the specified index.
+    /// Constructs a node ID for a new `Leaf` with the specified index.
     #[inline]
     fn leaf(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
         if idx > INDEX_MASK as usize {
@@ -106,7 +114,7 @@ impl NodeId {
         }
     }
 
-    /// Constructs a node id for a new Node with the specified index.
+    /// Constructs a node ID for a new `Node` with the specified index.
     #[inline]
     fn node(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
         if idx > INDEX_MASK as usize {
@@ -121,6 +129,21 @@ impl NodeId {
         }
     }
 
+    /// Constructs a node ID for a new `Subtree` with the specified index.
+    #[inline]
+    fn subtree(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
+        if idx > INDEX_MASK as usize {
+            Err(HashTreeError::IndexOverflow)
+        } else {
+            Ok(Self {
+                bucket: bucket
+                    .try_into()
+                    .map_err(|_| HashTreeError::IndexOverflow)?,
+                index_and_kind: SUBTREE_KIND | idx as u32,
+            })
+        }
+    }
+
     /// Returns the component kind of this node.
     #[inline]
     fn kind(self) -> NodeKind {
@@ -129,6 +152,7 @@ impl NodeId {
             FORK_KIND => NodeKind::Fork,
             NODE_KIND => NodeKind::Node,
             LEAF_KIND => NodeKind::Leaf,
+            SUBTREE_KIND => NodeKind::Subtree,
             _ => NodeKind::Empty,
         }
     }
@@ -146,8 +170,8 @@ impl NodeId {
     }
 }
 
-/// A range of NodeIds that share the same bucket and have consecutive indices
-/// index_range is to be understood as a half-open range, i.e., `start <= x < end`.
+/// A range of `NodeIds` that share the same bucket and have consecutive indices.
+/// `index_range` is a half-open range, i.e., `start <= x < end`.
 #[derive(Clone, Debug, Default)]
 struct NodeIndexRange {
     bucket: usize,
@@ -203,17 +227,18 @@ impl NodeIndexRange {
 ///
 /// In this representation, the identifier of a node are two 32 bit unsigned
 /// integers, where the first number indexes into the (outer) vector and for
-/// the second number , the 2 most significant bits are used to indicate the
+/// the second number , the 3 most significant bits are used to indicate the
 /// type of the node:
 ///
-///  * (0,00) is an empty tree.
-///  * (0,01) is a leaf.
-///  * (0,10) is a labeled node.
-///  * (0,11) is a fork.
+///  * (0,000) is an empty tree.
+///  * (0,001) is a leaf.
+///  * (0,010) is a labeled node.
+///  * (0,011) is a fork.
+///  * (0,100) is a reusable subtree.
 ///
-///  This means that the tree can store at most 2^30 nodes of the same type.  As
+///  This means that the tree can store at most 2^29 nodes of the same type.  As
 ///  each tree node has a 32-byte hash associated with it, the tree needs to
-///  occupy at least 32 GiB of data before the index overflows.
+///  occupy at least 16 GiB of data before the index overflows.
 ///
 /// [1]: https://en.wikipedia.org/wiki/AoS_and_SoA
 #[derive(Clone, Debug)]
@@ -235,7 +260,7 @@ pub struct HashTree {
     /// index_range.0 <= index_range.1 <= node_labels[bucket].len()
     root_labels_range: NodeIndexRange,
 
-    /// (i,j)-th element of this array contains the hash of the leaf with id
+    /// (i,j)-th element of this array contains the hash of the leaf with ID
     /// `NodeId::leaf(i,j)`.
     leaf_digests: Vec<Vec<Digest>>,
 
@@ -243,14 +268,14 @@ pub struct HashTree {
     // fork_digests.len() == fork_left_children.len() == fork_right_children.len().
     // forall i: fork_digest[i].len() == fork_left_children[i].len() ==
     // fork_right_children[i].len()
-    /// (i,j)-th element of this array contains the hash of the fork with id equal
+    /// (i,j)-th element of this array contains the hash of the fork with ID equal
     /// to `NodeId::fork(i,j)`.
     fork_digests: Vec<Vec<Digest>>,
-    /// (i,j)-th element of this array contains the node id of the left child of the
-    /// fork with id `NodeId::fork(i,j)`.
+    /// (i,j)-th element of this array contains the node ID of the left child of the
+    /// fork with ID `NodeId::fork(i,j)`.
     fork_left_children: Vec<Vec<NodeId>>,
-    /// (i,j)-th element of this array contains the node id of the right child of
-    /// the fork with id `NodeId::fork(i,j)`.
+    /// (i,j)-th element of this array contains the node ID of the right child of
+    /// the fork with ID `NodeId::fork(i,j)`.
     fork_right_children: Vec<Vec<NodeId>>,
 
     // INVARIANT:
@@ -261,23 +286,40 @@ pub struct HashTree {
     //
     // INVARIANT:
     // labels having the same parent node are stored consecutively in the same bucket.
-    /// (i,j)-th element of this array contains the hash of the labeled node with id
+    /// (i,j)-th element of this array contains the hash of the labeled node with ID
     /// `NodeId::node(i,j)`.
     node_digests: Vec<Vec<Digest>>,
     /// (i,j)-th element of this array contains the label of the labeled node with
-    /// id `NodeId::node(i,j)`.
+    /// ID `NodeId::node(i,j)`.
     node_labels: Vec<Vec<Label>>,
     /// (i,j)-th element of this array contains the direct child of the labeled node
-    /// with id `NodeId::node(i,j)`.
+    /// with ID `NodeId::node(i,j)`.
     node_children: Vec<Vec<NodeId>>,
     /// (i,j)-th element of this array contains an IndexRange pointing to a
     /// half-closed index interval [a, b) in of of the buckets
     /// pointing into the node_labels array containing all the labels on edges
-    /// of the original tree going out of the node with id `NodeId::node(i,j)`.
+    /// of the original tree going out of the node with ID `NodeId::node(i,j)`.
     ///
     /// INVARIANT: bucket ≤ node_labels.len()
     /// index_range.0 <= index_range.1 <= node_labels[bucket].len()
     node_children_labels_ranges: Vec<Vec<NodeIndexRange>>,
+
+    /// (i,j)-th element of this array contains the reusable subtree node with ID
+    /// `NodeId::subtree(i,j)`: a complete, self-contained `Arc<HashTree>` plus
+    /// the [`SubtreeId`] of the source it was built from. The node's digest is
+    /// the inner tree's `root_hash()`.
+    subtrees: Vec<Vec<SubtreeNode>>,
+}
+
+/// A self-contained, reusable subtree stored in a [`NodeKind::Subtree`] node.
+#[derive(Clone, Debug)]
+struct SubtreeNode {
+    /// The fully materialized subtree. Shared so that an unchanged subtree can
+    /// be reused (cloned cheaply) from a baseline tree across rounds.
+    tree: Arc<HashTree>,
+    /// Identity of the source this subtree was built from, used to detect that
+    /// an unchanged subtree can be reused from a baseline. See [`SubtreeId`].
+    id: SubtreeId,
 }
 
 impl HashTree {
@@ -300,20 +342,25 @@ impl HashTree {
             node_labels: vec![Default::default()],
             node_children: vec![Default::default()],
             node_children_labels_ranges: vec![Default::default()],
+            subtrees: vec![Default::default()],
         }
     }
 
-    /// Number of digests in the HashTree
+    /// Number of digests in the `HashTree`.
     pub fn size(&self) -> usize {
         let leaf_size: usize = self.leaf_digests.iter().map(|bucket| bucket.len()).sum();
         let fork_size: usize = self.fork_digests.iter().map(|bucket| bucket.len()).sum();
         let node_size: usize = self.node_digests.iter().map(|bucket| bucket.len()).sum();
+        let subtree_size: usize = self.subtrees.iter().map(|bucket| bucket.len()).sum();
 
-        // Since this is for metrics only we don't care about potential overflows
-        leaf_size + fork_size + node_size
+        // Since this is for metrics only we don't care about potential overflows.
+        // Note: reusable subtree nodes are counted as a single node each; the
+        // nodes of the inner (shared) `Arc<HashTree>` are not counted here.
+        // XXX: Where is this used? Should we also count nodes in subtrees?
+        leaf_size + fork_size + node_size + subtree_size
     }
 
-    /// Largest index in the HashTree
+    /// Largest index in the `HashTree`.
     pub fn max_index(&self) -> usize {
         let leaf_size = self
             .leaf_digests
@@ -333,8 +380,41 @@ impl HashTree {
             .map(|bucket| bucket.len())
             .max()
             .unwrap_or(0);
+        let subtree_size = self
+            .subtrees
+            .iter()
+            .map(|bucket| bucket.len())
+            .max()
+            .unwrap_or(0);
 
-        leaf_size.max(fork_size).max(node_size)
+        leaf_size.max(fork_size).max(node_size).max(subtree_size)
+    }
+
+    /// Number of reusable [`NodeKind::Subtree`] nodes in this tree.
+    ///
+    /// Diagnostics/test only.
+    #[doc(hidden)]
+    pub fn subtree_count(&self) -> usize {
+        self.subtrees.iter().map(|bucket| bucket.len()).sum()
+    }
+
+    /// Number of this tree's reusable subtree nodes whose inner `Arc<HashTree>`
+    /// was reused (is pointer-shared) from `baseline`.
+    ///
+    /// Diagnostics/test only.
+    #[doc(hidden)]
+    pub fn reused_subtree_count(&self, baseline: &HashTree) -> usize {
+        let baseline_ptrs: std::collections::HashSet<usize> = baseline
+            .subtrees
+            .iter()
+            .flatten()
+            .map(|node| Arc::as_ptr(&node.tree) as usize)
+            .collect();
+        self.subtrees
+            .iter()
+            .flatten()
+            .filter(|node| baseline_ptrs.contains(&(Arc::as_ptr(&node.tree) as usize)))
+            .count()
     }
 
     /// Note that new forks are always added to fork_digests[0], but in order
@@ -361,6 +441,14 @@ impl HashTree {
         let id = self.leaf_digests[0].len();
         self.leaf_digests[0].push(d);
         NodeId::leaf(self.bucket_offset, id)
+    }
+
+    /// Constructs a new reusable subtree node wrapping the self-contained
+    /// `tree`, tagged with the source identity `id`.
+    fn new_subtree(&mut self, tree: Arc<HashTree>, id: SubtreeId) -> Result<NodeId, HashTreeError> {
+        let idx = self.subtrees[0].len();
+        self.subtrees[0].push(SubtreeNode { tree, id });
+        NodeId::subtree(self.bucket_offset, idx)
     }
 
     /// Preallocates `len` nodes. Makes the new nodes root if the `parent` is
@@ -423,6 +511,10 @@ impl HashTree {
             NodeKind::Leaf => {
                 &self.leaf_digests[node_id.bucket() - self.bucket_offset][node_id.index()]
             }
+            NodeKind::Subtree => self.subtrees[node_id.bucket() - self.bucket_offset]
+                [node_id.index()]
+            .tree
+            .root_hash(),
             NodeKind::Empty => &EMPTY_HASH,
         }
     }
@@ -470,6 +562,8 @@ impl HashTree {
                 self.node_children[bucket][idx],
             ),
             NodeKind::Leaf => HashTreeView::Leaf(&self.leaf_digests[bucket][idx]),
+            // XXX: Shouldn't this directly return the subtree root?
+            NodeKind::Subtree => HashTreeView::Subtree(&self.subtrees[bucket][idx].tree),
             NodeKind::Empty => HashTreeView::Empty,
         }
     }
@@ -617,6 +711,13 @@ impl HashTree {
                                 );
                                 B::make_pruned(digest.clone())
                             }
+                            HashTreeView::Subtree(inner) => {
+                                debug_assert!(
+                                    false,
+                                    "a tree node without children must not be a subtree"
+                                );
+                                B::make_pruned(inner.root_hash().clone())
+                            }
                         });
                     }
 
@@ -660,6 +761,15 @@ impl HashTree {
             pos: NodeId,
             t: &LabeledTree<Vec<u8>>,
         ) -> Result<B, WitnessGenerationError<B>> {
+            // A reusable subtree node embeds a complete `Arc<HashTree>`. To generate a
+            // witness we simply switch into that inner tree and continue there.
+            if pos.kind() == NodeKind::Subtree {
+                let HashTreeView::Subtree(inner) = ht.view(pos) else {
+                    unreachable!("pos.kind() == Subtree")
+                };
+                return go::<B>(inner, NodeId::empty(), inner.root, t);
+            }
+
             match t {
                 LabeledTree::Leaf(data) => Ok(match ht.view(pos) {
                     HashTreeView::Leaf(_) => B::make_leaf(&data[..]),
@@ -668,12 +778,16 @@ impl HashTree {
                         B::make_node(label.clone(), B::make_pruned(ht.digest(child).clone()))
                     }
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
+                    // Intercepted above.
+                    HashTreeView::Subtree(inner) => B::make_pruned(inner.root_hash().clone()),
                 }),
                 LabeledTree::SubTree(children) if children.is_empty() => Ok(match ht.view(pos) {
                     HashTreeView::Empty => B::make_empty(),
                     HashTreeView::Leaf(digest) => B::make_pruned(digest.clone()),
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
                     HashTreeView::Node(digest, _label, _child) => B::make_pruned(digest.clone()),
+                    // Intercepted above.
+                    HashTreeView::Subtree(inner) => B::make_pruned(inner.root_hash().clone()),
                 }),
                 LabeledTree::SubTree(children) => children
                     .iter()
@@ -704,6 +818,9 @@ impl HashTree {
         self.node_children.extend(subtree.node_children);
         self.node_children_labels_ranges
             .extend(subtree.node_children_labels_ranges);
+
+        // Reusable subtrees
+        self.subtrees.extend(subtree.subtrees);
     }
 }
 
@@ -713,6 +830,12 @@ impl PartialEq<crypto::HashTree> for HashTree {
         fn eq_recursive(ht: &HashTree, ht_root: NodeId, other: &crypto::HashTree) -> bool {
             ht.digest(ht_root) == other.digest()
                 && match (ht_root.kind(), other) {
+                    // A reusable subtree node embeds a complete inner tree, so
+                    // compare structurally by recursing into it.
+                    (NodeKind::Subtree, _) => {
+                        let inner = &ht.subtrees[ht_root.bucket()][ht_root.index()].tree;
+                        eq_recursive(inner, inner.root, other)
+                    }
                     (NodeKind::Leaf | NodeKind::Empty, crypto::HashTree::Leaf { digest: _ }) => {
                         true
                     }
@@ -763,6 +886,9 @@ pub enum HashTreeView<'a> {
     Leaf(&'a Digest),
     Fork(&'a Digest, NodeId, NodeId),
     Node(&'a Digest, &'a Label, NodeId),
+    /// A reusable subtree node; holds the embedded, self-contained inner tree
+    /// (whose `root_hash()` is this node's digest).
+    Subtree(&'a HashTree),
 }
 
 /// Error produced when computing hash trees
@@ -774,9 +900,108 @@ pub enum HashTreeError {
     IndexOverflow,
 }
 
+/// A position in a baseline [`HashTree`] whose labeled children mirror the
+/// children of the lazy fork currently being (re)built. Used to reuse subtrees
+/// with matching [`SubtreeId`] from a previously built tree, traversed in
+/// lockstep with the new tree.
+#[derive(Clone, Copy)]
+struct Baseline<'a> {
+    tree: &'a HashTree,
+    /// The labeled node whose children we compare against (`empty` for the root).
+    parent: NodeId,
+}
+
+/// One labeled child of a [`Baseline`] cursor.
+#[derive(Clone, Copy)]
+struct BaselineChild<'a> {
+    tree: &'a HashTree,
+    /// The labeled node (`kind() == Node`) for this child.
+    node: NodeId,
+}
+
+impl<'a> Baseline<'a> {
+    /// Streams the baseline children as `(label, child)` pairs, in label order
+    /// (so they can be merge-joined with the new fork's children).
+    fn children(self) -> impl Iterator<Item = (Label, BaselineChild<'a>)> + 'a {
+        let tree = self.tree;
+        let NodeIndexRange {
+            bucket,
+            index_range,
+        } = tree.node_labels_range(self.parent);
+        index_range.map(move |idx| {
+            let node = NodeId::node(bucket, idx).expect("valid baseline hash tree");
+            (
+                tree.node_labels[bucket][idx].clone(),
+                BaselineChild { tree, node },
+            )
+        })
+    }
+}
+
+impl<'a> BaselineChild<'a> {
+    /// The subtree under this labeled node.
+    fn subtree(&self) -> NodeId {
+        let bucket = self.node.bucket() - self.tree.bucket_offset;
+        self.tree.node_children[bucket][self.node.index()]
+    }
+
+    /// If the baseline stored this child as a reusable [`NodeKind::Subtree`],
+    /// returns its source identity and the shared inner tree.
+    fn reusable(&self) -> Option<(&'a SubtreeId, &'a Arc<HashTree>)> {
+        let child = self.subtree();
+        if child.kind() == NodeKind::Subtree {
+            let node = &self.tree.subtrees[child.bucket() - self.tree.bucket_offset][child.index()];
+            Some((&node.id, &node.tree))
+        } else {
+            None
+        }
+    }
+
+    /// A cursor for descending into this child when recomputing it inline.
+    fn descend(self) -> Baseline<'a> {
+        Baseline {
+            tree: self.tree,
+            parent: self.node,
+        }
+    }
+}
+
 /// Materializes the provided lazy tree and builds its hash tree that can be
 /// used to produce witnesses.
+///
+/// Subtrees that carry a [`LazyTree::subtree_id`] (e.g. canisters) are built as
+/// standalone trees and stored as self-contained [`NodeKind::Subtree`] nodes.
+/// The resulting tree has the exact same root hash as a fully materialized
+/// build and serves witnesses without any external source.
 pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
+    hash_lazy_tree_impl(t, None)
+}
+
+/// Like [`hash_lazy_tree`], but reuses the already-built `Arc<HashTree>` of
+/// every unchanged subtree from `baseline`.
+///
+/// The new lazy tree and the baseline tree are traversed in lockstep (children
+/// merge-joined by label). Wherever a child carries a [`SubtreeId`] equal to the
+/// one the baseline stored at the same label, the baseline's inner tree is
+/// reused verbatim instead of rebuilding and rehashing it.
+///
+/// The result is identical (same root hash, same witnesses) to a full
+/// [`hash_lazy_tree`] build. `baseline` must have been built by
+/// `hash_lazy_tree`/`hash_lazy_tree_with_baseline` under the **same
+/// certification version** as `t`, since [`SubtreeId`] equality only implies
+/// digest equality when all ambient encoding parameters match; supplying a
+/// version-mismatched baseline produces a corrupt result (consensus critical).
+pub fn hash_lazy_tree_with_baseline(
+    t: &LazyTree<'_>,
+    baseline: &HashTree,
+) -> Result<HashTree, HashTreeError> {
+    hash_lazy_tree_impl(t, Some(baseline))
+}
+
+fn hash_lazy_tree_impl(
+    t: &LazyTree<'_>,
+    baseline: Option<&HashTree>,
+) -> Result<HashTree, HashTreeError> {
     struct SubtreeRoot {
         children_range: NodeIndexRange,
         root: NodeId,
@@ -808,12 +1033,48 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         }
     }
 
+    /// Builds the hash tree for `child`, returning the [`NodeId`] of its root.
+    ///
+    /// If `child` carries a [`LazyTree::subtree_id`] it becomes a self-contained
+    /// [`NodeKind::Subtree`] node: its inner `Arc<HashTree>` is reused from the
+    /// matching `baseline` child when the ids are equal, otherwise it is built
+    /// standalone via [`hash_lazy_tree`]. Otherwise `child` is materialized
+    /// inline into `ht` via [`go`], descending the baseline cursor in lockstep.
+    fn build_child(
+        child: &LazyTree<'_>,
+        ht: &mut HashTree,
+        parent: NodeId,
+        par_strategy: &mut ParStrategy,
+        recursion_depth: u32,
+        baseline: Option<BaselineChild<'_>>,
+    ) -> Result<NodeId, HashTreeError> {
+        match child.subtree_id() {
+            Some(id) => {
+                let tree = match baseline.and_then(|b| b.reusable()) {
+                    Some((base_id, base_tree)) if *base_id == id => Arc::clone(base_tree),
+                    _ => Arc::new(hash_lazy_tree(child)?),
+                };
+                ht.new_subtree(tree, id)
+            }
+            None => go(
+                child,
+                ht,
+                parent,
+                par_strategy,
+                recursion_depth,
+                // XXX: This should be `None`.
+                baseline.map(BaselineChild::descend),
+            ),
+        }
+    }
+
     fn go(
         t: &LazyTree<'_>,
         ht: &mut HashTree,
         parent: NodeId,
         par_strategy: &mut ParStrategy,
         recursion_depth: u32,
+        baseline: Option<Baseline<'_>>,
     ) -> Result<NodeId, HashTreeError> {
         if recursion_depth > MAX_RECURSION_DEPTH {
             return Err(HashTreeError::RecursionTooDeep(MAX_RECURSION_DEPTH));
@@ -864,15 +1125,23 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
                         recursion_depth,
                         bucket,
                         &range,
+                        baseline,
                     )?;
                 } else {
-                    for (i, (label, child)) in range.zip(f.children()) {
-                        let child = go(
+                    // Merge-join the new children with the baseline children (both
+                    // in ascending label order); a missing baseline child is `None`.
+                    let joined = left_outer_join(
+                        f.children(),
+                        baseline.into_iter().flat_map(Baseline::children),
+                    );
+                    for (i, (label, child, base)) in range.zip(joined) {
+                        let child = build_child(
                             &child,
                             ht,
                             NodeId::node(bucket, i)?,
                             par_strategy,
                             recursion_depth + 1,
+                            base,
                         )?;
                         let mut h = Hasher::for_domain("ic-hashtree-labeled");
                         h.update(label.as_bytes());
@@ -916,6 +1185,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
     }
 
     /// Does the same as the single-threaded else branch, but using multiple threads
+    #[allow(clippy::too_many_arguments)]
     fn fork_parallel(
         thread_pool: &mut scoped_threadpool::Pool,
         ht: &mut HashTree,
@@ -924,6 +1194,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         depth: u32,
         bucket: usize,
         range: &Range<usize>,
+        baseline: Option<Baseline<'_>>,
     ) -> Result<(), HashTreeError> {
         let bucket_offset = ht.node_children.len();
         let threads = thread_pool.thread_count() as usize;
@@ -940,9 +1211,22 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         let mut roots: Vec<Vec<SubtreeRoot>> = repeat_with(|| Vec::with_capacity(per_thread))
             .take(threads)
             .collect();
+
+        // Align each new child with its baseline counterpart (by label) in a
+        // single sequential pass (no hashing); the actual building below runs in
+        // parallel. The resulting `Vec` is aligned with `children`.
+        // XXX: This should be constructed at once with `children`.
+        let bases: Vec<Option<BaselineChild>> = left_outer_join(
+            children.iter().map(|(label, _)| (label.clone(), ())),
+            baseline.into_iter().flat_map(Baseline::children),
+        )
+        .map(|(_label, (), base)| base)
+        .collect();
+
         thread_pool.scoped(|scope| {
-            for (i, (children, subtree, roots)) in izip!(
+            for (i, (children, bases, subtree, roots)) in izip!(
                 children.chunks(per_thread),
+                bases.chunks(per_thread),
                 subtrees.iter_mut(),
                 roots.iter_mut()
             )
@@ -957,21 +1241,34 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
                     // lookup based on NodeId.
                     let mut ht = HashTree::new_with_bucket_offset(bucket_offset + i);
                     let mut error: Option<HashTreeError> = None;
-                    for (_, child) in children {
+                    for ((_label, child), base) in children.iter().zip(bases) {
                         // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
-                        // and fix the link from `root` to the parent later
-                        let root = go(
+                        // and fix the link from `root` to the parent later.
+                        //
+                        // A reusable subtree node has no materialized labeled children of its
+                        // own, so its `children_range` is empty (and is never consulted: such
+                        // nodes are descended into via their inner tree during witness generation).
+                        let root: Result<(NodeId, NodeIndexRange), HashTreeError> = build_child(
                             child,
                             &mut ht,
                             NodeId::empty(),
                             &mut ParStrategy::Sequential,
                             depth + 1,
-                        );
+                            *base,
+                        )
+                        .map(|id| {
+                            let children_range = if id.kind() == NodeKind::Subtree {
+                                NodeIndexRange::default()
+                            } else {
+                                ht.root_labels_range.clone()
+                            };
+                            (id, children_range)
+                        });
                         match root {
-                            Ok(root) => {
+                            Ok((root, children_range)) => {
                                 roots.push(SubtreeRoot {
                                     root,
-                                    children_range: ht.root_labels_range.clone(),
+                                    children_range,
                                 });
                             }
                             Err(err) => {
@@ -1004,8 +1301,23 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         Ok(())
     }
 
+    let baseline = baseline.map(|tree| Baseline {
+        tree,
+        parent: NodeId::empty(),
+    });
+
     let mut ht = HashTree::new();
-    ht.root = go(t, &mut ht, NodeId::empty(), &mut ParStrategy::Concurrent, 0)?;
+    // NB: the root is always materialized; `subtree_id` only collapses
+    // *descendants* into reusable subtree nodes. (Building a stand-alone subtree
+    // is just `hash_lazy_tree` on that subtree's root, which is materialized.)
+    ht.root = go(
+        t,
+        &mut ht,
+        NodeId::empty(),
+        &mut ParStrategy::Sequential,
+        0,
+        baseline,
+    )?;
 
     ht.check_invariants();
 

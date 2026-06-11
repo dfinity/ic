@@ -8,12 +8,53 @@
 pub mod materialize;
 
 use ic_crypto_tree_hash::Label;
+use std::any::Any;
+use std::fmt;
 use std::sync::Arc;
 
 /// A hash of the tree leaf contents according to the IC interface spec.  See
 /// the definition of "reconstruct" function on
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#certificate.
 pub type Hash = [u8; 32];
+
+/// An opaque, type-erased identity for a lazy subtree, backed by a shared
+/// pointer into the source state it was derived from (e.g. an
+/// `Arc<CanisterState>`).
+///
+/// Two IDs are equal iff they point to the same allocation. Because the source
+/// is copy-on-write (a mutation produces a fresh `Arc`), equal IDs imply the
+/// subtrees encode identically — **provided all ambient encoding parameters
+/// (e.g. the certification version) match** — which is what lets an unchanged
+/// subtree's already-built [`crate::hash_tree::HashTree`] be reused across
+/// builds. The held `Arc` also keeps the source alive, so the address can never
+/// be recycled for a different object while the ID exists (no ABA).
+#[derive(Clone)]
+pub struct SubtreeId(Arc<dyn Any + Send + Sync>);
+
+impl SubtreeId {
+    /// Creates a subtree ID from a shared pointer to the subtree's source.
+    pub fn new<T: Any + Send + Sync>(source: Arc<T>) -> Self {
+        Self(source)
+    }
+
+    /// The address of the underlying allocation, used for identity comparison.
+    fn addr(&self) -> *const () {
+        Arc::as_ptr(&self.0) as *const ()
+    }
+}
+
+impl PartialEq for SubtreeId {
+    fn eq(&self, other: &Self) -> bool {
+        self.addr() == other.addr()
+    }
+}
+impl Eq for SubtreeId {}
+
+impl fmt::Debug for SubtreeId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubtreeId({:p})", self.addr())
+    }
+}
 
 /// A type alias for a ref-counted stateless function.
 pub type ArcFn<'a, T> = Arc<dyn Fn() -> T + 'a + Send + Sync>;
@@ -54,6 +95,20 @@ pub trait LazyFork<'a>: Send + Sync {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Returns a stable identity for the subtree rooted at this fork if it
+    /// should be stored as a self-contained, reusable subtree node (an
+    /// `Arc<HashTree>`) in the [`crate::hash_tree::HashTree`].
+    ///
+    /// Defaults to `None` (materialize the subtree inline). Forks that wrap
+    /// shared, copy-on-write state (e.g. an `Arc<CanisterState>`) should
+    /// override this to return that `Arc` as a [`SubtreeId`]. Such subtrees are
+    /// built once as standalone trees and, when an unchanged subtree (same
+    /// `SubtreeId`) is found in a baseline tree, its `Arc<HashTree>` is reused
+    /// verbatim. See [`crate::hash_tree::hash_lazy_tree_with_baseline`].
+    fn subtree_id(&self) -> Option<SubtreeId> {
+        None
+    }
 }
 
 /// A tree that can lazily expand while it's being traversed.
@@ -77,6 +132,17 @@ pub enum LazyTree<'a> {
     // suspended trees
     LazyBlob(ArcFn<'a, Vec<u8>>),
     LazyFork(Arc<dyn LazyFork<'a> + 'a + Send + Sync>),
+}
+
+impl<'a> LazyTree<'a> {
+    /// Returns this subtree's reusable identity, if any; see
+    /// [`LazyFork::subtree_id`]. Only forks can carry one.
+    pub fn subtree_id(&self) -> Option<SubtreeId> {
+        match self {
+            LazyTree::LazyFork(f) => f.subtree_id(),
+            LazyTree::Blob(_, _) | LazyTree::LazyBlob(_) => None,
+        }
+    }
 }
 
 /// A helper function to construct a fork of a lazy tree.
