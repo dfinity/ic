@@ -588,6 +588,8 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
                 .unwrap_or_default()
         };
 
+        assert!(deltas_for(RejectReason::EngineNotAllowed).is_empty());
+
         RejectSignalsV25 {
             canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
             canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
