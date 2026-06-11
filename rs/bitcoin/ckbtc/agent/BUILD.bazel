@@ -12,7 +12,6 @@ rust_library(
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/bitcoin/ckbtc/minter",
-        "//rs/ledger_suite/icrc1",
         "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:num-traits",

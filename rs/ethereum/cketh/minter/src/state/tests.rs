@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -807,7 +806,7 @@ fn state_equivalence() {
     use crate::tx::{
         Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
     };
-    use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
+    use ic_cdk::management_canister::EcdsaPublicKeyResult;
     use maplit::{btreemap, btreeset};
 
     fn source(txhash: &str, index: u64) -> EventSource {
@@ -994,7 +993,7 @@ fn state_equivalence() {
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         log_scrapings: log_scrapings.clone(),
-        ecdsa_public_key: Some(EcdsaPublicKeyResponse {
+        ecdsa_public_key: Some(EcdsaPublicKeyResult {
             public_key: vec![1; 32],
             chain_code: vec![2; 32],
         }),

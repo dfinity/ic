@@ -10,11 +10,13 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+attestation = { path = "../../sev/attestation" }
 clap = { workspace = true }
 ic_os_logging = { path = "../../logging" }
 tracing = { workspace = true }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
+hex = { workspace = true }
 libcryptsetup-rs = { workspace = true }
 ic_device = { path = "../../device" }
 sev_guest = { path = "../../sev/guest" }
@@ -24,6 +26,8 @@ mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 sev = { workspace = true }
 tempfile = { workspace = true }
 

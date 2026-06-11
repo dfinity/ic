@@ -48,9 +48,9 @@ pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 /// The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 
-/// The maximum number of early remote DKG transcripts we want to include in a data payload.
+/// The maximum number of remote DKG transcripts we want to include in a data payload.
 /// Note that responses for `SetupInitialDKG` requests contain two transcripts.
-const MAX_EARLY_REMOTE_TRANSCRIPTS: usize = 2;
+const MAX_REMOTE_TRANSCRIPTS_PER_PAYLOAD: usize = 2;
 
 /// The maximum number of intervals during which an initial DKG request is
 /// attempted.
@@ -448,17 +448,16 @@ mod tests {
         batch::ValidationContext,
         consensus::{
             Block, BlockPayload, BlockProposal, DataPayload, HasHeight, Payload,
-            dkg::DkgDataPayload,
+            dkg::{DkgDataPayload, RemoteDkgAttempts, RemoteTranscriptResult},
         },
         crypto::{
             AlgorithmId, CryptoHash,
             error::MalformedPublicKeyError,
             threshold_sig::ni_dkg::{
                 NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-                NiDkgTranscript, errors::create_transcript_error::DkgCreateTranscriptError,
+                errors::create_transcript_error::DkgCreateTranscriptError,
             },
         },
-        messages::CallbackId,
         time::UNIX_EPOCH,
     };
     use payload_validator::validate_payload;
@@ -862,15 +861,18 @@ mod tests {
                 assert_eq!(remote_dealings, 2);
 
                 // Once enough remote dealings are available on chain, they are turned into
-                // early remote transcripts in the data payload.
+                // remote transcripts in the data payload.
                 pool.advance_round_normal_operation();
-                let early_remote = extract_remote_dkgs_from_highest_block(&pool);
-                assert_eq!(early_remote.len(), 2);
+                let remote_transcripts = extract_remote_dkgs_from_highest_block(&pool);
+                assert_eq!(remote_transcripts.len(), 2);
                 let mut tags = BTreeSet::new();
-                for (dkg_id, _, result) in &early_remote {
-                    assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                    assert!(result.is_ok());
-                    assert!(tags.insert(dkg_id.dkg_tag.clone()));
+                for transcript in &remote_transcripts {
+                    assert_eq!(
+                        transcript.dkg_id.target_subnet,
+                        NiDkgTargetSubnet::Remote(target_id)
+                    );
+                    assert!(transcript.transcript_result.is_ok());
+                    assert!(tags.insert(transcript.dkg_id.dkg_tag.clone()));
                 }
                 assert_eq!(
                     tags,
@@ -887,10 +889,10 @@ mod tests {
                         .as_ref()
                         .as_summary()
                         .dkg
-                        .initial_dkg_attempts
+                        .remote_dkg_attempts
                         .get(&target_id),
-                    Some(&0),
-                    "Expected initial_dkg_attempts[{target_id:?}] to be 0"
+                    Some(&RemoteDkgAttempts::Completed),
+                    "Expected remote_dkg_attempts[{target_id:?}] to be Completed"
                 );
                 let change_set = dkg.on_state_change(&*dkg_pool.read().unwrap());
                 match &change_set.as_slice() {
@@ -919,8 +921,11 @@ mod tests {
                 pool.advance_round_normal_operation_n(dkg_interval_length);
                 let latest_summary = PoolReader::new(&pool).get_highest_finalized_summary_block();
                 let dkg_summary = &latest_summary.payload.as_ref().as_summary().dkg;
-                let remote_dkg_attempts = &dkg_summary.initial_dkg_attempts;
-                assert_eq!(remote_dkg_attempts.get(&target_id), Some(&0));
+                let remote_dkg_attempts = &dkg_summary.remote_dkg_attempts;
+                assert_eq!(
+                    remote_dkg_attempts.get(&target_id),
+                    Some(&RemoteDkgAttempts::Completed)
+                );
                 assert_eq!(remote_dkg_attempts.len(), 1);
             });
         });
@@ -966,9 +971,12 @@ mod tests {
                 assert_eq!(data.dkg.transcripts_for_remote_subnets.len(), 2);
                 let mut tags = BTreeSet::new();
                 for dkg in data.dkg.transcripts_for_remote_subnets.iter() {
-                    assert_eq!(dkg.0.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                    assert!(dkg.2.is_err());
-                    assert!(tags.insert(dkg.0.dkg_tag.clone()));
+                    assert_eq!(
+                        dkg.dkg_id.target_subnet,
+                        NiDkgTargetSubnet::Remote(target_id)
+                    );
+                    assert!(dkg.transcript_result.is_err());
+                    assert!(tags.insert(dkg.dkg_id.dkg_tag.clone()));
                 }
                 assert_eq!(
                     tags,
@@ -1005,9 +1013,12 @@ mod tests {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
                 assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 0);
-                // Verify that the initial_dkg_attempts are set to 0 (completed)
-                assert_eq!(summary.dkg.initial_dkg_attempts.get(&target_id), Some(&0),);
-                assert_eq!(summary.dkg.initial_dkg_attempts.len(), 1);
+                // Verify that the remote_dkg_attempts are set to `Completed`.
+                assert_eq!(
+                    summary.dkg.remote_dkg_attempts.get(&target_id),
+                    Some(&RemoteDkgAttempts::Completed),
+                );
+                assert_eq!(summary.dkg.remote_dkg_attempts.len(), 1);
             } else {
                 panic!(
                     "block at height {} is not a summary block",
@@ -1695,9 +1706,9 @@ mod tests {
         });
     }
 
-    const EARLY_DKG_INTERVAL: u64 = 99;
+    const REMOTE_DKG_INTERVAL: u64 = 99;
 
-    /// Common setup for early transcript tests using `setup_initial_dkg`.
+    /// Common setup for remote transcript tests using `setup_initial_dkg`.
     /// Advances to the first summary block and returns the deps, target id,
     /// and the two remote DKG ids (low + high threshold).
     fn setup_initial_dkg_test(
@@ -1711,7 +1722,7 @@ mod tests {
             vec![(
                 10,
                 SubnetRecordBuilder::from(&node_ids)
-                    .with_dkg_interval_length(EARLY_DKG_INTERVAL)
+                    .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                     .build(),
             )],
         );
@@ -1726,7 +1737,7 @@ mod tests {
         );
 
         deps.pool
-            .advance_round_normal_operation_n(EARLY_DKG_INTERVAL + 1);
+            .advance_round_normal_operation_n(REMOTE_DKG_INTERVAL + 1);
 
         // Verify that the highest summary block has no remote DKG configs and
         // does not contain remote transcripts.
@@ -1742,13 +1753,13 @@ mod tests {
         assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
         let remote_dkg_ids = vec![
             NiDkgId {
-                start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
+                start_block_height: Height::from(REMOTE_DKG_INTERVAL + 1),
                 dealer_subnet: deps.replica_config.subnet_id,
                 dkg_tag: NiDkgTag::LowThreshold,
                 target_subnet: NiDkgTargetSubnet::Remote(target_id),
             },
             NiDkgId {
-                start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
+                start_block_height: Height::from(REMOTE_DKG_INTERVAL + 1),
                 dealer_subnet: deps.replica_config.subnet_id,
                 dkg_tag: NiDkgTag::HighThreshold,
                 target_subnet: NiDkgTargetSubnet::Remote(target_id),
@@ -1809,9 +1820,9 @@ mod tests {
         );
     }
 
-    /// Advance through a full DKG interval and verify that no early remote
+    /// Advance through a full DKG interval and verify that no remote
     /// transcripts or dealings appear in any block.
-    fn assert_no_early_transcript_duplicates(pool: &mut TestConsensusPool, interval_length: u64) {
+    fn assert_no_remote_transcript_duplicates(pool: &mut TestConsensusPool, interval_length: u64) {
         for _ in 0..interval_length + 1 {
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(pool).len(), 0);
@@ -1853,7 +1864,7 @@ mod tests {
     }
 
     #[test]
-    fn test_early_setup_initial_dkg_transcripts() {
+    fn test_setup_initial_dkg_remote_transcripts() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
 
@@ -1882,30 +1893,34 @@ mod tests {
             assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 3);
             assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
 
-            // Now sufficient dealings are on chain; early remote transcripts should appear
+            // Now sufficient dealings are on chain; remote transcripts should appear
             deps.pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
             let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
             assert_eq!(remote_dkgs.len(), 2);
-            for (dkg_id, _, result) in &remote_dkgs {
-                assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                assert!(result.is_ok());
+            for transcript in &remote_dkgs {
+                assert_eq!(
+                    transcript.dkg_id.target_subnet,
+                    NiDkgTargetSubnet::Remote(target_id)
+                );
+                assert!(transcript.transcript_result.is_ok());
             }
             assert!(
                 remote_dkgs
                     .iter()
-                    .any(|(id, _, _)| id.dkg_tag == NiDkgTag::HighThreshold)
+                    .any(|t| t.dkg_id.dkg_tag == NiDkgTag::HighThreshold)
             );
             assert!(
                 remote_dkgs
                     .iter()
-                    .any(|(id, _, _)| id.dkg_tag == NiDkgTag::LowThreshold)
+                    .any(|t| t.dkg_id.dkg_tag == NiDkgTag::LowThreshold)
             );
 
             assert_highest_block_validates(&deps);
 
-            // Also validate with empty transcripts_for_remote_subnets (early
-            // transcripts are only an optimization, so validation must still pass).
+            // Also validate with empty transcripts_for_remote_subnets (including
+            // the remote transcripts is only an optimization, so validation must
+            // still pass).
             let block: Block = deps
                 .pool
                 .validated()
@@ -1920,7 +1935,7 @@ mod tests {
                 .get_notarized_block(&block.parent, height)
                 .map(|block| block.into_inner())
                 .unwrap();
-            let payload_without_early_remote = match block.payload.as_ref() {
+            let payload_without_remote = match block.payload.as_ref() {
                 BlockPayload::Data(data) => {
                     let dkg_without_remote =
                         DkgDataPayload::new(data.dkg.start_height, data.dkg.messages.clone());
@@ -1940,7 +1955,7 @@ mod tests {
                     &pool_reader,
                     &*deps.dkg_pool.read().unwrap(),
                     parent,
-                    &payload_without_early_remote,
+                    &payload_without_remote,
                     deps.state_manager.as_ref(),
                     &block.context,
                     &MetricsRegistry::new().int_counter_vec(
@@ -1954,12 +1969,12 @@ mod tests {
             );
 
             // Verify that no more transcripts are created in later blocks.
-            assert_no_early_transcript_duplicates(&mut deps.pool, EARLY_DKG_INTERVAL);
+            assert_no_remote_transcript_duplicates(&mut deps.pool, REMOTE_DKG_INTERVAL);
         });
     }
 
     #[test]
-    fn test_early_remote_transcripts_with_reproducible_crypto_error() {
+    fn test_remote_transcripts_with_reproducible_crypto_error() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let (mut deps, target_id, remote_dkg_ids) = setup_initial_dkg_test(pool_config);
 
@@ -2005,7 +2020,7 @@ mod tests {
                     &no_op_logger(),
                 )
                 .unwrap();
-                let early_transcripts = payload_builder::create_early_remote_transcripts(
+                let remote_transcripts = payload_builder::create_remote_transcripts(
                     &pool_reader,
                     &mock_crypto,
                     &parent,
@@ -2015,10 +2030,13 @@ mod tests {
                 )
                 .unwrap();
 
-                assert_eq!(early_transcripts.len(), 2);
-                for (dkg_id, _callback_id, result) in &early_transcripts {
-                    assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-                    let error_msg = result.as_ref().unwrap_err();
+                assert_eq!(remote_transcripts.len(), 2);
+                for transcript in &remote_transcripts {
+                    assert_eq!(
+                        transcript.dkg_id.target_subnet,
+                        NiDkgTargetSubnet::Remote(target_id)
+                    );
+                    let error_msg = transcript.transcript_result.as_ref().unwrap_err();
                     assert!(
                         error_msg.contains("test error"),
                         "Error message should contain the original error, got: {error_msg}"
@@ -2030,7 +2048,7 @@ mod tests {
                     dkg: DkgDataPayload::new_with_remote_dkg_transcripts(
                         last_summary_block.height,
                         vec![],
-                        early_transcripts,
+                        remote_transcripts,
                     ),
                     idkg: Default::default(),
                 });
@@ -2067,7 +2085,7 @@ mod tests {
             deps.pool.advance_round_with_block(&proposal);
 
             // Verify that no more transcripts are created in later blocks.
-            assert_no_early_transcript_duplicates(&mut deps.pool, EARLY_DKG_INTERVAL);
+            assert_no_remote_transcript_duplicates(&mut deps.pool, REMOTE_DKG_INTERVAL);
         });
     }
 
@@ -2194,7 +2212,7 @@ mod tests {
     }
 
     #[test]
-    fn test_early_reshare_chain_key_transcripts() {
+    fn test_reshare_chain_key_remote_transcripts() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids = (1..5).map(node_test_id).collect::<Vec<_>>();
             let key_id = VetKdKeyId {
@@ -2209,7 +2227,7 @@ mod tests {
                 vec![(
                     10,
                     SubnetRecordBuilder::from(&node_ids)
-                        .with_dkg_interval_length(EARLY_DKG_INTERVAL)
+                        .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                         .with_chain_key_config(ChainKeyConfig {
                             key_configs: vec![KeyConfig {
                                 key_id: MasterPublicKeyId::VetKd(key_id.clone()),
@@ -2229,7 +2247,7 @@ mod tests {
 
             // Advance until the first vetkd transcript is created
             deps.pool
-                .advance_round_normal_operation_n(EARLY_DKG_INTERVAL + 3);
+                .advance_round_normal_operation_n(REMOTE_DKG_INTERVAL + 3);
 
             // Latest summary should contain only local configs.
             let summary_block = PoolReader::new(&deps.pool).get_highest_finalized_summary_block();
@@ -2253,7 +2271,7 @@ mod tests {
             complement_state_manager_with_dkg_contexts(deps.state_manager.clone(), contexts, None);
 
             let remote_dkg_ids = vec![NiDkgId {
-                start_block_height: Height::from(EARLY_DKG_INTERVAL + 1),
+                start_block_height: Height::from(REMOTE_DKG_INTERVAL + 1),
                 dealer_subnet: subnet_test_id(0),
                 dkg_tag: NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
                     key_id.clone(),
@@ -2266,16 +2284,19 @@ mod tests {
             assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 3);
             assert_eq!(extract_remote_dkgs_from_highest_block(&deps.pool).len(), 0);
 
-            // Now sufficient dealings are in the pool; early remote transcript should appear
+            // Now sufficient dealings are in the pool; remote transcript should appear
             deps.pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
             let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
             assert_eq!(remote_dkgs.len(), 1);
-            let (dkg_id, _, result) = &remote_dkgs[0];
-            assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
-            assert!(result.is_ok());
+            let transcript = &remote_dkgs[0];
             assert_eq!(
-                dkg_id.dkg_tag,
+                transcript.dkg_id.target_subnet,
+                NiDkgTargetSubnet::Remote(target_id)
+            );
+            assert!(transcript.transcript_result.is_ok());
+            assert_eq!(
+                transcript.dkg_id.dkg_tag,
                 NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id))
             );
 
@@ -2283,7 +2304,7 @@ mod tests {
             assert_highest_block_validates(&deps);
 
             // Verify that no more transcripts are created in later blocks.
-            assert_no_early_transcript_duplicates(&mut deps.pool, EARLY_DKG_INTERVAL);
+            assert_no_remote_transcript_duplicates(&mut deps.pool, REMOTE_DKG_INTERVAL);
         });
     }
 
@@ -2292,10 +2313,10 @@ mod tests {
     /// additional SetupInitialDKG context (lowest target_id) with insufficient
     /// dealings for one of its configs:
     /// - The first setup target is skipped (insufficient dealings).
-    /// - The remaining two contexts compete for MAX_EARLY_REMOTE_TRANSCRIPTS
+    /// - The remaining two contexts compete for MAX_REMOTE_TRANSCRIPTS_PER_PAYLOAD
     ///   (= 2), and only the first context's transcripts are included.
     #[test]
-    fn test_early_remote_transcripts_respects_max() {
+    fn test_remote_transcripts_respects_max() {
         for (setup_first, desc) in [
             (true, "SetupInitialDKG first"),
             (false, "ReshareChainKey first"),
@@ -2315,7 +2336,7 @@ mod tests {
                     vec![(
                         10,
                         SubnetRecordBuilder::from(&node_ids)
-                            .with_dkg_interval_length(EARLY_DKG_INTERVAL)
+                            .with_dkg_interval_length(REMOTE_DKG_INTERVAL)
                             .with_chain_key_config(ChainKeyConfig {
                                 key_configs: vec![KeyConfig {
                                     key_id: MasterPublicKeyId::VetKd(key_id.clone()),
@@ -2396,11 +2417,10 @@ mod tests {
                 assert_eq!(
                     extract_remote_dkgs_from_highest_block(&deps.pool).len(),
                     0,
-                    "[{desc}] no early transcripts yet"
+                    "[{desc}] no remote transcripts yet"
                 );
 
-                type RemoteDkg = (NiDkgId, CallbackId, Result<NiDkgTranscript, String>);
-                let check_transcripts = |expect_setup_initial_dkg, remote_dkgs: Vec<RemoteDkg>| {
+                let check = |expect_setup_initial_dkg, remote_dkgs: Vec<RemoteTranscriptResult>| {
                     if expect_setup_initial_dkg {
                         assert_eq!(
                             remote_dkgs.len(),
@@ -2409,14 +2429,14 @@ mod tests {
                             remote_dkgs.len()
                         );
                         let mut tags = BTreeSet::new();
-                        for (dkg_id, _, result) in &remote_dkgs {
+                        for transcript in &remote_dkgs {
                             assert_eq!(
-                                dkg_id.target_subnet,
+                                transcript.dkg_id.target_subnet,
                                 NiDkgTargetSubnet::Remote(setup_target_id),
                                 "[{desc}] transcript should be for SetupInitialDKG target id"
                             );
-                            assert!(result.is_ok(), "[{desc}]");
-                            assert!(tags.insert(dkg_id.dkg_tag.clone()));
+                            assert!(transcript.transcript_result.is_ok(), "[{desc}]");
+                            assert!(tags.insert(transcript.dkg_id.dkg_tag.clone()));
                         }
                         assert_eq!(
                             tags,
@@ -2430,15 +2450,15 @@ mod tests {
                             "[{desc}] Expected 1 ReshareChainKey transcript, got {}",
                             remote_dkgs.len()
                         );
-                        let (dkg_id, _, result) = &remote_dkgs[0];
+                        let transcript = &remote_dkgs[0];
                         assert_eq!(
-                            dkg_id.target_subnet,
+                            transcript.dkg_id.target_subnet,
                             NiDkgTargetSubnet::Remote(reshare_target_id),
                             "[{desc}] transcript should be for ReshareChainKey target id"
                         );
-                        assert!(result.is_ok(), "[{desc}]");
+                        assert!(transcript.transcript_result.is_ok(), "[{desc}]");
                         assert_eq!(
-                            dkg_id.dkg_tag,
+                            transcript.dkg_id.dkg_tag,
                             NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(
                                 key_id.clone()
                             ))
@@ -2448,19 +2468,19 @@ mod tests {
 
                 // The skipped target is skipped (insufficient dealings for its
                 // second config). The remaining setup and reshare targets compete
-                // for MAX_EARLY_REMOTE_TRANSCRIPTS.
+                // for MAX_REMOTE_TRANSCRIPTS_PER_PAYLOAD.
                 deps.pool.advance_round_normal_operation();
                 assert_highest_block_validates(&deps);
                 assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
                 let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
-                check_transcripts(setup_first, remote_dkgs);
+                check(setup_first, remote_dkgs);
 
                 // Now transcripts for the opposite request should appear
                 deps.pool.advance_round_normal_operation();
                 assert_highest_block_validates(&deps);
                 assert_eq!(extract_dealings_from_highest_block(&deps.pool).len(), 0);
                 let remote_dkgs = extract_remote_dkgs_from_highest_block(&deps.pool);
-                check_transcripts(!setup_first, remote_dkgs);
+                check(!setup_first, remote_dkgs);
             });
         }
     }

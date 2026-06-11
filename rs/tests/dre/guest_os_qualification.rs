@@ -99,7 +99,7 @@ pub fn main() -> anyhow::Result<()> {
                         .build()
                         .expect("Should be able to build runtime"),
                     vec![
-                        // Ensure that the initial version is blessed
+                        // Ensure that the initial version is elected
                         // Since we are using our config this should
                         // always be the case.
                         Box::new(EnsureElectedVersion {
@@ -135,7 +135,7 @@ pub fn main() -> anyhow::Result<()> {
                         Box::new(UpdateApiBoundaryNodes {
                             version: initial_version.clone(),
                         }),
-                        // Ensure that the new version is blessed
+                        // Ensure that the new version is elected
                         Box::new(EnsureElectedVersion {
                             version: target_version.clone(),
                             url: get_guestos_update_img_url(),
@@ -190,7 +190,7 @@ pub fn main() -> anyhow::Result<()> {
                         Box::new(RetireElectedVersions {
                             versions: vec![initial_version.clone()],
                         }),
-                        // Ensure that the old version is blessed
+                        // Ensure that the old version is elected
                         // if it was retired previously
                         Box::new(EnsureElectedVersion {
                             version: initial_version.clone(),

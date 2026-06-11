@@ -22,17 +22,17 @@ use crate::{
 };
 use allowed_panics::panic_with_replica_diverged_at_height;
 use crossbeam_channel::{Sender, bounded, unbounded};
-use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state::lazy_tree_conversion::{
+    compute_state_height_witness, replicated_state_as_lazy_tree,
+};
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
-    lazy_tree::LazyTree,
-    lazy_tree::materialize::materialize_partial,
+    lazy_tree::{LazyTree, materialize::materialize_partial},
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{
     Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness, recompute_digest,
-    sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces_certified_stream_store::{
@@ -45,7 +45,7 @@ use ic_interfaces_state_manager::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, warn};
 use ic_metrics::{
     MetricsRegistry,
-    buckets::{decimal_buckets, exponential_buckets},
+    buckets::{decimal_buckets, decimal_buckets_with_zero, exponential_buckets},
 };
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
@@ -183,6 +183,7 @@ pub struct StateManagerMetrics {
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     states_metadata_pbuf_size: IntGauge,
+    hot_canisters_count: Histogram,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
     tip_handler_queue_length: IntGauge,
@@ -446,6 +447,13 @@ impl StateManagerMetrics {
             "Size of states_metadata.pbuf in bytes.",
         );
 
+        let hot_canisters_count = metrics_registry.histogram(
+            "state_manager_hot_canisters_count",
+            "Number of canisters in the hot pool before repartitioning.",
+            // 0, 1, 2, 5, 10, …, 500_000, 1_000_000
+            decimal_buckets_with_zero(0, 5),
+        );
+
         let tip_handler_queue_length = metrics_registry.int_gauge(
             "state_manager_tip_handler_queue_length",
             "Length of TipChannel queue.",
@@ -517,6 +525,7 @@ impl StateManagerMetrics {
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             states_metadata_pbuf_size,
+            hot_canisters_count,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry, log),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
             tip_handler_queue_length,
@@ -1399,7 +1408,13 @@ impl StateManagerImpl {
             metrics.clone(),
             malicious_flags.clone(),
         );
-        let (_hash_thread_handle, hash_channel) = spawn_hash_thread(metrics.clone(), log.clone());
+        let persist_metadata_guard = Arc::new(Mutex::new(()));
+        let (_hash_thread_handle, hash_channel) = spawn_hash_thread(
+            state_layout.clone(),
+            persist_metadata_guard.clone(),
+            metrics.clone(),
+            log.clone(),
+        );
 
         let starting_time = Instant::now();
         let loaded_states_metadata =
@@ -1613,8 +1628,6 @@ impl StateManagerImpl {
             tip: Some(tip_height_and_state.1),
         }));
 
-        let persist_metadata_guard = Arc::new(Mutex::new(()));
-
         let deallocator_thread =
             DeallocatorThread::new("StateDeallocator", Duration::from_millis(1));
 
@@ -1728,7 +1741,7 @@ impl StateManagerImpl {
     fn observe_num_loaded_wasm_files(&self, state: &ReplicatedState) {
         let num_loaded_canister_wasm = state
             .canister_states()
-            .iter()
+            .all_iter()
             .filter_map(|(_, canister)| canister.execution_state.as_ref())
             .filter(|execution_state| {
                 execution_state.wasm_binary.binary.module_loading_status()
@@ -1738,7 +1751,7 @@ impl StateManagerImpl {
 
         let num_loaded_snapshot_wasm: usize = state
             .canister_states()
-            .values()
+            .all_values()
             .map(|canister| {
                 canister
                     .canister_snapshots
@@ -2717,13 +2730,7 @@ fn state_height_witness(
         .with_label_values(&["state_height_witness"])
         .start_timer();
 
-    let paths = vec![vec!["metadata".into(), "height".into()].into()];
-    let labeled_tree =
-        sparse_labeled_tree_from_paths(&paths).expect("Failed to compute labeled tree for height");
-    let partial_tree = materialize_partial(lazy_tree, &labeled_tree, None);
-    hash_tree
-        .witness::<Witness>(&partial_tree)
-        .expect("Failed to compute witness for state height")
+    compute_state_height_witness(lazy_tree, hash_tree)
 }
 
 fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
@@ -3418,6 +3425,15 @@ impl StateManager for StateManagerImpl {
             }
         }
 
+        // Re-establish strict hot/cold partitioning of canister states. Mutations
+        // during the round may have left canisters that are now cold in `hot`. The
+        // partition must be canonical at checkpoint time so that a replica continuing
+        // through a checkpoint and one (re)starting from it agree on the partition.
+        self.metrics
+            .hot_canisters_count
+            .observe(state.canister_states().hot_len() as f64);
+        state.repartition_canister_states();
+
         let assert_tip_is_none = |states: &SharedState| {
             // The following assert validates that we don't have two clients
             // modifying TIP at the same time and that each commit_and_certify()
@@ -3474,20 +3490,20 @@ impl StateManager for StateManagerImpl {
             .tip_handler_queue_length
             .set(self.tip_channel.len() as i64);
 
-        let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
-            None;
+        let mut state_metadata: Option<StateMetadata> = None;
+        let mut compute_manifest_request: Option<TipRequest> = None;
         let mut follow_up_tip_requests = Vec::new();
 
         let state = match scope {
             CertificationScope::Full => {
                 let CreateCheckpointResult {
                     state,
-                    state_metadata,
-                    compute_manifest_request,
+                    state_metadata: metadata,
+                    compute_manifest_request: req,
                     tip_requests,
                 } = self.create_checkpoint_and_switch(state, height);
-                state_metadata_and_compute_manifest_request =
-                    Some((state_metadata, compute_manifest_request));
+                state_metadata = Some(metadata);
+                compute_manifest_request = Some(req);
                 follow_up_tip_requests = tip_requests;
 
                 state
@@ -3496,7 +3512,10 @@ impl StateManager for StateManagerImpl {
         };
 
         // Kick off hashing of the new state. This will also compare the result with the
-        // delivered hash, if present, in order to detect divergence.
+        // delivered hash, if present, in order to detect divergence. For checkpointing
+        // heights, the hash thread also inserts `state_metadata` into `states_metadata`
+        // under the same write lock as `certifications_metadata`, so the two maps stay
+        // consistent.
         let hash_req = HashRequest::HashState {
             state: Arc::clone(&state),
             states: Arc::clone(&self.states),
@@ -3506,8 +3525,8 @@ impl StateManager for StateManagerImpl {
             latest_height_update_time: Arc::clone(&self.latest_height_update_time),
             reference_certification: Box::new(maybe_delivered_certification),
             scope: scope.clone(),
-            state_layout: Box::new(self.state_layout.clone()),
             max_certified_height_tx: Arc::clone(&self.max_certified_height_tx),
+            state_metadata,
         };
         self.hash_channel.send(hash_req).unwrap();
 
@@ -3521,8 +3540,9 @@ impl StateManager for StateManagerImpl {
             (height, state.deref().clone())
         };
 
-        // For checkpoint heights, we await the state hash immediately. This may not be necessary,
-        // but it keeps the existing checkpointing behaviour as is.
+        // For checkpoint heights, we await the state hash immediately. This is also what
+        // ensures that `states_metadata` has been populated by the hash thread before we
+        // read it below.
         // Note: This must not be called while a write lock to `states` is being held.
         if scope == CertificationScope::Full {
             self.flush_hash_channel();
@@ -3534,15 +3554,22 @@ impl StateManager for StateManagerImpl {
 
         assert_tip_is_none(&states);
 
-        if let Some((state_metadata, compute_manifest_request)) =
-            state_metadata_and_compute_manifest_request
-        {
-            let metadata = states
-                .states_metadata
-                .entry(height)
-                .or_insert(state_metadata);
+        if let Some(compute_manifest_request) = compute_manifest_request {
+            // The hash thread inserted `states_metadata` for this height under the same
+            // lock, and we just awaited it above via `flush_hash_channel`, so an entry
+            // must be present.
+            debug_assert!(states.states_metadata.contains_key(&height));
             debug_assert!(self.tip_channel.len() <= 2);
-            if metadata.bundled_manifest.is_none() {
+            // Skip the manifest request only if a manifest is already present (e.g.
+            // populated by state sync). Otherwise — including the case where the entry
+            // is unexpectedly missing in release — send the request; the tip thread
+            // handles a missing `states_metadata` entry gracefully.
+            let already_has_manifest = states
+                .states_metadata
+                .get(&height)
+                .and_then(|m| m.bundled_manifest.as_ref())
+                .is_some();
+            if !already_has_manifest {
                 self.tip_channel
                     .send(compute_manifest_request)
                     .expect("failed to send ComputeManifestRequest message");
@@ -3559,9 +3586,10 @@ impl StateManager for StateManagerImpl {
         // tip if needed.
         states.tip_height = next_tip.0;
         states.tip = Some(next_tip.1);
-        if scope == CertificationScope::Full {
-            self.release_lock_and_persist_metadata(states);
-        }
+        // Note: for `Full` scope, `states_metadata` has already been persisted to disk by
+        // the hash thread (under the same write lock that inserted the entry), so there is
+        // no need to persist here.
+        drop(states);
         for req in follow_up_tip_requests {
             self.tip_channel
                 .send(req)
@@ -3638,15 +3666,20 @@ enum HashRequest {
         /// `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING`.
         reference_certification: Box<Option<Certification>>,
         scope: CertificationScope,
-        /// Boxed so that variants have similar size and we don't waste space when sending `HashRequest::Wait`.
-        state_layout: Box<StateLayout>,
         max_certified_height_tx: Arc<watch::Sender<Height>>,
+        /// For checkpointing heights, the `StateMetadata` to insert into `states_metadata`
+        /// atomically with `certifications_metadata` (i.e. under the same write lock on
+        /// `SharedState`). This guarantees that after the hash thread has processed the
+        /// request, both metadata maps contain a consistent entry for `height`.
+        state_metadata: Option<StateMetadata>,
     },
     /// Wait for the message to be executed and notify back via `sender`.
     Wait { sender: Sender<()> },
 }
 
 fn spawn_hash_thread(
+    state_layout: StateLayout,
+    persist_metadata_guard: Arc<Mutex<()>>,
     metrics: StateManagerMetrics,
     log: ReplicaLogger,
 ) -> (JoinOnDrop<()>, Sender<HashRequest>) {
@@ -3667,8 +3700,8 @@ fn spawn_hash_thread(
                             latest_height_update_time,
                             reference_certification,
                             scope,
-                            state_layout,
                             max_certified_height_tx,
+                            state_metadata,
                         } => {
                             let mut certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
@@ -3719,6 +3752,17 @@ fn spawn_hash_thread(
                                 assert_prev_hash_matches(prev_hash, "previously computed");
                             }
 
+                            // For checkpointing heights, insert `states_metadata` under the same
+                            // write lock as `certifications_metadata`, so the two maps are always
+                            // consistent. We use `or_insert` so that an existing entry (e.g.
+                            // populated by state sync) is preserved.
+                            if let Some(state_metadata) = state_metadata {
+                                states
+                                    .states_metadata
+                                    .entry(height)
+                                    .or_insert(state_metadata);
+                            }
+
                             // Add state and hash to snapshots and certification_metadata
                             if !states
                                 .snapshots
@@ -3766,6 +3810,20 @@ fn spawn_hash_thread(
                                         height,
                                     );
                                 }
+                            }
+
+                            // For checkpointing heights, persist `states_metadata` to disk while
+                            // still holding (and then releasing) the same write lock used to insert
+                            // the in-memory entry above. This keeps the persisted file in lockstep
+                            // with the in-memory state.
+                            if scope == CertificationScope::Full {
+                                release_lock_and_persist_metadata(
+                                    &log,
+                                    &metrics,
+                                    &state_layout,
+                                    states,
+                                    &persist_metadata_guard,
+                                );
                             }
                         }
                         HashRequest::Wait { sender } => {

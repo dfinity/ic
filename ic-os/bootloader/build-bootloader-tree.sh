@@ -8,10 +8,13 @@ set -euxo pipefail
 
 trap 'sudo rm -rf "${TMP_DIR}"' EXIT
 
-while getopts "o:" OPT; do
+while getopts "o:b:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
+            ;;
+        b)
+            BASE_IMAGE_FILE="${OPTARG}"
             ;;
         *)
             echo "No output file given" >&2
@@ -22,12 +25,11 @@ done
 
 TMP_DIR=$(mktemp -d --tmpdir="/tmp/containers" build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
+BASE_IMAGE="$(cat ${BASE_IMAGE_FILE})"
 
 podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
-    RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
@@ -37,7 +39,7 @@ podman --root "${TMP_DIR}/root" --runroot "${TMP_DIR}/runroot" build --iidfile "
         boot linux search normal configfile \
         part_gpt btrfs ext2 fat iso9660 loopback \
         test keystatus gfxmenu regexp probe \
-        efi_gop efi_uga all_video gfxterm font \
+        efi_gop all_video gfxterm font \
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 

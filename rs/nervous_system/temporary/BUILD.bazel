@@ -17,7 +17,6 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     deps = [
         ":temporary",
-        "@crate_index//:rand",  # Used by doc test.
     ],
 )
 

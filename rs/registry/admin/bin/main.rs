@@ -81,7 +81,7 @@ use ic_protobuf::registry::{
     node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::CanisterMigrations,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
@@ -89,15 +89,15 @@ use ic_protobuf::registry::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
     chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
-    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
+    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry,
+    replica_version::ReplicaVersionRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
     NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
     get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_canister_migrations_record_key, make_crypto_node_key,
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    is_node_record_key, make_api_boundary_node_record_key, make_canister_migrations_record_key,
+    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -136,6 +136,7 @@ use registry_canister::mutations::{
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+    do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_set_subnet_operational_level::{
         NodeSshAccess, SetSubnetOperationalLevelPayload, operational_level,
@@ -293,6 +294,12 @@ enum SubCommand {
 
     /// Get a DataCenterRecord
     GetDataCenter(GetDataCenterCmd),
+
+    /// Get the subnet to which `SetupInitialDKG` management canister calls
+    /// without an explicit subnet id are routed by default. Prints `None` if
+    /// no default is configured, in which case such calls fall back to the
+    /// calling subnet (NNS).
+    GetDefaultInitialDkgSubnet,
 
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
@@ -525,6 +532,11 @@ enum SubCommand {
     /// At the end of subnet recovery, run propose-to-bring-subnet-back-online.
     ProposeToTakeSubnetOfflineForRepairs(ProposeToTakeSubnetOfflineForRepairsCmd),
 
+    /// Submits a proposal to set or unset the default subnet to which
+    /// `SetupInitialDKG` management canister calls are routed when no subnet is
+    /// specified explicitly in the request.
+    ProposeToSetDefaultInitialDkgSubnet(ProposeToSetDefaultInitialDkgSubnetCmd),
+
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
 
@@ -728,7 +740,7 @@ struct GetGuestOsVersionCmd {
 }
 
 /// Sub-command to submit a proposal to upgrade the replicas running a specific
-/// subnet to the given (blessed) version.
+/// subnet to the given (elected) version.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToAllSubnetNodesCmd {
@@ -1029,6 +1041,44 @@ impl ProposalPayload<SetSubnetOperationalLevelPayload>
             ssh_readonly_access: Some(vec![]),
             ssh_node_state_write_access: Some(ssh_node_state_write_access),
             recalled_replica_version_ids: Some(vec![]),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to set or unset the default subnet to which
+/// `SetupInitialDKG` management canister calls are routed when no subnet is
+/// specified explicitly in the request.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToSetDefaultInitialDkgSubnetCmd {
+    /// The subnet to which `SetupInitialDKG` calls without an explicit subnet
+    /// id should be routed by default. If omitted, the registry entry is
+    /// removed and `SetupInitialDKG` requests fall back to being routed to the
+    /// calling subnet (NNS).
+    #[clap(long)]
+    pub subnet_id: Option<PrincipalId>,
+}
+
+impl ProposalTitle for ProposeToSetDefaultInitialDkgSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match self.subnet_id {
+                Some(subnet_id) => format!(
+                    "Set default initial DKG subnet to {}",
+                    shortened_pid_string(&subnet_id)
+                ),
+                None => "Unset default initial DKG subnet".to_string(),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SetDefaultInitialDkgSubnetPayload> for ProposeToSetDefaultInitialDkgSubnetCmd {
+    async fn payload(&self, _: &Agent) -> SetDefaultInitialDkgSubnetPayload {
+        SetDefaultInitialDkgSubnetPayload {
+            subnet_id: self.subnet_id,
         }
     }
 }
@@ -4588,6 +4638,7 @@ async fn main() {
             SubCommand::ProposeToTakeCanisterSnapshot(_) => (),
             SubCommand::ProposeToLoadCanisterSnapshot(_) => (),
             SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
+            SubCommand::ProposeToSetDefaultInitialDkgSubnet(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             SubCommand::ProposeToUpdateFirewallRules(_) => (),
@@ -4841,12 +4892,33 @@ async fn main() {
             .await;
         }
         SubCommand::GetElectedGuestosVersions => {
-            print_and_get_last_value::<BlessedReplicaVersions>(
-                make_blessed_replica_versions_key().as_bytes().to_vec(),
-                &registry_canister,
-                opts.json,
-            )
-            .await;
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let guestos_versions = registry_client
+                .get_all_replica_version_records(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap_or_default();
+
+            if opts.json {
+                let version_ids: Vec<String> = guestos_versions
+                    .into_iter()
+                    .map(|(version, _)| version)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
+                for (version, _) in guestos_versions {
+                    println!("{}", version);
+                }
+            }
         }
         SubCommand::GetRoutingTable(cmd) => {
             let registry_version = cmd.registry_version.map(RegistryVersion::from);
@@ -4896,6 +4968,29 @@ async fn main() {
                 .unwrap();
             for (key_id, subnets) in chain_key_enabled_subnets.iter() {
                 println!("KeyId {key_id:?}: {subnets:?}");
+            }
+        }
+        SubCommand::GetDefaultInitialDkgSubnet => {
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let default_initial_dkg_subnet_id = registry_client
+                .get_default_initial_dkg_subnet_id(registry_client.get_latest_version())
+                .unwrap();
+            match default_initial_dkg_subnet_id {
+                Some(subnet_id) => println!("Default initial DKG subnet: {subnet_id}"),
+                None => println!(
+                    "No default initial DKG subnet is configured; `SetupInitialDKG` calls \
+                    without an explicit subnet id fall back to the calling subnet (NNS)."
+                ),
             }
         }
         SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
@@ -5773,9 +5868,16 @@ async fn main() {
 
             let hostos_versions = registry_client
                 .get_hostos_versions(registry_client.get_latest_version())
-                .unwrap();
+                .unwrap()
+                .unwrap_or_default();
 
-            if let Some(hostos_versions) = hostos_versions {
+            if opts.json {
+                let version_ids: Vec<String> = hostos_versions
+                    .into_iter()
+                    .map(|version| version.hostos_version_id)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
                 for version in hostos_versions {
                     println!("{}", version.hostos_version_id);
                 }
@@ -5899,6 +6001,21 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SetSubnetOperationalLevel,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToSetDefaultInitialDkgSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SetDefaultInitialDkgSubnet,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

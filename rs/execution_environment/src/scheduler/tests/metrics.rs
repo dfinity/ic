@@ -159,11 +159,11 @@ fn can_record_metrics_for_a_round() {
         }
     }
 
-    for canister in test.state_mut().canisters_iter_mut() {
+    test.state_mut().canisters_for_each_mut(|_id, canister| {
         Arc::make_mut(canister)
             .system_state
             .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
-    }
+    });
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)
         + test
@@ -1184,18 +1184,17 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
             &no_op_logger(),
         );
 
+        let expected_memory_cycles = (test.memory_cost(memory_allocation, duration)
+            + test.canister_base_cost(memory_allocation, duration))
+        .nominal()
+        .get() as f64;
         assert_eq!(
             fetch_gauge_vec(
                 test.metrics_registry(),
                 "replicated_state_consumed_cycles_from_replica_start",
             ),
             metric_vec(&[
-                (
-                    &[("use_case", "Memory")],
-                    test.memory_cost(memory_allocation, duration)
-                        .nominal()
-                        .get() as f64
-                ),
+                (&[("use_case", "Memory")], expected_memory_cycles),
                 (
                     &[("use_case", "ComputeAllocation")],
                     test.compute_allocation_cost(compute_allocation, duration)
@@ -1210,12 +1209,7 @@ fn consumed_cycles_for_resource_allocations_are_updated_from_valid_canisters() {
                 "replicated_state_consumed_cycles_from_replica_start_as_counters",
             ),
             metric_vec(&[
-                (
-                    &[("use_case", "Memory")],
-                    test.memory_cost(memory_allocation, duration)
-                        .nominal()
-                        .get() as f64
-                ),
+                (&[("use_case", "Memory")], expected_memory_cycles),
                 (
                     &[("use_case", "ComputeAllocation")],
                     test.compute_allocation_cost(compute_allocation, duration)

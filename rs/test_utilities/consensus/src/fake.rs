@@ -65,7 +65,7 @@ impl Fake for DkgSummary {
             /*interval_length=*/ Height::new(59),
             /*next_interval_length=*/ Height::new(59),
             /*height=*/ Height::new(0),
-            /*initial_dkg_attempts=*/ BTreeMap::default(),
+            /*remote_dkg_attempts=*/ BTreeMap::default(),
         )
     }
 }

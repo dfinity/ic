@@ -288,6 +288,7 @@ async fn setup_recovered_nns(
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             max_artifact_streams_per_peer: None,
             max_chunk_wait_ms: None,
             max_duplicity: None,
@@ -651,8 +652,9 @@ async fn test_recovered_nns(env: &TestEnv, nns_node: &IcNodeSnapshot) {
     let logger = env.logger();
     info!(logger, "Testing recovered NNS ...");
 
-    ProposalWithMainnetState::bless_replica_version(
+    ProposalWithMainnetState::elect_replica_version(
         nns_node,
+        &env.topology_snapshot(),
         &ReplicaVersion::try_from("1111111111111111111111111111111111111111").unwrap(),
         &logger,
         "2222222222222222222222222222222222222222222222222222222222222222".to_string(),

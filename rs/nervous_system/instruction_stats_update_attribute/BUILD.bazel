@@ -27,7 +27,5 @@ rust_test(
     deps = [
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
-        "@crate_index//:quote",
-        "@crate_index//:syn",
     ],
 )

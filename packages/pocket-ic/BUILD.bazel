@@ -9,7 +9,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "13.0.0",
+    version = "14.0.0",
     deps = [
         # Keep sorted.
         "@crate_index//:backoff",
@@ -172,6 +172,7 @@ rust_test(
             "tests/common.rs",
             "tests/icp_features.rs",
         ],
+        crate_features = ["head_nns"] if name_suffix == "-head-nns" else [],
         crate_root = "tests/icp_features.rs",
         data = [
             "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
@@ -198,6 +199,7 @@ rust_test(
             "//rs/nns/governance/api",
             "//rs/nns/sns-wasm",
             "//rs/registry/canister",
+            "//rs/registry/subnet_type",
             "//rs/types/base_types",
             "@crate_index//:candid",
             "@crate_index//:flate2",

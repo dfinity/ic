@@ -13,7 +13,10 @@ use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
     CreateCanisterParams, CreateCanisterPlacement, PocketIcBuilder,
-    common::rest::{IcpFeatures, IcpFeaturesConfig},
+    common::rest::{
+        CanisterCyclesCostSchedule, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
+        SubnetSpec,
+    },
     nonblocking::PocketIc,
 };
 use prometheus_parse::Scrape;
@@ -53,6 +56,7 @@ pub enum ValidationError {
     ReplacedCanisterNotStopped(Reserved),
     ReplacedCanisterHasSnapshots(Reserved),
     MigratedCanisterInsufficientCycles(Reserved),
+    CloudEngineSubnet { subnet: Principal },
     CallFailed { reason: String },
 }
 
@@ -179,9 +183,9 @@ async fn setup(
             None
         } else {
             Some(if LOG_MEMORY_STORE_FEATURE_ENABLED {
-                11_200_000
+                40_000_000_000
             } else {
-                2_000_000
+                30_000_000_000
             })
         };
         let migrated_canister = pic
@@ -1783,4 +1787,148 @@ async fn parallel_validations() {
     }
     assert_eq!(not_controller_counter, 200);
     assert_eq!(rate_limited_counter, 60);
+}
+
+async fn migrate_with_cloud_engine_subnet(
+    migrated_on_cloud_engine: bool,
+    replaced_on_cloud_engine: bool,
+) -> Result<(), ValidationError> {
+    let pic = PocketIcBuilder::new_with_config(ExtendedSubnetConfigSet {
+        application: vec![SubnetSpec::default(), SubnetSpec::default()],
+        cloud_engine: vec![
+            SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free),
+            SubnetSpec::default().with_cost_schedule(CanisterCyclesCostSchedule::Free),
+        ],
+        ..Default::default()
+    })
+    .with_icp_features(IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    })
+    .build_async()
+    .await;
+
+    let system_controller = Principal::anonymous();
+    let c1 = Principal::self_authenticating(vec![1]);
+
+    let registry_wasm = Project::cargo_bin_maybe_from_env("registry-canister", &[]);
+    pic.upgrade_canister(
+        REGISTRY_CANISTER_ID.into(),
+        registry_wasm.bytes(),
+        vec![],
+        Some(Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap()),
+    )
+    .await
+    .unwrap();
+
+    let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
+    pic.create_canister_with_id(
+        Some(system_controller),
+        Some(CanisterSettings {
+            controllers: Some(vec![system_controller]),
+            ..Default::default()
+        }),
+        MIGRATION_CANISTER_ID.into(),
+    )
+    .await
+    .unwrap();
+    pic.install_canister(
+        MIGRATION_CANISTER_ID.into(),
+        migration_canister_wasm.bytes(),
+        Encode!(&MigrationCanisterInitArgs { allowlist: None }).unwrap(),
+        Some(system_controller),
+    )
+    .await;
+
+    let topology = pic.topology().await;
+    let app_subnets = topology.get_app_subnets();
+    let cloud_engine_subnets = topology.get_cloud_engines();
+
+    let controllers = vec![c1, MIGRATION_CANISTER_ID.into()];
+
+    let migrated_subnet = if migrated_on_cloud_engine {
+        cloud_engine_subnets[0]
+    } else {
+        app_subnets[0]
+    };
+    let migrated_canister = pic
+        .create_canister_with_params(
+            Some(c1),
+            CreateCanisterParams {
+                cycles: None,
+                settings: Some(CanisterSettings {
+                    controllers: Some(controllers.clone()),
+                    ..Default::default()
+                }),
+                placement: Some(CreateCanisterPlacement::SubnetId(migrated_subnet)),
+            },
+        )
+        .await
+        .unwrap();
+    pic.add_cycles(migrated_canister, u128::MAX / 2).await;
+    pic.stop_canister(migrated_canister, Some(c1))
+        .await
+        .unwrap();
+
+    let replaced_subnet = if replaced_on_cloud_engine {
+        cloud_engine_subnets[1]
+    } else {
+        app_subnets[1]
+    };
+    let replaced_canister = pic
+        .create_canister_with_params(
+            Some(c1),
+            CreateCanisterParams {
+                cycles: None,
+                settings: Some(CanisterSettings {
+                    controllers: Some(controllers),
+                    ..Default::default()
+                }),
+                placement: Some(CreateCanisterPlacement::SubnetId(replaced_subnet)),
+            },
+        )
+        .await
+        .unwrap();
+    pic.add_cycles(replaced_canister, u128::MAX / 2).await;
+    pic.stop_canister(replaced_canister, Some(c1))
+        .await
+        .unwrap();
+
+    migrate_canister(
+        &pic,
+        c1,
+        &MigrateCanisterArgs {
+            migrated_canister_id: migrated_canister,
+            replaced_canister_id: replaced_canister,
+        },
+    )
+    .await
+}
+
+#[tokio::test]
+async fn validation_fails_cloud_engine_subnet() {
+    let result = migrate_with_cloud_engine_subnet(false, true).await;
+    let Err(ValidationError::CloudEngineSubnet { .. }) = result else {
+        panic!("unexpected result: {:?}", result)
+    };
+
+    let result = migrate_with_cloud_engine_subnet(true, false).await;
+    let Err(ValidationError::CloudEngineSubnet { .. }) = result else {
+        panic!("unexpected result: {:?}", result)
+    };
+}
+
+#[tokio::test]
+async fn validation_succeeds_both_app_subnets() {
+    migrate_with_cloud_engine_subnet(false, false)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn validation_fails_both_cloud_engine_subnets() {
+    let result = migrate_with_cloud_engine_subnet(true, true).await;
+    let Err(ValidationError::CloudEngineSubnet { .. }) = result else {
+        panic!("unexpected result: {:?}", result)
+    };
 }

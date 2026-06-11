@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
 load("//bazel:defs.bzl", "rust_test_with_binary")
 
 package(default_visibility = ["//visibility:public"])
@@ -32,11 +32,10 @@ rust_library(
     ],
 )
 
-# Disabled due to https://github.com/bazelbuild/rules_rust/issues/1233
-# rust_doc_test(
-#     name = "state_layout_doc_test",
-#     crate = ":state_layout",
-# )
+rust_doc_test(
+    name = "state_layout_doc_test",
+    crate = ":state_layout",
+)
 
 rust_test_with_binary(
     name = "state_layout_test",
@@ -48,6 +47,7 @@ rust_test_with_binary(
     ],
     deps = [
         # Keep sorted.
+        "//rs/config",
         "//rs/interfaces",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/time",

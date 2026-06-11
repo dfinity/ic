@@ -30,7 +30,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ubuntu:24.04
+      image: ubuntu:26.04
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:

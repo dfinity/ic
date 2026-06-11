@@ -104,11 +104,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "13.0.0";
-const MAX_SERVER_VERSION: &str = "14";
+const MIN_SERVER_VERSION: &str = "14.0.0";
+const MAX_SERVER_VERSION: &str = "15";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "13.0.0";
+pub const LATEST_SERVER_VERSION: &str = "14.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -1480,6 +1480,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.canister_exists(canister_id).await })
     }
 
+    /// Deletes a subnet. Panics if the subnet does not exist or is a named subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub fn delete_subnet(&self, subnet_id: SubnetId) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.delete_subnet(subnet_id).await })
+    }
+
     /// Returns the subnet ID of the canister if the canister exists.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, canister_id = %canister_id.to_string()))]
     pub fn get_subnet(&self, canister_id: CanisterId) -> Option<SubnetId> {
@@ -2510,25 +2517,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 13.0.0")
+            check_pocketic_server_version("pocket-ic 14.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 13 0 0")
+            check_pocketic_server_version("pocket-ic-server 14 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 12.0.0")
+            check_pocketic_server_version("pocket-ic-server 13.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 13.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 13.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 13.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 14.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 14.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 14.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 14.0.0")
+            check_pocketic_server_version("pocket-ic-server 15.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );

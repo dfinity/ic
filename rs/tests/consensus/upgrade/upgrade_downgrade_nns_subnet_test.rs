@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_consensus_system_test_upgrade_common::{bless_target_version, upgrade};
+use ic_consensus_system_test_upgrade_common::{elect_target_version, upgrade};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
@@ -42,7 +42,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let log = env.logger();
     let nns_node = env.get_first_healthy_system_node_snapshot();
 
-    let target_version = bless_target_version(&env, &nns_node);
+    let target_version = elect_target_version(&env, &nns_node);
     info!(log, "Upgrading NNS subnet to {} ...", target_version);
     let (faulty_node, can_id, msg) =
         upgrade(&env, &nns_node, &target_version, SubnetType::System, None);

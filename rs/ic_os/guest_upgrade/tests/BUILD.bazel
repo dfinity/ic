@@ -24,6 +24,7 @@ rust_test(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
+        "@crate_index//:rand",
         "@crate_index//:rustls",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",

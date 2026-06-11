@@ -13,7 +13,7 @@ use ic_types::methods::SystemMethod;
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_gt, assert_le};
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::ops::Range;
 
@@ -91,12 +91,7 @@ fn inner_loop_stops_when_no_instructions_consumed() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.execute_round_called.get(), 1);
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        1
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 1);
 
     assert_eq!(
         test.state()
@@ -142,12 +137,7 @@ fn test_multiple_iterations_of_inner_loop() {
         3
     );
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        3
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 3);
 
     assert_eq!(
         test.state()
@@ -157,6 +147,62 @@ fn test_multiple_iterations_of_inner_loop() {
         3
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
+}
+
+/// Ensures that `inner_round()` continues with another iteration after the
+/// previous iteration only processed messages that got rejected (e.g. because
+/// the callee was low on cycles), with zero Wasm instructions executed.
+#[test]
+fn inner_loop_continues_after_zero_instructions_iteration() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig::application_subnet())
+        .build();
+
+    // Two canisters:
+    //   - canister A (well funded) makes a call to canister B;
+    //   - canister B (low on cycles) cannot execute the incoming request, which is
+    //     rejected without executing any Wasm.
+    let canister_a = test.create_canister();
+    let canister_b = test.create_canister_with(
+        // Too few cycles to execute the incoming request.
+        Cycles::new(1),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        None,
+        None,
+        None,
+    );
+    let message = ingress(50).call(other_side(canister_b, 50), on_response(50));
+    test.send_ingress(canister_a, message);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Expecting the full call tree to complete within one round:
+    //   - Iteration 1: A executes an ingress message that produces a request for B.
+    //   - Iteration 2: B cannot pay for executing the request so the DSM produces a
+    //                  reject response with no Wasm execution (zero instructions).
+    //   - Iteration 3: A executes the reject response.
+    //
+    // One round, 3 iterations that processed at least one input each.
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 3);
+
+    // Only A actually executed messages (the ingress and the reject response).
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .update_transactions_total,
+        2
+    );
+
+    // Neither canister should have any inputs or outputs.
+    for canister in [canister_a, canister_b] {
+        let queues = test.canister_state(canister).system_state.queues();
+        assert_eq!(queues.input_queues_message_count(), 0);
+        assert_eq!(queues.output_queues_message_count(), 0);
+    }
 }
 
 #[test]
@@ -750,7 +796,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `number_of_canisters` rounds.
     let number_of_rounds = number_of_canisters;
 
-    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
+    let canister_ids: Vec<_> = test.state().canister_states().all_keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -766,7 +812,7 @@ fn scheduler_respects_compute_allocation(
     }
 
     // Check that the compute allocations of the canisters are respected.
-    for (canister_id, canister) in test.state().canister_states().iter() {
+    for (canister_id, canister) in test.state().canister_states().all_iter() {
         let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
@@ -1015,12 +1061,12 @@ fn frozen_canisters_are_fully_executed() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores,
             max_instructions_per_round: (2 * slice).into(),
-            max_instructions_per_message: slice.into(),
+            max_instructions_per_message: (10 * slice).into(),
             max_instructions_per_slice: slice.into(),
             max_instructions_per_install_code_slice: slice.into(),
-            // Charge for every message execution enough to execute all but one canister on
-            // each core. And to prevent a second iteration.
-            instruction_overhead_per_execution: (slice / (canisters_per_core - 1) + 1).into(),
+            // Charge for every message execution more than the round limit, to ensure that.
+            // the overhead does not apply to executions skipped due to low cycles.
+            instruction_overhead_per_execution: (3 * slice).into(),
             instruction_overhead_per_canister: 0.into(),
             instruction_overhead_per_canister_for_finalization: 0.into(),
             ..SchedulerConfig::application_subnet()
@@ -1043,43 +1089,41 @@ fn frozen_canisters_are_fully_executed() {
             None,
         );
         test.send_ingress(frozen_canister_id, ingress(slice * 10));
+        // Give each canister enough AP to be able to observe charging without free
+        // compute distribution.
+        test.state_mut()
+            .canister_priority_mut(frozen_canister_id)
+            .accumulated_priority = ONE_HUNDRED_PERCENT * 2;
         canisters.push(frozen_canister_id);
     }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All but 2 canisters were "executed".
+    // All canisters were "executed".
     assert_eq!(
         test.scheduler()
             .metrics
             .instructions_consumed_per_message
             .get_sample_count(),
-        (canisters_per_core - 1) * 2
+        canisters_per_core * 2
+    );
+    assert_eq!(
+        zero_instruction_messages(test.metrics_registry()),
+        canisters_per_core * 2
     );
 
-    let canister_priority = |canister_id: &CanisterId| -> &ic_replicated_state::CanisterPriority {
-        test.state().canister_priority(canister_id)
-    };
     for (i, canister) in canisters.iter().enumerate() {
-        if (i as u64) < (canisters_per_core - 1) * 2 {
-            assert!(
-                test.was_fully_executed(*canister),
-                "Canister {i} should have been fully executed",
-            );
-            assert!(
-                canister_priority(canister).accumulated_priority.get() < 0,
-                "Canister {i} should have been charged"
-            );
-        } else {
-            assert!(
-                !test.was_fully_executed(*canister),
-                "Canister {i} should not have been executed",
-            );
-            assert!(
-                canister_priority(canister).accumulated_priority.get() > 0,
-                "Canister {i} should not have been charged"
-            );
-        }
+        assert!(
+            test.was_fully_executed(*canister),
+            "Canister {i} should have been fully executed",
+        );
+        assert_eq!(
+            test.state()
+                .canister_priority(canister)
+                .accumulated_priority,
+            ONE_HUNDRED_PERCENT,
+            "Canister {i} should have been charged"
+        );
     }
 }
 

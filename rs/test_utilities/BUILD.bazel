@@ -10,6 +10,8 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/bitcoin/replica_types",
+        "//rs/canonical_state",
+        "//rs/canonical_state/tree_hash",
         "//rs/config",
         "//rs/consensus/features",
         "//rs/crypto/sha2",

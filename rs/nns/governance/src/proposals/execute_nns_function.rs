@@ -458,6 +458,7 @@ pub enum ValidNnsFunction {
     SetSubnetOperationalLevel,
     SplitSubnet,
     DeleteSubnet,
+    SetDefaultInitialDkgSubnet,
 }
 
 impl ValidNnsFunction {
@@ -588,6 +589,9 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::SplitSubnet => (REGISTRY_CANISTER_ID, "split_subnet"),
             ValidNnsFunction::DeleteSubnet => (REGISTRY_CANISTER_ID, "delete_subnet"),
+            ValidNnsFunction::SetDefaultInitialDkgSubnet => {
+                (REGISTRY_CANISTER_ID, "set_default_initial_dkg_subnet")
+            }
         }
     }
 
@@ -618,7 +622,8 @@ impl ValidNnsFunction {
             | ValidNnsFunction::UpdateSnsWasmSnsSubnetIds
             | ValidNnsFunction::SetSubnetOperationalLevel
             | ValidNnsFunction::SplitSubnet
-            | ValidNnsFunction::DeleteSubnet => Topic::SubnetManagement,
+            | ValidNnsFunction::DeleteSubnet
+            | ValidNnsFunction::SetDefaultInitialDkgSubnet => Topic::SubnetManagement,
 
             ValidNnsFunction::ReviseElectedGuestosVersions
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
@@ -708,6 +713,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetSubnetOperationalLevel => "Set Subnet Operational Level",
             ValidNnsFunction::SplitSubnet => "Split subnet",
             ValidNnsFunction::DeleteSubnet => "Delete Subnet",
+            ValidNnsFunction::SetDefaultInitialDkgSubnet => "Set Default Initial DKG Subnet",
         }
     }
 
@@ -932,6 +938,11 @@ impl ValidNnsFunction {
                 and routing table entries are removed from the registry, and the subnet's \
                 nodes become unassigned. Currently limited to CloudEngine subnets."
             }
+            ValidNnsFunction::SetDefaultInitialDkgSubnet => {
+                "Set or unset the default subnet to which `SetupInitialDKG` management canister \
+                calls are routed when no subnet is specified explicitly in the request. If unset, \
+                such requests are routed to the calling subnet (NNS)."
+            }
         }
     }
 }
@@ -1022,6 +1033,9 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
             }
             NnsFunction::SplitSubnet => Ok(ValidNnsFunction::SplitSubnet),
             NnsFunction::DeleteSubnet => Ok(ValidNnsFunction::DeleteSubnet),
+            NnsFunction::SetDefaultInitialDkgSubnet => {
+                Ok(ValidNnsFunction::SetDefaultInitialDkgSubnet)
+            }
 
             // Obsolete functions - based on check_obsolete
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {

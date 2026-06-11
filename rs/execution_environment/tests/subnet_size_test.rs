@@ -2,7 +2,7 @@ use candid::{Decode, Encode};
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfig, SubnetSecurity},
 };
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
@@ -304,7 +304,8 @@ fn simulate_one_gib_per_second_cost(
     env.advance_time(duration_between_allocation_charges);
 
     let balance_before = env.cycle_balance(canister_id);
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
     let balance_after = env.cycle_balance(canister_id);
 
     // Scale the cost from a defined in config value to a 1 second duration.
@@ -359,7 +360,7 @@ fn apply_filter(
 /// Create a `SubnetConfig` with a redacted `CyclesAccountManagerConfig` to have only the fees
 /// for specific operation.
 fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> SubnetConfig {
-    let mut subnet_config = SubnetConfig::new(subnet_type);
+    let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
     subnet_config.cycles_account_manager_config =
         apply_filter(subnet_config.cycles_account_manager_config, filter);
 
@@ -768,6 +769,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
+            base_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
             // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
@@ -810,6 +812,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 ingress_byte_reception_fee: Cycles::new(2_000),
                 // 10 SDR per GiB per year => 10e12 Cycles per year
                 gib_storage_per_second_fee: Cycles::new(317_500),
+                base_per_second_fee: Cycles::new(10_000),
                 duration_between_allocation_charges: Duration::from_secs(10),
                 ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
                 schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -819,8 +822,10 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 http_request_per_byte_fee: Cycles::new(400),
                 http_response_per_byte_fee: Cycles::new(800),
                 max_storage_reservation_period: Duration::from_secs(0),
-                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
-                    .default_reserved_balance_limit,
+                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet(
+                    SubnetSecurity::None,
+                )
+                .default_reserved_balance_limit,
                 fetch_canister_logs_base_fee: Cycles::new(5_000_000),
                 fetch_canister_logs_per_byte_fee: Cycles::new(80),
             }
@@ -860,6 +865,20 @@ fn compute_allocation_cost(
     scale_cost(config, cycles, subnet_size)
 }
 
+fn canister_base_cost(
+    config: &CyclesAccountManagerConfig,
+    bytes: NumBytes,
+    duration: Duration,
+    subnet_size: usize,
+) -> Cycles {
+    if bytes.get() > 0 {
+        let cycles = config.base_per_second_fee * duration.as_secs() as u128;
+        scale_cost(config, cycles, subnet_size)
+    } else {
+        Cycles::zero()
+    }
+}
+
 fn calculate_one_gib_per_second_cost(
     config: &CyclesAccountManagerConfig,
     subnet_size: usize,
@@ -868,6 +887,7 @@ fn calculate_one_gib_per_second_cost(
     let one_gib = NumBytes::from(1 << 30);
     let duration = Duration::from_secs(1);
     memory_cost(config, one_gib, duration, subnet_size)
+        + canister_base_cost(config, one_gib, duration, subnet_size)
         + compute_allocation_cost(config, compute_allocation, duration, subnet_size)
 }
 
@@ -980,15 +1000,15 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert small subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_lo, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(10.012_680_000));
+    assert_eq!(cost * per_year, trillion_cycles(10.328_040_000));
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(26.186_989_824));
+    assert_eq!(cost * per_year, trillion_cycles(27.011_782_368));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.012_648_464));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.328_008_464));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.

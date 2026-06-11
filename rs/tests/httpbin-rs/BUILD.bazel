@@ -6,21 +6,6 @@ load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:axum",
-    "@crate_index//:clap",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-util",
-    "@crate_index//:rand",
-    "@crate_index//:rustls",
-    "@crate_index//:rustls-pemfile",
-    "@crate_index//:serde_json",
-    "@crate_index//:tokio",
-    "@crate_index//:tokio-rustls",
-    "@crate_index//:tower",
-]
-
 rust_binary(
     name = "httpbin",
     srcs = ["src/main.rs"],
@@ -29,7 +14,20 @@ rust_binary(
         "//rs:system-tests-pkg",
         "//rs/pocket_ic_server:__pkg__",
     ],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:axum",
+        "@crate_index//:clap",
+        "@crate_index//:hyper",
+        "@crate_index//:hyper-util",
+        "@crate_index//:rand",
+        "@crate_index//:rustls",
+        "@crate_index//:rustls-pemfile",
+        "@crate_index//:serde_json",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-rustls",
+        "@crate_index//:tower",
+    ],
 )
 
 pkg_tar(

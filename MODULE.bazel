@@ -11,7 +11,7 @@ register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.8.2")
-bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
@@ -30,31 +30,29 @@ single_version_override(
 )
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.14.0")
+bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
     "@rules_foreign_cc//toolchains:preinstalled_make_toolchain",
 )
 
-# Use HEAD to include this commit which is needed for preinstalled toolchains to work
-# https://github.com/bazel-contrib/rules_foreign_cc/commit/d03f7ae79ddda0ad228b17048b9e2dc0efcc8e95
-#
 # Use a patch to work around determinism issues in make & pkgconfig toolchains
 # https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
 archive_override(
     module_name = "rules_foreign_cc",
-    integrity = "sha384-bTtlZejENu+3rnOsCg1nmSZJl54++7nB0zgzWT+jtZJ1QyMRwkV4ieOaeORQTdjY",
+    integrity = "sha256-MnWXKJE8N2ukWwEWhptxtoscLr+PK897QSIrwHt3PXM=",
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
-    strip_prefix = "rules_foreign_cc-77d4483fadbb1b7bcace18ed8e8e87e8791050f6",
+    strip_prefix = "rules_foreign_cc-0.15.1",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/bazelbuild/rules_foreign_cc/tar.gz/77d4483fadbb1b7bcace18ed8e8e87e8791050f6"],
+    urls = ["https://github.com/bazel-contrib/rules_foreign_cc/releases/download/0.15.1/rules_foreign_cc-0.15.1.tar.gz"],
 )
 
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
 # Rust
 
@@ -275,20 +273,20 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 
 # Ubuntu snapshots
 
-bazel_dep(name = "rules_distroless", version = "0.3.8")
+bazel_dep(name = "rules_distroless", version = "0.8.0")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 
-# Packageset based on an Ubuntu noble snapshot, see manifest file
+# Packageset based on an Ubuntu resolute snapshot, see manifest file
 # for details
 # To update, comment out the `lock` field below and run:
-#   bazel run @noble//:lock
+#   bazel run @resolute//:lock
 apt.install(
-    name = "noble",
-    lock = "//bazel:noble.lock.json",
-    manifest = "//bazel:noble.yaml",
+    name = "resolute",
+    lock = "//bazel:resolute.lock.json",
+    manifest = "//bazel:resolute.yaml",
 )
-use_repo(apt, "noble")
+use_repo(apt, "resolute")
 
 # Single files & archives that are not bazel modules
 
@@ -696,6 +694,19 @@ http_archive(
     urls = [
         "https://codeload.github.com/jemalloc/jemalloc/tar.gz/refs/tags/5.3.0",
     ],
+)
+
+http_archive(
+    name = "e2fsprogs",
+    build_file = "@//third_party:BUILD.e2fsprogs.bazel",
+    # Drops the absolute build-time install prefix that mke2fs otherwise bakes
+    # into its binary (the compiled-in mke2fs.conf path), which breaks build
+    # reproducibility. See the patch for details.
+    patch_strip = 1,
+    patches = ["//bazel:e2fsprogs_no_external_config.patch"],
+    sha256 = "da274408bebbfd13a5a2fc3cfc66e3ffff17c48534673aa67f88d49b99123b96",
+    strip_prefix = "e2fsprogs-1.47.4",
+    urls = ["https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.4/e2fsprogs-1.47.4.tar.gz"],
 )
 
 http_archive(
@@ -1184,6 +1195,7 @@ canisters(
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
         "dogecoin": "ic-doge-canister.wasm.gz",
         "migration": "migration-canister.wasm.gz",
+        "engine-controller": "engine-controller-canister.wasm.gz",
         "subnet_rental": "subnet_rental_canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
