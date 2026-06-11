@@ -48,8 +48,31 @@ pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
 pub const BLOCK_TIME: Duration = Duration::from_secs(60);
-/// Must be at least the minter's `refresh_fee_percentiles_frequency`.
+/// Must be at least the minter's `refresh_fee_percentiles_frequency` (currently `SIX_MINUTES`,
+/// i.e. 360s, defined in `rs/dogecoin/ckdoge/minter/src/lib.rs`). There is no compile-time link
+/// between the two values: if the minter ever lowers that frequency below this interval, the fee
+/// refresh in `MinterCanister::await_fee_refresh` may not fire and the withdrawal-fee flake
+/// returns. Keep this value in sync with, and no smaller than, the minter's refresh frequency.
 pub const FEE_PERCENTILES_REFRESH_INTERVAL: Duration = Duration::from_secs(360);
+
+/// Drains the minter's startup timer tasks.
+///
+/// Installing or upgrading the minter calls `setup_tasks()`, which schedules both `ProcessLogic`
+/// and `RefreshFeePercentiles` at T0. If left unfired, `RefreshFeePercentiles` would fire during
+/// the first `DogecoinSyncGuard` tick in a subsequent `mine_blocks` call, sending a fee-percentile
+/// XNet call to the dogecoin canister while it is syncing new blocks. This puts the canister in a
+/// "not fully synced" state that prevents `DogecoinSyncGuard` from observing the target block
+/// height, causing a timeout.
+///
+/// Tick 1 fires `ProcessLogic`; tick 2 fires `RefreshFeePercentiles` and starts the XNet call; the
+/// remaining ticks let the round-trip complete. Afterwards the timer is at T0+360s, far beyond any
+/// `DogecoinSyncGuard` window.
+pub(crate) fn drain_startup_tasks(env: &PocketIc) {
+    const STARTUP_DRAIN_TICKS: usize = 20;
+    for _ in 0..STARTUP_DRAIN_TICKS {
+        env.tick();
+    }
+}
 
 pub struct Setup {
     pub env: Arc<PocketIc>,
@@ -188,17 +211,7 @@ impl Setup {
             );
         }
 
-        // After minter install, setup_tasks() schedules ProcessLogic and RefreshFeePercentiles at
-        // T0. If left unfired, RefreshFeePercentiles would fire during the first DogecoinSyncGuard
-        // tick in mine_blocks, sending a fee-percentile XNet call to the dogecoin canister while it
-        // is syncing new blocks. This puts the canister in a "not fully synced" state that prevents
-        // DogecoinSyncGuard from observing the target block height, causing a timeout.
-        // Tick 1 fires ProcessLogic; tick 2 fires RefreshFeePercentiles and starts the XNet call;
-        // the remaining ticks let the XNet round-trip complete. After this the timer is at T0+360s,
-        // far beyond any DogecoinSyncGuard window.
-        for _ in 0..20 {
-            env.tick();
-        }
+        drain_startup_tasks(&env);
 
         Self {
             env,

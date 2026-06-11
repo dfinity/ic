@@ -1,5 +1,7 @@
 use crate::events::MinterEventAssert;
-use crate::{FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
+use crate::{
+    FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL, drain_startup_tasks,
+};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
@@ -175,7 +177,10 @@ impl MinterCanister {
             }
         }
         dbg!(self.get_logs());
-        panic!("BUG: minter did not refresh fee percentiles within {max_ticks} ticks");
+        panic!(
+            "BUG: did not observe a successful fee-percentile refresh within {max_ticks} ticks \
+             (the RefreshFeePercentiles task may have run but failed to compute a median fee)"
+        );
     }
 
     fn count_fee_percentile_refreshes(&self) -> usize {
@@ -373,16 +378,7 @@ impl MinterCanister {
                 Some(NNS_ROOT_PRINCIPAL),
             )
             .expect("BUG: failed to upgrade minter");
-        // post_upgrade calls setup_tasks() which resets both ProcessLogic and RefreshFeePercentiles
-        // to T0. Tick 1 fires ProcessLogic; tick 2 fires RefreshFeePercentiles and starts its XNet
-        // call to the dogecoin canister; the remaining ticks let the round-trip complete so the
-        // timer is pushed to T0+360s before control returns. Without this, RefreshFeePercentiles
-        // would fire during the first DogecoinSyncGuard tick in a subsequent mine_blocks call,
-        // sending the fee-percentile request while the dogecoin canister is syncing blocks, which
-        // puts it in a "not fully synced" state that causes DogecoinSyncGuard to time out.
-        for _ in 0..20 {
-            self.env.tick();
-        }
+        drain_startup_tasks(&self.env);
     }
 }
 
