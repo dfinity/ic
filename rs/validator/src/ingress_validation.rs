@@ -673,11 +673,11 @@ fn sender_info_permissions(info: &[u8]) -> Option<String> {
     let mut config = DecoderConfig::new();
     config.set_decoding_quota(SENDER_INFO_DECODING_QUOTA);
     config.set_skipping_quota(SENDER_INFO_SKIPPING_QUOTA);
-    let Icrc3Value::Map(attributes) = decode_one_with_config(info, &config).ok()? else {
+    let Icrc3Value::Map(mut attributes) = decode_one_with_config(info, &config).ok()? else {
         return None;
     };
-    match attributes.get(SENDER_INFO_PERMISSIONS_ATTRIBUTE) {
-        Some(Icrc3Value::Text(permissions)) => Some(permissions.clone()),
+    match attributes.remove(SENDER_INFO_PERMISSIONS_ATTRIBUTE) {
+        Some(Icrc3Value::Text(permissions)) => Some(permissions),
         _ => None,
     }
 }

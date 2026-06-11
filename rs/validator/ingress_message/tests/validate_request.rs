@@ -1992,10 +1992,11 @@ fn max_ingress_expiry_at(current_time: Time) -> Time {
 
 mod sender_info {
     use super::*;
-    use candid::Encode;
+    use candid::{CandidType, Encode};
     use ic_types::messages::{RawSignedSenderInfo, SenderInfoContent};
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
     use ic_validator_http_request_test_utils::DirectAuthenticationScheme::CanisterSignature;
+    use std::collections::BTreeMap;
 
     /// Creates a canister signer, signs the given info bytes, and returns the
     /// verifier builder (with root of trust configured), the signer, and a
@@ -2052,16 +2053,16 @@ mod sender_info {
     /// Deliberately a different mirror of the ICRC-3 `Value` type than the
     /// one used by the validator for decoding, like the mirrors used by
     /// actual signers (e.g. Internet Identity).
-    #[derive(candid::CandidType)]
+    #[derive(CandidType)]
     enum TestIcrc3Value {
         Text(String),
-        Map(std::collections::BTreeMap<String, TestIcrc3Value>),
+        Map(BTreeMap<String, TestIcrc3Value>),
     }
 
     /// Candid-encodes an ICRC-3 map with the `implicit:permissions` attribute
     /// set to the given value.
     fn encoded_permissions_attribute(permissions: &str) -> Vec<u8> {
-        let map = std::collections::BTreeMap::from([(
+        let map = BTreeMap::from([(
             "implicit:permissions".to_string(),
             TestIcrc3Value::Text(permissions.to_string()),
         )]);
