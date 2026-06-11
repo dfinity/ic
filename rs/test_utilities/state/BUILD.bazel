@@ -10,6 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/bitcoin/replica_types",
+        "//rs/canonical_state/certification_version",
         "//rs/interfaces",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",

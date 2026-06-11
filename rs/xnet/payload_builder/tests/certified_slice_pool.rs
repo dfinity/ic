@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_canonical_state::LabelLike;
+use ic_canonical_state::{CURRENT_CERTIFICATION_VERSION, LabelLike};
 use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
@@ -40,6 +40,7 @@ fn slice_unpack_roundtrip(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -63,6 +64,7 @@ fn slice_garbage_collect(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -140,6 +142,7 @@ fn slice_take_prefix(
         100, // max_size
         0, // min_signal_count
         100, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -284,6 +287,7 @@ fn invalid_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -421,6 +425,7 @@ fn slice_accurate_count_bytes(
         100, // max_size
         0, // min_signal_count
         100, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -491,6 +496,7 @@ fn matching_count_bytes(
         100, // max_size
         0, // min_signal_count
         100, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -524,6 +530,7 @@ fn pool(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -790,6 +797,7 @@ fn pool_append_same_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -907,6 +915,7 @@ fn pool_append_non_empty_to_empty(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -975,6 +984,7 @@ fn pool_append_non_empty_to_non_empty(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1096,6 +1106,7 @@ fn pool_put_invalid_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1151,6 +1162,7 @@ fn pool_append_invalid_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1240,6 +1252,7 @@ fn pool_append_invalid_slice_to_empty(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1299,6 +1312,7 @@ fn pool_take_slice_respects_signal_limit(
         2 * MAX_SIGNALS, // max_size
         0, // min_signal_count
         0, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
