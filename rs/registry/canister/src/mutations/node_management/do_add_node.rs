@@ -1158,11 +1158,8 @@ mod tests {
             // Note: `max_rewardable_nodes` intentionally does NOT contain
             // an entry for `node_reward_type` here, demonstrating that the
             // quota does not apply for these types.
-            let node_operator_id = registry_add_node_operator_for_node(
-                &mut registry,
-                node_ids[0],
-                btreemap! {},
-            );
+            let node_operator_id =
+                registry_add_node_operator_for_node(&mut registry, node_ids[0], btreemap! {});
 
             // Adding several nodes of this type should all succeed even
             // though no quota is configured.
@@ -1171,9 +1168,7 @@ mod tests {
                 registry
                     .do_add_node_(payload, node_operator_id, now_system_time())
                     .unwrap_or_else(|e| {
-                        panic!(
-                            "do_add_node_ failed for {node_reward_type} on iteration {i}: {e}"
-                        )
+                        panic!("do_add_node_ failed for {node_reward_type} on iteration {i}: {e}")
                     });
             }
         }
