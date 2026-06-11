@@ -136,7 +136,7 @@ impl Registry {
                 "{LOG_PREFIX}do_add_node: Node reward type is required."
             ))?;
 
-            // TODO(NNS1-XXXX): Re-enable the max_rewardable_nodes quota check for
+            // TODO(CLO-15): Re-enable the max_rewardable_nodes quota check for
             // type4.1-type4.4 once we no longer treat rewards of type4.5 as type1.1.
             // For now, node providers may deploy arbitrarily many nodes of these
             // types without being constrained by `max_rewardable_nodes`. Type4.5 is
@@ -1141,7 +1141,7 @@ mod tests {
 
     #[test]
     fn should_allow_arbitrarily_many_nodes_of_type4dot1_through_type4dot4() {
-        // TODO(NNS1-XXXX): Remove this test once we re-enable the
+        // TODO(CLO-15): Remove this test once we re-enable the
         // max_rewardable_nodes quota check for type4.1-type4.4. See related TODO
         // in `do_add_node_`.
         for node_reward_type in [
