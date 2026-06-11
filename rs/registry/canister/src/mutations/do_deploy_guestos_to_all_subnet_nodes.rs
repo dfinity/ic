@@ -33,7 +33,7 @@ impl Registry {
                 subnet_record.subnet_type,
                 i32::from(SubnetTypePb::CloudEngine),
                 "{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: engine controller may only \
-                 update CloudEngine subnets; subnet {subnet_id} has subnet_type {:?}",
+                 deploy GuestOS to CloudEngine subnets; subnet {subnet_id} has subnet_type {:?}",
                 subnet_record.subnet_type,
             );
         }
@@ -72,27 +72,26 @@ mod tests {
     use super::*;
     use crate::common::test_helpers::{
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes, prepare_registry_with_nodes_and_reward_type,
+        prepare_registry_with_cloud_engine_subnet, prepare_registry_with_nodes,
     };
     use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID};
-    use ic_protobuf::registry::node::v1::NodeRewardType;
-    use ic_protobuf::registry::subnet::v1::{
-        CanisterCyclesCostSchedule, SubnetType as SubnetTypePb,
-    };
+    use ic_protobuf::registry::subnet::v1::SubnetType as SubnetTypePb;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::ReplicaVersion;
     use maplit::btreemap;
 
-    /// Creates a registry with a single subnet of the given `subnet_type`.
-    fn make_registry_with_subnet(subnet_type: SubnetType) -> (Registry, SubnetId) {
+    /// Creates a registry with a single non-CloudEngine subnet of the given
+    /// `subnet_type`. For CloudEngine subnets, use
+    /// [`prepare_registry_with_cloud_engine_subnet`] directly.
+    fn make_registry_with_non_cloud_engine_subnet(subnet_type: SubnetType) -> (Registry, SubnetId) {
+        assert_ne!(
+            subnet_type,
+            SubnetType::CloudEngine,
+            "use prepare_registry_with_cloud_engine_subnet for CloudEngine subnets",
+        );
         let mut registry = invariant_compliant_registry(0);
-        // CloudEngine subnets require nodes with reward type 4.
-        let (mutate_request, node_ids_and_dkg_pks) = if subnet_type == SubnetType::CloudEngine {
-            prepare_registry_with_nodes_and_reward_type(1, 2, NodeRewardType::Type4)
-        } else {
-            prepare_registry_with_nodes(1, 2)
-        };
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -104,9 +103,6 @@ mod tests {
 
         let mut subnet_record = get_invariant_compliant_subnet_record(vec![*first_node_id]);
         subnet_record.subnet_type = i32::from(SubnetTypePb::from(subnet_type));
-        if subnet_type == SubnetType::CloudEngine {
-            subnet_record.canister_cycles_cost_schedule = CanisterCyclesCostSchedule::Free as i32;
-        }
 
         let subnet_id = subnet_test_id(3000);
         registry.maybe_apply_mutation_internal(add_fake_subnet(
@@ -128,7 +124,9 @@ mod tests {
 
     #[test]
     fn engine_controller_can_deploy_to_cloud_engine_subnet() {
-        let (mut registry, subnet_id) = make_registry_with_subnet(SubnetType::CloudEngine);
+        let mut registry = invariant_compliant_registry(0);
+        let (mutate_request, subnet_id) = prepare_registry_with_cloud_engine_subnet(1, 2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             ENGINE_CONTROLLER_CANISTER_ID.get(),
@@ -143,9 +141,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "engine controller may only update CloudEngine subnets")]
+    #[should_panic(expected = "engine controller may only deploy GuestOS to CloudEngine subnets")]
     fn engine_controller_cannot_deploy_to_non_cloud_engine_subnet() {
-        let (mut registry, subnet_id) = make_registry_with_subnet(SubnetType::Application);
+        let (mut registry, subnet_id) = make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             ENGINE_CONTROLLER_CANISTER_ID.get(),
@@ -155,7 +153,7 @@ mod tests {
 
     #[test]
     fn governance_can_deploy_to_non_cloud_engine_subnet() {
-        let (mut registry, subnet_id) = make_registry_with_subnet(SubnetType::Application);
+        let (mut registry, subnet_id) = make_registry_with_non_cloud_engine_subnet(SubnetType::Application);
 
         registry.do_deploy_guestos_to_all_subnet_nodes(
             GOVERNANCE_CANISTER_ID.get(),
