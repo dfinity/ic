@@ -1,0 +1,45 @@
+"""
+dosfstools, built from source. Provides mkfs.fat (used to create FAT/VFAT
+filesystem images for IC-OS) and fatlabel (used to set their volume label).
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(["**"]),
+)
+
+configure_make(
+    name = "dosfstools",
+    args = ["-j"],
+    configure_in_place = True,
+    configure_options = [
+        # Build without iconv: dosfstools then uses its compiled-in CP850
+        # conversion table instead of glibc's iconv/gconv modules. IC-OS only
+        # uses ASCII volume labels (covered by CP850), and this keeps the build
+        # hermetic (no dependency on which gconv modules the runtime glibc ships)
+        # and self-contained.
+        "--without-iconv",
+    ],
+    lib_source = ":all_srcs",
+    out_binaries = [
+        "mkfs.fat",
+        "fatlabel",
+    ],
+    # We don't ship any libs out of this build.
+    out_shared_libs = [],
+    out_static_libs = [],
+    # mkfs.fat and fatlabel install under sbin/ by autotools (they're sysadmin
+    # tools); rules_foreign_cc only picks up out_binaries from bin/, so move them.
+    postfix_script = (
+        "mkdir -p $$INSTALLDIR/bin $$INSTALLDIR/include && " +
+        "cp $$INSTALLDIR/sbin/mkfs.fat $$INSTALLDIR/bin/mkfs.fat && " +
+        "cp $$INSTALLDIR/sbin/fatlabel $$INSTALLDIR/bin/fatlabel"
+    ),
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
