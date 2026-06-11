@@ -544,6 +544,7 @@ pub struct Delegation {
     pubkey: Blob,
     expiration: Time,
     targets: Option<Vec<Blob>>,
+    permissions: Option<String>,
 }
 
 impl Delegation {
@@ -552,6 +553,7 @@ impl Delegation {
             pubkey: Blob(pubkey),
             expiration,
             targets: None,
+            permissions: None,
         }
     }
 
@@ -560,6 +562,16 @@ impl Delegation {
             pubkey: Blob(pubkey),
             expiration,
             targets: Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect()),
+            permissions: None,
+        }
+    }
+
+    pub fn new_with_permissions(pubkey: Vec<u8>, expiration: Time, permissions: String) -> Self {
+        Self {
+            pubkey: Blob(pubkey),
+            expiration,
+            targets: None,
+            permissions: Some(permissions),
         }
     }
 
@@ -590,6 +602,12 @@ impl Delegation {
     pub fn number_of_targets(&self) -> Option<usize> {
         self.targets.as_ref().map(Vec::len)
     }
+
+    /// The kinds of calls the delegation permits, if restricted.
+    /// `None` means the delegation is unrestricted.
+    pub fn permissions(&self) -> Option<&str> {
+        self.permissions.as_deref()
+    }
 }
 
 impl SignedBytesWithoutDomainSeparator for Delegation {
@@ -605,6 +623,9 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
                 "targets",
                 Array(targets.iter().map(|t| Bytes(t.0.as_slice())).collect()),
             );
+        }
+        if let Some(permissions) = &self.permissions {
+            map.insert("permissions", String(permissions));
         }
 
         bytes.extend_from_slice(&hash_of_map(&map, |key, value| hash_key_val(key, value)));

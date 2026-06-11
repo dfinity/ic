@@ -531,6 +531,23 @@ impl DirectAuthenticationScheme {
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
+
+    /// Creates a delegation that restricts the kinds of calls the delegate
+    /// may make (e.g., `"queries"`).
+    fn delegate_to_with_permissions(
+        &self,
+        other: &DirectAuthenticationScheme,
+        expiration: Time,
+        permissions: &str,
+    ) -> SignedDelegation {
+        let delegation = Delegation::new_with_permissions(
+            other.public_key_der(),
+            expiration,
+            permissions.to_string(),
+        );
+        let signature = self.sign(&delegation);
+        SignedDelegation::new(delegation, signature)
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -591,6 +608,19 @@ impl DelegationChainBuilder {
         let current_end = self.end.unwrap_or_else(|| self.start.clone());
         self.signed_delegations
             .push(current_end.delegate_to_with_targets(&new_end, expiration, targets));
+        self.end = Some(new_end);
+        self
+    }
+
+    pub fn delegate_to_with_permissions(
+        mut self,
+        new_end: DirectAuthenticationScheme,
+        expiration: Time,
+        permissions: &str,
+    ) -> Self {
+        let current_end = self.end.unwrap_or_else(|| self.start.clone());
+        self.signed_delegations
+            .push(current_end.delegate_to_with_permissions(&new_end, expiration, permissions));
         self.end = Some(new_end);
         self
     }

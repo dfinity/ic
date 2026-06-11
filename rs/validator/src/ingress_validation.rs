@@ -60,6 +60,33 @@ const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
+/// Value of a delegation's `permissions` field that restricts the sender
+/// to query calls: requests to `/call` endpoints are rejected.
+const DELEGATION_PERMISSIONS_QUERIES: &str = "queries";
+
+/// Value of a delegation's `permissions` field that explicitly permits all
+/// kinds of calls (same as an absent `permissions` field).
+const DELEGATION_PERMISSIONS_UPDATES: &str = "updates";
+
+/// Restrictions that a chain of delegations places on the sender.
+#[derive(Debug)]
+struct DelegationRestrictions {
+    /// The set of canister IDs that are common to all delegations' `targets`.
+    targets: CanisterIdSet,
+    /// Whether some delegation in the chain restricts the sender to query
+    /// calls via the `permissions` field.
+    queries_only: bool,
+}
+
+impl DelegationRestrictions {
+    fn unrestricted() -> Self {
+        Self {
+            targets: CanisterIdSet::all(),
+            queries_only: false,
+        }
+    }
+}
+
 /// A trait for validating an `HttpRequest` with content `C`.
 pub trait HttpRequestVerifier<C, R>: Send + Sync {
     /// Validates the given request.
@@ -76,6 +103,9 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
     /// * The request's signature (if any) is correct.
     /// * If the request specifies a `CanisterId` (see `HasCanisterId`),
     ///   then it must be among the set of canister IDs that are common to all delegations.
+    /// * Every delegation's `permissions` field (if any) holds a supported value
+    ///   (`"queries"` or `"updates"`). If the request is an update call, no delegation
+    ///   restricts the sender to query calls (`permissions = "queries"`).
     ///
     /// The following signatures (for signing the request or any delegation) are supported
     /// (see the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures)):
@@ -115,14 +145,17 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        let delegation_targets = validate_request_content(
+        let restrictions = validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
         )?;
-        validate_request_target(request, &delegation_targets)?;
-        Ok(delegation_targets)
+        if restrictions.queries_only {
+            return Err(UpdateCallNotPermittedByDelegation);
+        }
+        validate_request_target(request, &restrictions.targets)?;
+        Ok(restrictions.targets)
     }
 }
 
@@ -140,14 +173,16 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        let delegation_targets = validate_request_content(
+        // A delegation with `permissions = "queries"` does not restrict
+        // query calls.
+        let restrictions = validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
         )?;
-        validate_request_target(request, &delegation_targets)?;
-        Ok(delegation_targets)
+        validate_request_target(request, &restrictions.targets)?;
+        Ok(restrictions.targets)
     }
 }
 
@@ -166,12 +201,15 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
+        // A delegation with `permissions = "queries"` does not restrict
+        // read_state requests.
         validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
         )
+        .map(|restrictions| restrictions.targets)
     }
 }
 
@@ -198,14 +236,14 @@ fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
     ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
+) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
 {
     validate_nonce(request)?;
     // Validate the envelope signature first (cheap check) before performing
     // expensive canister signature verification in validate_sender_info.
-    let targets = validate_user_id_and_signature(
+    let restrictions = validate_user_id_and_signature(
         ingress_signature_verifier,
         &request.sender(),
         &request.id(),
@@ -217,7 +255,7 @@ where
         root_of_trust_provider,
     )?;
     validate_sender_info(request, ingress_signature_verifier, root_of_trust_provider)?;
-    Ok(targets)
+    Ok(restrictions)
 }
 
 fn validate_request_target<C: HasCanisterId>(
@@ -266,6 +304,11 @@ pub enum RequestValidationError {
     NonceTooBig { num_bytes: usize, maximum: usize },
     #[error("Invalid sender info: {0}")]
     InvalidSenderInfo(String),
+    #[error(
+        "Update calls are not permitted: a delegation restricts the sender \
+         to query calls (permissions = \"queries\")."
+    )]
+    UpdateCallNotPermittedByDelegation,
 }
 
 /// Error in verifying the signature or authentication part of a request.
@@ -285,6 +328,8 @@ pub enum AuthenticationError {
     DelegationTooLongError { length: usize, maximum: usize },
     #[error("Chain of delegations contains at least one cycle: first repeating public key encountered {}", hex::encode(.public_key))]
     DelegationContainsCyclesError { public_key: Vec<u8> },
+    #[error("Unsupported delegation permissions: {0}")]
+    UnsupportedDelegationPermissions(String),
 }
 
 /// Set of canister IDs.
@@ -638,7 +683,7 @@ fn validate_signature<R: RootOfTrustProvider>(
     signature: &UserSignature,
     current_time: Time,
     root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
+) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
 {
@@ -647,7 +692,7 @@ where
     let empty_vec = Vec::new();
     let signed_delegations = signature.sender_delegation.as_ref().unwrap_or(&empty_vec);
 
-    let (pubkey, targets) = validate_delegations(
+    let (pubkey, restrictions) = validate_delegations(
         validator,
         signed_delegations.as_slice(),
         signature.signer_pubkey.clone(),
@@ -666,7 +711,7 @@ where
             validate_webauthn_sig(validator, &webauthn_sig, message_id, &pk)
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
-            Ok(targets)
+            Ok(restrictions)
         }
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
@@ -674,7 +719,7 @@ where
             let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
             validate_signature_plain(validator, message_id, &basic_sig, &pk)
                 .map_err(InvalidSignature)?;
-            Ok(targets)
+            Ok(restrictions)
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
@@ -689,7 +734,7 @@ where
                     e.to_string()
                 ))
             );
-            Ok(targets)
+            Ok(restrictions)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
             Err(RequestValidationError::InvalidSignature(
@@ -717,20 +762,23 @@ fn validate_signature_plain(
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication
 //
 // If the delegations are valid, returns the public key used to sign the
-// request as well as the set of canister IDs that the public key is valid for.
+// request as well as the restrictions that the delegations place on the
+// sender (the set of canister IDs that the public key is valid for, and
+// whether the sender is restricted to query calls).
 fn validate_delegations<R: RootOfTrustProvider>(
     validator: &dyn IngressSigVerifier,
     signed_delegations: &[SignedDelegation],
     mut pubkey: Vec<u8>,
     root_of_trust_provider: &R,
-) -> Result<(Vec<u8>, CanisterIdSet), RequestValidationError>
+) -> Result<(Vec<u8>, DelegationRestrictions), RequestValidationError>
 where
     R::Error: std::error::Error,
 {
     ensure_delegations_does_not_contain_cycles(&pubkey, signed_delegations)?;
     ensure_delegations_does_not_contain_too_many_targets(signed_delegations)?;
-    // Initially, assume that the delegations target all possible canister IDs.
-    let mut targets = CanisterIdSet::all();
+    // Initially, assume that the delegations place no restrictions on the
+    // sender.
+    let mut restrictions = DelegationRestrictions::unrestricted();
 
     for sd in signed_delegations {
         let delegation = sd.delegation();
@@ -745,11 +793,24 @@ where
         )
         .map_err(InvalidDelegation)?;
         // Restrict the canister targets to the ones specified in the delegation.
-        targets = targets.intersect(new_targets);
+        restrictions.targets = restrictions.targets.intersect(new_targets);
+        // Restrict the kinds of calls to the ones permitted by the delegation.
+        // Unsupported values are rejected (fail-closed): no delegations with a
+        // `permissions` field exist that predate this validation, so there is
+        // no backward compatibility concern.
+        match delegation.permissions() {
+            None | Some(DELEGATION_PERMISSIONS_UPDATES) => {}
+            Some(DELEGATION_PERMISSIONS_QUERIES) => restrictions.queries_only = true,
+            Some(unsupported) => {
+                return Err(InvalidDelegation(UnsupportedDelegationPermissions(
+                    unsupported.to_string(),
+                )));
+            }
+        }
         pubkey = delegation.pubkey().to_vec();
     }
 
-    Ok((pubkey, targets))
+    Ok((pubkey, restrictions))
 }
 
 fn ensure_delegations_does_not_contain_cycles(
@@ -846,14 +907,14 @@ fn validate_user_id_and_signature<R: RootOfTrustProvider>(
     signature: Option<&UserSignature>,
     current_time: Time,
     root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
+) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
 {
     match signature {
         None => {
             if sender.get().is_anonymous() {
-                return Ok(CanisterIdSet::all());
+                return Ok(DelegationRestrictions::unrestricted());
             }
             Err(MissingSignature(*sender))
         }

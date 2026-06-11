@@ -131,7 +131,7 @@ fn plain_authentication_with_one_delegation() {
         sender_delegation: Some(vec![signed_delegation]),
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -139,7 +139,7 @@ fn plain_authentication_with_one_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 
     // Try verifying the signature in the future. It should fail because the
@@ -207,7 +207,7 @@ fn plain_authentication_with_one_scoped_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
     );
 }
 
@@ -308,7 +308,7 @@ fn plain_authentication_with_multiple_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
     );
     assert_matches!(
         validate_signature(
@@ -434,7 +434,7 @@ fn validate_signature_webauthn() {
         sender_delegation: None,
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -442,7 +442,7 @@ fn validate_signature_webauthn() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 
@@ -467,7 +467,7 @@ fn validate_signature_webauthn_ed25519() {
         sender_delegation: None,
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -475,7 +475,7 @@ fn validate_signature_webauthn_ed25519() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 
@@ -504,7 +504,7 @@ fn validate_signature_webauthn_with_delegations() {
         sender_delegation: Some(vec![SignedDelegation::new(delegation, delegation_sig)]),
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -512,7 +512,7 @@ fn validate_signature_webauthn_with_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 

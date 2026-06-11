@@ -18,6 +18,7 @@ mod targets {
                 invalid_canister_id,
                 to_blob(CanisterId::from(3)),
             ]),
+            permissions: None,
         };
 
         let targets = delegation.targets();
@@ -33,6 +34,7 @@ mod targets {
         let delegation = Delegation {
             pubkey: Blob(vec![]),
             expiration: CURRENT_TIME,
+            permissions: None,
             targets: Some(vec![
                 to_blob(canister_id_3),
                 to_blob(canister_id_3),
@@ -914,11 +916,13 @@ mod cbor_serialization {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: None,
+                permissions: None,
             },
             Value::Map(btreemap! {
                 text("pubkey") => bytes(&[1, 2, 3]),
                 text("expiration") => int(0),
                 text("targets") => Value::Null,
+                text("permissions") => Value::Null,
             }),
         );
 
@@ -927,11 +931,28 @@ mod cbor_serialization {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: Some(vec![Blob(vec![4, 5, 6])]),
+                permissions: None,
             },
             Value::Map(btreemap! {
                 text("pubkey") => bytes(&[1, 2, 3]),
                 text("expiration") => int(0),
                 text("targets") => Value::Array(vec![bytes(&[4, 5, 6])]),
+                text("permissions") => Value::Null,
+            }),
+        );
+
+        assert_cbor_ser_equal(
+            &Delegation {
+                pubkey: Blob(vec![1, 2, 3]),
+                expiration: UNIX_EPOCH,
+                targets: None,
+                permissions: Some("queries".to_string()),
+            },
+            Value::Map(btreemap! {
+                text("pubkey") => bytes(&[1, 2, 3]),
+                text("expiration") => int(0),
+                text("targets") => Value::Null,
+                text("permissions") => text("queries"),
             }),
         );
     }
@@ -944,6 +965,7 @@ mod cbor_serialization {
                     pubkey: Blob(vec![1, 2, 3]),
                     expiration: UNIX_EPOCH,
                     targets: None,
+                    permissions: None,
                 },
                 signature: Blob(vec![4, 5, 6]),
             },
@@ -952,6 +974,7 @@ mod cbor_serialization {
                     text("pubkey") => bytes(&[1, 2, 3]),
                     text("expiration") => int(0),
                     text("targets") => Value::Null,
+                    text("permissions") => Value::Null,
                 }),
                 text("signature") => bytes(&[4, 5, 6]),
             }),

@@ -46,6 +46,8 @@ pub use internal::TimeProvider;
 /// * [`RequestValidationError::CanisterNotInDelegationTargets`]: if the request targets a canister
 ///   that is not authorized in one of the delegations.
 /// * [`RequestValidationError::InvalidSenderInfo`]: if sender info is provided but invalid.
+/// * [`RequestValidationError::UpdateCallNotPermittedByDelegation`]: if the request is an
+///   update call but a delegation restricts the sender to query calls.
 pub trait HttpRequestVerifier<C> {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError>;
 }
@@ -65,6 +67,7 @@ pub enum RequestValidationError {
     PathTooLongError { length: usize, maximum: usize },
     NonceTooBigError { num_bytes: usize, maximum: usize },
     InvalidSenderInfo(String),
+    UpdateCallNotPermittedByDelegation,
 }
 
 impl Display for RequestValidationError {
@@ -112,6 +115,13 @@ impl Display for RequestValidationError {
             RequestValidationError::InvalidSenderInfo(msg) => {
                 write!(f, "Invalid sender info: {msg}")
             }
+            RequestValidationError::UpdateCallNotPermittedByDelegation => {
+                write!(
+                    f,
+                    "Update calls are not permitted: a delegation restricts \
+                     the sender to query calls (permissions = \"queries\")"
+                )
+            }
         }
     }
 }
@@ -142,6 +152,9 @@ pub enum AuthenticationError {
     /// which was already encountered before in the chain of delegations.
     /// Note that if both keys are equal, then this delegation is self-signed, which is also forbidden.
     DelegationContainsCyclesError { public_key: Vec<u8> },
+
+    /// A delegation's `permissions` field holds an unsupported value.
+    UnsupportedDelegationPermissions(String),
 }
 
 impl Display for AuthenticationError {
@@ -165,6 +178,9 @@ impl Display for AuthenticationError {
                 "Chain of delegations contains at least one cycle: first repeating public key encountered {}",
                 hex::encode(public_key)
             ),
+            AuthenticationError::UnsupportedDelegationPermissions(permissions) => {
+                write!(f, "Unsupported delegation permissions: {permissions}")
+            }
         }
     }
 }

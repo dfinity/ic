@@ -208,6 +208,9 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::InvalidSenderInfo(msg) => {
             RequestValidationError::InvalidSenderInfo(msg)
         }
+        ic_validator::RequestValidationError::UpdateCallNotPermittedByDelegation => {
+            RequestValidationError::UpdateCallNotPermittedByDelegation
+        }
     }
 }
 fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> AuthenticationError {
@@ -232,6 +235,9 @@ fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> Auth
         }
         ic_validator::AuthenticationError::DelegationContainsCyclesError { public_key } => {
             AuthenticationError::DelegationContainsCyclesError { public_key }
+        }
+        ic_validator::AuthenticationError::UnsupportedDelegationPermissions(permissions) => {
+            AuthenticationError::UnsupportedDelegationPermissions(permissions)
         }
     }
 }
