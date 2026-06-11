@@ -16,7 +16,9 @@ Type=oneshot
 # the old ruleset and loading the new one happen in a single nft transaction:
 # if loading fails the previously active ruleset stays in effect instead of
 # leaving the node without a firewall (nft -f is transactional).
-ExecStart=/usr/sbin/nft -f /etc/nftables.conf
+# Note: /etc/nftables.conf is a symlink to the file loaded below (see the
+# GuestOS Dockerfile), so nftables.service at boot loads the same config.
+ExecStart=/usr/sbin/nft -f /run/ic-node/nftables-ruleset/nftables.conf
 # Loading can still fail transiently, e.g. when the "hostos" hostname cannot
 # be resolved yet early during boot. Since the load is atomic it is safe to
 # simply retry until it succeeds. If it keeps failing, the unit ends up in a
