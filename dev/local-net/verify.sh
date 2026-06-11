@@ -12,11 +12,13 @@ set -euo pipefail
 NET_URL="${NET_URL:-http://localhost:8080}"
 
 echo "==> /api/v2/status @ $NET_URL"
-status=$(curl -sS -m 5 "$NET_URL/api/v2/status") || {
+# CBOR contains null bytes; pipe through `strings` before any shell
+# capture so bash doesn't warn about ignored nulls.
+status=$(curl -sS -m 5 "$NET_URL/api/v2/status" | strings) || {
     echo "FAIL: could not reach $NET_URL/api/v2/status" >&2
     exit 1
 }
-echo "$status" | strings | grep -iE "impl_version|health" | sed 's/^/    /'
+echo "$status" | grep -iE "impl_version|health" | sed 's/^/    /'
 
 echo
 if command -v dfx >/dev/null 2>&1; then

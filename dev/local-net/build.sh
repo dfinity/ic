@@ -103,6 +103,8 @@ if [ "${SKIP_IMAGE:-0}" != "1" ]; then
 
     echo
     echo "Done. Sanity-check the binaries can at least exec:"
-    docker run --rm --platform=linux/amd64 ic-replica:dev /usr/local/bin/ic-replica --version || true
-    docker run --rm --platform=linux/amd64 ic-replica:dev /usr/local/bin/ic-prep --help 2>&1 | head -3 || true
+    # ic-replica's --version prints the version but then its config loader
+    # tries to consume the flag and complains; head -1 drops the noise.
+    docker run --rm --platform=linux/amd64 ic-replica:dev /usr/local/bin/ic-replica --version 2>&1 | head -1 || true
+    docker run --rm --platform=linux/amd64 ic-replica:dev /usr/local/bin/ic-prep --help 2>&1 | head -1 || true
 fi
