@@ -145,15 +145,27 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        let restrictions = validate_request_content(
-            request,
+        validate_nonce(request)?;
+        let restrictions = validate_user_id_and_signature(
             self.validator.as_ref(),
+            &request.sender(),
+            &request.id(),
+            match request.authentication() {
+                Authentication::Anonymous => None,
+                Authentication::Authenticated(signature) => Some(signature),
+            },
             current_time,
             root_of_trust_provider,
         )?;
+        // Reject update calls that a delegation restricts to query calls
+        // before performing potentially expensive canister signature
+        // verification of the sender info: such calls are rejected either
+        // way, so the delegation-based rejection takes precedence over an
+        // invalid sender info.
         if restrictions.queries_only {
             return Err(UpdateCallNotPermittedByDelegation);
         }
+        validate_sender_info(request, self.validator.as_ref(), root_of_trust_provider)?;
         validate_request_target(request, &restrictions.targets)?;
         Ok(restrictions.targets)
     }
@@ -306,7 +318,7 @@ pub enum RequestValidationError {
     InvalidSenderInfo(String),
     #[error(
         "Update calls are not permitted: a delegation restricts the sender \
-         to query calls (permissions = \"queries\")."
+         to query calls (permissions = \"queries\")"
     )]
     UpdateCallNotPermittedByDelegation,
 }

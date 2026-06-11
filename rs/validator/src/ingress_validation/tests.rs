@@ -207,7 +207,7 @@ fn plain_authentication_with_one_scoped_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap() && !restrictions.queries_only
     );
 }
 
@@ -308,7 +308,7 @@ fn plain_authentication_with_multiple_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap() && !restrictions.queries_only
     );
     assert_matches!(
         validate_signature(
