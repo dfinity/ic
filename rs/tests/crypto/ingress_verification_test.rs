@@ -1,7 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 use anyhow::Result;
-use candid::Encode;
+use candid::{CandidType, Encode};
 use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -28,6 +28,7 @@ use ic_universal_canister::wasm;
 use rand::{CryptoRng, Rng, SeedableRng, rngs::StdRng};
 use reqwest::{StatusCode, Url};
 use slog::debug;
+use std::collections::BTreeMap;
 
 const ALL_QUERY_API_VERSIONS: &[usize] = &[2, 3];
 const ALL_UPDATE_API_VERSIONS: &[usize] = &[2, 3, 4];
@@ -47,6 +48,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_sender_info))
                 .add_test(systest!(requests_with_valid_sender_info))
+                .add_test(systest!(requests_with_sender_info_permissions))
                 .add_test(systest!(requests_with_invalid_expiry))
                 .add_test(systest!(requests_with_canister_signature)),
         )
@@ -1348,6 +1350,172 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 let response = send_query(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
+            }
+        }
+    });
+}
+
+/// Minimal mirror of the ICRC-3 `Value` type used to encode the attributes
+/// map carried in `sender_info.info`, like the mirror used by Internet
+/// Identity to certify request attributes.
+#[derive(CandidType)]
+enum Icrc3Value {
+    Text(String),
+    Map(BTreeMap<String, Icrc3Value>),
+}
+
+/// Candid-encodes an ICRC-3 attributes map, optionally containing the
+/// `implicit:permissions` attribute with the given value.
+fn encoded_attributes_with_permissions(permissions: Option<&str>) -> Vec<u8> {
+    let mut attributes = BTreeMap::from([(
+        "implicit:origin".to_string(),
+        Icrc3Value::Text("https://example.com".to_string()),
+    )]);
+    if let Some(permissions) = permissions {
+        attributes.insert(
+            "implicit:permissions".to_string(),
+            Icrc3Value::Text(permissions.to_string()),
+        );
+    }
+    Encode!(&Icrc3Value::Map(attributes)).expect("failed to encode attributes")
+}
+
+/// Demonstrates the `implicit:permissions` sender_info attribute end-to-end:
+/// a signer canister (playing the role of Internet Identity) certifies an
+/// ICRC-3 attributes map restricting the sender to `"queries"`, and the
+/// protocol then rejects the sender's update calls during ingress validation
+/// while still permitting query calls (where the receiving canister can also
+/// read the certified attributes). Attribute maps with permissions
+/// `"updates"`, or without the permissions attribute, leave update calls
+/// permitted.
+pub fn requests_with_sender_info_permissions(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let test_info = TestInformation {
+                url: node_url,
+                canister_id: canister_id_from_principal(&canister.canister_id()),
+            };
+
+            let seed = b"sender_info_permissions_test_seed".to_vec();
+            let signer = CanisterSigner::new(&canister, seed);
+            let id = GenericIdentity::new_canister(signer.clone());
+
+            // Helper: canister-sign the given attributes blob as a
+            // sender_info, like Internet Identity does when certifying
+            // request attributes.
+            let signed_sender_info = |info_bytes: Vec<u8>| {
+                let signer = signer.clone();
+                async move {
+                    let sig = signer
+                        .sign(&SenderInfoContent(&info_bytes).as_signed_bytes())
+                        .await;
+                    RawSignedSenderInfo {
+                        info: Blob(info_bytes),
+                        signer: Blob(signer.canister_id().get().as_slice().to_vec()),
+                        sig: Blob(sig),
+                    }
+                }
+            };
+
+            // Helper: build an update call with the given sender_info, compute
+            // the message ID from ic-types (which includes sender_info, unlike
+            // ic_agent::EnvelopeContent), sign it, and send.
+            let send_update = |api_ver, sender_info| {
+                let content = HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "update".to_string(),
+                        arg: Blob(wasm().reply_data(b"update_reply").build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(sender_info),
+                    },
+                };
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
+                let fut = send_request(
+                    api_ver,
+                    &test_info,
+                    "call",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                );
+                async move { (fut.await, message_id) }
+            };
+
+            let queries_only_info = encoded_attributes_with_permissions(Some("queries"));
+            let queries_only_sender_info = signed_sender_info(queries_only_info.clone()).await;
+
+            ///////////////////////////////////////////////////////////////////
+            // A sender restricted to "queries" must not be able to make
+            // update calls: the protocol rejects them during ingress
+            // validation.
+            for &api_ver in ALL_UPDATE_API_VERSIONS {
+                let (response, _) = send_update(api_ver, queries_only_sender_info.clone()).await;
+                assert_eq!(response.status(), 400);
+                response.expect_text_error("Sender info does not permit update calls");
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            // The same sender_info still permits query calls, where the
+            // receiving canister can read the certified attributes via the
+            // msg_caller_info system API.
+            for &api_ver in ALL_QUERY_API_VERSIONS {
+                let content = HttpQueryContent::Query {
+                    query: HttpUserQuery {
+                        canister_id: Blob(test_info.canister_id.get().as_slice().to_vec()),
+                        method_name: "query".to_string(),
+                        arg: Blob(wasm().msg_caller_info_data().append_and_reply().build()),
+                        sender: Blob(id.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                        sender_info: Some(queries_only_sender_info.clone()),
+                    },
+                };
+                let message_id = MessageId::from(content.representation_independent_hash());
+                let signature = id.sign_bytes(&message_id.as_signed_bytes());
+                let response = send_request(
+                    api_ver,
+                    &test_info,
+                    "query",
+                    content,
+                    id.public_key_der(),
+                    None,
+                    signature,
+                )
+                .await;
+                response.expect_query_ok(api_ver);
+                response.expect_query_reply_arg(api_ver, &queries_only_info);
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            // Attributes with permissions "updates", or without the
+            // permissions attribute, leave update calls permitted.
+            for info_bytes in [
+                encoded_attributes_with_permissions(Some("updates")),
+                encoded_attributes_with_permissions(None),
+            ] {
+                let sender_info = signed_sender_info(info_bytes).await;
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    let (response, message_id) = send_update(api_ver, sender_info.clone()).await;
+                    let response =
+                        await_pending_update(api_ver, response, &test_info, &id, &message_id).await;
+                    response
+                        .with_request_id(message_id)
+                        .expect_update_ok(api_ver);
+                }
             }
         }
     });
