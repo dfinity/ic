@@ -1,6 +1,7 @@
 use crate::webauthn::validate_webauthn_sig;
 use AuthenticationError::*;
 use RequestValidationError::*;
+use candid::{CandidType, DecoderConfig, Deserialize, decode_one_with_config};
 use ic_crypto_iccsa::public_key_bytes_from_der;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{KeyBytesContentType, user_public_key_from_bytes};
@@ -18,8 +19,9 @@ use ic_types::{
         SignedSenderInfo, UserSignature, WebAuthnSignature,
     },
 };
+use serde_bytes::ByteBuf;
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
     sync::Arc,
 };
@@ -149,6 +151,7 @@ where
             // by simply omitting the sender info.
             SenderInfoRequirement::EnforceIfRequiredByDelegation,
         )?;
+        validate_sender_info_permits_update_calls(request.sender_info())?;
         validate_request_target(request, &restrictions.targets)?;
         Ok(restrictions.targets)
     }
@@ -324,6 +327,11 @@ pub enum RequestValidationError {
          but no sender_info was provided"
     )]
     SenderInfoRequiredByDelegation,
+    #[error(
+        "Sender info does not permit update calls: \
+         the \"implicit:permissions\" attribute is set to \"queries\"."
+    )]
+    UpdateCallNotPermittedBySenderInfo,
 }
 
 /// Error in verifying the signature or authentication part of a request.
@@ -600,6 +608,78 @@ where
         ))
     );
     Ok(())
+}
+
+/// Key of the attribute, in the ICRC-3 map carried in the `info` blob of a
+/// request's `sender_info`, whose value restricts which kinds of calls the
+/// sender info permits.
+const SENDER_INFO_PERMISSIONS_ATTRIBUTE: &str = "implicit:permissions";
+
+/// Value of the [`SENDER_INFO_PERMISSIONS_ATTRIBUTE`] attribute indicating
+/// that the sender info only permits query calls.
+const SENDER_INFO_PERMISSIONS_QUERIES: &str = "queries";
+
+/// Upper bound on the work performed when Candid-decoding the `info` blob of
+/// a `sender_info`, see [`DecoderConfig::set_decoding_quota`].
+const SENDER_INFO_DECODING_QUOTA: usize = 1_000_000;
+
+/// Upper bound on the work performed when skipping unneeded data while
+/// Candid-decoding the `info` blob of a `sender_info`,
+/// see [`DecoderConfig::set_skipping_quota`].
+const SENDER_INFO_SKIPPING_QUOTA: usize = 10_000;
+
+/// Minimal mirror of the ICRC-3 `Value` type
+/// (`https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-3/README.md#value`).
+///
+/// Since Candid variant tags are derived from the variant names, this type
+/// decodes any value encoded with an equivalent ICRC-3 value type, e.g. the
+/// one used by Internet Identity to encode certified request attributes.
+#[derive(CandidType, Deserialize, Debug)]
+enum Icrc3Value {
+    Blob(ByteBuf),
+    Text(String),
+    Nat(candid::Nat),
+    Int(candid::Int),
+    Array(Vec<Icrc3Value>),
+    Map(BTreeMap<String, Icrc3Value>),
+}
+
+/// Checks whether the given sender info (if any) permits update calls.
+///
+/// If the `info` blob of the sender info is a Candid-encoded ICRC-3 map whose
+/// [`SENDER_INFO_PERMISSIONS_ATTRIBUTE`] attribute has the text value
+/// [`SENDER_INFO_PERMISSIONS_QUERIES`], the signer restricted the sender to
+/// query calls and so update calls are rejected. In all other cases (no
+/// sender info, `info` is not a parseable ICRC-3 map, the attribute is
+/// absent, or it has any other value) the call is permitted.
+fn validate_sender_info_permits_update_calls(
+    sender_info: Option<&SignedSenderInfo>,
+) -> Result<(), RequestValidationError> {
+    let Some(sender_info) = sender_info else {
+        return Ok(());
+    };
+    match sender_info_permissions(&sender_info.info) {
+        Some(permissions) if permissions == SENDER_INFO_PERMISSIONS_QUERIES => {
+            Err(UpdateCallNotPermittedBySenderInfo)
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Extracts the value of the [`SENDER_INFO_PERMISSIONS_ATTRIBUTE`] attribute
+/// from the given `info` blob, provided the blob is a Candid-encoded ICRC-3
+/// map containing that attribute with a text value. Returns `None` otherwise.
+fn sender_info_permissions(info: &[u8]) -> Option<String> {
+    let mut config = DecoderConfig::new();
+    config.set_decoding_quota(SENDER_INFO_DECODING_QUOTA);
+    config.set_skipping_quota(SENDER_INFO_SKIPPING_QUOTA);
+    let Icrc3Value::Map(attributes) = decode_one_with_config(info, &config).ok()? else {
+        return None;
+    };
+    match attributes.get(SENDER_INFO_PERMISSIONS_ATTRIBUTE) {
+        Some(Icrc3Value::Text(permissions)) => Some(permissions.clone()),
+        _ => None,
+    }
 }
 
 // Check if ingress_expiry is within a proper range with respect to the given

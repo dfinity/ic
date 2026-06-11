@@ -48,6 +48,8 @@ pub use internal::TimeProvider;
 /// * [`RequestValidationError::InvalidSenderInfo`]: if sender info is provided but invalid.
 /// * [`RequestValidationError::SenderInfoRequiredByDelegation`]: if the request is an update
 ///   call without a `sender_info` but a delegation requires one to be present.
+/// * [`RequestValidationError::UpdateCallNotPermittedBySenderInfo`]: if the request is an update
+///   call but the provided sender info only permits query calls.
 pub trait HttpRequestVerifier<C> {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError>;
 }
@@ -68,6 +70,7 @@ pub enum RequestValidationError {
     NonceTooBigError { num_bytes: usize, maximum: usize },
     InvalidSenderInfo(String),
     SenderInfoRequiredByDelegation,
+    UpdateCallNotPermittedBySenderInfo,
 }
 
 impl Display for RequestValidationError {
@@ -120,6 +123,13 @@ impl Display for RequestValidationError {
                     f,
                     "A delegation requires the call to carry a signed sender info, \
                      but no sender_info was provided"
+                )
+            }
+            RequestValidationError::UpdateCallNotPermittedBySenderInfo => {
+                write!(
+                    f,
+                    "Sender info does not permit update calls: \
+                     the \"implicit:permissions\" attribute is set to \"queries\""
                 )
             }
         }

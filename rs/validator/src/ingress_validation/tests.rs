@@ -723,6 +723,116 @@ mod validate_sender_info {
     }
 }
 
+mod validate_sender_info_permissions {
+    use super::*;
+    use candid::Encode;
+
+    /// ICRC-3 value type used for encoding test payloads. Deliberately a
+    /// different mirror of the ICRC-3 `Value` type than the one used for
+    /// decoding, like the mirrors used by actual signers (e.g. Internet
+    /// Identity).
+    #[derive(CandidType)]
+    enum TestIcrc3Value {
+        Text(String),
+        Nat(candid::Nat),
+        Map(BTreeMap<String, TestIcrc3Value>),
+    }
+
+    fn signed_sender_info_with_info(info: Vec<u8>) -> SignedSenderInfo {
+        SignedSenderInfo {
+            info,
+            signer: canister_test_id(42),
+            sig: vec![4, 5, 6],
+        }
+    }
+
+    fn encoded_attributes_map(attributes: Vec<(&str, TestIcrc3Value)>) -> Vec<u8> {
+        let map: BTreeMap<String, TestIcrc3Value> = attributes
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value))
+            .collect();
+        Encode!(&TestIcrc3Value::Map(map)).expect("failed to encode attributes")
+    }
+
+    #[test]
+    fn should_permit_update_calls_without_sender_info() {
+        assert_matches!(validate_sender_info_permits_update_calls(None), Ok(()));
+    }
+
+    #[test]
+    fn should_permit_update_calls_when_info_is_not_an_icrc3_map() {
+        for info in [
+            vec![],
+            vec![1, 2, 3],
+            Encode!(&TestIcrc3Value::Text("queries".to_string())).expect("failed to encode"),
+        ] {
+            let sender_info = signed_sender_info_with_info(info);
+            assert_matches!(
+                validate_sender_info_permits_update_calls(Some(&sender_info)),
+                Ok(())
+            );
+        }
+    }
+
+    #[test]
+    fn should_permit_update_calls_without_permissions_attribute() {
+        let sender_info = signed_sender_info_with_info(encoded_attributes_map(vec![(
+            "implicit:origin",
+            TestIcrc3Value::Text("https://example.com".to_string()),
+        )]));
+        assert_matches!(
+            validate_sender_info_permits_update_calls(Some(&sender_info)),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_permit_update_calls_when_permissions_attribute_is_updates() {
+        let sender_info = signed_sender_info_with_info(encoded_attributes_map(vec![(
+            SENDER_INFO_PERMISSIONS_ATTRIBUTE,
+            TestIcrc3Value::Text("updates".to_string()),
+        )]));
+        assert_matches!(
+            validate_sender_info_permits_update_calls(Some(&sender_info)),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_permit_update_calls_when_permissions_attribute_is_not_text() {
+        let sender_info = signed_sender_info_with_info(encoded_attributes_map(vec![(
+            SENDER_INFO_PERMISSIONS_ATTRIBUTE,
+            TestIcrc3Value::Nat(candid::Nat::from(42_u64)),
+        )]));
+        assert_matches!(
+            validate_sender_info_permits_update_calls(Some(&sender_info)),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_reject_update_calls_when_permissions_attribute_is_queries() {
+        let sender_info = signed_sender_info_with_info(encoded_attributes_map(vec![
+            (
+                "implicit:origin",
+                TestIcrc3Value::Text("https://example.com".to_string()),
+            ),
+            (
+                "implicit:issued_at_timestamp_ns",
+                TestIcrc3Value::Nat(candid::Nat::from(1_700_000_000_000_000_000_u64)),
+            ),
+            (
+                SENDER_INFO_PERMISSIONS_ATTRIBUTE,
+                TestIcrc3Value::Text(SENDER_INFO_PERMISSIONS_QUERIES.to_string()),
+            ),
+        ]));
+        assert_matches!(
+            validate_sender_info_permits_update_calls(Some(&sender_info)),
+            Err(RequestValidationError::UpdateCallNotPermittedBySenderInfo)
+        );
+    }
+}
+
 mod canister_id_set {
     use super::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;

@@ -1992,6 +1992,7 @@ fn max_ingress_expiry_at(current_time: Time) -> Time {
 
 mod sender_info {
     use super::*;
+    use candid::Encode;
     use ic_types::messages::{RawSignedSenderInfo, SenderInfoContent};
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
     use ic_validator_http_request_test_utils::DirectAuthenticationScheme::CanisterSignature;
@@ -2041,6 +2042,67 @@ mod sender_info {
         let (builder, signer, sender_info) = valid_sender_info_setup(vec![1, 2, 3]);
         let verifier = builder.build();
         let request = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    /// Deliberately a different mirror of the ICRC-3 `Value` type than the
+    /// one used by the validator for decoding, like the mirrors used by
+    /// actual signers (e.g. Internet Identity).
+    #[derive(candid::CandidType)]
+    enum TestIcrc3Value {
+        Text(String),
+        Map(std::collections::BTreeMap<String, TestIcrc3Value>),
+    }
+
+    /// Candid-encodes an ICRC-3 map with the `implicit:permissions` attribute
+    /// set to the given value.
+    fn encoded_permissions_attribute(permissions: &str) -> Vec<u8> {
+        let map = std::collections::BTreeMap::from([(
+            "implicit:permissions".to_string(),
+            TestIcrc3Value::Text(permissions.to_string()),
+        )]);
+        Encode!(&TestIcrc3Value::Map(map)).expect("failed to encode attributes")
+    }
+
+    #[test]
+    fn should_reject_update_call_when_sender_info_only_permits_queries() {
+        let (builder, signer, sender_info) =
+            valid_sender_info_setup(encoded_permissions_attribute("queries"));
+        let verifier = builder.build();
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::UpdateCallNotPermittedBySenderInfo)
+        );
+    }
+
+    #[test]
+    fn should_accept_query_when_sender_info_only_permits_queries() {
+        let (builder, signer, sender_info) =
+            valid_sender_info_setup(encoded_permissions_attribute("queries"));
+        let verifier = builder.build();
+        let request = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(Direct(CanisterSignature(signer)))
+            .with_sender_info(sender_info)
+            .build();
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_update_call_when_sender_info_permits_updates() {
+        let (builder, signer, sender_info) =
+            valid_sender_info_setup(encoded_permissions_attribute("updates"));
+        let verifier = builder.build();
+        let request = HttpRequestBuilder::new_update_call()
             .with_ingress_expiry_at(CURRENT_TIME)
             .with_authentication(Direct(CanisterSignature(signer)))
             .with_sender_info(sender_info)
