@@ -149,8 +149,9 @@ use ic_types::{
         ValidationContext, XNetPayload,
     },
     canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseReceipt,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -1885,7 +1886,7 @@ impl StateMachine {
             .unwrap()
             .get_validated_shares()
             .filter_map(|share| {
-                if inducted.contains(&share.content.id) {
+                if inducted.contains(&share.content.id()) {
                     Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
                 } else {
                     None
@@ -2718,19 +2719,22 @@ impl StateMachine {
                 canister_id,
                 content: content.clone(),
             };
-            let response_metadata = CanisterHttpResponseMetadata {
-                id: CallbackId::from(request_id),
-                registry_version,
-                content_hash: ic_types::crypto::crypto_hash(&response),
-                content_size: content.count_bytes() as u32,
-                is_reject: content.is_reject(),
-                replica_version: ReplicaVersion::default(),
+            let receipt_share = CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: CallbackId::from(request_id),
+                    registry_version,
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    content_size: content.count_bytes() as u32,
+                    is_reject: content.is_reject(),
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt::default(),
             };
             let signature = CryptoReturningOk::default()
-                .sign(&response_metadata, node.node_id, registry_version)
+                .sign(&receipt_share, node.node_id, registry_version)
                 .unwrap();
             let share = Signed {
-                content: response_metadata,
+                content: receipt_share,
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
@@ -5133,7 +5137,7 @@ impl StateMachine {
             .read()
             .unwrap()
             .get_validated_shares()
-            .map(|share| share.content.id)
+            .map(|share| share.content.id())
             .collect();
         let state = self.state_manager.get_latest_state().take();
         state
