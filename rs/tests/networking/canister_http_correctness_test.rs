@@ -128,7 +128,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
                 .add_test(systest!(test_delete_without_non_replicated_rejected))
-                .add_test(systest!(test_patch_rejected))
+                .add_test(systest!(test_patch_call))
+                .add_test(systest!(test_patch_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1941,11 +1942,7 @@ fn test_delete_without_non_replicated_rejected(env: TestEnv) {
     });
 }
 
-// PATCH is plumbed through the types but not yet enabled on replicated subnets:
-// the execution layer rejects it so no PATCH context enters the replicated
-// state until support has rolled out to all replicas. This holds even for a
-// non-replicated request.
-fn test_patch_rejected(env: TestEnv) {
+fn test_patch_call(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1975,8 +1972,39 @@ fn test_patch_rejected(env: TestEnv) {
         },
     ));
 
+    assert_matches!(response, Ok(response) => {
+        assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+        assert_distinct_headers(&response);
+        assert_http_json_response(&request, &response);
+    });
+}
+
+fn test_patch_without_non_replicated_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{}]/{}", webserver_ipv6, "anything");
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::PATCH,
+        body: Some(vec![]),
+        transform: None,
+        max_response_bytes: Some(1024),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
     assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
-        assert!(reject_message.contains("PATCH HTTP method is not yet supported"));
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
     });
 }
 
