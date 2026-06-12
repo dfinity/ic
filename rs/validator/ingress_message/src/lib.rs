@@ -46,6 +46,8 @@ pub use internal::TimeProvider;
 /// * [`RequestValidationError::CanisterNotInDelegationTargets`]: if the request targets a canister
 ///   that is not authorized in one of the delegations.
 /// * [`RequestValidationError::InvalidSenderInfo`]: if sender info is provided but invalid.
+/// * [`RequestValidationError::SenderInfoRequiredByDelegation`]: if the request is an update
+///   call without a `sender_info` but a delegation requires one to be present.
 pub trait HttpRequestVerifier<C> {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError>;
 }
@@ -65,6 +67,7 @@ pub enum RequestValidationError {
     PathTooLongError { length: usize, maximum: usize },
     NonceTooBigError { num_bytes: usize, maximum: usize },
     InvalidSenderInfo(String),
+    SenderInfoRequiredByDelegation,
 }
 
 impl Display for RequestValidationError {
@@ -111,6 +114,13 @@ impl Display for RequestValidationError {
             ),
             RequestValidationError::InvalidSenderInfo(msg) => {
                 write!(f, "Invalid sender info: {msg}")
+            }
+            RequestValidationError::SenderInfoRequiredByDelegation => {
+                write!(
+                    f,
+                    "A delegation requires the call to carry a signed sender info, \
+                     but no sender_info was provided"
+                )
             }
         }
     }

@@ -60,6 +60,25 @@ const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
+/// Restrictions that a chain of delegations places on the sender.
+#[derive(Debug)]
+struct DelegationRestrictions {
+    /// The set of canister IDs that are common to all delegations' `targets`.
+    targets: CanisterIdSet,
+    /// Whether some delegation in the chain requires calls to carry a signed
+    /// `sender_info`.
+    sender_info_required: bool,
+}
+
+impl DelegationRestrictions {
+    fn unrestricted() -> Self {
+        Self {
+            targets: CanisterIdSet::all(),
+            sender_info_required: false,
+        }
+    }
+}
+
 /// A trait for validating an `HttpRequest` with content `C`.
 pub trait HttpRequestVerifier<C, R>: Send + Sync {
     /// Validates the given request.
@@ -76,6 +95,9 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
     /// * The request's signature (if any) is correct.
     /// * If the request specifies a `CanisterId` (see `HasCanisterId`),
     ///   then it must be among the set of canister IDs that are common to all delegations.
+    /// * If the request is an update call and some delegation requires the sender to
+    ///   carry a signed `sender_info` (`sender_info_required = true`), then the request
+    ///   must contain a `sender_info`.
     ///
     /// The following signatures (for signing the request or any delegation) are supported
     /// (see the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures)):
@@ -115,14 +137,29 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        let delegation_targets = validate_request_content(
-            request,
+        validate_nonce(request)?;
+        let restrictions = validate_user_id_and_signature(
             self.validator.as_ref(),
+            &request.sender(),
+            &request.id(),
+            match request.authentication() {
+                Authentication::Anonymous => None,
+                Authentication::Authenticated(signature) => Some(signature),
+            },
             current_time,
             root_of_trust_provider,
         )?;
-        validate_request_target(request, &delegation_targets)?;
-        Ok(delegation_targets)
+        // A delegation may require update calls to carry a signed
+        // `sender_info` (e.g. certified session attributes issued by the
+        // delegation's signer). Since the requirement is part of the signed
+        // delegation, the bearer of the delegation cannot lift it by simply
+        // omitting the sender info.
+        if restrictions.sender_info_required && request.sender_info().is_none() {
+            return Err(SenderInfoRequiredByDelegation);
+        }
+        validate_sender_info(request, self.validator.as_ref(), root_of_trust_provider)?;
+        validate_request_target(request, &restrictions.targets)?;
+        Ok(restrictions.targets)
     }
 }
 
@@ -140,14 +177,16 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
-        let delegation_targets = validate_request_content(
+        // `sender_info_required` only applies to update calls: query
+        // responses cannot change state, so there is nothing to restrict.
+        let restrictions = validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
         )?;
-        validate_request_target(request, &delegation_targets)?;
-        Ok(delegation_targets)
+        validate_request_target(request, &restrictions.targets)?;
+        Ok(restrictions.targets)
     }
 }
 
@@ -166,12 +205,15 @@ where
         if !request.sender().get().is_anonymous() {
             validate_ingress_expiry(request, current_time)?;
         }
+        // `sender_info_required` only applies to update calls; read_state
+        // requests cannot even carry a `sender_info`.
         validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
         )
+        .map(|restrictions| restrictions.targets)
     }
 }
 
@@ -198,14 +240,14 @@ fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
     ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
+) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
 {
     validate_nonce(request)?;
     // Validate the envelope signature first (cheap check) before performing
     // expensive canister signature verification in validate_sender_info.
-    let targets = validate_user_id_and_signature(
+    let restrictions = validate_user_id_and_signature(
         ingress_signature_verifier,
         &request.sender(),
         &request.id(),
@@ -217,7 +259,7 @@ where
         root_of_trust_provider,
     )?;
     validate_sender_info(request, ingress_signature_verifier, root_of_trust_provider)?;
-    Ok(targets)
+    Ok(restrictions)
 }
 
 fn validate_request_target<C: HasCanisterId>(
@@ -266,6 +308,11 @@ pub enum RequestValidationError {
     NonceTooBig { num_bytes: usize, maximum: usize },
     #[error("Invalid sender info: {0}")]
     InvalidSenderInfo(String),
+    #[error(
+        "A delegation requires the call to carry a signed sender info, \
+         but no sender_info was provided"
+    )]
+    SenderInfoRequiredByDelegation,
 }
 
 /// Error in verifying the signature or authentication part of a request.
@@ -638,7 +685,7 @@ fn validate_signature<R: RootOfTrustProvider>(
     signature: &UserSignature,
     current_time: Time,
     root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
+) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
 {
@@ -647,7 +694,7 @@ where
     let empty_vec = Vec::new();
     let signed_delegations = signature.sender_delegation.as_ref().unwrap_or(&empty_vec);
 
-    let (pubkey, targets) = validate_delegations(
+    let (pubkey, restrictions) = validate_delegations(
         validator,
         signed_delegations.as_slice(),
         signature.signer_pubkey.clone(),
@@ -666,7 +713,7 @@ where
             validate_webauthn_sig(validator, &webauthn_sig, message_id, &pk)
                 .map_err(WebAuthnError)
                 .map_err(InvalidSignature)?;
-            Ok(targets)
+            Ok(restrictions)
         }
         KeyBytesContentType::Ed25519PublicKeyDer
         | KeyBytesContentType::EcdsaP256PublicKeyDer
@@ -674,7 +721,7 @@ where
             let basic_sig = BasicSigOf::from(BasicSig(signature.signature.clone()));
             validate_signature_plain(validator, message_id, &basic_sig, &pk)
                 .map_err(InvalidSignature)?;
-            Ok(targets)
+            Ok(restrictions)
         }
         KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer => {
             let canister_sig = CanisterSigOf::from(CanisterSig(signature.signature.clone()));
@@ -689,7 +736,7 @@ where
                     e.to_string()
                 ))
             );
-            Ok(targets)
+            Ok(restrictions)
         }
         KeyBytesContentType::RsaSha256PublicKeyDer => {
             Err(RequestValidationError::InvalidSignature(
@@ -717,20 +764,23 @@ fn validate_signature_plain(
 // See https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication
 //
 // If the delegations are valid, returns the public key used to sign the
-// request as well as the set of canister IDs that the public key is valid for.
+// request as well as the restrictions that the delegations place on the
+// sender (the set of canister IDs that the public key is valid for, and
+// whether calls must carry a signed `sender_info`).
 fn validate_delegations<R: RootOfTrustProvider>(
     validator: &dyn IngressSigVerifier,
     signed_delegations: &[SignedDelegation],
     mut pubkey: Vec<u8>,
     root_of_trust_provider: &R,
-) -> Result<(Vec<u8>, CanisterIdSet), RequestValidationError>
+) -> Result<(Vec<u8>, DelegationRestrictions), RequestValidationError>
 where
     R::Error: std::error::Error,
 {
     ensure_delegations_does_not_contain_cycles(&pubkey, signed_delegations)?;
     ensure_delegations_does_not_contain_too_many_targets(signed_delegations)?;
-    // Initially, assume that the delegations target all possible canister IDs.
-    let mut targets = CanisterIdSet::all();
+    // Initially, assume that the delegations place no restrictions on the
+    // sender.
+    let mut restrictions = DelegationRestrictions::unrestricted();
 
     for sd in signed_delegations {
         let delegation = sd.delegation();
@@ -745,11 +795,14 @@ where
         )
         .map_err(InvalidDelegation)?;
         // Restrict the canister targets to the ones specified in the delegation.
-        targets = targets.intersect(new_targets);
+        restrictions.targets = restrictions.targets.intersect(new_targets);
+        // Since the field is covered by the delegation signature, the bearer
+        // of the delegation cannot lift the requirement by stripping it.
+        restrictions.sender_info_required |= delegation.sender_info_required();
         pubkey = delegation.pubkey().to_vec();
     }
 
-    Ok((pubkey, targets))
+    Ok((pubkey, restrictions))
 }
 
 fn ensure_delegations_does_not_contain_cycles(
@@ -846,14 +899,14 @@ fn validate_user_id_and_signature<R: RootOfTrustProvider>(
     signature: Option<&UserSignature>,
     current_time: Time,
     root_of_trust_provider: &R,
-) -> Result<CanisterIdSet, RequestValidationError>
+) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
 {
     match signature {
         None => {
             if sender.get().is_anonymous() {
-                return Ok(CanisterIdSet::all());
+                return Ok(DelegationRestrictions::unrestricted());
             }
             Err(MissingSignature(*sender))
         }

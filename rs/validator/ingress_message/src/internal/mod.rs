@@ -208,6 +208,9 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::InvalidSenderInfo(msg) => {
             RequestValidationError::InvalidSenderInfo(msg)
         }
+        ic_validator::RequestValidationError::SenderInfoRequiredByDelegation => {
+            RequestValidationError::SenderInfoRequiredByDelegation
+        }
     }
 }
 fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> AuthenticationError {

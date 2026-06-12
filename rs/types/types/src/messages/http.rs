@@ -544,6 +544,7 @@ pub struct Delegation {
     pubkey: Blob,
     expiration: Time,
     targets: Option<Vec<Blob>>,
+    sender_info_required: Option<bool>,
 }
 
 impl Delegation {
@@ -552,6 +553,7 @@ impl Delegation {
             pubkey: Blob(pubkey),
             expiration,
             targets: None,
+            sender_info_required: None,
         }
     }
 
@@ -560,6 +562,20 @@ impl Delegation {
             pubkey: Blob(pubkey),
             expiration,
             targets: Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect()),
+            sender_info_required: None,
+        }
+    }
+
+    pub fn new_with_sender_info_required(
+        pubkey: Vec<u8>,
+        expiration: Time,
+        sender_info_required: bool,
+    ) -> Self {
+        Self {
+            pubkey: Blob(pubkey),
+            expiration,
+            targets: None,
+            sender_info_required: Some(sender_info_required),
         }
     }
 
@@ -590,6 +606,12 @@ impl Delegation {
     pub fn number_of_targets(&self) -> Option<usize> {
         self.targets.as_ref().map(Vec::len)
     }
+
+    /// Whether the delegation requires requests authenticated through it to
+    /// carry a signed `sender_info`.
+    pub fn sender_info_required(&self) -> bool {
+        self.sender_info_required.unwrap_or(false)
+    }
 }
 
 impl SignedBytesWithoutDomainSeparator for Delegation {
@@ -604,6 +626,12 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
             map.insert(
                 "targets",
                 Array(targets.iter().map(|t| Bytes(t.0.as_slice())).collect()),
+            );
+        }
+        if let Some(sender_info_required) = self.sender_info_required {
+            map.insert(
+                "sender_info_required",
+                U64(if sender_info_required { 1 } else { 0 }),
             );
         }
 

@@ -531,6 +531,22 @@ impl DirectAuthenticationScheme {
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
+
+    /// Creates a delegation that requires calls to carry a signed `sender_info`.
+    fn delegate_to_with_sender_info_required(
+        &self,
+        other: &DirectAuthenticationScheme,
+        expiration: Time,
+        sender_info_required: bool,
+    ) -> SignedDelegation {
+        let delegation = Delegation::new_with_sender_info_required(
+            other.public_key_der(),
+            expiration,
+            sender_info_required,
+        );
+        let signature = self.sign(&delegation);
+        SignedDelegation::new(delegation, signature)
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -591,6 +607,23 @@ impl DelegationChainBuilder {
         let current_end = self.end.unwrap_or_else(|| self.start.clone());
         self.signed_delegations
             .push(current_end.delegate_to_with_targets(&new_end, expiration, targets));
+        self.end = Some(new_end);
+        self
+    }
+
+    pub fn delegate_to_with_sender_info_required(
+        mut self,
+        new_end: DirectAuthenticationScheme,
+        expiration: Time,
+        sender_info_required: bool,
+    ) -> Self {
+        let current_end = self.end.unwrap_or_else(|| self.start.clone());
+        self.signed_delegations
+            .push(current_end.delegate_to_with_sender_info_required(
+                &new_end,
+                expiration,
+                sender_info_required,
+            ));
         self.end = Some(new_end);
         self
     }

@@ -2175,6 +2175,141 @@ mod sender_info {
     }
 }
 
+mod delegation_sender_info_required {
+    use super::*;
+    use ic_types::messages::{RawSignedSenderInfo, SenderInfoContent};
+    use ic_validator_http_request_test_utils::DelegationChain;
+    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::CanisterSignature;
+
+    /// Creates a canister signer (acting as the delegation issuer, e.g.
+    /// Internet Identity), a delegation chain rooted at it that requires a
+    /// signed `sender_info`, and a valid `RawSignedSenderInfo` signed by the
+    /// same canister.
+    fn setup<R: Rng + CryptoRng>(
+        rng: &mut R,
+        sender_info_required: bool,
+    ) -> (
+        IngressMessageVerifierBuilder,
+        DelegationChain,
+        RawSignedSenderInfo,
+    ) {
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let builder = default_verifier().with_root_of_trust(root_of_trust.public_key);
+        let signer = CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        };
+        let info_bytes = b"certified session attributes".to_vec();
+        let sig = signer.sign(&SenderInfoContent(&info_bytes));
+        let sender_info = RawSignedSenderInfo {
+            info: Blob(info_bytes),
+            signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+            sig: Blob(sig.0),
+        };
+        let chain = DelegationChain::rooted_at(CanisterSignature(signer))
+            .delegate_to_with_sender_info_required(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                sender_info_required,
+            )
+            .build();
+        (builder, chain, sender_info)
+    }
+
+    #[test]
+    fn should_reject_update_call_without_sender_info_when_delegation_requires_it() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, _sender_info) = setup(rng, true);
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::SenderInfoRequiredByDelegation)
+        );
+    }
+
+    #[test]
+    fn should_accept_update_call_with_sender_info_when_delegation_requires_it() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, sender_info) = setup(rng, true);
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .with_sender_info(sender_info)
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_query_without_sender_info_when_delegation_requires_it() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, _sender_info) = setup(rng, true);
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_update_call_without_sender_info_when_not_required() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, _sender_info) = setup(rng, false);
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_reject_update_call_when_any_delegation_in_chain_requires_sender_info() {
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let verifier = default_verifier()
+            .with_root_of_trust(root_of_trust.public_key)
+            .build();
+        let signer = CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        };
+        // The requirement sits in the middle of the chain; subsequent
+        // delegations must not lift it.
+        let chain = DelegationChain::rooted_at(CanisterSignature(signer))
+            .delegate_to_with_sender_info_required(random_user_key_pair(rng), CURRENT_TIME, true)
+            .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
+            .build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::SenderInfoRequiredByDelegation)
+        );
+    }
+}
+
 fn default_verifier() -> IngressMessageVerifierBuilder {
     IngressMessageVerifier::builder().with_time_provider(TimeProvider::Constant(CURRENT_TIME))
 }

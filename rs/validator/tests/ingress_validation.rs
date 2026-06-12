@@ -70,3 +70,37 @@ fn delegation_with_targets_signed_bytes() {
 
     assert_eq!(d.as_signed_bytes(), expected_signed_bytes);
 }
+
+#[test]
+fn delegation_with_sender_info_required_signed_bytes() {
+    let d = Delegation::new_with_sender_info_required(vec![1, 2, 3], UNIX_EPOCH, true);
+
+    let mut expected_signed_bytes = Vec::new();
+    expected_signed_bytes.extend_from_slice(b"\x1Aic-request-auth-delegation");
+
+    // Representation-independent hash of the delegation.
+    let mut pubkey_hash = Vec::new();
+    pubkey_hash.extend_from_slice(&Sha256::hash(b"pubkey"));
+    pubkey_hash.extend_from_slice(&Sha256::hash(&[1, 2, 3]));
+
+    let mut expiration_hash = Vec::new();
+    expiration_hash.extend_from_slice(&Sha256::hash(b"expiration"));
+    expiration_hash.extend_from_slice(&Sha256::hash(&[0]));
+
+    let mut sender_info_required_hash = Vec::new();
+    sender_info_required_hash.extend_from_slice(&Sha256::hash(b"sender_info_required"));
+    sender_info_required_hash.extend_from_slice(&Sha256::hash(&[1]));
+
+    let mut hashes: Vec<Vec<u8>> = vec![pubkey_hash, expiration_hash, sender_info_required_hash];
+    hashes.sort();
+
+    let mut hasher = Sha256::new();
+    for hash in hashes {
+        hasher.write(&hash);
+    }
+
+    // Concatenate domain with representation-independent hash.
+    expected_signed_bytes.extend_from_slice(&hasher.finish());
+
+    assert_eq!(d.as_signed_bytes(), expected_signed_bytes);
+}
