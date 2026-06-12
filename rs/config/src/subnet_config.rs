@@ -26,7 +26,7 @@ impl SubnetSecurity {
     }
 }
 
-const GIB: u64 = 1024 * 1024 * 1024;
+const MIB: u64 = 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
 const T: u128 = 1_000_000_000_000;
@@ -108,7 +108,8 @@ const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
 /// The reserve represents the freely available portion of the
 /// `subnet_heap_delta_capacity` that can be used as a heap delta burst
 /// during the initial rounds following a checkpoint.
-const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * GIB);
+/// Nano-replica profile: must not exceed `SUBNET_HEAP_DELTA_CAPACITY`.
+const HEAP_DELTA_INITIAL_RESERVE: NumBytes = NumBytes::new(32 * MIB);
 
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
@@ -122,7 +123,9 @@ pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
 ///
 ///   long installs + long updates + query threads = 1 + 4 + 2 = 7
 ///
-const MAX_PAUSED_EXECUTIONS: usize = 4;
+// Nano-replica profile: limit concurrent paused (DTS) executions to keep the
+// number of simultaneously live Wasm instances small.
+const MAX_PAUSED_EXECUTIONS: usize = 1;
 
 /// Cost for creating a new canister.
 pub const CANISTER_CREATION_FEE: Cycles = Cycles::new(500_000_000_000);
@@ -318,7 +321,10 @@ impl SchedulerConfig {
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
+            // Nano-replica profile: cap per-canister heap delta per round so a
+            // single canister cannot fill the (small) subnet heap delta capacity
+            // in one round.
+            heap_delta_rate_limit: NumBytes::from(32 * MIB),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,

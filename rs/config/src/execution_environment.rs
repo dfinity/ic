@@ -9,7 +9,6 @@ use std::{str::FromStr, time::Duration};
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
 const GIB: u64 = 1024 * MIB;
-const TIB: u64 = 1024 * GIB;
 
 const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
 
@@ -34,7 +33,8 @@ pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABL
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
 /// capacity, then the subnet is never considered to have high usage.
-const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
+// Nano-replica profile: scaled down to run on a 512 MiB - 1 GiB VM.
+const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(384 * MIB);
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
@@ -42,7 +42,8 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * TIB);
+// Nano-replica profile: a few hundred MB of logical storage for the whole subnet.
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(512 * MIB);
 
 /// This is the upper limit on how much memory can be used by all guaranteed
 /// response canister messages on a given subnet.
@@ -50,24 +51,27 @@ const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * TIB);
 /// Guaranteed response message memory usage is calculated as the total size of
 /// enqueued guaranteed responses; plus the maximum allowed response size per
 /// reserved guaranteed response slot.
-const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
+// Nano-replica profile: guaranteed-response messages are heavily reserved
+// (~2 MiB per outstanding call), so keep this small. Consider rejecting
+// guaranteed-response calls entirely (best-effort-only subnet).
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(64 * MIB);
 
 /// The limit on how much memory may be used by all guaranteed response messages
 /// on a given subnet at the end of a round.
 ///
 /// During the round, the best-effort message memory usage may exceed the limit,
 /// but the constraint is restored at the end of the round by shedding messages.
-const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
+const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(32 * MIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet message memory
 /// capacity because here we count actual memory consumption as opposed to
 /// memory plus reservations.
-const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
+const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(32 * MIB);
 
 /// This is the upper limit on how much memory can be used by wasm custom
 /// sections on a given subnet.
-const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GIB);
+const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(16 * MIB);
 
 // The gen 1 production machines should have 64 cores.
 // We could in theory use 32 threads, leaving other threads for query handling,
@@ -79,15 +83,19 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 //    We needs to ensure:
 //    `SUBNET_MEMORY_CAPACITY / number_of_threads >= max_canister_memory`
 //    If you change this number please adjust other constants as well.
-pub(crate) const NUMBER_OF_EXECUTION_THREADS: usize = 4;
+// Nano-replica profile: a single update-execution thread. This also sets
+// `SchedulerConfig::scheduler_cores` and divides the (small) subnet memory
+// capacity by a single thread.
+pub(crate) const NUMBER_OF_EXECUTION_THREADS: usize = 1;
 
 /// The number of bytes reserved for response callback executions.
-/// For each thread, we reserve 2.5GiB of memory or, equivalently, 2560MiB.
+/// Nano-replica profile: 64MiB per thread (must stay well below the subnet
+/// memory capacity, otherwise no memory is left for canister state).
 pub const SUBNET_MEMORY_RESERVATION: NumBytes =
-    NumBytes::new(2560 * MIB * NUMBER_OF_EXECUTION_THREADS as u64);
+    NumBytes::new(64 * MIB * NUMBER_OF_EXECUTION_THREADS as u64);
 
 /// The soft limit on the subnet-wide number of callbacks.
-pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 1_000_000;
+pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 4_096;
 
 /// The number of callbacks that are guaranteed to each canister.
 pub const CANISTER_GUARANTEED_CALLBACK_QUOTA: usize = 50;
@@ -108,7 +116,11 @@ pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60)
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+// Nano-replica profile: heap deltas are the dominant *resident* cost between
+// checkpoints. Keep this small and checkpoint frequently (the subnet state is
+// only a few hundred MB, so checkpoints are cheap). Must be >= the per-message
+// dirty page limit so a single message can still complete.
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(96 * MIB);
 
 /// The maximum number of instructions for inspect_message calls.
 const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =
@@ -126,7 +138,8 @@ pub const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
 /// The number of query execution threads overall for all canisters.
 /// See also `QUERY_EXECUTION_THREADS_PER_CANISTER`.
-pub(crate) const QUERY_EXECUTION_THREADS_TOTAL: usize = 4;
+// Nano-replica profile: a single query-execution thread.
+pub(crate) const QUERY_EXECUTION_THREADS_TOTAL: usize = 1;
 
 /// When a canister is scheduled for query execution, it is allowed to run for
 /// this amount of time. This limit controls how many queries the canister
@@ -147,7 +160,7 @@ const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis
 ///
 /// The limit includes both cache keys and values, for successful query
 /// executions and user errors.
-const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
+const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(16 * MIB);
 
 /// The upper limit on how long the cache entry stays valid in the query cache.
 const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(600);
@@ -187,7 +200,9 @@ pub const DOGECOIN_MAINNET_CANISTER_ID: &str = "gordg-fyaaa-aaaan-aaadq-cai";
 const DOGECOIN_MAINNET_STAGING_CANISTER_ID: &str = "bhuiy-ciaaa-aaaad-abwea-cai";
 
 /// The capacity of the Wasm compilation cache.
-pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
+// Nano-replica profile: the compilation cache is on-disk; keep the in-memory
+// bound small.
+pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(64 * MIB);
 
 /// Maximum number of controllers allowed in a request (specified in the interface spec).
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;

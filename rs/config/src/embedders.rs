@@ -49,7 +49,7 @@ pub(crate) const MAX_NUMBER_EXPORTED_FUNCTIONS: usize = 1000;
 pub(crate) const MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS: usize = 20000;
 /// The number of threads to use for query execution per canister.
 /// See also `QUERY_EXECUTION_THREADS_TOTAL`.
-pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 2;
+pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 1;
 
 /// In terms of execution time, compiling 1 WASM instructions takes as much time
 /// as actually executing 6_000 instructions. Only public for use in tests.
@@ -63,25 +63,30 @@ pub const DEFAULT_CREATE_EXECUTION_STATE_BASE_COST: NumInstructions =
     NumInstructions::new(20_000_000);
 
 /// The number of rayon threads used by wasmtime to compile wasm binaries
-const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
+/// Nano-replica profile: minimal parallelism.
+const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 2;
 
 /// The number of rayon threads use for the parallel page copying optimization.
-const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
+/// Nano-replica profile: minimal parallelism.
+const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 2;
 
 /// Sandbox process eviction ensures that the number of sandbox processes is
-/// always below this threshold. Idle sandboxes should be using at most ~5MiB
-/// resident memory with the on-disk compilation cache, so 10,000 sandboxes
-/// shouldn't be more than 50 GiB.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 10_000;
+/// always below this threshold. Nano-replica profile: at ~5MiB idle RSS each,
+/// 32 sandboxes stay well under the budget while keeping a small working set
+/// of canisters warm (sandbox respawn is expensive and serialized behind the
+/// single update thread).
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 32;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
-pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
+/// Nano-replica profile: evict idle sandboxes quickly.
+pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(2 * 60);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
-/// This default is 1 GiB.
-pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GIB as usize) / PAGE_SIZE;
+/// Nano-replica profile: 32 MiB.
+pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize =
+    (32 * 1024 * 1024) / PAGE_SIZE;
 
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
@@ -90,31 +95,37 @@ pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::ne
 pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
 const KIB: u64 = 1024;
-const GIB: u64 = KIB * KIB * KIB;
+const MIB: u64 = KIB * KIB;
+
+// Nano-replica profile: these limits bound the *resident* working set of a
+// single execution. On a 512 MiB - 1 GiB VM they MUST stay well below the
+// available RAM, otherwise a single message can OOM-kill the replica (which on
+// a replicated subnet means state divergence). The mainnet values were 1-8 GiB.
 
 // Maximum number of stable memory dirty OS pages (4KiB) that an upgrade/install message execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE: NumOsPages =
-    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
+    NumOsPages::new(128 * MIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a regular message (update) execution
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
+    NumOsPages::new(32 * MIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory dirty OS pages (4KiB) that a non-replicated query is allowed to produce.
-const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages = NumOsPages::new(GIB / (PAGE_SIZE as u64));
+const STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY: NumOsPages =
+    NumOsPages::new(32 * MIB / (PAGE_SIZE as u64));
 
 // Maximum number of stable memory OS pages (4KiB) that that an upgrade/install message execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE: NumOsPages =
-    NumOsPages::new(8 * GIB / (PAGE_SIZE as u64));
+    NumOsPages::new(128 * MIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory OS pages (4KiB) that a that a regular message (update) execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
-    NumOsPages::new(2 * GIB / (PAGE_SIZE as u64));
+    NumOsPages::new(32 * MIB / (PAGE_SIZE as u64));
 // Maximum number of stable memory OS pages (4KiB) that a single non-replicated query execution
 // is allowed to access.
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
-    NumOsPages::new(GIB / (PAGE_SIZE as u64));
+    NumOsPages::new(32 * MIB / (PAGE_SIZE as u64));
 
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
