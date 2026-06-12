@@ -2221,11 +2221,11 @@ mod delegation_permissions {
     }
 
     #[test]
-    fn should_accept_update_call_when_delegation_permissions_are_updates() {
+    fn should_accept_update_call_when_delegation_permissions_are_all() {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "updates")
+            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "all")
             .build();
 
         let request = HttpRequestBuilder::new_update_call()
@@ -2240,42 +2240,47 @@ mod delegation_permissions {
     fn should_reject_all_request_types_when_delegation_permissions_unsupported() {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "writes")
-            .build();
+        // Note that "updates" is deliberately unsupported: the supported
+        // vocabulary is "queries" (queries only) and "all" (queries,
+        // replicated queries, and updates).
+        for unsupported in ["writes", "updates", ""] {
+            let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+                .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, unsupported)
+                .build();
 
-        let update = HttpRequestBuilder::new_update_call()
-            .with_ingress_expiry_at(CURRENT_TIME)
-            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
-            .build();
-        assert_matches!(
-            verifier.validate_request(&update),
-            Err(RequestValidationError::InvalidDelegation(
-                UnsupportedDelegationPermissions(permissions)
-            )) if permissions == "writes"
-        );
+            let update = HttpRequestBuilder::new_update_call()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+                .build();
+            assert_matches!(
+                verifier.validate_request(&update),
+                Err(RequestValidationError::InvalidDelegation(
+                    UnsupportedDelegationPermissions(permissions)
+                )) if permissions == unsupported
+            );
 
-        let query = HttpRequestBuilder::new_query()
-            .with_ingress_expiry_at(CURRENT_TIME)
-            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
-            .build();
-        assert_matches!(
-            verifier.validate_request(&query),
-            Err(RequestValidationError::InvalidDelegation(
-                UnsupportedDelegationPermissions(_)
-            ))
-        );
+            let query = HttpRequestBuilder::new_query()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+                .build();
+            assert_matches!(
+                verifier.validate_request(&query),
+                Err(RequestValidationError::InvalidDelegation(
+                    UnsupportedDelegationPermissions(_)
+                ))
+            );
 
-        let read_state = HttpRequestBuilder::new_read_state()
-            .with_ingress_expiry_at(CURRENT_TIME)
-            .with_authentication(AuthenticationScheme::Delegation(chain))
-            .build();
-        assert_matches!(
-            verifier.validate_request(&read_state),
-            Err(RequestValidationError::InvalidDelegation(
-                UnsupportedDelegationPermissions(_)
-            ))
-        );
+            let read_state = HttpRequestBuilder::new_read_state()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(chain))
+                .build();
+            assert_matches!(
+                verifier.validate_request(&read_state),
+                Err(RequestValidationError::InvalidDelegation(
+                    UnsupportedDelegationPermissions(_)
+                ))
+            );
+        }
     }
 
     #[test]

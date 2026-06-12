@@ -61,12 +61,14 @@ const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
 /// Value of a delegation's `permissions` field that restricts the sender
-/// to query calls: requests to `/call` endpoints are rejected.
+/// to query calls: requests to `/call` endpoints (i.e., updates and
+/// replicated queries) are rejected.
 const DELEGATION_PERMISSIONS_QUERIES: &str = "queries";
 
 /// Value of a delegation's `permissions` field that explicitly permits all
-/// kinds of calls (same as an absent `permissions` field).
-const DELEGATION_PERMISSIONS_UPDATES: &str = "updates";
+/// kinds of calls — queries, replicated queries, and updates (same as an
+/// absent `permissions` field).
+const DELEGATION_PERMISSIONS_ALL: &str = "all";
 
 /// Restrictions that a chain of delegations places on the sender.
 #[derive(Debug)]
@@ -104,7 +106,7 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
     /// * If the request specifies a `CanisterId` (see `HasCanisterId`),
     ///   then it must be among the set of canister IDs that are common to all delegations.
     /// * Every delegation's `permissions` field (if any) holds a supported value
-    ///   (`"queries"` or `"updates"`). If the request is an update call, no delegation
+    ///   (`"queries"` or `"all"`). If the request is an update call, no delegation
     ///   restricts the sender to query calls (`permissions = "queries"`).
     ///
     /// The following signatures (for signing the request or any delegation) are supported
@@ -811,7 +813,7 @@ where
         // `permissions` field exist that predate this validation, so there is
         // no backward compatibility concern.
         match delegation.permissions() {
-            None | Some(DELEGATION_PERMISSIONS_UPDATES) => {}
+            None | Some(DELEGATION_PERMISSIONS_ALL) => {}
             Some(DELEGATION_PERMISSIONS_QUERIES) => restrictions.queries_only = true,
             Some(unsupported) => {
                 return Err(InvalidDelegation(UnsupportedDelegationPermissions(
