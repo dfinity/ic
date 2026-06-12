@@ -174,5 +174,6 @@ rust_bench(
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:maplit",
+        "@crate_index//:pprof",
     ],
 )

@@ -134,17 +134,6 @@ pub enum LazyTree<'a> {
     LazyFork(Arc<dyn LazyFork<'a> + 'a + Send + Sync>),
 }
 
-impl<'a> LazyTree<'a> {
-    /// Returns this subtree's reusable identity, if any; see
-    /// [`LazyFork::subtree_id`]. Only forks can carry one.
-    pub fn subtree_id(&self) -> Option<SubtreeId> {
-        match self {
-            LazyTree::LazyFork(f) => f.subtree_id(),
-            LazyTree::Blob(_, _) | LazyTree::LazyBlob(_) => None,
-        }
-    }
-}
-
 /// A helper function to construct a fork of a lazy tree.
 pub fn fork<'a>(f: impl LazyFork<'a> + 'a) -> LazyTree<'a> {
     LazyTree::LazyFork(Arc::new(f))

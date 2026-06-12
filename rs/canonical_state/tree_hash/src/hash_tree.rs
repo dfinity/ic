@@ -900,66 +900,54 @@ pub enum HashTreeError {
     IndexOverflow,
 }
 
-/// A position in a baseline [`HashTree`] whose labeled children mirror the
-/// children of the lazy fork currently being (re)built. Used to reuse subtrees
-/// with matching [`SubtreeId`] from a previously built tree, traversed in
-/// lockstep with the new tree.
+/// A position in a baseline [`HashTree`] that mirrors the position of the lazy
+/// tree currently being (re)built. Used to reuse subtrees with matching
+/// [`SubtreeId`] from a previously built tree, traversed in lockstep with the
+/// new tree.
 #[derive(Clone, Copy)]
 struct Baseline<'a> {
     tree: &'a HashTree,
-    /// The labeled node whose children we compare against (`empty` for the root).
-    parent: NodeId,
-}
-
-/// One labeled child of a [`Baseline`] cursor.
-#[derive(Clone, Copy)]
-struct BaselineChild<'a> {
-    tree: &'a HashTree,
-    /// The labeled node (`kind() == Node`) for this child.
+    /// The node at this position: `empty` for the root, otherwise the labeled
+    /// node (`kind() == Node`) reached via the edge leading here.
     node: NodeId,
 }
 
 impl<'a> Baseline<'a> {
-    /// Streams the baseline children as `(label, child)` pairs, in label order
-    /// (so they can be merge-joined with the new fork's children).
-    fn children(self) -> impl Iterator<Item = (&'a Label, BaselineChild<'a>)> + 'a {
-        let tree = self.tree;
-        let NodeIndexRange {
-            bucket,
-            index_range,
-        } = tree.node_labels_range(self.parent);
-        index_range.map(move |idx| {
-            let node = NodeId::node(bucket, idx).expect("valid baseline hash tree");
-            (&tree.node_labels[bucket][idx], BaselineChild { tree, node })
-        })
-    }
-}
-
-impl<'a> BaselineChild<'a> {
-    /// The subtree under this labeled node.
-    fn subtree(&self) -> NodeId {
-        let bucket = self.node.bucket() - self.tree.bucket_offset;
-        self.tree.node_children[bucket][self.node.index()]
+    /// The content (subtree) the baseline stores at this position.
+    fn content(&self) -> NodeId {
+        if self.node == NodeId::empty() {
+            self.tree.root
+        } else {
+            let bucket = self.node.bucket() - self.tree.bucket_offset;
+            self.tree.node_children[bucket][self.node.index()]
+        }
     }
 
-    /// If the baseline stored this child as a reusable [`NodeKind::Subtree`],
+    /// If the baseline stored this position as a reusable [`NodeKind::Subtree`],
     /// returns its source identity and the shared inner tree.
     fn reusable(&self) -> Option<(&'a SubtreeId, &'a Arc<HashTree>)> {
-        let child = self.subtree();
-        if child.kind() == NodeKind::Subtree {
-            let node = &self.tree.subtrees[child.bucket() - self.tree.bucket_offset][child.index()];
+        let content = self.content();
+        if content.kind() == NodeKind::Subtree {
+            let node =
+                &self.tree.subtrees[content.bucket() - self.tree.bucket_offset][content.index()];
             Some((&node.id, &node.tree))
         } else {
             None
         }
     }
 
-    /// A cursor for descending into this child when recomputing it inline.
-    fn descend(self) -> Baseline<'a> {
-        Baseline {
-            tree: self.tree,
-            parent: self.node,
-        }
+    /// Streams the children positions as `(label, position)` pairs, in label
+    /// order (so they can be merge-joined with the new fork's children).
+    fn children(self) -> impl Iterator<Item = (&'a Label, Baseline<'a>)> + 'a {
+        let tree = self.tree;
+        let NodeIndexRange {
+            bucket,
+            index_range,
+        } = tree.node_labels_range(self.node);
+        index_range.map(move |idx| {
+            let node = NodeId::node(bucket, idx).expect("valid baseline hash tree");
+            (&tree.node_labels[bucket][idx], Baseline { tree, node })
+        })
     }
 }
 
@@ -1030,40 +1018,14 @@ fn hash_lazy_tree_impl(
         }
     }
 
-    /// Builds the hash tree for `child`, returning the [`NodeId`] of its root.
+    /// Builds the hash tree for `t`, returning the [`NodeId`] of its root.
     ///
-    /// If `child` carries a [`LazyTree::subtree_id`] it becomes a self-contained
+    /// A fork that carries a [`LazyFork::subtree_id`] — and is not the root of
+    /// the tree being built (see `is_root`) — becomes a self-contained
     /// [`NodeKind::Subtree`] node: its inner `Arc<HashTree>` is reused from the
-    /// matching `baseline` child when the ids are equal, otherwise it is built
-    /// standalone via [`hash_lazy_tree`]. Otherwise `child` is materialized
-    /// inline into `ht` via [`go`], descending the baseline cursor in lockstep.
-    fn build_child(
-        child: &LazyTree<'_>,
-        ht: &mut HashTree,
-        parent: NodeId,
-        par_strategy: &mut ParStrategy,
-        recursion_depth: u32,
-        baseline: Option<BaselineChild<'_>>,
-    ) -> Result<NodeId, HashTreeError> {
-        match child.subtree_id() {
-            Some(id) => {
-                let tree = match baseline.and_then(|b| b.reusable()) {
-                    Some((base_id, base_tree)) if *base_id == id => Arc::clone(base_tree),
-                    _ => Arc::new(hash_lazy_tree(child)?),
-                };
-                ht.new_subtree(tree, id)
-            }
-            None => go(
-                child,
-                ht,
-                parent,
-                par_strategy,
-                recursion_depth,
-                baseline.map(BaselineChild::descend),
-            ),
-        }
-    }
-
+    /// matching `baseline` position when the IDs are equal, otherwise it is
+    /// built standalone via [`hash_lazy_tree`]. Materializing the root of a
+    /// standalone build is what stops that recursion from looping forever.
     fn go(
         t: &LazyTree<'_>,
         ht: &mut HashTree,
@@ -1071,6 +1033,7 @@ fn hash_lazy_tree_impl(
         par_strategy: &mut ParStrategy,
         recursion_depth: u32,
         baseline: Option<Baseline<'_>>,
+        is_root: bool,
     ) -> Result<NodeId, HashTreeError> {
         if recursion_depth > MAX_RECURSION_DEPTH {
             return Err(HashTreeError::RecursionTooDeep(MAX_RECURSION_DEPTH));
@@ -1098,6 +1061,19 @@ fn hash_lazy_tree_impl(
                 ht.new_leaf(h.finalize())
             }
             LazyTree::LazyFork(f) => {
+                // A fork that carries a `subtree_id` is stored as a single,
+                // self-contained subtree node: reuse the baseline's inner tree
+                // when the identity matches, otherwise build it standalone. The
+                // root is always materialized (otherwise the standalone build
+                // below would recurse on the same fork forever).
+                if !is_root && let Some(id) = f.subtree_id() {
+                    let tree = match baseline.and_then(|b| b.reusable()) {
+                        Some((base_id, base_tree)) if *base_id == id => Arc::clone(base_tree),
+                        _ => Arc::new(hash_lazy_tree(t)?),
+                    };
+                    return ht.new_subtree(tree, id);
+                }
+
                 let num_children = f.len();
                 let NodeIndexRange {
                     bucket,
@@ -1131,13 +1107,14 @@ fn hash_lazy_tree_impl(
                         baseline.into_iter().flat_map(Baseline::children),
                     );
                     for (i, (label, child, base)) in range.zip(joined) {
-                        let child = build_child(
+                        let child = go(
                             &child,
                             ht,
                             NodeId::node(bucket, i)?,
                             par_strategy,
                             recursion_depth + 1,
                             base,
+                            false,
                         )?;
                         let mut h = Hasher::for_domain("ic-hashtree-labeled");
                         h.update(label.as_bytes());
@@ -1212,7 +1189,7 @@ fn hash_lazy_tree_impl(
         // single sequential pass (no hashing); the actual building below runs in
         // parallel. The resulting `Vec` is aligned with `children`.
         // XXX: This should be constructed at once with `children`.
-        let bases: Vec<Option<BaselineChild>> = left_outer_join(
+        let bases: Vec<Option<Baseline>> = left_outer_join(
             children.iter().map(|(label, _)| (label.clone(), ())),
             baseline.into_iter().flat_map(Baseline::children),
         )
@@ -1239,18 +1216,21 @@ fn hash_lazy_tree_impl(
                     let mut error: Option<HashTreeError> = None;
                     for ((_label, child), base) in children.iter().zip(bases) {
                         // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
-                        // and fix the link from `root` to the parent later.
+                        // and fix the link from `root` to the parent later. These children are not
+                        // roots of the overall (sub)tree, so `is_root` is `false`: a child that
+                        // carries a `subtree_id` is collapsed to a reusable subtree node here.
                         //
                         // A reusable subtree node has no materialized labeled children of its
                         // own, so its `children_range` is empty (and is never consulted: such
                         // nodes are descended into via their inner tree during witness generation).
-                        let root: Result<(NodeId, NodeIndexRange), HashTreeError> = build_child(
+                        let root: Result<(NodeId, NodeIndexRange), HashTreeError> = go(
                             child,
                             &mut ht,
                             NodeId::empty(),
                             &mut ParStrategy::Sequential,
                             depth + 1,
                             *base,
+                            false,
                         )
                         .map(|id| {
                             let children_range = if id.kind() == NodeKind::Subtree {
@@ -1299,13 +1279,14 @@ fn hash_lazy_tree_impl(
 
     let baseline = baseline.map(|tree| Baseline {
         tree,
-        parent: NodeId::empty(),
+        node: NodeId::empty(),
     });
 
     let mut ht = HashTree::new();
-    // NB: the root is always materialized; `subtree_id` only collapses
-    // *descendants* into reusable subtree nodes. (Building a stand-alone subtree
-    // is just `hash_lazy_tree` on that subtree's root, which is materialized.)
+    // The root is always materialized (`is_root = true`); `subtree_id` only
+    // collapses *descendants* into reusable subtree nodes. (Building a
+    // stand-alone subtree is just `hash_lazy_tree` on that subtree's root, which
+    // is in turn materialized for the same reason.)
     ht.root = go(
         t,
         &mut ht,
@@ -1313,6 +1294,7 @@ fn hash_lazy_tree_impl(
         &mut ParStrategy::Concurrent,
         0,
         baseline,
+        true,
     )?;
 
     ht.check_invariants();
