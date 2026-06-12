@@ -224,10 +224,6 @@ impl QueryStatsPayload {
     /// This function will drop trailing stats to guarantee, that the
     /// payload will fit into the `byte_limit`
     pub fn serialize_with_limit(&self, byte_limit: NumBytes) -> Vec<u8> {
-        if self.stats.is_empty() {
-            return vec![];
-        }
-
         let mut buffer = vec![].limit(byte_limit.get() as usize);
 
         // Encode the metadata about the messages
@@ -240,6 +236,11 @@ impl QueryStatsPayload {
             Ok(()) => (),
             // Return immidiately, if there is not enough space to fit the metadata
             Err(_) => return vec![],
+        }
+
+        // If there are no stats, return just epoch+proposer to signal epoch advancement.
+        if self.stats.is_empty() {
+            return buffer.into_inner();
         }
 
         let mut num_stats_included = 0;

@@ -39,7 +39,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_query_stats::QueryStatsPayloadBuilderParams;
+use ic_query_stats::{QueryStatsCollector, QueryStatsPayloadBuilderParams};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
@@ -132,6 +132,7 @@ impl ExecutionServices {
             query_stats_payload_builder,
             cycles_account_manager,
             execution_environment,
+            query_stats_collector,
         ) = setup_execution_helper(
             logger.clone(),
             metrics_registry,
@@ -180,6 +181,7 @@ impl ExecutionServices {
             config.rate_limiting_of_instructions,
             config.log_memory_store_feature,
             Arc::clone(&fd_factory),
+            query_stats_collector,
         ));
 
         Self {
@@ -228,6 +230,7 @@ pub struct ExecutionServicesForTesting {
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
     pub execution_environment: Arc<ExecutionEnvironment>,
+    pub local_query_execution_stats: Arc<QueryStatsCollector>,
 }
 
 impl ExecutionServicesForTesting {
@@ -256,6 +259,7 @@ impl ExecutionServicesForTesting {
             query_stats_payload_builder,
             cycles_account_manager,
             execution_environment,
+            local_query_execution_stats,
         ) = setup_execution_helper(
             logger,
             metrics_registry,
@@ -281,6 +285,7 @@ impl ExecutionServicesForTesting {
             query_stats_payload_builder,
             cycles_account_manager,
             execution_environment,
+            local_query_execution_stats,
         }
     }
 }
@@ -308,6 +313,7 @@ fn setup_execution_helper(
     QueryStatsPayloadBuilderParams,
     Arc<CyclesAccountManager>,
     Arc<ExecutionEnvironment>,
+    Arc<QueryStatsCollector>,
 ) {
     let scheduler_config = subnet_config.scheduler_config;
 
@@ -353,6 +359,7 @@ fn setup_execution_helper(
 
     let (query_stats_collector, query_stats_payload_builder) =
         ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
+    let query_stats_collector = Arc::new(query_stats_collector);
 
     let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
         config.default_provisional_cycles_balance,
@@ -405,7 +412,7 @@ fn setup_execution_helper(
         metrics_registry,
         scheduler_config.max_instructions_per_query_message,
         Arc::clone(&cycles_account_manager),
-        query_stats_collector,
+        Arc::clone(&query_stats_collector),
     );
 
     let query_scheduler = QueryScheduler::new(
@@ -433,5 +440,6 @@ fn setup_execution_helper(
         query_stats_payload_builder,
         cycles_account_manager,
         exec_env,
+        query_stats_collector,
     )
 }

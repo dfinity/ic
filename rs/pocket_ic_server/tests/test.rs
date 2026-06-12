@@ -938,19 +938,23 @@ fn test_query_stats() {
     assert_eq!(query_stats.request_payload_bytes_total, zero);
     assert_eq!(query_stats.response_payload_bytes_total, zero);
 
-    // Execute 13 query calls (one per each app subnet node) on the counter canister in each of 4 query stats epochs.
+    // Execute 13 query calls (one per each app subnet node) on the counter canister in each of the first two query stats epochs.
     // Every single query call has different arguments so that query calls are not cached.
+    // Due to a delay in query stats aggregation, two more epochs need to pass before
+    // we observe the stats from an epoch.
     let mut n: u64 = 0;
-    for _ in 0..4 {
-        for _ in 0..13 {
-            pic.query_call(
-                canister_id,
-                Principal::anonymous(),
-                "read",
-                n.to_le_bytes().to_vec(),
-            )
-            .unwrap();
-            n += 1;
+    for i in 0..4 {
+        if i < 2 {
+            for _ in 0..13 {
+                pic.query_call(
+                    canister_id,
+                    Principal::anonymous(),
+                    "read",
+                    n.to_le_bytes().to_vec(),
+                )
+                .unwrap();
+                n += 1;
+            }
         }
         // Execute one epoch.
         for _ in 0..60 {
@@ -958,7 +962,7 @@ fn test_query_stats() {
         }
     }
 
-    // Now the number of calls should be set to 26 (13 calls per epoch from 2 epochs) due to a delay in query stats aggregation.
+    // Now the number of calls should be set to 26 (13 calls per epoch from 2 epochs).
     let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
     assert_eq!(query_stats.num_calls_total, candid::Nat::from(26_u64));
     assert_ne!(query_stats.num_instructions_total, candid::Nat::from(0_u64));

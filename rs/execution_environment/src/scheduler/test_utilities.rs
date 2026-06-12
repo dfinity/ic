@@ -1124,6 +1124,7 @@ impl SchedulerTestBuilder {
             rate_limiting_of_instructions,
             config.log_memory_store_feature,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            execution_services.local_query_execution_stats,
         );
 
         let state_metrics = ReplicatedStateMetrics::new(&self.metrics_registry);

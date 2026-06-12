@@ -182,7 +182,7 @@ impl QueryStatsPayloadBuilderImpl {
             return vec![];
         }
 
-        let Ok(previous_ids) =
+        let Ok((previous_ids, has_submitted)) =
             self.get_previous_ids(self.node_id, current_stats.epoch, past_payloads, context)
         else {
             return vec![];
@@ -196,7 +196,10 @@ impl QueryStatsPayloadBuilderImpl {
             .cloned()
             .collect::<Vec<_>>();
 
-        if messages.is_empty() {
+        // Skip if there is nothing new to report and we've already submitted for this epoch.
+        // If we have not yet submitted for this epoch, fall through to send an empty payload
+        // so the aggregator can see that this node has moved past this epoch.
+        if messages.is_empty() && has_submitted {
             return vec![];
         }
 
@@ -273,7 +276,7 @@ impl QueryStatsPayloadBuilderImpl {
 
         // Get the previous ids, that have been already reported by this node in the epoch
         // NOTE: This also checks that the epoch that is being reported has not been aggregated yet
-        let previous_ids = self.get_previous_ids(
+        let (previous_ids, _) = self.get_previous_ids(
             payload.proposer,
             payload.epoch,
             past_payloads,
@@ -304,13 +307,15 @@ impl QueryStatsPayloadBuilderImpl {
     ///
     /// This function also returns an error, if we are requesting data on an epoch,
     /// that has been already aggregated.
+    /// Returns `(previous_canister_ids, has_submitted)` where `has_submitted` is true if this
+    /// node has already submitted any report (even empty) for the given epoch.
     fn get_previous_ids(
         &self,
         node_id: NodeId,
         epoch: QueryStatsEpoch,
         past_payloads: &[PastPayload],
         context: &ValidationContext,
-    ) -> Result<BTreeSet<CanisterId>, PayloadValidationError> {
+    ) -> Result<(BTreeSet<CanisterId>, bool), PayloadValidationError> {
         // Get unaggregated stats from certified state
         let certified_height = context.certified_height;
         let state_stats = &match self.state_reader.get_state_at(certified_height) {
@@ -363,41 +368,40 @@ impl QueryStatsPayloadBuilderImpl {
         }
 
         // Check the certified state for stats that we have already sent
-        if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
-            .map(|record| record.keys())
-        {
-            previous_ids.extend(state_stats);
+        let node_record = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch);
+        let has_submitted_in_state = node_record.is_some();
+        if let Some(record) = node_record {
+            previous_ids.extend(record.keys().copied());
         }
 
         // Check past payloads for stats already sent
+        let matching_past_payloads: Vec<_> = past_payloads
+            .iter()
+            .filter_map(|past_payload| {
+                QueryStatsPayload::deserialize(past_payload.payload)
+                    .inspect_err(|_| {
+                        error!(
+                            self.log,
+                            "Failed to deserialize past payload, this is a bug"
+                        );
+                    })
+                    .ok()
+                    .flatten()
+            })
+            .filter(|stats| stats.epoch == epoch && stats.proposer == node_id)
+            .collect();
+
+        let has_submitted_in_past = !matching_past_payloads.is_empty();
         previous_ids.extend(
-            past_payloads
-                .iter()
-                // Deserialize the payload
-                .filter_map(|past_payload| {
-                    QueryStatsPayload::deserialize(past_payload.payload)
-                        .inspect_err(|_| {
-                            error!(
-                                self.log,
-                                "Failed to deserialize past payload, this is a bug"
-                            );
-                        })
-                        .ok()
-                        .flatten()
-                })
-                // Filter out payloads that have a different epoch or are sent from different node
-                .filter(|stats| stats.epoch == epoch && stats.proposer == node_id)
-                // Map payload to CanisterIds
-                .flat_map(|stats| {
-                    stats
-                        .stats
-                        .iter()
-                        .map(|stat| stat.canister_id)
-                        .collect::<Vec<CanisterId>>()
-                }),
+            matching_past_payloads
+                .into_iter()
+                .flat_map(|stats| stats.stats.into_iter().map(|stat| stat.canister_id)),
         );
 
-        Ok(previous_ids)
+        Ok((
+            previous_ids,
+            has_submitted_in_state || has_submitted_in_past,
+        ))
     }
 }
 
