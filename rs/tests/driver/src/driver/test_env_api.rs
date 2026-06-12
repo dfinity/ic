@@ -1428,12 +1428,7 @@ pub fn get_build_setupos_config_image_tool() -> PathBuf {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(
-        &self,
-        group_base_name: String,
-        allocate_testnet_to_local_dc: bool,
-        no_group_ttl: bool,
-    );
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
 
 /// Name of the environment variable that controls the VM allocation mode used
@@ -1455,13 +1450,29 @@ fn vm_allocation_mode_from_env() -> Option<VmAllocationMode> {
     Some(mode)
 }
 
+/// Name of the environment variable that controls whether the Farm group is
+/// created with a required host feature restricting allocation to the local
+/// DC, i.e. the DC of the machine running the test as specified by the `DC`
+/// environment variable. Accepted values are `1`/`true` and `0`/`false`.
+const ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR: &str = "ALLOCATE_TESTNET_TO_LOCAL_DC";
+
+fn allocate_testnet_to_local_dc_from_env() -> bool {
+    let raw = match std::env::var(ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR) {
+        Ok(v) if !v.is_empty() => v,
+        _ => return false,
+    };
+    match raw.as_str() {
+        "1" | "true" => true,
+        "0" | "false" => false,
+        _ => panic!(
+            "Invalid value {raw:?} for environment variable {ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR}: \
+             accepted values are \"1\", \"true\", \"0\" and \"false\""
+        ),
+    }
+}
+
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(
-        &self,
-        group_base_name: String,
-        allocate_testnet_to_local_dc: bool,
-        no_group_ttl: bool,
-    ) {
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
         let vm_allocation_mode = vm_allocation_mode_from_env();
         if GroupSetup::attribute_exists(self) {
@@ -1477,7 +1488,7 @@ impl HasGroupSetup for TestEnv {
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match SystemTestBackend::read_attribute(self) {
                 SystemTestBackend::Farm => {
-                    let required_host_features = allocate_testnet_to_local_dc
+                    let required_host_features = allocate_testnet_to_local_dc_from_env()
                         .then(|| std::env::var("DC").ok())
                         .flatten()
                         .map(|dc| vec![HostFeature::DC(dc)])

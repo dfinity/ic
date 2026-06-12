@@ -235,6 +235,14 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
+    # Make the test driver allocate the Farm testnet to the same DC as the
+    # machine running the test (the DC volatile status variable derived from
+    # NODE_NAME). This avoids slow cross-DC transfers of large images.
+    # No-op when the DC is unknown, e.g. when running locally.
+    farm_only_env = {
+        "ALLOCATE_TESTNET_TO_LOCAL_DC": "1",
+    }
+
     valid_backends = [None, "farm", "local"]
     if backend not in valid_backends:
         fail("Invalid backend {}: must be one of {}".format(
@@ -313,7 +321,7 @@ def system_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
         data = data,
-        env = env | {
+        env = env | farm_only_env | {
             "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
             "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
         },
@@ -333,7 +341,7 @@ def system_test(
             "//rs/tests/idx:colocate_test_bin",
         ],
         env_inherit = env_inherit,
-        env = env | {
+        env = env | farm_only_env | {
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
@@ -439,14 +447,20 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         testonly = testonly,
     )
 
-    # TODO: install dosfstools as dependency
     native.genrule(
         name = name + "_vfat",
         srcs = [":" + name + "_size"],
         outs = [name + "_vfat.img"],
+        tools = ["//:mkfs.fat"],
+        # //:mkfs.fat resolves to the dosfstools bundle (mkfs.fat + fatlabel),
+        # so pick out the mkfs.fat binary by name.
         cmd = """
+        mkfs_fat=
+        for f in $(locations //:mkfs.fat); do
+            case "$$f" in */mkfs.fat) mkfs_fat="$$f" ;; esac
+        done
         truncate -s $$(cat $<) $@
-        /usr/sbin/mkfs.vfat -i "0" -n CONFIG $@
+        "$$mkfs_fat" -i "0" -n CONFIG $@
         """,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],

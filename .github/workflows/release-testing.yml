@@ -31,7 +31,8 @@ jobs:
   # as a separate job.
   release-system-tests:
     name: Release System Tests
-    runs-on: &dind-large-setup
+    runs-on:
+      group: dm1
       labels: dind-large
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:c3219dc2255d9359dd798913375f559e17f95772373b74c1db6e7221f50af78d
@@ -67,7 +68,8 @@ jobs:
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline
-    runs-on: *dind-large-setup
+    runs-on: &dind-large-setup
+      labels: dind-large
     container: *container-setup
     timeout-minutes: 180
     outputs:

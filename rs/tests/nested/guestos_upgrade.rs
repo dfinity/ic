@@ -22,7 +22,6 @@ use nested::{
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .allocate_testnet_to_local_dc()
         .with_setup(nested::setup)
         .add_test(systest!(upgrade_guestos))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
