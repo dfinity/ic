@@ -1163,7 +1163,7 @@ mod tests {
 
             // Adding several nodes of this type should all succeed even
             // though no quota is configured.
-            for i in 0..3u8 {
+            for i in 0..3_u8 {
                 let (payload, _) = prepare_add_node_payload(10 + i, node_reward_type);
                 registry
                     .do_add_node_(payload, node_operator_id, now_system_time())
