@@ -6,6 +6,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
 function install_hostos() {
@@ -96,9 +97,30 @@ function resize_partition() {
         log_and_halt_installation_on_error "${?}" "Unable to include PV '/dev/${drive}' in VG."
     done
 
-    # Extend GuestOS LV to fill VG space
-    lvextend -i "${count}" --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
-    log_and_halt_installation_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
+
+    # Configure multiple GuestOS if type4.X
+    # TODO: Configure differently for each variant
+    if [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+        # Cleanup the initial GuestOS
+        lvremove -f hostlvm/guestos >/dev/null 2>&1
+        log_and_halt_installation_on_error "${?}" "Unable to cleanup initial GuestOS volume"
+
+        # And set up new split volumes
+        free=$(vgs --noheadings -o vg_free_count hostlvm | tr -d ' ')
+        each=$((free / 5))
+        for i in 1 2 3 4; do
+            lvcreate -i "${count}" --type striped -l $each -n guestos$i hostlvm >/dev/null 2>&1
+            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+        done
+        lvcreate -i "${count}" --type striped -l 100%FREE -n guestos5 hostlvm >/dev/null 2>&1
+        log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+    # "Normal" behavior
+    else
+        # Extend GuestOS LV to fill VG space
+        lvextend -i "${count}" --type striped -l +100%FREE /dev/hostlvm/guestos >/dev/null 2>&1
+        log_and_halt_installation_on_error "${?}" "Unable to extend logical volume: /dev/hostlvm/guestos"
+    fi
 }
 
 # Establish run order

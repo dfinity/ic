@@ -11,7 +11,7 @@ source /opt/ic/bin/functions.sh
 LV="/dev/mapper/hostlvm-guestos"
 
 function install_guestos() {
-    echo "* Installing GuestOS disk-image..."
+    echo "* Installing GuestOS disk-images..."
 
     vgchange -ay hostlvm
     log_and_halt_installation_on_error "${?}" "Unable to activate HostOS volume group."
@@ -21,9 +21,11 @@ function install_guestos() {
     tar xaf /data/guest-os.img.tar.zst -C "${TMPDIR}" disk.img
     log_and_halt_installation_on_error "${?}" "Unable to extract GuestOS disk-image."
 
-    echo "* Writing the GuestOS image to ${LV}..."
-    dd if="${TMPDIR}/disk.img" of=${LV} bs=10M conv=sparse status=progress
-    log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image."
+    for lv in "${LV}"*; do
+        echo "* Writing the GuestOS image to ${lv}..."
+        dd if="${TMPDIR}/disk.img" of="${lv}" bs=10M conv=sparse status=progress
+        log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image to ${lv}."
+    done
 
     rm -rf "${TMPDIR}"
 
