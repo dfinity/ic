@@ -1,9 +1,8 @@
 use criterion::measurement::Measurement;
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box};
-use criterion_time::ProcessTime;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_canonical_state::{lazy_tree_conversion::replicated_state_as_lazy_tree, traverse};
-use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
+use ic_canonical_state_tree_hash::hash_tree::{hash_lazy_tree, hash_lazy_tree_with_baseline};
 use ic_canonical_state_tree_hash_test_utils::{build_witness_gen, crypto_hash_lazy_tree};
 use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator, flatmap};
@@ -36,9 +35,9 @@ use std::io::Write;
 use std::sync::Arc;
 
 fn bench_traversal<M: Measurement + 'static>(c: &mut Criterion<M>) {
-    const NUM_STREAM_MESSAGES: u64 = 1_000;
-    const NUM_CANISTERS: u64 = 100_000;
-    const NUM_STATUSES: u64 = 30_000;
+    const NUM_STREAM_MESSAGES: u64 = 10; //1_000;
+    const NUM_CANISTERS: u64 = 500_000;
+    const NUM_STATUSES: u64 = 10; //30_000;
 
     let subnet_type = SubnetType::Application;
     let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
@@ -145,8 +144,25 @@ fn bench_traversal<M: Measurement + 'static>(c: &mut Criterion<M>) {
     });
 
     c.bench_function("traverse/hash_tree_new", |b| {
+        let mut tree = None;
         b.iter(|| {
-            black_box(hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap())
+            tree = Some(black_box(
+                hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap(),
+            ));
+        });
+        std::mem::drop(tree);
+    });
+
+    let baseline = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap();
+    c.bench_function("traverse/hash_tree_cached", |b| {
+        b.iter(|| {
+            black_box(
+                hash_lazy_tree_with_baseline(
+                    &replicated_state_as_lazy_tree(&state, height),
+                    &baseline,
+                )
+                .unwrap(),
+            )
         })
     });
 

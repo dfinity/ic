@@ -922,7 +922,7 @@ struct BaselineChild<'a> {
 impl<'a> Baseline<'a> {
     /// Streams the baseline children as `(label, child)` pairs, in label order
     /// (so they can be merge-joined with the new fork's children).
-    fn children(self) -> impl Iterator<Item = (Label, BaselineChild<'a>)> + 'a {
+    fn children(self) -> impl Iterator<Item = (&'a Label, BaselineChild<'a>)> + 'a {
         let tree = self.tree;
         let NodeIndexRange {
             bucket,
@@ -930,10 +930,7 @@ impl<'a> Baseline<'a> {
         } = tree.node_labels_range(self.parent);
         index_range.map(move |idx| {
             let node = NodeId::node(bucket, idx).expect("valid baseline hash tree");
-            (
-                tree.node_labels[bucket][idx].clone(),
-                BaselineChild { tree, node },
-            )
+            (&tree.node_labels[bucket][idx], BaselineChild { tree, node })
         })
     }
 }
@@ -1062,7 +1059,6 @@ fn hash_lazy_tree_impl(
                 parent,
                 par_strategy,
                 recursion_depth,
-                // XXX: This should be `None`.
                 baseline.map(BaselineChild::descend),
             ),
         }
@@ -1314,7 +1310,7 @@ fn hash_lazy_tree_impl(
         t,
         &mut ht,
         NodeId::empty(),
-        &mut ParStrategy::Sequential,
+        &mut ParStrategy::Concurrent,
         0,
         baseline,
     )?;
