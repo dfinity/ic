@@ -93,6 +93,9 @@ impl GuestVMType {
 enum Command {
     /// Run the GuestOS virtual machine
     Run {
+        #[arg(long = "slot", default_value_t = 0)]
+        slot: usize,
+
         #[arg(long = "type", default_value = "default", value_enum)]
         vm_type: GuestVMType,
     },
@@ -121,11 +124,11 @@ pub async fn main() -> Result<()> {
 
     match args.command {
         Command::ReserveHugepages => reserve_hugepages(),
-        Command::Run { vm_type } => run(vm_type).await,
+        Command::Run { slot, vm_type } => run(slot, vm_type).await,
     }
 }
 
-async fn run(vm_type: GuestVMType) -> Result<()> {
+async fn run(slot: usize, vm_type: GuestVMType) -> Result<()> {
     let startup_message = match vm_type {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
@@ -141,7 +144,7 @@ async fn run(vm_type: GuestVMType) -> Result<()> {
     let termination_token = CancellationToken::new();
     setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
 
-    GuestVmService::create_and_run(vm_type, termination_token).await
+    GuestVmService::create_and_run(slot, vm_type, termination_token).await
 }
 
 fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
@@ -414,6 +417,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
+    guest_vm_slot: usize,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
@@ -432,7 +436,7 @@ impl GuestVmService {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
+    pub fn new(guest_vm_slot: usize, guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
         let libvirt_connection = LibvirtConnectionWithReconnect::new(Arc::new(|| {
@@ -469,15 +473,17 @@ impl GuestVmService {
             })
             .transpose()?;
 
+        let device_string = format!("{GUESTOS_DEVICE}{guest_vm_slot}");
         let disk_device = upgrade_mapped_device
             .as_ref()
             .map(|x| x.path())
-            .unwrap_or(Path::new(GUESTOS_DEVICE));
+            .unwrap_or(Path::new(&device_string));
 
         Ok(Self {
             metrics,
             libvirt_connection: Arc::new(libvirt_connection),
             hostos_config,
+            guest_vm_slot,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
             console_ttys: vec![
@@ -492,17 +498,18 @@ impl GuestVmService {
             disk_device: disk_device.to_path_buf(),
             _upgrade_mapped_device: upgrade_mapped_device,
             guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
-            vm_serial_log_path: serial_log_path(guest_vm_type).to_path_buf(),
+            vm_serial_log_path: serial_log_path(guest_vm_type, guest_vm_slot).to_path_buf(),
             command_runner: Arc::new(RealAsyncCommandRunner),
         })
     }
 
     #[cfg(target_os = "linux")]
     pub async fn create_and_run(
+        slot: usize,
         guest_vm_type: GuestVMType,
         termination_token: CancellationToken,
     ) -> Result<()> {
-        let mut guest_vm_service = Self::new(guest_vm_type)?;
+        let mut guest_vm_service = Self::new(slot, guest_vm_type)?;
         guest_vm_service.run(termination_token).await
     }
 
@@ -567,7 +574,7 @@ impl GuestVmService {
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
         VirtualMachine::try_destroy_existing_vm(
             self.libvirt_connection.as_ref(),
-            vm_domain_name(self.guest_vm_type),
+            &vm_domain_name(self.guest_vm_type, self.guest_vm_slot),
             self.command_runner.as_ref(),
         )
         .await?;
@@ -609,6 +616,7 @@ impl GuestVmService {
 
         assemble_config_media(
             &self.hostos_config,
+            self.guest_vm_slot,
             self.guest_vm_type,
             sev_certificate_chain_pem,
             config_media.path(),
@@ -624,6 +632,7 @@ impl GuestVmService {
             direct_boot.as_ref().map(DirectBoot::to_config),
             &self.disk_device,
             &self.vm_serial_log_path,
+            self.guest_vm_slot,
             self.guest_vm_type,
             available_hugepages_gib,
             &self.metrics,
@@ -637,7 +646,7 @@ impl GuestVmService {
             &vm_config,
             config_media,
             direct_boot,
-            vm_domain_name(self.guest_vm_type),
+            &vm_domain_name(self.guest_vm_type, self.guest_vm_slot),
         )
         .await?;
 

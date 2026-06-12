@@ -4,7 +4,7 @@ use config_types::{
     GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac_w_slot};
 use std::net::Ipv6Addr;
 use std::path::Path;
 use utils::to_cidr;
@@ -16,6 +16,7 @@ const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovery_h
 /// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config(
     hostos_config: &HostOSConfig,
+    guest_vm_slot: usize,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
@@ -47,9 +48,14 @@ pub fn generate_guestos_config(
         }
     };
 
-    let guestos_ipv6_address =
-        node_ipv6_address(node_type, hostos_config, deterministic_ipv6_config)?;
+    let guestos_ipv6_address = node_ipv6_address(
+        guest_vm_slot,
+        node_type,
+        hostos_config,
+        deterministic_ipv6_config,
+    )?;
     let peer_ipv6_address = node_ipv6_address(
+        0,
         upgrade_peer_node_type,
         hostos_config,
         deterministic_ipv6_config,
@@ -90,13 +96,15 @@ pub fn generate_guestos_config(
 }
 
 fn node_ipv6_address(
+    slot: usize,
     node_type: NodeType,
     hostos_config: &HostOSConfig,
     deterministic_config: &DeterministicIpv6Config,
 ) -> Result<Ipv6Addr> {
-    let mac = calculate_deterministic_mac(
+    let mac = calculate_deterministic_mac_w_slot(
         &hostos_config.icos_settings.mgmt_mac,
         hostos_config.icos_settings.deployment_environment,
+        slot,
         node_type,
     );
 

@@ -65,7 +65,16 @@ pub fn calculate_deterministic_mac(
     deployment_environment: DeploymentEnvironment,
     node_type: NodeType,
 ) -> MacAddr6 {
-    let index = node_type.to_index();
+    calculate_deterministic_mac_w_slot(mgmt_mac, deployment_environment, 0, node_type)
+}
+
+pub fn calculate_deterministic_mac_w_slot(
+    mgmt_mac: &MacAddr6,
+    deployment_environment: DeploymentEnvironment,
+    slot: usize,
+    node_type: NodeType,
+) -> MacAddr6 {
+    let index = node_type.to_index() | (slot as u8) << 4; // Mix in the slot index
 
     // NOTE: In order to be backwards compatible with existing scripts, this
     // **MUST** have a newline.
@@ -91,6 +100,7 @@ mod test {
         let mgmt_mac: MacAddr6 = "70:B5:E8:E8:25:DE".parse().unwrap();
         let expected_mac: MacAddr6 = "6a:00:f8:87:a4:8a".parse().unwrap();
         let mac = calculate_deterministic_mac(
+            0,
             &mgmt_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,

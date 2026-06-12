@@ -5,7 +5,7 @@ use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
-use deterministic_ips::calculate_deterministic_mac;
+use deterministic_ips::calculate_deterministic_mac_w_slot;
 use deterministic_ips::node_type::NodeType;
 use std::path::{Path, PathBuf};
 use tracing::info;
@@ -53,12 +53,14 @@ pub struct DirectBootConfig {
 
 pub fn assemble_config_media(
     hostos_config: &HostOSConfig,
+    guest_vm_slot: usize,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
     let guestos_config = generate_guestos_config(
         hostos_config,
+        guest_vm_slot,
         guest_vm_type.to_config_type(),
         sev_certificate_chain_pem,
     )
@@ -105,6 +107,7 @@ pub fn generate_vm_config(
     direct_boot: Option<DirectBootConfig>,
     disk_device: &Path,
     serial_log_path: &Path,
+    guest_vm_slot: usize,
     guest_vm_type: GuestVMType,
     available_hugepages_gib: u64,
     metrics: &GuestVmMetrics,
@@ -113,9 +116,10 @@ pub fn generate_vm_config(
         GuestVMType::Default => NodeType::GuestOS,
         GuestVMType::Upgrade => NodeType::UpgradeGuestOS,
     };
-    let mac_address = calculate_deterministic_mac(
+    let mac_address = calculate_deterministic_mac_w_slot(
         &config.icos_settings.mgmt_mac,
         config.icos_settings.deployment_environment,
+        guest_vm_slot,
         node_type,
     );
 
@@ -142,8 +146,8 @@ pub fn generate_vm_config(
     metrics.set_hugepages_enabled(guest_vm_type, use_hugepages);
 
     GuestOSTemplateProps {
-        domain_name: vm_domain_name(guest_vm_type).to_string(),
-        domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
+        domain_name: vm_domain_name(guest_vm_type, guest_vm_slot),
+        domain_uuid: vm_domain_uuid(guest_vm_type, guest_vm_slot),
         disk_device: disk_device.to_path_buf(),
         cpu_domain,
         console_log_path: serial_log_path.display().to_string(),
@@ -178,24 +182,24 @@ pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
     ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
 }
 
-pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
+pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: usize) -> String {
     match guest_vm_type {
-        GuestVMType::Default => DEFAULT_GUEST_VM_DOMAIN_NAME,
-        GuestVMType::Upgrade => UPGRADE_GUEST_VM_DOMAIN_NAME,
+        GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot}"),
+        GuestVMType::Upgrade => UPGRADE_GUEST_VM_DOMAIN_NAME.to_string(),
     }
 }
 
-pub fn vm_domain_uuid(guest_vm_type: GuestVMType) -> &'static str {
+pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: usize) -> String {
     match guest_vm_type {
-        GuestVMType::Default => "fd897da5-8017-41c8-8575-a706dba30766",
-        GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd",
+        GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba3076{slot:x}"),
+        GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd".to_string(),
     }
 }
 
-pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
+pub fn serial_log_path(guest_vm_type: GuestVMType, slot: usize) -> PathBuf {
     match guest_vm_type {
-        GuestVMType::Default => Path::new(DEFAULT_SERIAL_LOG_PATH),
-        GuestVMType::Upgrade => Path::new(UPGRADE_SERIAL_LOG_PATH),
+        GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot}")),
+        GuestVMType::Upgrade => PathBuf::from(UPGRADE_SERIAL_LOG_PATH.to_string()),
     }
 }
 
@@ -316,6 +320,7 @@ mod tests {
             direct_boot,
             Path::new("/dev/guest_disk"),
             Path::new("/var/serial/console.txt"),
+            0,
             guest_vm_type,
             available_hugepages_gib,
             &metrics,
