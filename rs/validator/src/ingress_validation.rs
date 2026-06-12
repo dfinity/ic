@@ -137,27 +137,18 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        validate_nonce(request)?;
-        let restrictions = validate_user_id_and_signature(
+        let restrictions = validate_request_content(
+            request,
             self.validator.as_ref(),
-            &request.sender(),
-            &request.id(),
-            match request.authentication() {
-                Authentication::Anonymous => None,
-                Authentication::Authenticated(signature) => Some(signature),
-            },
             current_time,
             root_of_trust_provider,
+            // A delegation may require update calls to carry a signed
+            // `sender_info` (e.g. certified session attributes issued by the
+            // delegation's signer). Since the requirement is part of the
+            // signed delegation, the bearer of the delegation cannot lift it
+            // by simply omitting the sender info.
+            SenderInfoRequirement::EnforceIfRequiredByDelegation,
         )?;
-        // A delegation may require update calls to carry a signed
-        // `sender_info` (e.g. certified session attributes issued by the
-        // delegation's signer). Since the requirement is part of the signed
-        // delegation, the bearer of the delegation cannot lift it by simply
-        // omitting the sender info.
-        if restrictions.sender_info_required && request.sender_info().is_none() {
-            return Err(SenderInfoRequiredByDelegation);
-        }
-        validate_sender_info(request, self.validator.as_ref(), root_of_trust_provider)?;
         validate_request_target(request, &restrictions.targets)?;
         Ok(restrictions.targets)
     }
@@ -178,12 +169,13 @@ where
             validate_ingress_expiry(request, current_time)?;
         }
         // `sender_info_required` only applies to update calls: query
-        // responses cannot change state, so there is nothing to restrict.
+        // requests cannot change state, so there is nothing to restrict.
         let restrictions = validate_request_content(
             request,
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
+            SenderInfoRequirement::Ignore,
         )?;
         validate_request_target(request, &restrictions.targets)?;
         Ok(restrictions.targets)
@@ -212,6 +204,7 @@ where
             self.validator.as_ref(),
             current_time,
             root_of_trust_provider,
+            SenderInfoRequirement::Ignore,
         )
         .map(|restrictions| restrictions.targets)
     }
@@ -235,11 +228,21 @@ fn validate_paths_width_and_depth(paths: &[Path]) -> Result<(), RequestValidatio
     Ok(())
 }
 
+/// Whether `validate_request_content` should enforce the delegations'
+/// `sender_info_required` restriction. Only update calls enforce it: query
+/// requests cannot change state, so there is nothing to restrict, and
+/// read_state requests cannot even carry a `sender_info`.
+enum SenderInfoRequirement {
+    EnforceIfRequiredByDelegation,
+    Ignore,
+}
+
 fn validate_request_content<C: HttpRequestContent, R: RootOfTrustProvider>(
     request: &HttpRequest<C>,
     ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     root_of_trust_provider: &R,
+    sender_info_requirement: SenderInfoRequirement,
 ) -> Result<DelegationRestrictions, RequestValidationError>
 where
     R::Error: std::error::Error,
@@ -258,6 +261,14 @@ where
         current_time,
         root_of_trust_provider,
     )?;
+    if matches!(
+        sender_info_requirement,
+        SenderInfoRequirement::EnforceIfRequiredByDelegation
+    ) && restrictions.sender_info_required
+        && request.sender_info().is_none()
+    {
+        return Err(SenderInfoRequiredByDelegation);
+    }
     validate_sender_info(request, ingress_signature_verifier, root_of_trust_provider)?;
     Ok(restrictions)
 }
