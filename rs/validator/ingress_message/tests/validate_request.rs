@@ -2373,6 +2373,134 @@ mod delegation_sender_info_required {
     }
 }
 
+/// End-to-end tests for the combined read-only-session design: a delegation
+/// with `sender_info_required = true` forces update calls to carry certified
+/// session attributes (`sender_info`), whose `implicit:permissions` attribute
+/// then determines whether update calls are permitted. The bearer of the
+/// delegation can neither strip the requirement (it is covered by the
+/// delegation signature) nor omit the attributes (the call is rejected
+/// without them).
+mod read_only_sessions {
+    use super::*;
+    use candid::Encode;
+    use ic_types::messages::{RawSignedSenderInfo, SenderInfoContent};
+    use ic_validator_http_request_test_utils::DelegationChain;
+    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::CanisterSignature;
+
+    /// Deliberately a different mirror of the ICRC-3 `Value` type than the
+    /// one used by the validator for decoding, like the mirrors used by
+    /// actual signers (e.g. Internet Identity).
+    #[derive(candid::CandidType)]
+    enum TestIcrc3Value {
+        Text(String),
+        Map(std::collections::BTreeMap<String, TestIcrc3Value>),
+    }
+
+    /// Creates a canister signer (the issuer, e.g. Internet Identity), a
+    /// delegation chain rooted at it requiring a signed `sender_info`, and
+    /// certified attributes restricting the session to the given permissions.
+    fn read_only_session_setup<R: Rng + CryptoRng>(
+        rng: &mut R,
+        permissions: &str,
+    ) -> (
+        IngressMessageVerifierBuilder,
+        DelegationChain,
+        RawSignedSenderInfo,
+    ) {
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let builder = default_verifier().with_root_of_trust(root_of_trust.public_key);
+        let signer = CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        };
+        let attributes = std::collections::BTreeMap::from([(
+            "implicit:permissions".to_string(),
+            TestIcrc3Value::Text(permissions.to_string()),
+        )]);
+        let info_bytes =
+            Encode!(&TestIcrc3Value::Map(attributes)).expect("failed to encode attributes");
+        let sig = signer.sign(&SenderInfoContent(&info_bytes));
+        let sender_info = RawSignedSenderInfo {
+            info: Blob(info_bytes),
+            signer: Blob(CANISTER_ID_SIGNER.get().into_vec()),
+            sig: Blob(sig.0),
+        };
+        let chain = DelegationChain::rooted_at(CanisterSignature(signer))
+            .delegate_to_with_sender_info_required(random_user_key_pair(rng), CURRENT_TIME, true)
+            .build();
+        (builder, chain, sender_info)
+    }
+
+    #[test]
+    fn should_reject_update_call_with_queries_only_attributes() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, sender_info) = read_only_session_setup(rng, "queries");
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .with_sender_info(sender_info)
+            .build();
+
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::UpdateCallNotPermittedBySenderInfo)
+        );
+    }
+
+    #[test]
+    fn should_reject_update_call_omitting_the_attributes() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, _sender_info) = read_only_session_setup(rng, "queries");
+        let verifier = builder.build();
+
+        // A dapp cannot lift the queries-only restriction by omitting the
+        // attributes: the delegation requires them to be present.
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+
+        assert_matches!(
+            verifier.validate_request(&request),
+            Err(RequestValidationError::SenderInfoRequiredByDelegation)
+        );
+    }
+
+    #[test]
+    fn should_accept_query_with_queries_only_attributes() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, sender_info) = read_only_session_setup(rng, "queries");
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .with_sender_info(sender_info)
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+
+    #[test]
+    fn should_accept_update_call_with_updates_attributes() {
+        let rng = &mut reproducible_rng();
+        let (builder, chain, sender_info) = read_only_session_setup(rng, "updates");
+        let verifier = builder.build();
+
+        let request = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .with_sender_info(sender_info)
+            .build();
+
+        assert_eq!(verifier.validate_request(&request), Ok(()));
+    }
+}
+
 fn default_verifier() -> IngressMessageVerifierBuilder {
     IngressMessageVerifier::builder().with_time_provider(TimeProvider::Constant(CURRENT_TIME))
 }
