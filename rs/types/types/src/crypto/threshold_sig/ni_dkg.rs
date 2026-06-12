@@ -142,6 +142,26 @@ pub enum NiDkgTargetSubnet {
     Remote(NiDkgTargetId),
 }
 
+impl NiDkgTargetSubnet {
+    /// Return true if the target subnet is local,
+    /// meaning the subnet creates keys for itself.
+    pub fn is_local(&self) -> bool {
+        match self {
+            Self::Local => true,
+            Self::Remote(_) => false,
+        }
+    }
+
+    /// Return true if the target subnet is remote,
+    /// meaning the subnet creates keys for another subnet.
+    pub fn is_remote(&self) -> bool {
+        match self {
+            Self::Local => false,
+            Self::Remote(_) => true,
+        }
+    }
+}
+
 /// An ID for a remote `NiDkgTargetSubnet`.
 ///
 /// Please refer to the rustdoc of `NiDkgTargetSubnet::Remote` for an

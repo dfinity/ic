@@ -81,6 +81,7 @@ wat = { workspace = true }
 
 [dev-dependencies]
 ic-base-types = { path = "../types/base_types" }
+ic-certification = { path = "../certification" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 proptest = { workspace = true }
 test-strategy = "0.4.0"

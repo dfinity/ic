@@ -143,12 +143,6 @@ TEST_DEPENDENCIES = [
     "@crate_index//:wat",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
-
-ALIASES = {}
-
 EXTERNAL_CANISTER_DATA = [
     "@mainnet_canisters//:cycles_ledger.wasm.gz",
     "@mainnet_canisters//:internet_identity_backend.wasm.gz",
@@ -251,7 +245,6 @@ MAINNET_NNS_CANISTER_ENV = {
     cargo_build_script(
         name = "build_script" + name_suffix,
         srcs = ["build.rs"],
-        aliases = ALIASES,
         build_script_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
         data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         deps = BUILD_DEPENDENCIES,
@@ -265,7 +258,6 @@ MAINNET_NNS_CANISTER_ENV = {
 [
     rust_library(
         name = "pocket-ic-server-lib" + name_suffix,
-        testonly = True,
         srcs = [
             "src/beta_features.rs",
             "src/external_canister_types.rs",
@@ -276,9 +268,12 @@ MAINNET_NNS_CANISTER_ENV = {
         ]),
         compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
         crate_name = "pocket_ic_server",
-        proc_macro_deps = MACRO_DEPENDENCIES,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "13.0.0",
+        version = "14.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -290,10 +285,12 @@ MAINNET_NNS_CANISTER_ENV = {
 [
     rust_binary(
         name = "pocket-ic-server" + name_suffix,
-        testonly = True,
         srcs = ["src/main.rs"],
         compile_data = ["//:mainnet-routing-table.json"],
-        proc_macro_deps = MACRO_DEPENDENCIES,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         rustc_env = {
             "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
         },
@@ -315,7 +312,10 @@ MAINNET_NNS_CANISTER_ENV = {
 rust_ic_test(
     name = "pocket-ic-server-lib-test",
     crate = ":pocket-ic-server-lib",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     deps = TEST_DEPENDENCIES,
 )
 
@@ -341,7 +341,6 @@ rust_test(
             "tests/common.rs",
             "tests/" + name + ".rs",
         ],
-        aliases = {},
         data = [
             ":pocket-ic-server",
             "@mainnet_canisters//:internet_identity_backend.wasm.gz",
@@ -375,7 +374,6 @@ rust_test(
     srcs = [
         "tests/bitcoin_integration_tests.rs",
     ],
-    aliases = {},
     data = [
         ":pocket-ic-server",
         "//:bitcoind",
@@ -399,7 +397,6 @@ rust_test(
     srcs = [
         "tests/dogecoin_integration_tests.rs",
     ],
-    aliases = {},
     data = [
         ":pocket-ic-server",
         "//:dogecoind",

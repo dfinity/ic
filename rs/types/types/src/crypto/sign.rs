@@ -1,7 +1,7 @@
 //! Defines signature types.
 
 use super::hash::domain_separator::DomainSeparator;
-use crate::canister_http::CanisterHttpResponseMetadata;
+use crate::canister_http::CanisterHttpResponseReceipt;
 use crate::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
     NotarizationContent, RandomBeaconContent, RandomTapeContent,
@@ -37,7 +37,7 @@ where
 {
     fn as_signed_bytes(&self) -> Vec<u8> {
         let mut bytes = self.domain();
-        bytes.append(&mut self.as_signed_bytes_without_domain_separator());
+        self.write_signed_bytes_without_domain_separator(&mut bytes);
         bytes
     }
 }
@@ -70,7 +70,7 @@ mod private {
     impl SignatureDomainSeal for IDkgOpeningContent {}
     impl SignatureDomainSeal for WebAuthnEnvelope {}
     impl SignatureDomainSeal for Delegation {}
-    impl SignatureDomainSeal for CanisterHttpResponseMetadata {}
+    impl SignatureDomainSeal for CanisterHttpResponseReceipt {}
     impl SignatureDomainSeal for MessageId {}
     impl<'a> SignatureDomainSeal for SenderInfoContent<'a> {}
     impl SignatureDomainSeal for CertificationContent {}
@@ -83,7 +83,7 @@ mod private {
     impl SignatureDomainSeal for VetKdEncryptedKeyShareContent {}
 }
 
-impl SignatureDomain for CanisterHttpResponseMetadata {
+impl SignatureDomain for CanisterHttpResponseReceipt {
     fn domain(&self) -> Vec<u8> {
         domain_with_prepended_length(
             DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata.as_str(),
@@ -260,7 +260,7 @@ impl SignatureDomain for SignableMock {
 }
 
 impl SignedBytesWithoutDomainSeparator for SignableMock {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.signed_bytes_without_domain.clone()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.signed_bytes_without_domain);
     }
 }

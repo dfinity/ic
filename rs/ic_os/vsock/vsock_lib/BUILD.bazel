@@ -2,41 +2,45 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/http_utils",
-    "@crate_index//:anyhow",
-    "@crate_index//:mockall",
-    "@crate_index//:procfs",
-    "@crate_index//:rusb",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:vsock",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "vsock_lib",
     srcs = glob(
         ["src/**/*.rs"],
     ),
-    aliases = ALIASES,
     crate_name = "vsock_lib",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/http_utils",
+        "@crate_index//:anyhow",
+        "@crate_index//:mockall",
+        "@crate_index//:procfs",
+        "@crate_index//:rusb",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:vsock",
+    ],
 )
 
 rust_test(
     name = "test",
     size = "small",
     crate = ":vsock_lib",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/http_utils",
+        "@crate_index//:anyhow",
+        "@crate_index//:mockall",
+        "@crate_index//:procfs",
+        "@crate_index//:rusb",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:vsock",
+    ],
 )

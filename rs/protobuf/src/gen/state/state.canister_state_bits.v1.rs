@@ -645,7 +645,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 65
+/// Next ID: 68
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "4")]
@@ -745,6 +745,13 @@ pub struct CanisterStateBits {
     /// The index of the next log record to be created.
     #[prost(uint64, tag = "44")]
     pub next_canister_log_record_idx: u64,
+    /// Whether the one-time migration from CanisterLog to LogMemoryStore has
+    /// already been performed for this canister.
+    #[prost(bool, tag = "66")]
+    pub log_memory_store_migrated: bool,
+    /// The persistent high-water mark for log record indexing in LogMemoryStore.
+    #[prost(uint64, tag = "67")]
+    pub log_memory_store_persistent_next_idx: u64,
     /// The Wasm memory limit. This is a field in developer-visible canister
     /// settings that allows the developer to limit the usage of the Wasm memory
     /// by the canister to leave some room in 4GiB for upgrade calls.

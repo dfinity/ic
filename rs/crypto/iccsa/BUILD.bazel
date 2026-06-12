@@ -30,17 +30,13 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/certification",
-        "//rs/certification/test-utils",
-        "//rs/crypto/iccsa/test_utils",
         "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha2",
         "//rs/crypto/test_utils",
-        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/tree_hash",
         "//rs/interfaces",
         "//rs/types/types",
-        "@crate_index//:assert_matches",
         "@crate_index//:base64",
         "@crate_index//:hex",
         "@crate_index//:rand",

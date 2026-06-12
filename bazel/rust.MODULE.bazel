@@ -32,10 +32,6 @@ crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 # Use particular version with `@crate_index//:mycrate-3.14.16`
 
 crate.spec(
-    package = "actix-http",
-    version = "^3.12.1",
-)
-crate.spec(
     package = "actix-rt",
     version = "^2.10.0",
 )
@@ -186,10 +182,6 @@ crate.spec(
     package = "bitcoin",
     package_alias = "bitcoin-0-28",
     version = "^0.28.2",
-)
-crate.spec(
-    package = "bitflags",
-    version = "^1.2.1",
 )
 crate.spec(
     package = "bs58",
@@ -775,6 +767,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
+        "check-endpoints",
         "exe",
     ],
     package = "ic-wasm",
@@ -1061,10 +1054,6 @@ crate.spec(
     ],
     package = "opentelemetry_sdk",
     version = "^0.27.1",
-)
-crate.spec(
-    package = "opentelemetry-prometheus",
-    version = "^0.14.1",
 )
 crate.spec(
     default_features = False,
@@ -1633,10 +1622,6 @@ crate.spec(
     version = "3.20",
 )
 crate.spec(
-    package = "tester",
-    version = "^0.7.0",
-)
-crate.spec(
     package = "test-strategy",
     version = "^0.3.1",
 )
@@ -1861,15 +1846,11 @@ crate.spec(
     version = "^0.3.7",
 )
 crate.spec(
-    package = "wasm-bindgen",
-    version = "^0.2",
-)
-crate.spec(
     features = [
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     default_features = False,
@@ -1877,15 +1858,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     default_features = False,
@@ -1897,15 +1878,15 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^44.0.1",
+    version = "^45.0.0",
 )
 crate.spec(
     package = "wast",
-    version = "^248.0.0",
+    version = "^251.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "~1.248.0",
+    version = "~1.251.0",
 )
 crate.spec(
     package = "webpki-roots",
@@ -2043,6 +2024,11 @@ crate.annotation(
     gen_binaries = ["canbench"],
 )
 crate.annotation(
+    crate = "askama_derive",
+    patch_args = ["-p2"],
+    patches = ["@@//bazel:askama.patch"],
+)
+crate.annotation(
     crate = "cc",
     patch_args = ["-p1"],
     patches = ["@@//bazel:cc_rs.patch"],
@@ -2148,6 +2134,16 @@ crate.annotation(
     crate = "ring",
 )
 crate.annotation(
+    crate = "rustix",
+    # Patch for determinism issues: rustix's build script leaves a
+    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
+    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
+    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:rustix.patch"],
+    version = "1.1.4",
+)
+crate.annotation(
     crate = "ic-wasm",
     gen_binaries = ["ic-wasm"],
 )
@@ -2166,10 +2162,10 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@protobuf//:protoc",
+        "@@//bazel:protoc",
     ],
     build_script_env = {
-        "PROTOC": "$(execpath @protobuf//:protoc)",
+        "PROTOC": "$(execpath @@//bazel:protoc)",
     },
     crate = "pprof",
 )
@@ -2201,7 +2197,7 @@ crate.from_specs(
 )
 
 # inject nice names for those repos to avoid canonical naming
-inject_repo(crate, "openssl", "lmdb", "jemalloc", "protobuf")
+inject_repo(crate, "openssl", "lmdb", "jemalloc")
 
 use_repo(crate, "crate_index")
 

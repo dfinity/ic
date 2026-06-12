@@ -2,73 +2,117 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/crypto",
-    "//rs/crypto/interfaces/sig_verification",
-    "//rs/crypto/internal/crypto_service_provider",
-    "//rs/crypto/internal/logmon",
-    "//rs/crypto/node_key_generation",
-    "//rs/crypto/temp_crypto/temp_vault",
-    "//rs/crypto/tls_interfaces",
-    "//rs/crypto/utils/basic_sig",
-    "//rs/interfaces",
-    "//rs/interfaces/registry",
-    "//rs/limits",
-    "//rs/monitoring/logger",
-    "//rs/protobuf",
-    "//rs/registry/fake",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
-    "//rs/types/base_types",
-    "//rs/types/types",
-    "@crate_index//:rand",
-    "@crate_index//:rustls",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/test_utilities/time",
-    "//rs/types/types_test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:rand_chacha",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "temp_crypto",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_crypto_temp_crypto",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/crypto",
+        "//rs/crypto/interfaces/sig_verification",
+        "//rs/crypto/internal/crypto_service_provider",
+        "//rs/crypto/internal/logmon",
+        "//rs/crypto/node_key_generation",
+        "//rs/crypto/temp_crypto/temp_vault",
+        "//rs/crypto/tls_interfaces",
+        "//rs/crypto/utils/basic_sig",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:rustls",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
     name = "temp_crypto_test",
-    aliases = ALIASES,
     crate = ":temp_crypto",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/crypto",
+        "//rs/crypto/interfaces/sig_verification",
+        "//rs/crypto/internal/crypto_service_provider",
+        "//rs/crypto/internal/logmon",
+        "//rs/crypto/node_key_generation",
+        "//rs/crypto/temp_crypto/temp_vault",
+        "//rs/crypto/tls_interfaces",
+        "//rs/crypto/utils/basic_sig",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:rustls",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test_suite(
     name = "test_suite",
     srcs = glob(["tests/**"]),
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":temp_crypto"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        ":temp_crypto",
+        "//rs/config",
+        "//rs/crypto",
+        "//rs/crypto/interfaces/sig_verification",
+        "//rs/crypto/internal/crypto_service_provider",
+        "//rs/crypto/internal/logmon",
+        "//rs/crypto/node_key_generation",
+        "//rs/crypto/temp_crypto/temp_vault",
+        "//rs/crypto/test_utils",
+        "//rs/crypto/tls_interfaces",
+        "//rs/crypto/utils/basic_sig",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/time",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:rustls",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )

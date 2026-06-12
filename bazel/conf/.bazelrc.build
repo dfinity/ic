@@ -5,6 +5,23 @@
 # lockfile for MODULE.bazel
 common --lockfile_mode=off
 
+# Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
+# See https://github.com/protocolbuffers/protobuf/issues/19558
+# (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
+common --incompatible_enable_proto_toolchain_resolution
+
+# protobuf 33's upb bootstrap tools (protoc-gen-upb*, protoc_minimal, ...) use
+# __start_/__stop_ linker-array sections (e.g. linkarr_upb_AllExts). lld (used by
+# the hermetic zig toolchain on Linux) garbage-collects these under its default
+# --start-stop-gc together with our opt-mode --gc-sections, breaking the link
+# with "undefined symbol: __start_linkarr_upb_AllExts". The lld-suggested
+# `-z nostart-stop-gc` is rejected by zig's wrapper, so we disable section GC
+# instead. Scoped to the exec config (these are build-time `[for tool]` targets,
+# so target binaries/canisters keep --gc-sections) and to Linux via
+# --enable_platform_specific_config (the macOS system linker rejects this flag).
+common --enable_platform_specific_config
+build:linux --host_linkopt=-Wl,--no-gc-sections
+
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17

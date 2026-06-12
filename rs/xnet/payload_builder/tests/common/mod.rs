@@ -66,12 +66,13 @@ impl StateManagerFixture {
             verifier,
             subnet_id,
             subnet_type,
-            log.clone(),
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
-            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+            tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &metrics,
+            log.clone(),
         );
 
         Self {

@@ -258,7 +258,7 @@ fn upgrade_fails_on_not_enough_cycles() {
 fn upgrade_fails_on_no_execution_state() {
     let mut test = execution_test_with_max_rounds(1);
     // Create canister with no binary and hence no execution state
-    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_id = test.create_canister(30_000_000_000_u64.into());
     let canister_state_before = test.canister_state(canister_id).clone();
 
     let result = test.upgrade_canister(canister_id, new_empty_binary());
@@ -970,7 +970,7 @@ fn dts_uninstall_with_aborted_upgrade() {
 fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
     let mut test = execution_test_with_max_rounds(1);
     // Create canister with no binary and hence no execution state
-    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_id = test.create_canister(30_000_000_000_u64.into());
     let canister_state_before = test.canister_state(canister_id).clone();
 
     let result = test.upgrade_canister_v2(

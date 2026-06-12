@@ -66,6 +66,9 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                         .collect(),
                     routing_table: Some(ft.routing_table.as_ref().into()),
                 }),
+            default_initial_dkg_subnet_id: item
+                .default_initial_dkg_subnet_id
+                .map(subnet_id_into_protobuf),
         }
     }
 }
@@ -105,6 +108,11 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             Some(canister) => Some(CanisterId::try_from(canister.clone())?),
             None => None,
         };
+
+        let default_initial_dkg_subnet_id = item
+            .default_initial_dkg_subnet_id
+            .map(subnet_id_try_from_protobuf)
+            .transpose()?;
 
         Ok(Self {
             subnets,
@@ -146,6 +154,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                     })
                 }
             },
+            default_initial_dkg_subnet_id,
         })
     }
 }
@@ -562,6 +571,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 None => BlockmakerMetricsTimeSeries::default(),
             },
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         })
     }
 }

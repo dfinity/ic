@@ -2,7 +2,7 @@ use crate::{
     CallOrigin, CanisterState, CanisterStatus, ExecutionTask, ReplicatedState, num_bytes_try_from,
 };
 use ic_base_types::SubnetId;
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
+use ic_config::execution_environment::Config;
 use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, MasterPublicKeyId};
 use ic_metrics::MetricsRegistry;
@@ -13,7 +13,9 @@ use ic_types::{
     Height, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumBytes, NumInstructions, Time,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
-use prometheus::{CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntGauge, IntGaugeVec};
+use prometheus::{
+    CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntGauge, IntGaugeVec,
+};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -24,6 +26,10 @@ const MESSAGE_KIND_CANISTER: &str = "canister";
 /// Alert for call contexts older than this cutoff (one day).
 const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
+
+/// Critical error for subnet-wide canister memory usage in excess of subnet
+/// memory capacity.
+const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str = "scheduler_subnet_memory_usage_invariant_broken";
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -37,6 +43,10 @@ pub struct ReplicatedStateMetrics {
     canister_stable_memory_usage: Histogram,
     canister_memory_allocation: Histogram,
     canister_compute_allocation: Histogram,
+    canisters_memory_usage_bytes: IntGauge,
+    wasm_custom_sections_memory_usage_bytes: IntGauge,
+    canister_history_memory_usage_bytes: IntGauge,
+    canister_history_total_num_changes: Histogram,
     ingress_history_length: IntGauge,
     registered_canisters: IntGaugeVec,
     available_canister_ids: IntGauge,
@@ -106,6 +116,24 @@ impl ReplicatedStateMetrics {
                 "canister_compute_allocation_ratio",
                 "Canisters compute allocation distribution ratio (0-1).",
                 linear_buckets(0.0, 0.1, 11),
+            ),
+            canisters_memory_usage_bytes: metrics_registry.int_gauge(
+                "canister_memory_usage_bytes",
+                "Total memory footprint of all canisters.",
+            ),
+            wasm_custom_sections_memory_usage_bytes: metrics_registry.int_gauge(
+                "mr_wasm_custom_sections_memory_usage_bytes",
+                "Total memory footprint of all canisters' Wasm custom sections.",
+            ),
+            canister_history_memory_usage_bytes: metrics_registry.int_gauge(
+                "mr_canister_history_memory_usage_bytes",
+                "Total memory footprint of all canisters' canister history.",
+            ),
+            canister_history_total_num_changes: metrics_registry.histogram(
+                "mr_canister_history_total_num_changes",
+                "Total number of changes in canister history per canister.",
+                // 0, 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
             ),
             ingress_history_length: metrics_registry.int_gauge(
                 "replicated_state_ingress_history_length",
@@ -350,6 +378,9 @@ impl ReplicatedStateMetrics {
         let mut in_flight_signature_request_contexts_by_key_id =
             BTreeMap::<MasterPublicKeyId, u32>::new();
 
+        let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
+        let mut canister_history_memory_usage = NumBytes::new(0);
+
         let mut total_canister_balance = Cycles::zero();
         let mut total_canister_reserved_balance = Cycles::zero();
 
@@ -357,7 +388,7 @@ impl ReplicatedStateMetrics {
         let mut total_canister_snapshots_count = 0;
 
         let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
-        state.canisters_iter().for_each(|canister| {
+        for canister in state.canisters_iter() {
             match canister.system_state.get_status() {
                 CanisterStatus::Running { .. } => num_running_canisters += 1,
                 CanisterStatus::Stopping { stop_contexts, .. } => {
@@ -424,6 +455,13 @@ impl ReplicatedStateMetrics {
                 canisters_not_in_routing_table += 1;
             }
 
+            wasm_custom_sections_memory_usage += canister
+                .execution_state
+                .as_ref()
+                .map(|es| es.metadata.memory_usage())
+                .unwrap_or_default();
+            canister_history_memory_usage += canister.canister_history_memory_usage();
+
             total_canister_balance += canister.system_state.balance();
             total_canister_reserved_balance += canister.system_state.reserved_balance();
 
@@ -452,7 +490,7 @@ impl ReplicatedStateMetrics {
 
             total_canister_snapshots_memory_taken += canister.canister_snapshots.memory_taken();
             total_canister_snapshots_count += canister.canister_snapshots.len();
-        });
+        }
 
         self.old_open_call_contexts
             .with_label_values(&[OLD_CALL_CONTEXT_LABEL_ONE_DAY])
@@ -568,6 +606,13 @@ impl ReplicatedStateMetrics {
         self.stop_canister_calls_without_call_id
             .set(num_stop_canister_calls_without_call_id as i64);
 
+        self.canisters_memory_usage_bytes
+            .set(state.total_canister_memory_usage().get() as i64);
+        self.wasm_custom_sections_memory_usage_bytes
+            .set(wasm_custom_sections_memory_usage.get() as i64);
+        self.canister_history_memory_usage_bytes
+            .set(canister_history_memory_usage.get() as i64);
+
         self.total_canister_balance
             .set(total_canister_balance.get() as f64);
 
@@ -602,7 +647,7 @@ impl ReplicatedStateMetrics {
         self.canister_compute_allocation
             .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
 
-        let log_memory_usage = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        let log_memory_usage = if canister.system_state.log_memory_store.is_migrated() {
             canister.system_state.log_memory_store.memory_usage()
         } else {
             canister.system_state.canister_log.bytes_used()
@@ -611,7 +656,7 @@ impl ReplicatedStateMetrics {
             .observe(log_memory_usage as f64);
 
         // Observe retention from whichever log store is active.
-        let retention = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        let retention = if canister.system_state.log_memory_store.is_migrated() {
             canister.system_state.log_memory_store.retention()
         } else {
             canister.system_state.canister_log.retention()
@@ -619,6 +664,13 @@ impl ReplicatedStateMetrics {
         if let Some(retention) = retention {
             self.canister_log_retention.observe(retention.as_secs_f64());
         }
+
+        self.canister_history_total_num_changes.observe(
+            canister
+                .system_state
+                .get_canister_history()
+                .get_total_num_changes() as f64,
+        );
     }
 }
 
@@ -630,6 +682,86 @@ fn join_consumed_cycles_by_use_case(
         *destination_map
             .entry(*use_case)
             .or_insert_with(NominalCycles::zero) += *cycles;
+    }
+}
+
+/// Collection of Replicated State invariants (and their related bounds) to be
+/// checked at the end of a round.
+pub struct ReplicatedStateInvariants {
+    subnet_memory_usage_invariant: IntCounter,
+    default_subnet_memory_capacity: NumBytes,
+}
+
+impl ReplicatedStateInvariants {
+    pub fn new(metrics_registry: &MetricsRegistry, hypervisor_config: &Config) -> Self {
+        Self {
+            subnet_memory_usage_invariant: metrics_registry
+                .error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
+            default_subnet_memory_capacity: hypervisor_config.subnet_memory_capacity,
+        }
+    }
+
+    /// Checks the Replicated State invariants at the end of a round.
+    pub fn check(
+        &self,
+        state: &ReplicatedState,
+        is_checkpoint_round: bool,
+        height: Height,
+        logger: &ReplicaLogger,
+    ) {
+        self.check_dts(state, is_checkpoint_round);
+        self.check_subnet_memory_usage(state, height, logger);
+    }
+
+    /// Checks DTS invariants at the end of a round.
+    fn check_dts(&self, state: &ReplicatedState, is_checkpoint_round: bool) {
+        // Only hot canisters may have non-empty task queues.
+        let canisters_with_tasks = state
+            .hot_canisters_iter()
+            .filter(|canister| !canister.system_state.task_queue.is_empty());
+
+        for canister in canisters_with_tasks {
+            canister
+                .system_state
+                .task_queue
+                .check_dts_invariants(is_checkpoint_round, &canister.canister_id());
+        }
+    }
+
+    /// Checks the subnet memory usage invariant at the end of a round.
+    fn check_subnet_memory_usage(
+        &self,
+        state: &ReplicatedState,
+        height: Height,
+        logger: &ReplicaLogger,
+    ) {
+        // `O(|hot canisters|)` thanks to `CanisterStates` maintaining precomputed stats
+        // for all cold canisters.
+        let canisters_memory = state.canister_states().memory_taken();
+        let total_canister_history_memory_usage = canisters_memory.canister_history();
+        let total_canister_memory_allocated_bytes = canisters_memory.execution();
+        let subnet_memory_capacity = state
+            .resource_limits()
+            .maximum_state_size_or(self.default_subnet_memory_capacity);
+
+        // Check that subnet memory usage invariant still holds after the round execution.
+        // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
+        // by `total_canister_history_memory_usage` because the canister history
+        // memory usage is not tracked during a round in `SubnetAvailableMemory`.
+        if total_canister_memory_allocated_bytes
+            > subnet_memory_capacity + total_canister_history_memory_usage
+        {
+            self.subnet_memory_usage_invariant.inc();
+            warn!(
+                logger,
+                "{}: In round {} @ time {}, total canister memory allocated bytes {} exceeded subnet memory capacity {}",
+                SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
+                height,
+                state.time(),
+                total_canister_memory_allocated_bytes,
+                subnet_memory_capacity
+            );
+        }
     }
 }
 

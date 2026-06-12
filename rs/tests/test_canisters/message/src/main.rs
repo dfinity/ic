@@ -9,6 +9,7 @@ thread_local! {
 
 #[ic_cdk::update]
 fn store(text: String) {
+    ic_cdk::println!("{}", text);
     MSG.with(|msg| *msg.borrow_mut() = Some(text));
 }
 

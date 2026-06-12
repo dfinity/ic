@@ -37,7 +37,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
+use std::{collections::BTreeSet, sync::Arc};
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
@@ -76,7 +76,6 @@ pub fn run_fuzzer(module: ICWasmModule) {
 
     let result = wasm_executor.create_execution_state(
         canister_module,
-        PathBuf::new(),
         CanisterId::from_u64(1),
         compilation_cache.clone(),
     );

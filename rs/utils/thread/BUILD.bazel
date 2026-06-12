@@ -8,7 +8,9 @@ rust_library(
     crate_name = "ic_utils_thread",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
     ],
 )
 
@@ -16,6 +18,8 @@ rust_test(
     name = "thread_test",
     crate = ":thread",
     deps = [
-        "@crate_index//:crossbeam-channel",
+        # Keep sorted.
+        "//rs/monitoring/metrics",
+        "@crate_index//:prometheus",
     ],
 )

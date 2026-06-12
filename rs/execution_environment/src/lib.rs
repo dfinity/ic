@@ -171,7 +171,6 @@ impl ExecutionServices {
         let scheduler = Box::new(SchedulerImpl::new(
             subnet_config.scheduler_config,
             config.embedders_config,
-            own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
             Arc::clone(&execution_environment) as Arc<_>,
             Arc::clone(&cycles_account_manager),
@@ -179,6 +178,7 @@ impl ExecutionServices {
             logger,
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
+            config.log_memory_store_feature,
             Arc::clone(&fd_factory),
         ));
 

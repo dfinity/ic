@@ -27,7 +27,7 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
-use ic_consensus_system_test_utils::upgrade::bless_replica_version;
+use ic_consensus_system_test_utils::upgrade::elect_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
@@ -103,12 +103,13 @@ pub fn test(env: TestEnv) {
     let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
-    // Bless target version
+    // Elect target version
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         &nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &log,
         sha256,

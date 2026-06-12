@@ -345,7 +345,6 @@ mod tests {
         };
 
         let execution_state = ExecutionState::new(
-            "NOT_USED".into(),
             wasm_binary,
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory,

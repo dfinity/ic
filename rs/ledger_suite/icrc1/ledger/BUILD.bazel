@@ -37,7 +37,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:hex",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-certification",
-            "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:leb128",
             "@crate_index//:minicbor",
@@ -111,6 +110,14 @@ package(default_visibility = ["//visibility:public"])
         srcs = ["src/main.rs"] + glob(["src/benches/**/*.rs"]),
         crate_features = features,
         crate_name = "ic_icrc1_ledger_canister" + name_suffix,
+        # The `_getblocksdisabled` variants compile without `get_blocks`
+        # but share the same `ledger.did` (which still declares it). The
+        # `_canbench` variants compile in benchmark-only `__canbench__*`
+        # and `__tracing__*` query endpoints from canbench-rs that aren't
+        # in `ledger.did` either, and replace `canister_init` with the
+        # canbench harness's own. Opt both kinds of variants out of
+        # check-endpoints — they're test-only and not production canisters.
+        hidden_endpoints = None if ("get-blocks-disabled" in features or "canbench-rs" in features) else "hidden_endpoints.conf",
         opt = "z",
         proc_macro_deps = [
             # Keep sorted.
@@ -306,7 +313,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-agent",
             "@crate_index//:ic-cbor",
             "@crate_index//:ic-certification",
-            "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
             "@crate_index//:num-bigint",
             "@crate_index//:num-traits",

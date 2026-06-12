@@ -2,45 +2,30 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ed25519",
-    "//packages/ic-secp256k1",
-    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/nns/governance/api",
-    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
-    "//rs/rosetta-api/icp:ic-rosetta-api",
-    "//rs/rosetta-api/icp:rosetta-api",
-    "//rs/types/base_types",
-    "@crate_index//:anyhow",
-    "@crate_index//:candid",
-    "@crate_index//:hex",
-    "@crate_index//:num-bigint",
-    "@crate_index//:reqwest",
-    "@crate_index//:serde",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    ":ic-icp-rosetta-client",
-    "//packages/pocket-ic:pocket-ic",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/nns/constants",
-    "//rs/rosetta-api/icp/runner:ic-icp-rosetta-runner",
-    "//rs/rosetta-api/icp/test_utils",
-    "@crate_index//:candid",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-]
-
 rust_library(
     name = "ic-icp-rosetta-client",
     srcs = ["src/lib.rs"],
     crate_name = "ic_icp_rosetta_client",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//packages/ic-secp256k1",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/governance/api",
+        "//rs/rosetta-api/common/rosetta_core:rosetta-core",
+        "//rs/rosetta-api/icp:ic-rosetta-api",
+        "//rs/rosetta-api/icp:rosetta-api",
+        "//rs/types/base_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:num-bigint",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
@@ -62,5 +47,16 @@ rust_test(
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":ic-icp-rosetta-client",
+        "//packages/pocket-ic",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/constants",
+        "//rs/rosetta-api/icp/runner:ic-icp-rosetta-runner",
+        "//rs/rosetta-api/icp/test_utils",
+        "@crate_index//:candid",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )

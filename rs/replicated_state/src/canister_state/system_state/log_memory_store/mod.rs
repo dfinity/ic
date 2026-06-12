@@ -45,9 +45,6 @@ use std::time::Duration;
 /// the maximum message response size.
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
-    /// Feature flag for controlling LogMemoryStore enabled.
-    feature_flag: FlagStatus,
-
     /// Optional PageMap for storing log records ring-buffer with metadata.
     /// It can be None when canister code is uninstalled and logs are
     /// removed.
@@ -63,6 +60,16 @@ pub struct LogMemoryStore {
     /// It is updated with the current `next_idx()` whenever the logs are
     /// modified: appended, cleared or deallocated.
     persistent_next_idx: u64,
+
+    /// Tracks whether the one-time migration from `CanisterLog` to
+    /// `LogMemoryStore` has already been performed for this canister.
+    ///
+    /// On the first round execution after the upgrade that enables the feature
+    /// the store is initialised with `DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT` and
+    /// existing `CanisterLog` records are copied in.  Once that has happened
+    /// this flag is set to `true` and persisted so that the migration is never
+    /// repeated, even if the user later resets `log_memory_limit` to 0.
+    migrated: bool,
 
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
@@ -88,33 +95,28 @@ impl LogMemoryStore {
     /// explicitly resized to a non-zero capacity.
     pub fn new(feature_flag: FlagStatus) -> Self {
         const DEFAULT_NEXT_IDX: u64 = 0;
-        Self::new_inner(feature_flag, None, DEFAULT_NEXT_IDX)
+        // A freshly created canister has no legacy CanisterLog records to migrate,
+        // so migration is considered done from the start.
+        let migrated = feature_flag == FlagStatus::Enabled;
+        Self::new_inner(None, DEFAULT_NEXT_IDX, migrated)
     }
 
     /// Creates a new store from a checkpoint.
     pub fn from_checkpoint(
-        feature_flag: FlagStatus,
         maybe_page_map: Option<PageMap>,
         persistent_next_idx: u64,
+        migrated: bool,
     ) -> Self {
-        Self::new_inner(feature_flag, maybe_page_map, persistent_next_idx)
+        Self::new_inner(maybe_page_map, persistent_next_idx, migrated)
     }
 
     fn new_inner(
-        feature_flag: FlagStatus,
         maybe_page_map: Option<PageMap>,
         persistent_next_idx: u64,
+        migrated: bool,
     ) -> Self {
-        let maybe_page_map = if feature_flag == FlagStatus::Enabled {
-            maybe_page_map
-        } else {
-            None
-        };
-        let persistent_next_idx = if feature_flag == FlagStatus::Enabled {
-            persistent_next_idx
-        } else {
-            0
-        };
+        let maybe_page_map = if migrated { maybe_page_map } else { None };
+        let persistent_next_idx = if migrated { persistent_next_idx } else { 0 };
         // Rebuild the first-timestamp cache from the ring buffer so the
         // invariant holds immediately after `from_checkpoint`, without
         // waiting for the next mutation to populate it.
@@ -123,14 +125,33 @@ impl LogMemoryStore {
             .and_then(RingBuffer::load_checked)
             .and_then(|rb| rb.first_timestamp(&rb.get_header()));
         let store = Self {
-            feature_flag,
             maybe_page_map,
             persistent_next_idx,
+            migrated,
             header_cache: OnceLock::new(),
             first_timestamp_cache,
         };
         debug_assert!(store.stats_ok());
         store
+    }
+
+    /// Returns `true` if the one-time migration from `CanisterLog` has already
+    /// been performed for this canister.
+    pub fn is_migrated(&self) -> bool {
+        self.migrated
+    }
+
+    /// Marks the one-time migration as complete.
+    pub fn set_migrated(&mut self) {
+        self.migrated = true;
+    }
+
+    /// Clears the migration flag and resets the persistent index to zero so
+    /// that the feature can be cleanly re-enabled later. The migration will
+    /// run again on the next round execution after the feature is re-enabled.
+    pub fn clear_migrated(&mut self) {
+        self.migrated = false;
+        self.persistent_next_idx = 0;
     }
 
     /// Provides access to the underlying `PageMap`.
@@ -268,12 +289,8 @@ impl LogMemoryStore {
 
     /// Returns the projected memory usage after `resize(limit)` would complete,
     /// without mutating any state.
-    ///
-    /// Uses the canister's per-store `feature_flag` so that the projection
-    /// matches what `resize` will actually do, regardless of the current
-    /// global config value.
     pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
-        if self.feature_flag == FlagStatus::Disabled || limit == NumBytes::new(0) {
+        if limit == NumBytes::new(0) {
             return NumBytes::new(0);
         }
         // Mirror resize_impl's capacity clamping exactly.
@@ -307,10 +324,6 @@ impl LogMemoryStore {
     /// Also used as the early-return guard inside `resize_impl`, so the
     /// two cannot diverge.
     pub fn would_resize(&self, limit: usize) -> bool {
-        if self.feature_flag == FlagStatus::Disabled {
-            // When disabled, resize deallocates — work only if allocated.
-            return self.maybe_page_map.is_some();
-        }
         if limit == 0 {
             // Limit zero deallocates — work only if allocated.
             return self.maybe_page_map.is_some();
@@ -339,7 +352,7 @@ impl LogMemoryStore {
         if !self.would_resize(limit) {
             return;
         }
-        if self.feature_flag == FlagStatus::Disabled || limit == 0 {
+        if limit == 0 {
             self.deallocate();
             return;
         }
@@ -394,12 +407,16 @@ impl LogMemoryStore {
 
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
-        if self.feature_flag == FlagStatus::Disabled {
-            self.deallocate();
-            return;
-        }
         if delta_log.is_empty() {
-            return; // Don't append if delta is empty.
+            // No records to append, but still carry the monotone index forward.
+            // This case is particularly relevant for migrating canister logs
+            // from the legacy `canister_log` which can be empty after uninstalling
+            // the canister in which case we still want to preserve `next_idx`.
+            // This way, a service can continuously fetch canister logs
+            // by keeping track of the last fetched index which is monotonically
+            // increasing.
+            self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            return;
         }
         let Some(mut ring_buffer) = self.load_ring_buffer() else {
             return; // No ring buffer exists.
@@ -431,11 +448,11 @@ impl LogMemoryStore {
 impl Clone for LogMemoryStore {
     fn clone(&self) -> Self {
         Self {
-            feature_flag: self.feature_flag,
             // PageMap is a persistent data structure, so clone is cheap and creates
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
             persistent_next_idx: self.persistent_next_idx,
+            migrated: self.migrated,
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
                 Some(val) => OnceLock::from(*val),
@@ -450,9 +467,9 @@ impl PartialEq for LogMemoryStore {
     fn eq(&self, other: &Self) -> bool {
         // header_cache and first_timestamp_cache are transient caches and
         // should not be compared.
-        self.feature_flag == other.feature_flag
-            && self.maybe_page_map == other.maybe_page_map
+        self.maybe_page_map == other.maybe_page_map
             && self.persistent_next_idx == other.persistent_next_idx
+            && self.migrated == other.migrated
     }
 }
 

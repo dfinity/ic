@@ -205,6 +205,8 @@ pub struct CanisterStateBits {
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub next_canister_log_record_idx: u64,
+    pub log_memory_store_migrated: bool,
+    pub log_memory_store_persistent_next_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
     pub task_queue: TaskQueue,

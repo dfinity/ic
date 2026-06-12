@@ -14,6 +14,10 @@ use std::sync::Arc;
 use unstake_maturity_of_dissolved_neurons::UnstakeMaturityOfDissolvedNeuronsTask;
 use update_icp_xdr_rate_related_data::UpdateIcpXdrRateRelatedData;
 
+pub(crate) use update_icp_xdr_rate_related_data::{
+    MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70, MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+};
+
 use crate::{canister_state::GOVERNANCE, storage::VOTING_POWER_SNAPSHOTS};
 
 mod calculate_distributable_rewards;

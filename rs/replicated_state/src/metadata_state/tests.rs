@@ -494,6 +494,7 @@ fn network_topology_roundtrip_encoding() {
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
         None,
+        Some(app_subnet_id),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology);
@@ -516,6 +517,7 @@ fn network_topology_roundtrip_encoding() {
             },
             routing_table: full_routing_table,
         }),
+        Some(app_subnet_id),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology_with_full);
@@ -2285,7 +2287,7 @@ fn compatibility_for_reject_reason() {
         RejectReason::iter()
             .map(|reason| reason as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7]
+        [1, 2, 3, 4, 5, 6, 7, 8]
     );
 }
 

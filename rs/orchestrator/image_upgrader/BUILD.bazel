@@ -2,33 +2,22 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/http_utils",
-    "//rs/monitoring/logger",
-    "@crate_index//:slog",
-    "@crate_index//:tokio",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "image_upgrader",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_image_upgrader",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/http_utils",
+        "//rs/monitoring/logger",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_doc_test(
@@ -38,8 +27,16 @@ rust_doc_test(
 
 rust_test(
     name = "image_upgrader_test",
-    aliases = ALIASES,
     crate = ":image_upgrader",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/http_utils",
+        "//rs/monitoring/logger",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )

@@ -382,7 +382,7 @@ pub struct Summary {
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
-    pub initial_dkg_attempts: ::prost::alloc::vec::Vec<InitialDkgAttemptCount>,
+    pub remote_dkg_attempts: ::prost::alloc::vec::Vec<RemoteDkgAttemptCount>,
     #[prost(message, repeated, tag = "10")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "11")]
@@ -449,7 +449,7 @@ pub struct NiDkgConfig {
     pub resharing_transcript: ::core::option::Option<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InitialDkgAttemptCount {
+pub struct RemoteDkgAttemptCount {
     #[prost(bytes = "vec", tag = "1")]
     pub target_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint32, tag = "2")]
@@ -516,6 +516,11 @@ pub struct ThresholdSignatureShare {
     pub signature: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "2")]
     pub signer: ::core::option::Option<NodeId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentReceipt {
+    #[prost(message, optional, tag = "1")]
+    pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
@@ -585,6 +590,8 @@ pub struct CanisterHttpResponseSignature {
     pub signer: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub payment_receipt: ::core::option::Option<CanisterHttpPaymentReceipt>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseWithConsensus {

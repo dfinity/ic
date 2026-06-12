@@ -222,12 +222,13 @@ impl InitializedNode {
             Arc::new(FakeVerifier),
             subnet_id,
             subnet_type,
-            ic_logger::replica_logger::no_op_logger(),
-            &ic_metrics::MetricsRegistry::new(),
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
             tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+            None,
+            &ic_metrics::MetricsRegistry::new(),
+            ic_logger::replica_logger::no_op_logger(),
         );
 
         let (_height, state) = state_manager.take_tip();

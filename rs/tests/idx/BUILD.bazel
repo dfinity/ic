@@ -4,10 +4,6 @@ load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-ALIASES = {
-    "//rs/utils": "utils",
-}
-
 rust_binary(
     name = "colocate_test_bin",
     testonly = True,
@@ -83,7 +79,9 @@ rust_binary(
     name = "test-driver-e2e-scenarios",
     testonly = True,
     srcs = ["test_driver_e2e_scenarios.rs"],
-    aliases = ALIASES,
+    aliases = {
+        "//rs/utils": "utils",
+    },
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         # Keep sorted.

@@ -16,7 +16,7 @@ use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::{SMALL_APP_SUBNET_MAX_SIZE, SYSTEM_SUBNET_STREAM_MSG_LIMIT};
 use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
-use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_query_stats::QueryStatsAggregatorMetrics;
@@ -44,15 +44,16 @@ use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    ExecutionRound, Height, NodeId, NumBytes, PrincipalId, PrincipalIdBlobParseError,
-    RegistryVersion, SubnetId, Time,
+    ExecutionRound, Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion,
+    SubnetId, Time,
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{
-    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Gauge, Histogram, HistogramTimer, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    IntGaugeVec,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
@@ -85,6 +86,8 @@ const STATUS_QUEUE_FULL: &str = "queue_full";
 const STATUS_SUCCESS: &str = "success";
 
 const PHASE_LOAD_STATE: &str = "load_state";
+const PHASE_READ_REGISTRY: &str = "read_registry";
+const PHASE_GARBAGE_COLLECT: &str = "garbage_collect";
 const PHASE_COMMIT: &str = "commit";
 
 /// Label for message kind: "request" or "response".
@@ -109,11 +112,6 @@ const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
 const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
-
-const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
-    "mr_wasm_custom_sections_memory_usage_bytes";
-const METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES: &str = "mr_canister_history_memory_usage_bytes";
-const METRIC_CANISTER_HISTORY_TOTAL_NUM_CHANGES: &str = "mr_canister_history_total_num_changes";
 
 const METRIC_SUBNET_INFO: &str = "mr_subnet_info";
 const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
@@ -304,42 +302,24 @@ pub(crate) struct MessageRoutingMetrics {
     /// Most recently seen certified height, per remote subnet
     pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
-    pub(crate) process_batch_phase_duration: HistogramVec,
+    process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
-    pub(crate) timed_out_messages_total: IntCounterVec,
+    timed_out_messages_total: IntCounterVec,
     /// Number of timed out callbacks.
     pub(crate) timed_out_callbacks_total: IntCounter,
     /// Number of shed best-effort messages.
-    pub(crate) shed_messages_total: IntCounterVec,
+    shed_messages_total: IntCounterVec,
     /// Byte size of shed best-effort messages.
-    pub(crate) shed_message_bytes_total: IntCounterVec,
+    shed_message_bytes_total: IntCounterVec,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
-    pub(crate) subnet_split_height: IntGaugeVec,
+    subnet_split_height: IntGaugeVec,
     /// Number of blocks proposed.
-    pub(crate) blocks_proposed_total: IntCounter,
+    blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
-    pub(crate) blocks_not_proposed_total: IntCounter,
+    blocks_not_proposed_total: IntCounter,
     /// Number of blocks not proposed by blockmaker ID.
-    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
-
-    /// The memory footprint of all the canisters on this subnet. Note that this
-    /// counter is from the perspective of the canisters and does not account
-    /// for the extra copies of the state that the protocol has to store for
-    /// correct operations.
-    canisters_memory_usage_bytes: IntGauge,
-    /// The memory footprint of Wasm custom sections of all canisters on this
-    /// subnet. Note that the value is from the perspective of the canisters
-    /// and does not account for the extra copies of the state that the protocol
-    /// has to store for correct operations.
-    wasm_custom_sections_memory_usage_bytes: IntGauge,
-    /// The memory footprint of canister history of all canisters on this
-    /// subnet. Note that the value is from the perspective of the canisters
-    /// and does not account for the extra copies of the state that the protocol
-    /// has to store for correct operations.
-    canister_history_memory_usage_bytes: IntGauge,
-    /// The total number of changes in canister history per canister on this subnet.
-    canister_history_total_num_changes: Histogram,
+    blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     subnet_info: IntGaugeVec,
     subnet_size: IntGauge,
@@ -464,24 +444,6 @@ impl MessageRoutingMetrics {
                 "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
                 &["blockmaker_id"],
             ),
-            canisters_memory_usage_bytes: metrics_registry.int_gauge(
-                "canister_memory_usage_bytes",
-                "Total memory footprint of all canisters on this subnet.",
-            ),
-            wasm_custom_sections_memory_usage_bytes: metrics_registry.int_gauge(
-                METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES,
-                "Total memory footprint of Wasm custom sections of all canisters on this subnet.",
-            ),
-            canister_history_memory_usage_bytes: metrics_registry.int_gauge(
-                METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES,
-                "Total memory footprint of canister history of all canisters on this subnet.",
-            ),
-            canister_history_total_num_changes: metrics_registry.histogram(
-                METRIC_CANISTER_HISTORY_TOTAL_NUM_CHANGES,
-                "Total number of changes in canister history per canister on this subnet.",
-                // 0, 1, 2, 5, …, 1000, 2000, 5000
-                decimal_buckets_with_zero(0, 3),
-            ),
 
             subnet_info: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_INFO,
@@ -566,6 +528,12 @@ impl MessageRoutingMetrics {
             state_time,
             batch_time
         );
+    }
+
+    pub fn start_phase_timer(&self, phase: &str) -> HistogramTimer {
+        self.process_batch_phase_duration
+            .with_label_values(&[phase])
+            .start_timer()
     }
 }
 
@@ -738,55 +706,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             log,
             malicious_flags,
         }
-    }
-
-    /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
-    /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
-        self.metrics
-            .process_batch_phase_duration
-            .with_label_values(&[phase])
-            .observe(since.elapsed().as_secs_f64());
-    }
-
-    /// Observes metrics related to memory used by canisters. It includes:
-    ///   * total memory used
-    ///   * memory used by Wasm Custom Sections
-    ///   * memory used by canister history
-    ///
-    /// Returns the total memory usage of the canisters of this subnet.
-    fn observe_canisters_memory_usage(&self, state: &ReplicatedState) -> NumBytes {
-        let mut total_memory_usage = NumBytes::new(0);
-        let mut wasm_custom_sections_memory_usage = NumBytes::new(0);
-        let mut canister_history_memory_usage = NumBytes::new(0);
-        for canister in state.canisters_iter() {
-            // Export the total canister memory usage; execution and wasm custom section
-            // memory are included in `memory_usage()`; message memory is added separately.
-            total_memory_usage += canister.memory_usage() + canister.message_memory_usage().total();
-            wasm_custom_sections_memory_usage += canister
-                .execution_state
-                .as_ref()
-                .map(|es| es.metadata.memory_usage())
-                .unwrap_or_default();
-            canister_history_memory_usage += canister.canister_history_memory_usage();
-            self.metrics.canister_history_total_num_changes.observe(
-                canister
-                    .system_state
-                    .get_canister_history()
-                    .get_total_num_changes() as f64,
-            );
-        }
-        self.metrics
-            .canisters_memory_usage_bytes
-            .set(total_memory_usage.get() as i64);
-        self.metrics
-            .wasm_custom_sections_memory_usage_bytes
-            .set(wasm_custom_sections_memory_usage.get() as i64);
-        self.metrics
-            .canister_history_memory_usage_bytes
-            .set(canister_history_memory_usage.get() as i64);
-
-        total_memory_usage
     }
 
     /// Reads registry contents required by `BatchProcessorImpl::process_batch()`.
@@ -1200,6 +1119,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
+        // Look up the default subnet for `SetupInitialDKG`. The key may be
+        // unset (in which case `SetupInitialDKG` requests fall back to the
+        // calling subnet), or the configured subnet may not be visible from
+        // this subnet (e.g. if it has been filtered out above), in which case
+        // we also fall back to the calling subnet.
+        let default_initial_dkg_subnet_id = self
+            .registry
+            .get_default_initial_dkg_subnet_id(registry_version)
+            .map_err(|err| registry_error("default initial DKG subnet ID", None, err))?
+            .filter(|subnet_id| subnets.contains_key(subnet_id));
+
         let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
@@ -1240,6 +1170,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
             full_topology,
+            default_initial_dkg_subnet_id,
         ))
     }
 
@@ -1390,7 +1321,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let since = Instant::now();
-        let _process_batch_start = since;
+        let load_state_timer = self.metrics.start_phase_timer(PHASE_LOAD_STATE);
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1449,10 +1380,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.metadata.subnet_split_from = None;
         }
-        self.observe_phase_duration(PHASE_LOAD_STATE, &since);
+        load_state_timer.observe_duration();
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
 
+        let read_registry_timer = self.metrics.start_phase_timer(PHASE_READ_REGISTRY);
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
@@ -1481,14 +1413,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&failed_blockmaker.to_string()])
                 .inc();
         }
-
         state
             .metadata
             .blockmaker_metrics_time_series
             .observe(batch.time, &batch.blockmaker_metrics);
+        read_registry_timer.observe_duration();
 
         let batch_summary = batch.batch_summary.clone();
-
+        let batch_number = batch.batch_number;
         let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
@@ -1499,6 +1431,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
+
+        let garbage_collect_timer = self.metrics.start_phase_timer(PHASE_GARBAGE_COLLECT);
         // Prune any orphaned canister priorities.
         state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
@@ -1507,25 +1441,30 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
         state_after_round.metadata.subnet_metrics.num_canisters =
             state_after_round.canister_states().len() as u64;
-        let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
-        state_after_round
-            .metadata
-            .subnet_metrics
-            .canister_state_bytes = total_memory_usage;
 
-        #[cfg(feature = "malicious_code")]
-        if let Some(delay) = self.malicious_flags.delay_execution(_process_batch_start) {
-            info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
+        // Calculating the total memory usage across all canisters is expensive and
+        // we do not need it to be perfectly accurate. Only do it every 10 rounds.
+        if batch_number.get().is_multiple_of(10) {
+            let total_memory_usage = state_after_round.total_canister_memory_usage();
+            state_after_round
+                .metadata
+                .subnet_metrics
+                .canister_state_bytes = total_memory_usage;
         }
 
-        let phase_since = Instant::now();
+        #[cfg(feature = "malicious_code")]
+        if let Some(delay) = self.malicious_flags.delay_execution(since) {
+            info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
+        }
+        garbage_collect_timer.observe_duration();
 
+        let commit_timer = self.metrics.start_phase_timer(PHASE_COMMIT);
         self.state_manager.commit_and_certify(
             state_after_round,
             certification_scope,
             batch_summary,
         );
-        self.observe_phase_duration(PHASE_COMMIT, &phase_since);
+        commit_timer.observe_duration();
 
         self.metrics
             .process_batch_duration

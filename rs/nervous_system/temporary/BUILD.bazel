@@ -2,14 +2,12 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test_s
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = glob(
-    ["src/**"],
-    exclude = ["**/*tests.rs"],
-)
-
 rust_library(
     name = "temporary",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "ic_nervous_system_temporary",
     version = "0.0.1",
 )
@@ -19,7 +17,6 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     deps = [
         ":temporary",
-        "@crate_index//:rand",  # Used by doc test.
     ],
 )
 

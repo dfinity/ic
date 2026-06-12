@@ -1,5 +1,5 @@
-use crate::CryptoComponentImpl;
 use crate::sign::{get_log_id, log_err, log_ok_content};
+use crate::{CryptoComponentImpl, CryptoComponentRng};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{debug, new_logger, warn};
@@ -198,7 +198,7 @@ pub use utils::{MegaKeyFromRegistryError, retrieve_mega_public_key_from_registry
 /// [`ProofOfEqualOpenings`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::zk::ProofOfEqualOpenings
 /// [`SimpleCommitment`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::SimpleCommitment
 /// [`xmd`]: ic_crypto_internal_seed::xmd
-impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> IDkgProtocol for CryptoComponentImpl<C, R> {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
@@ -371,7 +371,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(
             &self.csp,
-            self.vault.as_ref(),
+            &self.csprng,
             self.registry_client.as_ref(),
             params,
             dealings,
@@ -420,7 +420,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = transcript::verify_transcript(
             &self.csp,
-            self.vault.as_ref(),
+            &self.csprng,
             self.registry_client.as_ref(),
             params,
             transcript,

@@ -1,4 +1,7 @@
-use ic_config::{Config, subnet_config::SubnetConfig};
+use ic_config::{
+    Config,
+    subnet_config::{SubnetConfig, SubnetSecurity},
+};
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::execution_environment::IngressHistoryReader;
 use ic_messaging::MessageRoutingImpl;
@@ -97,7 +100,7 @@ pub(crate) fn setup() -> (
     let subnet_id = subnet_test_id(1);
     let root_subnet_id = subnet_test_id(2);
     let (config, _) = Config::temp_config();
-    let subnet_config = SubnetConfig::new(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
@@ -116,12 +119,13 @@ pub(crate) fn setup() -> (
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,
         subnet_type,
-        log.clone().into(),
-        &metrics_registry,
         &config.state_manager,
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
         tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+        None,
+        &metrics_registry,
+        log.clone().into(),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
