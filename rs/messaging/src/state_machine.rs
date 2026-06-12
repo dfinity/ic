@@ -1,3 +1,4 @@
+use crate::canister_http_refunds::deliver_canister_http_refunds;
 use crate::message_routing::{
     ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
 };
@@ -136,29 +137,36 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        let (batch_messages, mut consensus_responses, chain_key_data, requires_full_state_hash) =
-            match batch.content {
-                // Regular batch, proceed with round execution.
-                BatchContent::Data {
-                    batch_messages,
-                    consensus_responses,
-                    chain_key_data,
-                    requires_full_state_hash,
-                } => (
-                    batch_messages,
-                    consensus_responses,
-                    chain_key_data,
-                    requires_full_state_hash,
-                ),
+        let (
+            batch_messages,
+            mut consensus_responses,
+            refunds,
+            chain_key_data,
+            requires_full_state_hash,
+        ) = match batch.content {
+            // Regular batch, proceed with round execution.
+            BatchContent::Data {
+                batch_messages,
+                consensus_responses,
+                refunds,
+                chain_key_data,
+                requires_full_state_hash,
+            } => (
+                batch_messages,
+                consensus_responses,
+                refunds,
+                chain_key_data,
+                requires_full_state_hash,
+            ),
 
-                // Consensus is telling us to split, do so and return the new state.
-                BatchContent::Splitting {
-                    new_subnet_id,
-                    other_subnet_id,
-                } => {
-                    return self.online_split(state, new_subnet_id, other_subnet_id);
-                }
-            };
+            // Consensus is telling us to split, do so and return the new state.
+            BatchContent::Splitting {
+                new_subnet_id,
+                other_subnet_id,
+            } => {
+                return self.online_split(state, new_subnet_id, other_subnet_id);
+            }
+        };
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {
@@ -169,6 +177,11 @@ impl StateMachine for StateMachineImpl {
                 &self.metrics.query_stats_metrics,
             );
         }
+
+        // Accumulate HTTP outcall refund shares into the corresponding request
+        // contexts. This is done before execution, so that the response handler
+        // can include the accumulated refund when it delivers the response.
+        deliver_canister_http_refunds(&refunds, &mut state, &self.log);
 
         // Time out expired messages.
         //

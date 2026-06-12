@@ -768,13 +768,19 @@ impl ExecutionEnvironment {
                                 .or_default() += 1;
                         }
 
-                        // Refund the cycles left unspent upfront (`request.payment`)
-                        // plus the per-replica refunds that the participating nodes
-                        // signed over. For non-HTTP responses `refund_shares` is empty,
-                        // so this preserves the previous behavior.
-                        let refund_shares_total: Cycles =
-                            response.refund_shares.iter().map(|(_, c)| *c).sum();
-                        let refund = request.payment + refund_shares_total;
+                        // Refund the cycles left unspent upfront (`request.payment`).
+                        // For HTTP outcalls, additionally refund the per-replica
+                        // shares that the messaging layer accumulated into the
+                        // request context's `refund_status` before execution. For
+                        // non-HTTP responses there is no such accumulation, so this
+                        // preserves the previous behavior.
+                        let http_refund = match &context {
+                            SubnetCallContext::CanisterHttpRequest(context) => {
+                                context.refund_status.refunded_cycles
+                            }
+                            _ => Cycles::new(0),
+                        };
+                        let refund = request.payment + http_refund;
 
                         state.push_subnet_output_response(
                             Response {

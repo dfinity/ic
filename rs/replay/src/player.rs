@@ -799,6 +799,7 @@ impl Player {
                 },
                 chain_key_data: Default::default(),
                 consensus_responses: Vec::new(),
+                refunds: Vec::new(),
                 requires_full_state_hash: false,
             },
             // Use a fake randomness here since we don't have random tape for extra messages
@@ -839,6 +840,7 @@ impl Player {
                         batch_messages: BatchMessages::default(),
                         chain_key_data: Default::default(),
                         consensus_responses: Vec::new(),
+                        refunds: Vec::new(),
                         requires_full_state_hash: !have_incomplete_msgs,
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();

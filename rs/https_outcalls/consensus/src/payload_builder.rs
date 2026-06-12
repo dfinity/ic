@@ -42,7 +42,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
+        CanisterHttpPayload, CanisterHttpRefund, ConsensusResponse, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
@@ -916,29 +916,40 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     }
 }
 
-impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
-    for CanisterHttpPayloadBuilderImpl
+impl
+    IntoMessages<(
+        Vec<ConsensusResponse>,
+        Vec<CanisterHttpRefund>,
+        CanisterHttpBatchStats,
+    )> for CanisterHttpPayloadBuilderImpl
 {
-    fn into_messages(payload: &[u8]) -> (Vec<ConsensusResponse>, CanisterHttpBatchStats) {
+    fn into_messages(
+        payload: &[u8],
+    ) -> (
+        Vec<ConsensusResponse>,
+        Vec<CanisterHttpRefund>,
+        CanisterHttpBatchStats,
+    ) {
         let mut stats = CanisterHttpBatchStats::default();
 
         let messages = bytes_to_payload(payload)
             .expect("Failed to parse a payload that was already validated");
 
+        // Each section yields a `ConsensusResponse` (delivered to the caller)
+        // paired with its per-replica refund shares (accounting data, threaded
+        // separately to the messaging layer).
         let responses = messages.responses.into_iter().map(|response| {
             if response.proof.signatures.len() == 1 {
                 stats.single_signature_responses += 1;
             }
             stats.responses += 1;
-            // Carry each participating replica's signed refund share to
-            // Execution, which sums them up to refund the caller.
             let refund_shares = response
                 .proof
                 .signatures
                 .iter()
                 .map(|(node_id, signature)| (*node_id, signature.payment_receipt.refund))
                 .collect();
-            ConsensusResponse::new(
+            let consensus_response = ConsensusResponse::new(
                 response.content.id,
                 match response.content.content {
                     CanisterHttpResponseContent::Success(data) => Payload::Data(data),
@@ -946,20 +957,22 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
                         Payload::Reject(RejectContext::from(&canister_http_reject))
                     }
                 },
-            )
-            .with_refund_shares(refund_shares)
+            );
+            (consensus_response, refund_shares)
         });
 
         let timeouts = messages.timeouts.iter().map(|callback| {
-            // Map timeouts to a rejected response
+            // Map timeouts to a rejected response. A timed-out request has no
+            // signed shares, hence no refunds.
             stats.timeouts += 1;
-            ConsensusResponse::new(
+            let consensus_response = ConsensusResponse::new(
                 *callback,
                 Payload::Reject(RejectContext::new(
                     RejectCode::SysTransient,
                     "Canister http request timed out",
                 )),
-            )
+            );
+            (consensus_response, vec![])
         });
 
         let divergence_responses = messages
@@ -988,14 +1001,24 @@ impl IntoMessages<(Vec<ConsensusResponse>, CanisterHttpBatchStats)>
             })
             .flatten();
 
-        let responses = responses
+        let mut consensus_responses = Vec::new();
+        let mut refunds = Vec::new();
+        for (consensus_response, refund_shares) in responses
             .chain(timeouts)
             .chain(divergence_responses)
             .chain(flexible_ok_responses)
             .chain(flexible_errors)
-            .collect();
+        {
+            if !refund_shares.is_empty() {
+                refunds.push(CanisterHttpRefund {
+                    callback: consensus_response.callback,
+                    shares: refund_shares,
+                });
+            }
+            consensus_responses.push(consensus_response);
+        }
 
-        (responses, stats)
+        (consensus_responses, refunds, stats)
     }
 }
 
@@ -1024,14 +1047,15 @@ fn refund_shares_from_flexible(
         .collect()
 }
 
-/// Converts a [`FlexibleCanisterHttpResponses`] into a [`ConsensusResponse`].
+/// Converts a [`FlexibleCanisterHttpResponses`] into a [`ConsensusResponse`]
+/// paired with its per-replica refund shares.
 ///
 /// Returns `None` if Candid decoding/encoding fails, which leads to skipping
 /// the delivery of this response. This should never occur, but if it does,
 /// eventually a timeout will gracefully end the outstanding callback.
 fn flexible_ok_responses_into_consensus_response(
     response_group: FlexibleCanisterHttpResponses,
-) -> Option<ConsensusResponse> {
+) -> Option<(ConsensusResponse, Vec<(NodeId, Cycles)>)> {
     let refund_shares = refund_shares_from_flexible(&response_group.responses);
     let payloads: Vec<_> = response_group
         .responses
@@ -1051,10 +1075,10 @@ fn flexible_ok_responses_into_consensus_response(
 
     let bytes = Encode!(&FlexibleHttpRequestResult::Ok(payloads)).ok()?;
 
-    Some(
-        ConsensusResponse::new(response_group.callback_id, Payload::Data(bytes))
-            .with_refund_shares(refund_shares),
-    )
+    Some((
+        ConsensusResponse::new(response_group.callback_id, Payload::Data(bytes)),
+        refund_shares,
+    ))
 }
 
 /// Converts a [`FlexibleCanisterHttpError`] into a [`ConsensusResponse`]
@@ -1063,7 +1087,7 @@ fn flexible_ok_responses_into_consensus_response(
 /// Returns `None` if Candid encoding fails (should never happen).
 fn flexible_error_into_consensus_response(
     error: FlexibleCanisterHttpError,
-) -> Option<ConsensusResponse> {
+) -> Option<(ConsensusResponse, Vec<(NodeId, Cycles)>)> {
     let callback_id = error.callback_id();
 
     // A timed-out flexible request has no signed shares, hence no refunds.
@@ -1185,9 +1209,10 @@ fn flexible_error_into_consensus_response(
 
     let bytes = Encode!(&FlexibleHttpRequestResult::Err(err)).ok()?;
 
-    Some(
-        ConsensusResponse::new(callback_id, Payload::Data(bytes)).with_refund_shares(refund_shares),
-    )
+    Some((
+        ConsensusResponse::new(callback_id, Payload::Data(bytes)),
+        refund_shares,
+    ))
 }
 
 /// Turns a [`CanisterHttpResponseDivergence`] into a [`ConsensusResponse`] containing a rejection.
@@ -1202,7 +1227,7 @@ fn flexible_error_into_consensus_response(
 /// The function includes request id, which is also part of the hashed value.
 fn divergence_response_into_reject(
     response: CanisterHttpResponseDivergence,
-) -> Option<ConsensusResponse> {
+) -> Option<(ConsensusResponse, Vec<(NodeId, Cycles)>)> {
     let Some(id) = response.shares.first().map(|share| share.content.id()) else {
         // NOTE: We skip delivering the divergence response, if it has no shares
         // Such a divergence response should never validate, therefore this should never happen
@@ -1238,7 +1263,7 @@ fn divergence_response_into_reject(
         .map(|(hash, count)| format!("[{}: {}]", hex::encode(hash), count))
         .collect::<Vec<_>>();
 
-    Some(
+    Some((
         ConsensusResponse::new(
             id,
             Payload::Reject(RejectContext::new(
@@ -1249,9 +1274,9 @@ fn divergence_response_into_reject(
                     hash_counts.join(", ")
                 ),
             )),
-        )
-        .with_refund_shares(refund_shares),
-    )
+        ),
+        refund_shares,
+    ))
 }
 
 fn validation_failed(

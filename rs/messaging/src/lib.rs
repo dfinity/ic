@@ -2,6 +2,7 @@
 //! (ii) inter-canister message routing within a subnet and across subnets (also
 //! known as cross-net or XNet transfer).
 
+mod canister_http_refunds;
 mod message_routing;
 pub(crate) mod routing;
 mod scheduling;

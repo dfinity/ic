@@ -53,6 +53,10 @@ pub enum BatchContent {
         batch_messages: BatchMessages,
         /// Responses to subnet calls that require consensus' involvement.
         consensus_responses: Vec<ConsensusResponse>,
+        /// Per-callback refunds for HTTP outcalls, delivered separately from the
+        /// consensus responses (they are accounting data, not delivered to the
+        /// calling canister).
+        refunds: Vec<CanisterHttpRefund>,
         /// Data required by the chain key service
         chain_key_data: ChainKeyData,
         /// Whether the state obtained by executing this batch needs to be fully
@@ -298,36 +302,18 @@ where
 
 /// Response to a subnet call that requires Consensus' involvement.
 ///
-/// Only holds the payload and callback ID; Execution populates the originator
-/// and respondent from the incoming request.
-///
-/// For HTTP outcalls, `refund_shares` carries the per-replica refunds that the
-/// participating nodes signed over as part of the aggregated response proof.
-/// Execution sums them up to determine how many cycles to return to the caller.
-/// For all other consensus responses (e.g. threshold signatures, IDkg
-/// dealings) this is empty. The field is only used in-memory on the hop from
-/// the consensus queue to Execution and is intentionally not serialized.
+/// Only holds the payload and callback ID, Execution populates other fields
+/// (originator, respondent, refund) from the incoming request.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ConsensusResponse {
     pub callback: CallbackId,
     pub payload: Payload,
-    pub refund_shares: Vec<(NodeId, Cycles)>,
 }
 
 impl ConsensusResponse {
     pub fn new(callback: CallbackId, payload: Payload) -> Self {
-        Self {
-            callback,
-            payload,
-            refund_shares: vec![],
-        }
-    }
-
-    /// Attaches the per-replica refund shares to this response.
-    pub fn with_refund_shares(mut self, refund_shares: Vec<(NodeId, Cycles)>) -> Self {
-        self.refund_shares = refund_shares;
-        self
+        Self { callback, payload }
     }
 }
 
@@ -359,12 +345,24 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
         Ok(Self {
             callback: rep.callback.into(),
             payload,
-            // `refund_shares` are not part of the wire format; they are only
-            // populated in-memory when building the consensus queue from an
-            // HTTP outcalls payload (see the canister_http payload builder).
-            refund_shares: vec![],
         })
     }
+}
+
+/// Per-callback refund delivered alongside (but separately from) a
+/// [`ConsensusResponse`] for an HTTP outcall.
+///
+/// `shares` holds the per-replica refunds that the participating nodes signed
+/// over as part of the aggregated response proof. Unlike the consensus
+/// response, this is *not* delivered to the calling canister; it is consumed by
+/// the messaging layer, which accumulates the shares into the request context's
+/// refund status. It is only used in-memory on the hop from consensus to the
+/// messaging layer and is intentionally not serialized.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpRefund {
+    pub callback: CallbackId,
+    pub shares: Vec<(NodeId, Cycles)>,
 }
 
 #[cfg(test)]

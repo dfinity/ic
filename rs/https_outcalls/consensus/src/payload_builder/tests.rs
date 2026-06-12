@@ -804,7 +804,8 @@ fn divergence_error_message() {
         shares: response_shares,
     };
 
-    let divergence_reject = divergence_response_into_reject(divergence_response).unwrap();
+    let (divergence_reject, _refunds) =
+        divergence_response_into_reject(divergence_response).unwrap();
 
     assert_eq!(
         divergence_reject.payload,
@@ -2896,7 +2897,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
@@ -2943,7 +2944,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     let Payload::Data(ref data) = responses[0].payload else {
@@ -2984,7 +2985,7 @@ fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
     let payload = flexible_payload(vec![group_a, group_b, group_c]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 3);
     assert_eq!(stats.flexible_ok_responses, 3);
@@ -3010,7 +3011,7 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 0);
     assert_eq!(stats.flexible_ok_responses, 0);
@@ -3027,7 +3028,7 @@ fn flexible_error_into_messages_timeout() {
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
@@ -3066,7 +3067,7 @@ fn flexible_error_into_messages_too_many_rejects() {
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
@@ -3121,7 +3122,7 @@ fn flexible_error_into_messages_responses_too_large() {
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
-    let (responses, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    let (responses, _refunds, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
     assert_eq!(responses.len(), 1);
     assert_eq!(responses[0].callback, callback_id);
