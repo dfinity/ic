@@ -212,8 +212,8 @@ pub enum RejectReason {
     /// It is not expected that this reason will ever be used.
     Unknown = 7,
 
-    /// Request rejected because the sending subnet is a CloudEngine subnet,
-    /// which is not allowed to send guaranteed-response calls to non-engine subnets.
+    /// Request rejected because either the sending or receiving subnet is a CloudEngine subnet,
+    /// which does not allow guaranteed-response calls or attached cycles.
     EngineNotAllowed = 8,
 }
 

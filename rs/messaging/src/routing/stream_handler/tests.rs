@@ -13,14 +13,14 @@ use ic_replicated_state::{
     CanisterStatus, ReplicatedState, Stream, SubnetTopology,
     metadata_state::{StreamMap, testing::NetworkTopologyTesting},
     replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
-    testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
+    testing::{OutputRequestBuilder, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter,
     fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
 };
-use ic_test_utilities_state::{CanisterStateBuilder, register_callback};
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{SUBNET_12, SUBNET_23, SUBNET_27, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
@@ -1936,7 +1936,13 @@ fn check_stream_handler_generated_reject_signal_queue_full() {
 fn check_stream_handler_generated_reject_signal_out_of_memory() {
     check_stream_handler_generated_reject_signal_impl(
         0, // `available_guaranteed_response_memory`
-        &|_| {},
+        // Touch the canister (no mutation) so it ends up in the `hot` pool.
+        // `induct_stream_slices` will do the same when it looks up the canister to try
+        // to deliver the message; without this, the expected and inducted states would
+        // differ in their hot/cold partition.
+        &|state| {
+            state.canister_state_make_mut(&LOCAL_CANISTER).unwrap();
+        },
         RejectReason::OutOfMemory,
     );
 }
@@ -3790,20 +3796,14 @@ fn with_test_setup_and_config(
                     // Register a callback and make an input queue reservation if `msg_config`
                     // corresponds to `LOCAL_CANISTER`; else use a dummy callback id.
                     if originator == *LOCAL_CANISTER {
-                        // Register a `Callback` and get a `CallbackId`.
-                        let callback_id =
-                            register_callback(&mut canister_state, respondent, deadline);
-
                         // Make an input queue reservation.
-                        canister_state
+                        let callback_id = canister_state
                             .push_output_request(
-                                RequestBuilder::new()
+                                OutputRequestBuilder::new()
                                     .sender(originator)
                                     .receiver(respondent)
-                                    .sender_reply_callback(callback_id)
                                     .deadline(deadline)
-                                    .build()
-                                    .into(),
+                                    .build(),
                                 UNIX_EPOCH,
                             )
                             .unwrap();

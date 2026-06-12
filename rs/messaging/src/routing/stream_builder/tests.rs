@@ -9,16 +9,19 @@ use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
+    CanisterState, CanisterStates, InputQueueType, ReplicatedState, Stream, SubnetTopology,
     metadata_state::testing::NetworkTopologyTesting,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
+    testing::{
+        CanisterQueuesTesting, OutputRequestBuilder, ReplicatedStateTesting, StreamTesting,
+        SystemStateTesting,
+    },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
     nonzero_values,
 };
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::ids::{
     SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_27, SUBNET_42, canister_test_id, user_test_id,
 };
@@ -100,19 +103,19 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
-        let callback_id = register_callback(&mut canister_state, receiver, NO_DEADLINE);
-        let msg = generate_message_for_test(
-            sender,
-            receiver,
-            callback_id,
-            "method".to_string(),
-            payment,
-            NO_DEADLINE,
-        );
+        let msg = OutputRequestBuilder::default()
+            .sender(sender)
+            .receiver(receiver)
+            .method_name("method".to_string())
+            .payment(payment)
+            .deadline(NO_DEADLINE)
+            .build();
 
-        canister_state
-            .push_output_request(msg.clone().into(), UNIX_EPOCH)
+        let callback_id = canister_state
+            .push_output_request(msg.clone(), UNIX_EPOCH)
             .unwrap();
+        let msg = msg.into_request(callback_id);
+
         canister_state
             .system_state
             .queues_mut()
@@ -272,17 +275,17 @@ fn build_streams_local_canisters() {
         // messages, but also the destination canisters of all messages.
         let mut provided_canister_states = canister_states_with_outputs(msgs.clone());
         for msg in &msgs {
-            provided_canister_states
-                .entry(msg.receiver)
-                .or_insert_with(|| {
+            if provided_canister_states.get(&msg.receiver).is_none() {
+                provided_canister_states.insert(
                     new_canister_state(
                         msg.receiver,
                         msg.sender.get(),
                         *INITIAL_CYCLES,
                         NumSeconds::from(100_000),
                     )
-                    .into()
-                });
+                    .into(),
+                );
+            }
         }
 
         // Establish that the provided_state has the provided_canister_states.
@@ -1858,9 +1861,7 @@ fn generate_message_for_test(
 }
 
 // Generates `CanisterStates` with the given messages in output queues.
-fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
-    msgs: Vec<M>,
-) -> BTreeMap<CanisterId, Arc<CanisterState>> {
+fn canister_states_with_outputs<M: Into<RequestOrResponse>>(msgs: Vec<M>) -> CanisterStates {
     let mut canister_states = BTreeMap::<CanisterId, Arc<CanisterState>>::new();
 
     for msg in msgs {
@@ -1877,13 +1878,22 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
 
         match msg {
             RequestOrResponse::Request(req) => {
-                let callback_id = register_callback(canister_state, req.receiver, req.deadline);
+                let output_request = OutputRequestBuilder::default()
+                    .sender(req.sender)
+                    .receiver(req.receiver)
+                    .method_name(req.method_name.clone())
+                    .method_payload(req.method_payload.clone())
+                    .payment(req.payment)
+                    .deadline(req.deadline)
+                    .build();
+                let callback_id = canister_state
+                    .push_output_request(output_request, UNIX_EPOCH)
+                    .unwrap();
+
                 // Check the implicit assumption that the test messages were generated with a
                 // `sender_reply_callback` that is consistent with the callback IDs that the
                 // `CallContextManager` generates and registers.
                 assert_eq!(req.sender_reply_callback, callback_id);
-
-                canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
             }
 
             RequestOrResponse::Response(rep) => {
@@ -1904,7 +1914,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
         }
     }
 
-    canister_states
+    CanisterStates::new(canister_states)
 }
 
 /// Returns a clone of the provided state with all output messages consumed.

@@ -140,6 +140,7 @@ DEV_DATA = [
     ":canister-playground-canister",
     ":mem-utils-test-canister",
     ":unstoppable-canister",
+    "//rs/engine_controller:engine-controller-canister",
     "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
@@ -198,6 +199,7 @@ DEV_ENV = {
     "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:subnet_rental.wasm.gz)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
+    "ENGINE_CONTROLLER_CANISTER_WASM_PATH": "$(rootpath //rs/engine_controller:engine-controller-canister)",
 }
 
 rust_canister(

@@ -67,6 +67,9 @@ pub struct FakeStateManager {
     /// Size 1 by default (no op).
     pub encode_certified_stream_slice_barrier: Arc<RwLock<Barrier>>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    /// When `Some(cap)`, the state manager acts as if its latest state height was capped at `cap`.
+    /// Used in tests to simulate a slow checkpoint holding certification back.
+    pub override_max_state_height: Arc<RwLock<Option<Height>>>,
 }
 
 impl Default for FakeStateManager {
@@ -100,6 +103,7 @@ impl FakeStateManager {
             tempdir: Arc::new(tmpdir),
             encode_certified_stream_slice_barrier: Arc::new(RwLock::new(Barrier::new(1))),
             fd_factory: Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            override_max_state_height: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -315,31 +319,36 @@ impl StateReader for FakeStateManager {
     type State = ReplicatedState;
 
     fn latest_state_height(&self) -> Height {
-        self.states
+        let real = self
+            .states
             .read()
             .unwrap()
             .last()
-            .map_or(INITIAL_STATE_HEIGHT, |snap| snap.height)
+            .map_or(INITIAL_STATE_HEIGHT, |snap| snap.height);
+        match *self.override_max_state_height.read().unwrap() {
+            Some(cap) => real.min(cap),
+            None => real,
+        }
     }
 
     // No certification support in FakeStateManager
     fn latest_certified_height(&self) -> Height {
-        self.states
+        let real = self
+            .states
             .read()
             .unwrap()
             .iter()
-            .filter(|s| s.height > Height::from(0) && s.certification.is_some())
-            .map(|s| s.height)
-            .next_back()
-            .unwrap_or_else(|| Height::from(0))
+            .rfind(|s| s.height > Height::from(0) && s.certification.is_some())
+            .map_or(INITIAL_STATE_HEIGHT, |snap| snap.height);
+        match *self.override_max_state_height.read().unwrap() {
+            Some(cap) => real.min(cap),
+            None => real,
+        }
     }
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
-        self.states
-            .read()
-            .unwrap()
-            .last()
-            .map_or_else(initial_state, |snap| snap.make_labeled_state())
+        self.get_state_at(self.latest_state_height())
+            .expect("latest state is always available in FakeStateManager")
     }
 
     // No certification support in FakeStateManager

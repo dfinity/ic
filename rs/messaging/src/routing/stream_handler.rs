@@ -1342,7 +1342,7 @@ fn generate_reject_response_for(reason: RejectReason, request: &Request) -> Requ
         ),
         RejectReason::EngineNotAllowed => (
             RejectCode::SysFatal,
-            "Guaranteed-response calls from CloudEngine subnets are not allowed".to_string(),
+            "Guaranteed-response calls and cycles transfers to/from CloudEngine subnets are not allowed".to_string(),
         ),
     };
     generate_reject_response(request, code, message)
