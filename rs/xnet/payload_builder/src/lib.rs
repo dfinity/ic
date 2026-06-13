@@ -1782,7 +1782,7 @@ impl XNetClientImpl {
                 .http2_only(true)
                 // Timer required by HTTP/2 keep-alive.
                 .timer(TokioTimer::new())
-                .http2_keep_alive_interval(Some(Duration::from_secs(5)))
+                .http2_keep_alive_interval(Some(Duration::from_secs(10)))
                 .http2_keep_alive_timeout(Duration::from_secs(5))
                 .http2_keep_alive_while_idle(true)
                 .pool_timer(TokioTimer::new())
