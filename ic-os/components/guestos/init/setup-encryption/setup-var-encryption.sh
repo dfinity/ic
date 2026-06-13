@@ -9,9 +9,9 @@ function transfer_log_state() {
     MACHINE_ID=$(cat /etc/machine-id || echo invalid)
     echo "Successfully mounted old /var partition, copying contents for machine id: ${MACHINE_ID}"
 
-    # First, copy actual journal files.
-    mkdir -p /mnt/var_new/log/journal
-    if cp -vr /mnt/var_old/log/journal/"${MACHINE_ID}" /mnt/var_new/log/journal/"${MACHINE_ID}"; then
+    # First, copy latest journal files.
+    mkdir -p /mnt/var_new/log/journal/"${MACHINE_ID}"
+    if cp -pv $(ls -t /mnt/var_old/log/journal/"${MACHINE_ID}"/*.journal | head -3) /mnt/var_new/log/journal/"${MACHINE_ID}"/; then
         chown -R root.systemd-journal /mnt/var_new/log/journal/
         chcon -R system_u:object_r:systemd_journal_t:s0 /mnt/var_new/log/journal/"${MACHINE_ID}"
         ls -lZ /mnt/var_new/log/journal/"${MACHINE_ID}"
