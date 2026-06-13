@@ -3,17 +3,17 @@
 //! When building a [`HashTree`] from a [`LazyTree`], every subtree that carries
 //! a [`LazyFork::subtree_id`] (here a per-canister fork, mirroring `CanisterFork`
 //! in production) is built as a standalone tree and stored as a self-contained
-//! [`NodeKind::Subtree`] node holding an `Arc<HashTree>`. Such a tree:
+//! [`NodeKind::Subtree`] node (an `Arc<SubtreeNode>`). Such a tree:
 //!
 //!   * has the exact same root hash as a fully materialized build, and
 //!   * serves witnesses without any external source (it is self-contained), and
 //!   * when built with a baseline ([`hash_lazy_tree_with_baseline`]), reuses the
-//!     `Arc<HashTree>` of every unchanged subtree (matched by `SubtreeId`).
+//!     `Arc<SubtreeNode>` of every unchanged subtree (matched by `SubtreeId`).
 
 use ic_canonical_state_tree_hash::hash_tree::{
     HashTree, hash_lazy_tree, hash_lazy_tree_with_baseline,
 };
-use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeId, fork};
+use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeId, SubtreeSource, fork};
 use ic_canonical_state_tree_hash_test_utils::as_lazy;
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, Witness, flatmap};
 use std::collections::BTreeMap;
@@ -94,7 +94,11 @@ impl<'a> LazyFork<'a> for CanisterArcFork<'a> {
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
-        Box::new(self.children_map().iter().map(|(l, t)| (l.clone(), as_lazy(t))))
+        Box::new(
+            self.children_map()
+                .iter()
+                .map(|(l, t)| (l.clone(), as_lazy(t))),
+        )
     }
 
     fn len(&self) -> usize {
@@ -102,7 +106,11 @@ impl<'a> LazyFork<'a> for CanisterArcFork<'a> {
     }
 
     fn subtree_id(&self) -> Option<SubtreeId> {
-        Some(SubtreeId::new(Arc::clone(self.canister)))
+        Some(SubtreeId::new(self.canister))
+    }
+
+    fn subtree_source(&self) -> Option<SubtreeSource> {
+        Some(SubtreeSource::new(self.canister))
     }
 }
 
@@ -252,7 +260,11 @@ fn witnesses_into_canisters_are_self_contained() {
         // The requested leaves must be present (not pruned).
         assert!(
             mixed
-                .lookup(&[CANISTER_LABEL, canister_id_label(i).as_bytes(), b"module_hash"])
+                .lookup(&[
+                    CANISTER_LABEL,
+                    canister_id_label(i).as_bytes(),
+                    b"module_hash"
+                ])
                 .is_found(),
             "expected canister {i} module_hash in the witness"
         );
@@ -299,7 +311,11 @@ fn absence_witnesses_are_self_contained() {
         assert_eq!(&mixed.digest(), tree.root_hash());
         assert!(
             mixed
-                .lookup(&[CANISTER_LABEL, canister_id_label(i).as_bytes(), b"nonexistent"])
+                .lookup(&[
+                    CANISTER_LABEL,
+                    canister_id_label(i).as_bytes(),
+                    b"nonexistent"
+                ])
                 .is_absent(),
             "expected absence proof inside canister {i}, got {mixed:?}"
         );

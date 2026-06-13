@@ -9,52 +9,12 @@ pub mod materialize;
 
 use ic_crypto_tree_hash::Label;
 use std::any::Any;
-use std::fmt;
 use std::sync::Arc;
 
 /// A hash of the tree leaf contents according to the IC interface spec.  See
 /// the definition of "reconstruct" function on
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#certificate.
 pub type Hash = [u8; 32];
-
-/// An opaque, type-erased identity for a lazy subtree, backed by a shared
-/// pointer into the source state it was derived from (e.g. an
-/// `Arc<CanisterState>`).
-///
-/// Two IDs are equal iff they point to the same allocation. Because the source
-/// is copy-on-write (a mutation produces a fresh `Arc`), equal IDs imply the
-/// subtrees encode identically — **provided all ambient encoding parameters
-/// (e.g. the certification version) match** — which is what lets an unchanged
-/// subtree's already-built [`crate::hash_tree::HashTree`] be reused across
-/// builds. The held `Arc` also keeps the source alive, so the address can never
-/// be recycled for a different object while the ID exists (no ABA).
-#[derive(Clone)]
-pub struct SubtreeId(Arc<dyn Any + Send + Sync>);
-
-impl SubtreeId {
-    /// Creates a subtree ID from a shared pointer to the subtree's source.
-    pub fn new<T: Any + Send + Sync>(source: Arc<T>) -> Self {
-        Self(source)
-    }
-
-    /// The address of the underlying allocation, used for identity comparison.
-    fn addr(&self) -> *const () {
-        Arc::as_ptr(&self.0) as *const ()
-    }
-}
-
-impl PartialEq for SubtreeId {
-    fn eq(&self, other: &Self) -> bool {
-        self.addr() == other.addr()
-    }
-}
-impl Eq for SubtreeId {}
-
-impl fmt::Debug for SubtreeId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SubtreeId({:p})", self.addr())
-    }
-}
 
 /// A type alias for a ref-counted stateless function.
 pub type ArcFn<'a, T> = Arc<dyn Fn() -> T + 'a + Send + Sync>;
@@ -96,17 +56,28 @@ pub trait LazyFork<'a>: Send + Sync {
         self.len() == 0
     }
 
-    /// Returns a stable identity for the subtree rooted at this fork if it
-    /// should be stored as a self-contained, reusable subtree node (an
-    /// `Arc<HashTree>`) in the [`crate::hash_tree::HashTree`].
+    /// A cheap, copyable identity for the subtree rooted at this fork, present iff
+    /// the subtree should be stored as a self-contained, reusable subtree node in
+    /// the [`HashTree`](crate::hash_tree::HashTree).
     ///
-    /// Defaults to `None` (materialize the subtree inline). Forks that wrap
-    /// shared, copy-on-write state (e.g. an `Arc<CanisterState>`) should
-    /// override this to return that `Arc` as a [`SubtreeId`]. Such subtrees are
-    /// built once as standalone trees and, when an unchanged subtree (same
-    /// `SubtreeId`) is found in a baseline tree, its `Arc<HashTree>` is reused
-    /// verbatim. See [`crate::hash_tree::hash_lazy_tree_with_baseline`].
+    /// Defaults to `None` (materialize the subtree inline). Forks that wrap shared,
+    /// copy-on-write state (e.g. an `Arc<CanisterState>`) should override this to
+    /// return that `Arc`'s identity as a [`SubtreeId`]. Such subtrees are built
+    /// once as standalone trees and, when an unchanged subtree (same identity) is
+    /// found in a baseline tree, its node is reused verbatim. See
+    /// [`hash_lazy_tree_with_baseline`](crate::hash_tree::hash_lazy_tree_with_baseline).
+    ///
+    /// MUST be consistent with [`subtree_source`](Self::subtree_source): both
+    /// `None`; or both`Some` and `self.subtree_source().unwrap().id() ==
+    /// self.subtree_id().unwrap()`.
     fn subtree_id(&self) -> Option<SubtreeId> {
+        None
+    }
+
+    /// The owned source handle stored in a reusable subtree node; see
+    /// [`SubtreeSource`] and [`subtree_id`](Self::subtree_id). Called to clone the
+    /// source `Arc` only when the subtree is being (re)built.
+    fn subtree_source(&self) -> Option<SubtreeSource> {
         None
     }
 }
@@ -169,5 +140,51 @@ pub fn follow_path<'a>(t: &LazyTree<'a>, path: &[&[u8]]) -> Option<LazyTree<'a>>
             follow_path(&node, &path[1..])
         }
         _ => None,
+    }
+}
+
+/// A cheap, copyable identity for a lazy subtree: the bare address of the source
+/// allocation it was derived from (e.g. an `Arc<CanisterState>`), with no
+/// refcount bump.
+///
+/// Used to detect whether a subtree is unchanged (and can be reused from a
+/// baseline) without cloning the source `Arc`; the clone is only paid, via a
+/// [`SubtreeSource`], when a subtree is actually (re)built. A `SubtreeId`
+/// compares equal to the one derived from the same source, including the one
+/// obtained from the [`SubtreeSource`] kept by a reusable subtree node (see
+/// [`SubtreeSource::id`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct SubtreeId(*const ());
+
+impl SubtreeId {
+    /// Creates a subtree ID from a shared pointer to the `source`, without
+    /// cloning it (no refcount bump).
+    pub fn new<T>(source: &Arc<T>) -> Self {
+        Self(Arc::as_ptr(source) as *const ())
+    }
+}
+
+/// An owned, type-erased handle that keeps a lazy subtree's source alive, backed
+/// by a shared pointer into the state it was derived from (e.g. an
+/// `Arc<CanisterState>`).
+///
+/// The held `Arc` keeps the source allocation alive, so the [`SubtreeId`] it
+/// yields can never be recycled for a different object while the handle exists
+/// (no ABA hazard). A `SubtreeSource` is stored inside a reusable subtree node
+/// and is only created when that node is actually (re)built; cheap reuse checks
+/// go through [`SubtreeId`] instead, avoiding the `Arc::clone` refcount bump.
+#[derive(Clone, Debug)]
+pub struct SubtreeSource(Arc<dyn Any + Send + Sync>);
+
+impl SubtreeSource {
+    /// Creates a handle that shares ownership of the subtree's `source`.
+    pub fn new<T: Any + Send + Sync>(source: &Arc<T>) -> Self {
+        Self(Arc::clone(source) as Arc<dyn Any + Send + Sync>)
+    }
+
+    /// The cheap, copyable [`SubtreeId`] of this source, for equality comparison
+    /// without a refcount bump.
+    pub fn id(&self) -> SubtreeId {
+        SubtreeId(Arc::as_ptr(&self.0) as *const ())
     }
 }

@@ -11,8 +11,8 @@ use LazyTree::Blob;
 use ic_canonical_state_tree_hash::{
     hash_tree::HashTree,
     lazy_tree::{
-        Lazy, LazyFork, LazyTree, SubtreeId, blob, fork, materialize::materialize_partial,
-        num, string,
+        Lazy, LazyFork, LazyTree, SubtreeId, SubtreeSource, blob, fork,
+        materialize::materialize_partial, num, string,
     },
 };
 use ic_crypto_tree_hash::{Label, Witness, sparse_labeled_tree_from_paths};
@@ -851,14 +851,18 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
 
     /// A canister's certified subtree is stored as a self-contained, reusable
     /// subtree node identified by the backing `Arc<CanisterState>`. Since
-    /// canisters are copy-on-write `Arc`s, an unchanged canister keeps the same
-    /// identity across rounds and its already-built `HashTree` can be reused
-    /// from a baseline; any mutation yields a fresh `Arc` (and a rebuild).
+    /// canisters are copy-on-write `Arcs`, an unchanged canister retains its
+    /// identity across rounds and its already-built subtree from the earlier
+    /// `HashTree` can be reused. Any mutation yields a fresh `Arc` (and a rebuild).
     ///
-    /// NOTE: reuse is only sound across trees built under the same
+    /// NOTE: reuse is only sound across certified state trees built under the same
     /// [`CertificationVersion`], since the canonical encoding depends on it.
     fn subtree_id(&self) -> Option<SubtreeId> {
-        Some(SubtreeId::new(Arc::clone(self.canister)))
+        Some(SubtreeId::new(self.canister))
+    }
+
+    fn subtree_source(&self) -> Option<SubtreeSource> {
+        Some(SubtreeSource::new(self.canister))
     }
 }
 
