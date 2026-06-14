@@ -6,6 +6,7 @@ use ic_config::execution_environment::{
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
 use ic_execution_environment::units::{KIB, MIB};
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -22,7 +23,7 @@ use ic_test_utilities_execution_environment::{
     ExecutionTestBuilder, get_reject, get_reply, wat_canister, wat_fn,
 };
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::{CanisterId, NumInstructions, ingress::WasmResult};
+use ic_types::{CanisterId, CanisterLog, NumInstructions, ingress::WasmResult};
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -3151,4 +3152,90 @@ fn test_log_memory_store_deallocated_when_canister_out_of_cycles() {
             .log_memory_store
             .is_allocated()
     );
+}
+
+#[test]
+fn test_log_memory_store_migration_filters_records_with_invalid_idx() {
+    // Regression test: canister_log may contain records whose idx >= next_idx
+    // (a corrupted state that can arise from old checkpoints). The migration must
+    // filter these out rather than blindly copying them into log_memory_store.
+    let controller = PrincipalId::new_anonymous();
+    let subnet_type = SubnetType::Application;
+
+    // Step 1: Create env with log_memory_store disabled and checkpoints enabled.
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(subnet_type, SubnetSecurity::None),
+            ExecutionConfig {
+                log_memory_store_feature: FlagStatus::Disabled,
+                ..Default::default()
+            },
+        )))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    let canister_id = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .with_controllers(vec![controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // Step 2: Inject a corrupted canister_log: 3 records all with idx=0 but next_idx=0.
+    // This is invalid because valid records must have idx < next_idx.
+    {
+        let corrupted_record = CanisterLogRecord {
+            idx: 0,
+            timestamp_nanos: 1_000,
+            content: b"corrupted".to_vec(),
+        };
+        let (_height, mut state) = env.state_manager.take_tip();
+        let arc_canister = state.take_canister_state(&canister_id).unwrap();
+        let mut canister = (*arc_canister).clone();
+        canister.system_state.canister_log = CanisterLog::new_aggregate(
+            0,
+            vec![
+                corrupted_record.clone(),
+                corrupted_record.clone(),
+                corrupted_record,
+            ],
+        );
+        state.put_canister_state(canister);
+        env.state_manager
+            .commit_and_certify(state, CertificationScope::Full, None);
+    }
+
+    // Step 3: Restart with log_memory_store enabled. `logs_migrated` is transient
+    // and always resets to false on load, so migration runs on the first tick.
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    // Verify the corrupted state survived the checkpoint round-trip.
+    {
+        let state = env.get_latest_state();
+        let ss = &state.canister_state(&canister_id).unwrap().system_state;
+        assert_eq!(ss.canister_log.next_idx(), 0);
+        assert_eq!(ss.canister_log.records().len(), 3);
+        assert!(!ss.log_memory_store.is_migrated());
+    }
+
+    // Step 4: First tick triggers migration.
+    env.tick();
+
+    // Step 5: Migration must filter out all records whose idx >= next_idx (0 >= 0),
+    // so log_memory_store is migrated and allocated but empty with next_idx=0.
+    let state = env.get_latest_state();
+    let ss = &state.canister_state(&canister_id).unwrap().system_state;
+    assert!(ss.log_memory_store.is_migrated());
+    assert!(ss.log_memory_store.is_allocated());
+    assert!(ss.log_memory_store.is_empty());
+    assert_eq!(ss.log_memory_store.next_idx(), 0);
 }

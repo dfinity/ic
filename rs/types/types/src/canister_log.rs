@@ -182,9 +182,7 @@ impl CanisterLog {
         self.records.get()
     }
 
-    // TODO(DSM-11): remove allow(dead_code) when log memory store is used in production.
     /// Returns mutable reference to the canister log records.
-    #[allow(dead_code)]
     pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
         self.records.get_mut()
     }

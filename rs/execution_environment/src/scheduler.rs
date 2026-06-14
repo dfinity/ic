@@ -1148,9 +1148,12 @@ impl Scheduler for SchedulerImpl {
                         DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
                         Arc::clone(&self.fd_factory),
                     );
+                    let mut canister_log = system_state.canister_log.clone();
+                    let next_idx = canister_log.next_idx();
+                    canister_log.records_mut().retain(|r| r.idx < next_idx);
                     system_state
                         .log_memory_store
-                        .append_delta_log(&mut system_state.canister_log.clone());
+                        .append_delta_log(&mut canister_log);
                     system_state.log_memory_store.set_migrated();
                 } else if log_memory_store_feature == FlagStatus::Disabled
                     && canister.system_state.log_memory_store.is_migrated()
