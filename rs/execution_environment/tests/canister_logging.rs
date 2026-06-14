@@ -3184,23 +3184,31 @@ fn test_log_memory_store_migration_filters_records_with_invalid_idx() {
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
 
-    // Step 2: Inject a corrupted canister_log: 3 records all with idx=0 but next_idx=0.
-    // This is invalid because valid records must have idx < next_idx.
+    // Step 2: Inject a corrupted canister_log with next_idx=0 and three records:
+    // two with idx=0 (idx == next_idx) and one with idx=1 (idx > next_idx).
+    // All are invalid because valid records must have idx < next_idx.
     {
-        let corrupted_record = CanisterLogRecord {
-            idx: 0,
-            timestamp_nanos: 1_000,
-            content: b"corrupted".to_vec(),
-        };
         let (_height, mut state) = env.state_manager.take_tip();
         let arc_canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = (*arc_canister).clone();
         canister.system_state.canister_log = CanisterLog::new_aggregate(
             0,
             vec![
-                corrupted_record.clone(),
-                corrupted_record.clone(),
-                corrupted_record,
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: 1_000,
+                    content: b"corrupted_eq_0".to_vec(),
+                },
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: 1_001,
+                    content: b"corrupted_eq_1".to_vec(),
+                },
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1_002,
+                    content: b"corrupted_gt".to_vec(),
+                },
             ],
         );
         state.put_canister_state(canister);
