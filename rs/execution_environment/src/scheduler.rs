@@ -1139,7 +1139,7 @@ impl Scheduler for SchedulerImpl {
                 .round_log_memory_store_migration_duration
                 .start_timer();
             let log_memory_store_feature = self.log_memory_store_feature;
-            state.canisters_for_each_mut(|_id, canister| {
+            state.canisters_for_each_mut(|canister_id, canister| {
                 if log_memory_store_feature == FlagStatus::Enabled
                     && !canister.system_state.log_memory_store.is_migrated()
                 {
@@ -1151,6 +1151,18 @@ impl Scheduler for SchedulerImpl {
                     let mut canister_log = system_state.canister_log.clone();
                     let next_idx = canister_log.next_idx();
                     // Remove records with invalid indices (idx >= next_idx).
+                    for record in canister_log.records().iter().filter(|r| r.idx >= next_idx) {
+                        warn!(
+                            self.log,
+                            "Canister {}: dropping log record with idx {} (>= next_idx {}), \
+                             timestamp {}, content \"{}\"",
+                            canister_id,
+                            record.idx,
+                            next_idx,
+                            record.timestamp_nanos,
+                            String::from_utf8_lossy(&record.content),
+                        );
+                    }
                     canister_log.records_mut().retain(|r| r.idx < next_idx);
                     // Keep only the contiguous suffix ending at next_idx - 1,
                     // discarding any earlier records that precede a gap.
@@ -1158,6 +1170,18 @@ impl Scheduler for SchedulerImpl {
                         let records = canister_log.records_mut();
                         if records.back().map(|r| r.idx) != Some(next_idx - 1) {
                             // Gap at the tail: no record at next_idx - 1.
+                            for record in records.iter() {
+                                warn!(
+                                    self.log,
+                                    "Canister {}: dropping log record with idx {} \
+                                     (gap before next_idx {}), timestamp {}, content \"{}\"",
+                                    canister_id,
+                                    record.idx,
+                                    next_idx,
+                                    record.timestamp_nanos,
+                                    String::from_utf8_lossy(&record.content),
+                                );
+                            }
                             records.clear();
                         } else {
                             let mut expected = next_idx - 1;
@@ -1172,6 +1196,18 @@ impl Scheduler for SchedulerImpl {
                                 } else {
                                     break;
                                 }
+                            }
+                            for record in records.iter().take(contiguous_start) {
+                                warn!(
+                                    self.log,
+                                    "Canister {}: dropping log record with idx {} \
+                                     (gap before next_idx {}), timestamp {}, content \"{}\"",
+                                    canister_id,
+                                    record.idx,
+                                    next_idx,
+                                    record.timestamp_nanos,
+                                    String::from_utf8_lossy(&record.content),
+                                );
                             }
                             records.drain(..contiguous_start);
                         }
