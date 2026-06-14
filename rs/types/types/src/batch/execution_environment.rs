@@ -28,7 +28,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::{
         canister_state_bits::v1::{TotalQueryStats as TotalQueryStatsProto, Unsigned128},
-        stats::v1::{QueryStats as QueryStatsProto, QueryStatsInner},
+        stats::v1::{EmptyEpochEntry, QueryStats as QueryStatsProto, QueryStatsInner},
     },
     types::v1::{self as pb},
 };
@@ -141,22 +141,15 @@ pub struct RawQueryStats {
 
 impl RawQueryStats {
     pub fn as_query_stats(&self) -> Option<QueryStatsProto> {
-        // Serialize BTreeMap as vector
         let mut query_stats = vec![];
+        let mut empty_epochs = vec![];
 
         for (node_id, inner) in &self.stats {
             for (epoch, inner) in inner {
                 if inner.is_empty() {
-                    // Serialize empty epoch entries using canister=None as a sentinel so that
-                    // the entry survives the checkpoint serialization/deserialization round-trip.
-                    query_stats.push(QueryStatsInner {
+                    empty_epochs.push(EmptyEpochEntry {
                         proposer: Some(node_id_into_protobuf(*node_id)),
                         epoch: epoch.get(),
-                        canister: None,
-                        num_calls: 0,
-                        num_instructions: 0,
-                        ingress_payload_size: 0,
-                        egress_payload_size: 0,
                     });
                 }
                 for (canister_id, stats) in inner {
@@ -173,12 +166,16 @@ impl RawQueryStats {
             }
         }
 
-        if query_stats.is_empty() && self.highest_aggregated_epoch.is_none() {
+        if query_stats.is_empty()
+            && empty_epochs.is_empty()
+            && self.highest_aggregated_epoch.is_none()
+        {
             None
         } else {
             Some(QueryStatsProto {
                 highest_aggregated_epoch: self.highest_aggregated_epoch.map(|epoch| epoch.get()),
                 query_stats,
+                empty_epochs,
             })
         }
     }
@@ -195,31 +192,32 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
         for entry in value.query_stats {
             if let Ok(proposer) = node_id_try_from_option(entry.proposer) {
                 let epoch = QueryStatsEpoch::new(entry.epoch);
-                if let Some(canister_pb) = entry.canister {
-                    let canister: CanisterId =
-                        try_from_option_field(Some(canister_pb), "QueryStatsInner::canister_id")?;
-                    r.stats
-                        .entry(proposer)
-                        .or_default()
-                        .entry(epoch)
-                        .or_default()
-                        .insert(
-                            canister,
-                            QueryStats {
-                                num_calls: entry.num_calls,
-                                num_instructions: entry.num_instructions,
-                                ingress_payload_size: entry.ingress_payload_size,
-                                egress_payload_size: entry.egress_payload_size,
-                            },
-                        );
-                } else {
-                    // canister=None is a sentinel for an empty epoch entry; restore it.
-                    r.stats
-                        .entry(proposer)
-                        .or_default()
-                        .entry(epoch)
-                        .or_default();
-                }
+                let canister: CanisterId =
+                    try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
+                r.stats
+                    .entry(proposer)
+                    .or_default()
+                    .entry(epoch)
+                    .or_default()
+                    .insert(
+                        canister,
+                        QueryStats {
+                            num_calls: entry.num_calls,
+                            num_instructions: entry.num_instructions,
+                            ingress_payload_size: entry.ingress_payload_size,
+                            egress_payload_size: entry.egress_payload_size,
+                        },
+                    );
+            }
+        }
+        for entry in value.empty_epochs {
+            if let Ok(proposer) = node_id_try_from_option(entry.proposer) {
+                let epoch = QueryStatsEpoch::new(entry.epoch);
+                r.stats
+                    .entry(proposer)
+                    .or_default()
+                    .entry(epoch)
+                    .or_default();
             }
         }
         Ok(r)
