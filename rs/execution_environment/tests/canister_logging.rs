@@ -1033,11 +1033,11 @@ fn test_canister_log_overflow_evicts_oldest_records() {
         wat_canister()
             .update(
                 "update1",
-                wat_fn().debug_print(&[1u8; 8]).debug_print(&[1u8; 8]),
+                wat_fn().debug_print(&[1_u8; 8]).debug_print(&[1_u8; 8]),
             )
             .update(
                 "update2",
-                wat_fn().repeat(16, wat_fn().debug_print(&[2u8; 256])),
+                wat_fn().repeat(16, wat_fn().debug_print(&[2_u8; 256])),
             )
             .build_wasm(),
     );
@@ -1053,7 +1053,7 @@ fn test_canister_log_overflow_evicts_oldest_records() {
     // are dropped to maintain index continuity. Result: 13 records with 256-byte content.
     assert_eq!(records.len(), 13);
     for record in &records {
-        assert_eq!(record.content, vec![2u8; 256]);
+        assert_eq!(record.content, vec![2_u8; 256]);
     }
     // First record has idx 5 = 2 + (16 - 13) (second update starts at idx 2).
     assert_eq!(records[0].idx, 5);
