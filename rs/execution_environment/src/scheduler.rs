@@ -1150,7 +1150,32 @@ impl Scheduler for SchedulerImpl {
                     );
                     let mut canister_log = system_state.canister_log.clone();
                     let next_idx = canister_log.next_idx();
+                    // Remove records with invalid indices (idx >= next_idx).
                     canister_log.records_mut().retain(|r| r.idx < next_idx);
+                    // Keep only the contiguous suffix ending at next_idx - 1,
+                    // discarding any earlier records that precede a gap.
+                    if next_idx > 0 {
+                        let records = canister_log.records_mut();
+                        if records.back().map(|r| r.idx) != Some(next_idx - 1) {
+                            // Gap at the tail: no record at next_idx - 1.
+                            records.clear();
+                        } else {
+                            let mut expected = next_idx - 1;
+                            let mut contiguous_start = records.len() - 1;
+                            for i in (0..records.len() - 1).rev() {
+                                if expected == 0 {
+                                    break;
+                                }
+                                if records[i].idx == expected - 1 {
+                                    expected -= 1;
+                                    contiguous_start = i;
+                                } else {
+                                    break;
+                                }
+                            }
+                            records.drain(..contiguous_start);
+                        }
+                    }
                     system_state
                         .log_memory_store
                         .append_delta_log(&mut canister_log);

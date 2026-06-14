@@ -3239,3 +3239,145 @@ fn test_log_memory_store_migration_filters_records_with_invalid_idx() {
     assert!(ss.log_memory_store.is_empty());
     assert_eq!(ss.log_memory_store.next_idx(), 0);
 }
+
+#[test]
+fn test_log_memory_store_migration_filters_gap_records() {
+    // Regression test: canister_log records may have gaps in their idx sequence,
+    // or contain duplicate/invalid idx values. Only the contiguous suffix ending
+    // at next_idx - 1 must be migrated.
+    //
+    // Each canister's log starts with two records both having idx=0 (invalid), then
+    // records [10, 11, 20, 21, 22] with a gap at [12..19].
+    //
+    // Two sub-cases:
+    //  - gap_suffix: next_idx=23 → only [20, 21, 22] survive (contiguous suffix ending at 22)
+    //  - gap_end:    next_idx=24 → no records survive (last record is 22, not next_idx-1=23)
+    let controller = PrincipalId::new_anonymous();
+    let subnet_type = SubnetType::Application;
+
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(subnet_type, SubnetSecurity::None),
+            ExecutionConfig {
+                log_memory_store_feature: FlagStatus::Disabled,
+                ..Default::default()
+            },
+        )))
+        .with_subnet_type(subnet_type)
+        .with_checkpoints_enabled(true)
+        .build();
+
+    let settings = || {
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .with_controllers(vec![controller])
+            .build()
+    };
+
+    let canister_gap_suffix =
+        create_and_install_canister(&env, settings(), UNIVERSAL_CANISTER_WASM.to_vec());
+    let canister_gap_end =
+        create_and_install_canister(&env, settings(), UNIVERSAL_CANISTER_WASM.to_vec());
+
+    // Inject a canister_log combining invalid idx (two records with idx=0) and a gap:
+    // records idx [0, 0, 10, 11, 20, 21, 22].
+    let gap_records = || {
+        vec![
+            CanisterLogRecord {
+                idx: 0,
+                timestamp_nanos: 0,
+                content: b"corrupted_0a".to_vec(),
+            },
+            CanisterLogRecord {
+                idx: 0,
+                timestamp_nanos: 0,
+                content: b"corrupted_0b".to_vec(),
+            },
+            CanisterLogRecord {
+                idx: 10,
+                timestamp_nanos: 1_000,
+                content: b"a".to_vec(),
+            },
+            CanisterLogRecord {
+                idx: 11,
+                timestamp_nanos: 1_001,
+                content: b"b".to_vec(),
+            },
+            CanisterLogRecord {
+                idx: 20,
+                timestamp_nanos: 2_000,
+                content: b"c".to_vec(),
+            },
+            CanisterLogRecord {
+                idx: 21,
+                timestamp_nanos: 2_001,
+                content: b"d".to_vec(),
+            },
+            CanisterLogRecord {
+                idx: 22,
+                timestamp_nanos: 2_002,
+                content: b"e".to_vec(),
+            },
+        ]
+    };
+
+    {
+        let (_height, mut state) = env.state_manager.take_tip();
+
+        let arc = state.take_canister_state(&canister_gap_suffix).unwrap();
+        let mut c = (*arc).clone();
+        // next_idx=23: last record (idx=22) == next_idx-1, contiguous suffix [20,21,22]
+        c.system_state.canister_log = CanisterLog::new_aggregate(23, gap_records());
+        state.put_canister_state(c);
+
+        let arc = state.take_canister_state(&canister_gap_end).unwrap();
+        let mut c = (*arc).clone();
+        // next_idx=24: last record (idx=22) != next_idx-1=23, so all records are discarded
+        c.system_state.canister_log = CanisterLog::new_aggregate(24, gap_records());
+        state.put_canister_state(c);
+
+        env.state_manager
+            .commit_and_certify(state, CertificationScope::Full, None);
+    }
+
+    let env = env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        ExecutionConfig {
+            log_memory_store_feature: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    env.tick();
+
+    // canister_gap_suffix: only the contiguous suffix [20, 21, 22] migrated.
+    {
+        let state = env.get_latest_state();
+        let ss = &state
+            .canister_state(&canister_gap_suffix)
+            .unwrap()
+            .system_state;
+        assert!(ss.log_memory_store.is_migrated());
+        assert!(ss.log_memory_store.is_allocated());
+        assert!(!ss.log_memory_store.is_empty());
+        assert_eq!(ss.log_memory_store.next_idx(), 23);
+        let records = ss.log_memory_store.records(None);
+        assert_eq!(
+            records.iter().map(|r| r.idx).collect::<Vec<_>>(),
+            vec![20, 21, 22]
+        );
+    }
+
+    // canister_gap_end: last record (22) doesn't reach next_idx-1 (23), so all discarded.
+    {
+        let state = env.get_latest_state();
+        let ss = &state
+            .canister_state(&canister_gap_end)
+            .unwrap()
+            .system_state;
+        assert!(ss.log_memory_store.is_migrated());
+        assert!(ss.log_memory_store.is_allocated());
+        assert!(ss.log_memory_store.is_empty());
+        assert_eq!(ss.log_memory_store.next_idx(), 24);
+    }
+}
