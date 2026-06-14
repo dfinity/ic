@@ -419,7 +419,10 @@ impl LogMemoryStore {
             return;
         }
         let Some(mut ring_buffer) = self.load_ring_buffer() else {
-            return; // No ring buffer exists.
+            // No ring buffer exists (e.g., log_memory_limit is zero), but still
+            // carry the monotone index forward so consumers can track progress.
+            self.persistent_next_idx = self.persistent_next_idx.max(delta_log.next_idx());
+            return;
         };
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..));

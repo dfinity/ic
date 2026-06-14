@@ -119,21 +119,20 @@ fn test_retention_across_lifecycle() {
 }
 
 #[test]
-fn test_appending_to_uninitialized_store_is_no_op() {
+fn test_appending_to_uninitialized_store_updates_next_idx() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let mut delta = CanisterLog::default_delta();
     delta.add_record(1, b"data".to_vec());
 
-    // Append without setting limit
+    // Append without setting limit: no data stored, but next_idx advances.
     s.append_delta_log(&mut delta);
 
-    // Should still be empty
     assert!(s.is_empty());
     assert_eq!(s.memory_usage(), 0);
     assert_eq!(s.byte_capacity(), 0);
     assert_eq!(s.bytes_used(), 0);
     assert_eq!(s.records(None).len(), 0);
-    assert_eq!(s.next_idx(), 0);
+    assert_eq!(s.next_idx(), 1);
 }
 
 #[test]
