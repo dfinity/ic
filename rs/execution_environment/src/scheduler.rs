@@ -41,7 +41,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
+    CanisterId, CanisterLog, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
     MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
     ReplicaVersion, Time,
 };
@@ -1148,7 +1148,7 @@ impl Scheduler for SchedulerImpl {
                         DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
                         Arc::clone(&self.fd_factory),
                     );
-                    let mut canister_log = system_state.canister_log.clone();
+                    let canister_log = &system_state.canister_log;
                     let next_idx = canister_log.next_idx();
                     // Remove records with invalid indices (idx >= next_idx).
                     for record in canister_log.records().iter().filter(|r| r.idx >= next_idx) {
@@ -1163,14 +1163,14 @@ impl Scheduler for SchedulerImpl {
                             String::from_utf8_lossy(&record.content),
                         );
                     }
-                    canister_log.records_mut().retain(|r| r.idx < next_idx);
+                    let mut records: Vec<_> = canister_log.records().iter().cloned().collect();
+                    records.retain(|r| r.idx < next_idx);
                     // Keep only the contiguous suffix ending at next_idx - 1,
                     // discarding any earlier records that precede a gap.
                     if next_idx > 0 {
-                        let records = canister_log.records_mut();
-                        if records.back().map(|r| r.idx) != Some(next_idx - 1) {
+                        if records.last().map(|r| r.idx) != Some(next_idx - 1) {
                             // Gap at the tail: no record at next_idx - 1.
-                            for record in records.iter() {
+                            for record in &records {
                                 warn!(
                                     self.log,
                                     "Canister {}: dropping log record with idx {} \
@@ -1212,9 +1212,10 @@ impl Scheduler for SchedulerImpl {
                             records.drain(..contiguous_start);
                         }
                     }
+                    let mut filtered_log = CanisterLog::new_aggregate(next_idx, records);
                     system_state
                         .log_memory_store
-                        .append_delta_log(&mut canister_log);
+                        .append_delta_log(&mut filtered_log);
                     system_state.log_memory_store.set_migrated();
                 } else if log_memory_store_feature == FlagStatus::Disabled
                     && canister.system_state.log_memory_store.is_migrated()
