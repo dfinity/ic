@@ -421,6 +421,14 @@ impl LogMemoryStore {
         let Some(mut ring_buffer) = self.load_ring_buffer() else {
             return; // No ring buffer exists.
         };
+        // If the delta overflowed and evicted records, there is a gap between the
+        // aggregate's next expected index and the delta's first record. Clear the
+        // ring buffer to maintain index continuity.
+        if let Some(first) = delta_log.records().front()
+            && first.idx > self.next_idx()
+        {
+            ring_buffer.clear();
+        }
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..));
         self.save_ring_buffer(ring_buffer);
