@@ -937,6 +937,10 @@ crate.spec(
     version = "2.7",
 )
 crate.spec(
+    package = "meval",
+    version = "^0.2.0",
+)
+crate.spec(
     # When updating this, please make sure that the built
     # binary exports metrics http_cache_* after one
     # successful request to the proxy.  The OpenTelemetry
@@ -1215,6 +1219,21 @@ crate.spec(
     version = "^0.11.5",
 )
 crate.spec(
+    # Pinned at =0.11.7 deliberately. Newer point releases (0.11.13+) added
+    # an unconditional `ring = { features = ["wasm32_unknown_unknown_js"] }`
+    # and `getrandom = { features = ["wasm_js"] }` for `wasm32-unknown-unknown`.
+    # Bazel's crate_universe target-unifies features per package, so those
+    # transitively activate `getrandom 0.2.10/js` (= wasm-bindgen + js-sys)
+    # for *every* wasm32 crate in the workspace -- which causes IC canister
+    # wasms to fail Wasm-validation with `Module imports function
+    # '__wbindgen_describe' from '__wbindgen_placeholder__' that is not
+    # exported by the runtime`. Holding quinn-proto at 0.11.7 keeps the
+    # NNS canister Wasm clean while letting the host-side reqwest 0.12
+    # (which transitively pulls quinn) keep working.
+    package = "quinn-proto",
+    version = "=0.11.7",
+)
+crate.spec(
     package = "quinn-udp",
     version = "^0.5.5",
 )
@@ -1296,6 +1315,18 @@ crate.spec(
     ],
     package = "ring",
     version = "^0.17.7",
+)
+crate.spec(
+    # See ai_agent docs / commit history for the full saga. Short version:
+    # we keep rig at default-features = false, features = ["reqwest"], and
+    # supply the missing TLS plumbing for reqwest 0.13 via the
+    # `rustls-no-provider` feature -- not by enabling rig's `rustls`
+    # feature (that drags in aws-lc-rs and conflicts with our pinned
+    # quinn 0.11.5).
+    default_features = False,
+    features = ["reqwest"],
+    package = "rig-core",
+    version = "^0.36.0",
 )
 crate.spec(
     package = "ripemd",
@@ -2050,6 +2081,39 @@ crate.annotation(
 crate.annotation(
     crate = "libz-sys",
     crate_features = ["static"],
+)
+crate.annotation(
+    # rig 0.36 transitively builds reqwest 0.13, but rig only enables
+    # reqwest's `charset, http2, system-proxy` features -- never any TLS
+    # backend. As a result, reqwest 0.13's `Client::builder().build()`
+    # falls back to the plain-HTTP hyper connector and every https://
+    # request fails synchronously with `client error (Connect) ->
+    # invalid URL, scheme is not http`.
+    #
+    # Activate `rustls-no-provider` (which gates the rustls connector
+    # code in reqwest source) *and* also inject the rustls deps the
+    # feature would normally pull in -- `crate.annotation crate_features`
+    # only sets compile-time `cfg(feature = ...)` flags; it does NOT
+    # re-trigger Cargo's dep resolution, so we have to wire the deps in
+    # by hand via the `deps` attribute. We deliberately use
+    # `rustls-no-provider` (not `rustls`) so that aws-lc-rs is not
+    # pulled in alongside the workspace's existing `ring` rustls
+    # provider; the ai_agent main() installs the ring provider at
+    # startup so reqwest's rustls path picks it up.
+    crate = "reqwest",
+    crate_features = [
+        "__rustls",
+        "__tls",
+        "rustls-no-provider",
+    ],
+    version = "0.13.3",
+    deps = [
+        "@crate_index__hyper-rustls-0.27.7//:hyper_rustls",
+        "@crate_index__rustls-0.23.27//:rustls",
+        "@crate_index__rustls-pki-types-1.12.0//:rustls_pki_types",
+        "@crate_index__rustls-platform-verifier-0.6.2//:rustls_platform_verifier",
+        "@crate_index__tokio-rustls-0.26.0//:tokio_rustls",
+    ],
 )
 crate.annotation(
     crate = "curve25519-dalek",

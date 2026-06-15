@@ -467,6 +467,85 @@ pub fn setup_consensus_and_p2p(
     )
 }
 
+/// State-sync-only P2P setup for AI nodes.
+///
+/// Brings up the QUIC transport and `StateSyncManager` (in receive-only mode:
+/// it consumes adverts from peers and downloads chunks but does not broadcast
+/// its own adverts) for a node that is NOT a consensus member of the subnet.
+///
+/// Skips:
+/// * consensus / dkg / idkg / certifier / ingress / https-outcalls handlers
+/// * artifact pools other than the consensus pool used to seed the CUP
+/// * payload builders, message routing, execution
+/// * public HTTP endpoints, XNet
+///
+/// The local node MUST be present in the subnet's `SubnetTopology` as an
+/// AI-node peer (driven by `AiNodeRecord.subnet_id` matching this subnet at
+/// the latest registry version).
+#[allow(clippy::too_many_arguments)]
+pub fn setup_state_sync_only_p2p(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    transport_config: TransportConfig,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    tls_config: Arc<dyn TlsConfig>,
+    state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    registry_client: Arc<dyn RegistryClient>,
+) {
+    info!(
+        log,
+        "Starting state-sync-only P2P stack for node {node_id} on subnet {subnet_id}"
+    );
+
+    // State sync receive-only: do NOT advertise our state (we don't have
+    // anything authoritative to offer; we are a passive client).
+    let (state_sync_manager_router, state_sync_manager_runner) =
+        ic_state_sync_manager::build_state_sync_manager_with_options(
+            log,
+            metrics_registry,
+            rt_handle,
+            state_sync_client,
+            /* advertise = */ false,
+        );
+
+    let p2p_router = state_sync_manager_router.layer(TraceLayer::new_for_http());
+
+    let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
+        log.clone(),
+        metrics_registry,
+        rt_handle,
+        subnet_id,
+        consensus_pool_cache,
+        registry_client.clone(),
+    );
+
+    let transport_addr: SocketAddr = (
+        IpAddr::from_str(&transport_config.node_ip).expect("Invalid IP"),
+        transport_config.listening_port,
+    )
+        .into();
+
+    let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
+        log,
+        metrics_registry,
+        rt_handle,
+        tls_config,
+        registry_client,
+        node_id,
+        topology_watcher,
+        ic_quic_transport::create_udp_socket(rt_handle, transport_addr),
+        p2p_router,
+    ));
+
+    // Hand the transport to the state-sync manager. The returned shutdown is
+    // intentionally leaked (lives for the lifetime of the process); for a
+    // prototype we don't need graceful shutdown plumbing.
+    let _state_sync_manager = state_sync_manager_runner.start(quic_transport);
+}
+
 /// The function creates the consensus protocols and the event loops that drive them forward.
 /// The event loops are written in SANS-IO style (https://www.firezone.dev/blog/sans-io, )
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]

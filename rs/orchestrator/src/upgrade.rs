@@ -5,6 +5,7 @@ use crate::{
     orchestrator::SubnetAssignment,
     process_manager::{Process, ProcessManager},
     registry_helper::RegistryHelper,
+    state_cleanup::{KEY_CHANGES_FILENAME, remove_node_state, sync_and_trim_fs},
 };
 use async_trait::async_trait;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
@@ -19,7 +20,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::{
+    ai_node::AiNodeRegistry, node::NodeRegistry, subnet::SubnetRegistry,
+};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
@@ -37,8 +40,6 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
-
-const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[cfg(not(test))]
 const TIMEOUT_IGNORE_UP_TO_DATE_REPLICATOR: Duration = Duration::from_secs(1800); // 30 minutes
@@ -63,6 +64,16 @@ pub struct ReplicaProcess {
     version: ReplicaVersion,
     binary: PathBuf,
     args: Vec<OsString>,
+}
+
+impl ReplicaProcess {
+    pub(crate) fn new(version: ReplicaVersion, binary: PathBuf, args: Vec<OsString>) -> Self {
+        Self {
+            version,
+            binary,
+            args,
+        }
+    }
 }
 
 impl Process for ReplicaProcess {
@@ -211,6 +222,21 @@ impl Upgrade {
     /// 5. Stopping the replica process and removing the node state if leaving the subnet.
     pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
+
+        // If this node has been promoted to an AI node, the regular upgrade
+        // loop must NOT manage a replica process: the `AiNodeManager` task is
+        // the sole owner of the (possibly-running) state-sync-only replica.
+        // We just keep the orchestrator alive so that registry replication
+        // and OS upgrades continue to function.
+        if matches!(
+            self.registry
+                .get_registry_client()
+                .get_ai_node_record(self.node_id, latest_registry_version),
+            Ok(Some(_))
+        ) {
+            *self.subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
+            return Ok(OrchestratorControlFlow::Unassigned);
+        }
 
         let maybe_local_cup_proto = self.cup_provider.get_local_cup_proto();
         let maybe_local_cup = maybe_local_cup_proto.as_ref().and_then(|proto| {
@@ -874,132 +900,6 @@ fn node_is_in_subnet_at_version(
                 .unwrap_or(true)
         })
         .unwrap_or(true)
-}
-
-/// Call `sync` and `fstrim` on the data partition
-async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
-    let mut fstrim_script = tokio::process::Command::new("/opt/ic/bin/sync_fstrim.sh");
-    info!(logger, "Running command '{:?}'...", fstrim_script);
-    match fstrim_script.status().await {
-        Ok(status) => {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(format!(
-                    "Failed to run command '{fstrim_script:?}', return value: {status}"
-                ))
-            }
-        }
-        Err(err) => Err(format!(
-            "Failed to run command '{fstrim_script:?}', error: {err}"
-        )),
-    }
-}
-
-/// Deletes the subnet state consisting of the consensus pool, execution state,
-/// the local CUP and the persisted error metric of threshold key changes.
-fn remove_node_state(
-    replica_config_file: PathBuf,
-    cup_path: PathBuf,
-    orchestrator_data_directory: PathBuf,
-) -> Result<(), String> {
-    use ic_config::{Config, ConfigSource};
-    use std::fs::{remove_dir_all, remove_file};
-    let tmpdir = tempfile::Builder::new()
-        .prefix("ic_config")
-        .tempdir()
-        .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
-    let config = Config::load_with_tmpdir(
-        ConfigSource::File(replica_config_file),
-        tmpdir.path().to_path_buf(),
-    );
-
-    let consensus_pool_path = config.artifact_pool.consensus_pool_path;
-    remove_dir_all(&consensus_pool_path).map_err(|err| {
-        format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
-    })?;
-
-    let state_path = config.state_manager.state_root();
-
-    // We have to explicitly delete child sub-directories and files from the state_root,
-    // instead of calling remove_dir_all(state_path) because
-    // deleting the "page_deltas" directory results in a SELinux issue: upon deletion of
-    // a directory/file, its SELinux class is not persisted if it's recreated. Upon
-    // re-creation, the SELinux rights of the creator are applied, not the "old" ones.
-    // Deleting the page_deltas directory would thus remove the sandbox capacity to
-    // do IO in the page delta files.
-    for entry in std::fs::read_dir(state_path.as_path()).map_err(|err| {
-        format!(
-            "Error iterating through dir {:?}, because {:?}",
-            state_path.as_path(),
-            err
-        )
-    })? {
-        let en = entry
-            .as_ref()
-            .expect("Getting reference of dir entry failed.");
-        // If this isn't the page deltas directory, it's safe to delete.
-        if en
-            .file_name()
-            .into_string()
-            .expect("Converting file name to string failed.")
-            != config.state_manager.page_deltas_dirname()
-        {
-            if en
-                .file_type()
-                .expect("IO error fetching file type.")
-                .is_dir()
-            {
-                remove_dir_all(en.path())
-            } else {
-                std::fs::remove_file(en.path())
-            }
-            .map_err(|err| {
-                format!(
-                    "Couldn't delete the path {:?}, because {:?}",
-                    en.path(),
-                    err
-                )
-            })?;
-        } else {
-            // Look into the page_deltas/ directory and delete any possible leftover files.
-            for entry in std::fs::read_dir(
-                state_path
-                    .as_path()
-                    .join(config.state_manager.page_deltas_dirname()),
-            )
-            .map_err(|err| {
-                format!(
-                    "Error iterating through dir {:?}, because {:?}",
-                    state_path.as_path(),
-                    err
-                )
-            })? {
-                std::fs::remove_file(entry.expect("Error getting file under page_delta/.").path())
-                    .map_err(|err| {
-                        format!(
-                            "Couldn't delete the file {:?}, because {:?}",
-                            en.path(),
-                            err
-                        )
-                    })?;
-            }
-        }
-    }
-
-    remove_file(&cup_path)
-        .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
-
-    let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
-    if key_changed_metric.try_exists().map_err(|err| {
-        format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
-    })? {
-        remove_file(&key_changed_metric).map_err(|err| {
-            format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
-        })?;
-    }
-
-    Ok(())
 }
 
 /// Re-execute the current process, exactly as it was originally called.

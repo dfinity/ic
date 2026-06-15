@@ -334,6 +334,17 @@ http_archive(
     url = "https://github.com/apalache-mc/apalache/releases/download/v0.52.2/apalache-0.52.2.tgz",
 )
 
+# Ollama CPU-only runtime, shipped in the GuestOS. Only the `ollama` binary
+# and the CPU ggml shared libraries are kept; GPU runners (CUDA/MLX/Vulkan)
+# are stripped via the `build_file` filter. Used for AI nodes.
+http_archive(
+    name = "ollama",
+    build_file = "@//third_party:BUILD.ollama.bazel",
+    sha256 = "528acc42750f755ce57b13b8138419ceac953b6fd488045f73dc1e80246da480",
+    type = "tar.zst",
+    url = "https://github.com/ollama/ollama/releases/download/v0.21.1/ollama-linux-amd64.tar.zst",
+)
+
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(

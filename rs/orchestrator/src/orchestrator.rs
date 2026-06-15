@@ -1,4 +1,5 @@
 use crate::{
+    ai_node::AiNodeManager,
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
     catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
@@ -80,6 +81,7 @@ pub struct Orchestrator {
     registration: Option<NodeRegistration>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     ipv4_configurator: Option<Ipv4Configurator>,
+    ai_node_manager: Option<AiNodeManager>,
     task_tracker: TaskTracker,
 }
 
@@ -347,7 +349,7 @@ impl Orchestrator {
         let ipv4_configurator = Ipv4Configurator::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            ic_binary_directory,
+            ic_binary_directory.clone(),
             logger.clone(),
         );
 
@@ -355,6 +357,30 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             node_id,
+            logger.clone(),
+        );
+
+        // The AI node manager owns its own CatchUpPackageProvider and
+        // ProcessManager. It runs the state-sync-only replica when the local
+        // `AiNodeRecord` points at a subnet, and reuses the same on-disk
+        // layout (state_root, consensus pool, cup file) as the regular
+        // replica so cleanup logic is shared.
+        let ai_cup_provider = CatchUpPackageProvider::new(
+            Arc::clone(&registry),
+            local_cup_reader.clone(),
+            Arc::clone(&crypto) as _,
+            Arc::clone(&crypto) as _,
+            logger.clone(),
+            node_id,
+        );
+        let ai_node_manager = AiNodeManager::new(
+            Arc::clone(&registry),
+            ai_cup_provider,
+            replica_version.clone(),
+            args.replica_config_file.clone(),
+            args.orchestrator_data_directory.clone(),
+            node_id,
+            ic_binary_directory,
             logger.clone(),
         );
 
@@ -366,7 +392,9 @@ impl Orchestrator {
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
             replica_process,
+            ai_node_manager.get_replica_process_handle(),
             Arc::clone(&subnet_assignment),
+            ai_node_manager.get_status_handle(),
             replica_version,
             hostos_version.ok(),
             local_cup_reader,
@@ -385,6 +413,7 @@ impl Orchestrator {
             registration: Some(registration),
             subnet_assignment,
             ipv4_configurator: Some(ipv4_configurator),
+            ai_node_manager: Some(ai_node_manager),
             task_tracker,
         })
     }
@@ -595,6 +624,19 @@ impl Orchestrator {
             }
         }
 
+        async fn ai_node_check(
+            mut ai_node_manager: AiNodeManager,
+            cancellation_token: CancellationToken,
+        ) {
+            loop {
+                ai_node_manager.check_and_update().await;
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = cancellation_token.cancelled() => break
+                }
+            }
+        }
+
         async fn serve_dashboard(
             dashboard: OrchestratorDashboard,
             cancellation_token: CancellationToken,
@@ -637,6 +679,13 @@ impl Orchestrator {
                     ipv4_configurator,
                     cancellation_token.clone(),
                 ),
+            );
+        }
+
+        if let Some(ai_node_manager) = self.ai_node_manager.take() {
+            self.task_tracker.spawn(
+                "ai_node_management",
+                ai_node_check(ai_node_manager, cancellation_token.clone()),
             );
         }
 

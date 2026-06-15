@@ -73,6 +73,7 @@ use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootPro
 use ic_nns_init::make_hsm_sender;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
+    ai_node::v1::AiNodeRecord,
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -93,11 +94,12 @@ use ic_registry_client_helpers::{
     replica_version::ReplicaVersionRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
-    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_canister_migrations_record_key,
-    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    AI_NODE_RECORD_KEY_PREFIX, API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    ROOT_SUBNET_ID_KEY, get_node_operator_id_from_record_key, get_node_record_node_id,
+    is_node_operator_record_key, is_node_record_key, make_ai_node_record_key,
+    make_api_boundary_node_record_key, make_canister_migrations_record_key, make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -126,6 +128,7 @@ use prost::Message;
 use recover_subnet::ProposeToUpdateRecoveryCupCmd;
 use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
+    do_add_ai_nodes::AddAiNodesPayload,
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -133,6 +136,7 @@ use registry_canister::mutations::{
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
+    do_remove_ai_nodes::RemoveAiNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
@@ -142,6 +146,7 @@ use registry_canister::mutations::{
         NodeSshAccess, SetSubnetOperationalLevelPayload, operational_level,
     },
     do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
+    do_update_ai_node_subnet::UpdateAiNodeSubnetPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -584,6 +589,22 @@ enum SubCommand {
 
     /// Migrate node operator for nodes directly, without governance.
     MigrateNodeOperatorDirectly(MigrateNodeOperatorDirectlyCmd),
+
+    /// Register AI nodes directly, without governance.
+    AddAiNodes(AddAiNodesCmd),
+
+    /// Remove AI nodes directly, without governance.
+    RemoveAiNodes(RemoveAiNodesCmd),
+
+    /// Update the subnet association of an AI node directly, without
+    /// governance.
+    UpdateAiNodeSubnet(UpdateAiNodeSubnetCmd),
+
+    /// Retrieve an AI node record.
+    GetAiNode(GetAiNodeCmd),
+
+    /// Retrieve all AI node ids.
+    GetAiNodes,
 
     /// Update local registry store by pulling from remote URL
     UpdateRegistryLocalStore(UpdateRegistryLocalStoreCmd),
@@ -3445,6 +3466,45 @@ struct MigrateNodeOperatorDirectlyCmd {
     pub new_node_operator_id: PrincipalId,
 }
 
+#[derive(Parser)]
+struct AddAiNodesCmd {
+    /// The nodes to register as AI nodes.
+    #[clap(long, required = true, num_args(1..), alias = "node-ids")]
+    pub nodes: Vec<PrincipalId>,
+
+    /// Subnet to associate the AI nodes with. Required: every AI node must be
+    /// associated with a subnet at creation time. Use `update-ai-node-subnet`
+    /// later to change or clear the association.
+    #[clap(long, required = true)]
+    pub subnet_id: PrincipalId,
+}
+
+#[derive(Parser)]
+struct RemoveAiNodesCmd {
+    /// The AI nodes to remove.
+    #[clap(long, required = true, num_args(1..), alias = "node-ids")]
+    pub nodes: Vec<PrincipalId>,
+}
+
+#[derive(Parser)]
+struct UpdateAiNodeSubnetCmd {
+    /// The AI node whose subnet association should be updated.
+    #[clap(long)]
+    pub node_id: PrincipalId,
+
+    /// New subnet association for the AI node. Omit to disassociate the
+    /// node from any subnet.
+    #[clap(long)]
+    pub subnet_id: Option<PrincipalId>,
+}
+
+/// Sub-command to fetch an AI node record from the registry.
+#[derive(Parser)]
+struct GetAiNodeCmd {
+    /// The node id.
+    node_id: PrincipalId,
+}
+
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
 #[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
@@ -4654,6 +4714,11 @@ async fn main() {
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::SwapNodeInSubnetDirectly(_) => (),
             SubCommand::MigrateNodeOperatorDirectly(_) => (),
+            SubCommand::AddAiNodes(_) => (),
+            SubCommand::RemoveAiNodes(_) => (),
+            SubCommand::UpdateAiNodeSubnet(_) => (),
+            SubCommand::GetAiNode(_) => (),
+            SubCommand::GetAiNodes => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -5505,6 +5570,33 @@ async fn main() {
         }
         SubCommand::MigrateNodeOperatorDirectly(cmd) => {
             migrate_node_operator_directly(registry_canister, cmd).await;
+        }
+        SubCommand::AddAiNodes(cmd) => {
+            add_ai_nodes(registry_canister, cmd).await;
+        }
+        SubCommand::RemoveAiNodes(cmd) => {
+            remove_ai_nodes(registry_canister, cmd).await;
+        }
+        SubCommand::UpdateAiNodeSubnet(cmd) => {
+            update_ai_node_subnet(registry_canister, cmd).await;
+        }
+        SubCommand::GetAiNode(cmd) => {
+            print_and_get_last_value::<AiNodeRecord>(
+                make_ai_node_record_key(cmd.node_id.into())
+                    .as_bytes()
+                    .to_vec(),
+                &registry_canister,
+                opts.json,
+            )
+            .await;
+        }
+        SubCommand::GetAiNodes => {
+            let records = get_ai_node_ids(reachable_nns_urls.clone());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&records)
+                    .expect("Failed to serialize the records to JSON")
+            );
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
@@ -6778,6 +6870,34 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
+fn get_ai_node_ids(nns_url: Vec<Url>) -> Vec<String> {
+    let registry_client = RegistryClientImpl::new(
+        Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            nns_url,
+        )),
+        None,
+    );
+    // maximum number of retries, let the user ctrl+c if necessary
+    registry_client
+        .try_polling_latest_version(usize::MAX)
+        .unwrap();
+    let keys = registry_client
+        .get_key_family(
+            AI_NODE_RECORD_KEY_PREFIX,
+            registry_client.get_latest_version(),
+        )
+        .unwrap();
+
+    keys.iter()
+        .map(|k| {
+            k.strip_prefix(AI_NODE_RECORD_KEY_PREFIX)
+                .unwrap()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+}
+
 fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {
     println!("Routing table. Most recent version is {version}");
 
@@ -7082,6 +7202,86 @@ async fn migrate_node_operator_directly(
     {
         Some(_) => println!("Node operator migrated successfully."),
         None => panic!("No response was received from migrate_node_operator_directly"),
+    }
+}
+
+async fn add_ai_nodes(registry_canister: RegistryCanister, cmd: AddAiNodesCmd) {
+    let nonce = generate_nonce();
+    let request = AddAiNodesPayload {
+        node_ids: cmd.nodes.into_iter().map(NodeId::from).collect(),
+        subnet_id: Some(SubnetId::from(cmd.subnet_id)),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize add_ai_nodes request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "add_ai_nodes",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("AI nodes added successfully."),
+        None => panic!("No response was received from add_ai_nodes"),
+    }
+}
+
+async fn remove_ai_nodes(registry_canister: RegistryCanister, cmd: RemoveAiNodesCmd) {
+    let nonce = generate_nonce();
+    let request = RemoveAiNodesPayload {
+        node_ids: cmd.nodes.into_iter().map(NodeId::from).collect(),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize remove_ai_nodes request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "remove_ai_nodes",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("AI nodes removed successfully."),
+        None => panic!("No response was received from remove_ai_nodes"),
+    }
+}
+
+async fn update_ai_node_subnet(registry_canister: RegistryCanister, cmd: UpdateAiNodeSubnetCmd) {
+    let nonce = generate_nonce();
+    let request = UpdateAiNodeSubnetPayload {
+        node_id: NodeId::from(cmd.node_id),
+        subnet_id: cmd.subnet_id.map(SubnetId::from),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize update_ai_node_subnet request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "update_ai_node_subnet",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("AI node subnet updated successfully."),
+        None => panic!("No response was received from update_ai_node_subnet"),
     }
 }
 

@@ -1,0 +1,26 @@
+[Unit]
+Description=Generate self-signed TLS cert for the ollama stunnel proxy
+Documentation=man:openssl-req(1)
+
+# /var must be mounted (cert lives in /var/lib/ollama-tls). The rootfs is
+# read-only so we cannot bake the key into the image.
+After=var.mount local-fs.target
+RequiresMountsFor=/var/lib
+
+# Skip running on systems that already have all three files. Idempotency is
+# also enforced by the script itself, but ConditionPathExists shaves a
+# fork+exec off subsequent boots.
+ConditionPathExists=!/var/lib/ollama-tls/stunnel.pem
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/generate-ollama-tls-cert.sh
+
+[Install]
+# Disabled by default in the GuestOS Dockerfile. Started on demand together
+# with `ollama-tls.service` and `ollama.service` by `manage-ollama.sh`,
+# which is itself driven by the orchestrator's `AiNodeManager` when the
+# local `AiNodeRecord` enables AI-node mode. Regular non-AI nodes never run
+# this unit and therefore never produce a "failed" cert-generation result.
+WantedBy=multi-user.target

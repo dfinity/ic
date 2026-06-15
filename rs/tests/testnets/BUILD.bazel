@@ -78,6 +78,12 @@ system_test(
 system_test_nns(
     name = "small",
     enable_metrics = True,
+    # Build the GuestOS base image from Dockerfile.base locally so that
+    # modifications to Dockerfile.base (for example, the bundled `ollama`
+    # binary + baked-in Gemma model) actually end up in the image used by
+    # this testnet. Without this, the testnet would start from the pinned
+    # upstream base image, which has none of those extras.
+    guestos = "local_base_dev",
     tags = [
         "dynamic_testnet",
         "manual",
@@ -146,6 +152,12 @@ system_test(
 system_test_nns(
     name = "small_nns",
     enable_metrics = True,
+    # Build the GuestOS base image from Dockerfile.base locally so that
+    # modifications to Dockerfile.base (for example, the bundled `ollama`
+    # binary + baked-in Gemma model) actually end up in the image used by
+    # this testnet. Without this, the testnet would start from the pinned
+    # upstream base image, which has none of those extras.
+    guestos = "local_base_dev",
     tags = [
         "dynamic_testnet",
         "manual",
@@ -216,6 +228,15 @@ system_test_nns(
 system_test_nns(
     name = "cloud_engine",
     enable_metrics = True,
+    # Build the GuestOS base image from Dockerfile.base locally so that
+    # modifications to Dockerfile.base (for example, the bundled `ollama`
+    # binary, the baked-in Gemma model under /opt/ollama-models, and the
+    # `/opt/ollama` directory tree) actually end up in the image used by
+    # this testnet. Without this, the testnet would start from the pinned
+    # upstream base image, which has none of those extras and the
+    # ollama.service unit fails at startup with
+    # "mkdir /opt/ollama-models: read-only file system".
+    guestos = "local_base_dev",
     tags = [
         "dynamic_testnet",
         "manual",

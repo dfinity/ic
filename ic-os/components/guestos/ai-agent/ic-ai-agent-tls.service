@@ -1,0 +1,27 @@
+[Unit]
+Description=stunnel TLS terminator in front of the IC AI agent
+Documentation=man:stunnel(8)
+
+# Mirrors the design of ollama-tls.service: stunnel runs independently of
+# ic-ai-agent.service and just listens on 11500/tcp, forwarding plaintext
+# to 127.0.0.1:11501. If the agent isn't running, clients get a refused
+# upstream connection but the TLS listener stays up.
+#
+# Do NOT use BindsTo=ic-ai-agent.service; the agent service is explicitly
+# disabled in the GuestOS Dockerfile and BindsTo would cause systemd to
+# Stop this unit at boot.
+After=network-online.target generate-ic-ai-agent-tls-cert.service
+Wants=network-online.target generate-ic-ai-agent-tls-cert.service
+
+# The cert is mandatory; if the generator failed, refuse to start.
+ConditionPathExists=/var/lib/ic-ai-agent-tls/stunnel.pem
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/stunnel /etc/stunnel/ic-ai-agent-tls.conf
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

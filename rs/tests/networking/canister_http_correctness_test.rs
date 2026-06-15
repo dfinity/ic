@@ -1044,11 +1044,23 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
+    // We pick a delay that exceeds the consensus-side timeout for canister
+    // HTTP requests (`CANISTER_HTTP_TIMEOUT_INTERVAL` in
+    // rs/types/types/src/canister_http.rs, currently 120s). When the adapter
+    // does not return within that interval, the consensus payload builder
+    // injects a synthetic timeout response with reject code `SysTransient`
+    // and message "Canister http request timed out". This is the canonical
+    // user-visible behaviour for an outcall whose endpoint is too slow.
+    //
+    // Note: the adapter has its own request timeout
+    // (`DEFAULT_HTTP_REQUEST_TIMEOUT_SECS`, currently 150s) which would
+    // otherwise turn the call into a `SysFatal`, but the consensus interval
+    // is shorter and fires first.
     let (response, _) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]/delay/40"),
+                url: format!("https://[{webserver_ipv6}]/delay/130"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1070,9 +1082,10 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
     assert_matches!(
         response,
         Err(RejectResponse {
-            reject_code: RejectCode::SysFatal,
+            reject_code: RejectCode::SysTransient,
+            reject_message,
             ..
-        })
+        }) if reject_message.contains("timed out")
     );
 }
 

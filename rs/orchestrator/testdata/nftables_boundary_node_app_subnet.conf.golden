@@ -91,6 +91,10 @@ table ip6 filter {
     ct state { established, related } accept
     ip6 saddr { ::/64 } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept
+    # Allow access to the ollama HTTP API (disabled by default, started on-demand via systemctl enable --now ollama).
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 11434 } accept
+    # Allow access to the IC AI agent HTTP API (disabled by default, started on-demand on AI nodes).
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 11500 } accept
 
     ip6 saddr {3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7} ct state { new } tcp dport {1080} accept # nodes for SOCKS proxy
 ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gol4s-2gsaq-aaaaa-aaaap-2ai

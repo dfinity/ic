@@ -35,6 +35,19 @@ RUN cd /tmp/ && \
     echo "c46e5b6f53948477ff3a19d97c58307394a29fe64a01905646f026ddc32cb65b  node_exporter-1.10.2.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
 
+# Download and verify ollama. Ships the binary + shared libraries needed for
+# CPU inference. Pinned to v0.21.1. The upstream bundle includes ~5 GiB of
+# GPU runners (CUDA/MLX/Vulkan); these are stripped in the main Dockerfile
+# because GuestOS nodes do CPU-only inference.
+# To update:
+#   1. Bump the version below.
+#   2. Fetch the new sha256 with `curl -L https://github.com/ollama/ollama/releases/download/v<ver>/ollama-linux-amd64.tar.zst | sha256sum`.
+#   3. Rebuild the base image and update docker-base.{prod,dev}.
+RUN cd /tmp/ && \
+    curl -L -O https://github.com/ollama/ollama/releases/download/v0.21.1/ollama-linux-amd64.tar.zst && \
+    echo "528acc42750f755ce57b13b8138419ceac953b6fd488045f73dc1e80246da480  ollama-linux-amd64.tar.zst" > ollama.sha256 && \
+    sha256sum -c ollama.sha256
+
 #
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 26.04 LTS Docker image
@@ -72,3 +85,34 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.10.2.linux-amd64.tar.gz node_exporter-1.10.2.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.10.2.linux-amd64.tar.gz
+
+# Install ollama (CPU-only). The upstream tarball is ~2 GiB and bundles GPU
+# runners we don't use; we extract only the binary and the CPU ggml libraries
+# into /opt/ollama. The resulting install is ~50 MiB. `curl` and `zstd` are
+# already installed from packages.common above.
+COPY --from=download /tmp/ollama-linux-amd64.tar.zst /tmp/ollama-linux-amd64.tar.zst
+# The binary and CPU ggml .so files are *also* injected later via the ext4
+# extras path with explicit 0755 mode (see rootfs map in ic-os/guestos/defs.bzl).
+# Podman's rootless squash/export drops the exec bit in this environment, so
+# relying on Dockerfile.base-only install would yield a 0644 binary at runtime.
+# We still need the binary here because `ollama-pull-gemma.sh` executes it to
+# pre-populate /opt/ollama-models.
+RUN mkdir -p /opt/ollama/bin /opt/ollama/lib/ollama /opt/ollama-models && \
+    cd /tmp/ && \
+    zstd -d ollama-linux-amd64.tar.zst -o ollama.tar && \
+    tar -xf ollama.tar bin/ollama && \
+    tar -tf ollama.tar | grep -E '^lib/ollama/libggml-(base|cpu-)[^/]*\.so' > /tmp/ollama-cpu-libs.txt && \
+    tar -xf ollama.tar -T /tmp/ollama-cpu-libs.txt && \
+    mv bin/ollama /opt/ollama/bin/ollama && \
+    mv lib/ollama/libggml-*.so* /opt/ollama/lib/ollama/ && \
+    chmod 0755 /opt/ollama/bin/ollama /opt/ollama/lib/ollama/*.so* && \
+    rm -rf /tmp/bin /tmp/lib /tmp/ollama.tar /tmp/ollama-linux-amd64.tar.zst /tmp/ollama-cpu-libs.txt && \
+    ln -s /opt/ollama/bin/ollama /usr/local/bin/ollama
+
+# Pre-pull the gemma3:1b model into /opt/ollama-models (read-only baked-in
+# model store). The on-disk layout produced by `ollama pull` is
+# /opt/ollama-models/{manifests,blobs}. Running
+# `OLLAMA_MODELS=/opt/ollama-models ollama run gemma3:1b` at runtime will
+# serve the model without any network access.
+COPY ollama-pull-gemma.sh /tmp/ollama-pull-gemma.sh
+RUN sh -eu /tmp/ollama-pull-gemma.sh && rm /tmp/ollama-pull-gemma.sh

@@ -1,0 +1,49 @@
+[Unit]
+Description=IC AI agent orchestration HTTP API (disabled by default)
+Documentation=https://github.com/anomalyco/opencode
+
+# Disabled by default in the GuestOS Dockerfile. Started on demand by
+# manage-ai-agent.sh (driven by the orchestrator's AiNodeManager) together
+# with the TLS cert generator and the stunnel proxy. Regular non-AI nodes
+# never bring this up.
+
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Run as the dedicated `ic-ai-agent` system user. That user is set up in
+# the GuestOS Dockerfile and joined to:
+#
+#   * `nonconfidential`         — read access to /var/lib/ic/data/ic_state
+#   * `ic-registry-local-store` — read access to the local registry store
+#
+# We deliberately do NOT use DynamicUser=yes here: the IC observability
+# tools (`ic_state`, `ic_metrics`, `ic_logs`) need to read directories
+# owned by `ic-replica:nonconfidential`, which a dynamic UID (with no
+# static group memberships) cannot do.
+User=ic-ai-agent
+Group=ic-ai-agent
+
+# Bind to loopback only on a non-privileged port. External clients reach
+# the service through the stunnel TLS terminator on :::11500 (see
+# /etc/systemd/system/ic-ai-agent-tls.service), which forwards plaintext to
+# 127.0.0.1:11501.
+Environment=IC_AI_AGENT_ADDR=127.0.0.1:11501
+
+ExecStart=/opt/ic/bin/ic-ai-agent --addr 127.0.0.1:11501
+
+Restart=on-failure
+RestartSec=5s
+
+# The agent is a stateless HTTP server: no on-disk state of its own.
+# Light hardening that doesn't conflict with reading the replica's
+# state/registry trees.
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

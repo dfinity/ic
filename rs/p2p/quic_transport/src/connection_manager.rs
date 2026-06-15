@@ -268,23 +268,36 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
-    /// Conditions under which the node can start outbound connecting attempt
-    /// - the node is a designated dialer
-    /// - peer is in the subnet
-    /// - this node is part of the subnet (can happen when a node is removed from the subnet)
-    /// - there is no connect attempted
-    /// - there is no established connection
+    /// Conditions under which the node can start an outbound connection attempt.
+    ///
+    /// Two roles are supported:
+    /// * Consensus members dial each other (peer must be a member, self must be
+    ///   a member, the usual `am_i_dialer` ordering applies).
+    /// * AI-node peers (passive state-sync clients) only dial consensus
+    ///   members, and dial them unconditionally (no `am_i_dialer` ordering,
+    ///   since AI peers are never targets of inbound dials from members).
     fn can_i_dial_to(&self, dst: &NodeId) -> bool {
-        let dialer = self.am_i_dialer(dst);
-        let peer_in_subnet = self.topology.is_member(dst);
-        let node_in_subnet = self.topology.is_member(&self.node_id);
         let no_active_connection_attempt = !self.outbound_connecting.contains(dst);
         let no_active_connection = !self.active_connections.contains(dst);
-        no_active_connection_attempt
-            && no_active_connection
-            && dialer
-            && node_in_subnet
-            && peer_in_subnet
+        if !(no_active_connection_attempt && no_active_connection) {
+            return false;
+        }
+
+        let self_is_member = self.topology.is_member(&self.node_id);
+        let self_is_ai_peer = self.topology.is_ai_peer(&self.node_id);
+        let dst_is_member = self.topology.is_member(dst);
+
+        if self_is_member {
+            // Standard consensus-member dial path.
+            let dialer = self.am_i_dialer(dst);
+            dialer && dst_is_member
+        } else if self_is_ai_peer {
+            // AI-node peers always dial out to members; they never accept
+            // inbound, so the dialer-ordering convention does not apply.
+            dst_is_member
+        } else {
+            false
+        }
     }
 
     pub async fn run(mut self, cancellation: CancellationToken) {
@@ -419,10 +432,12 @@ impl ConnectionManager {
 
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
+        // A peer is kept if it is either a consensus member or an AI-node
+        // peer; this node is kept active iff it itself is either.
         let peer_map = self.peer_map.read().unwrap();
         peer_map.iter().for_each(|(peer_id, conn_handle)| {
-            let peer_left_topology = !self.topology.is_member(peer_id);
-            let node_left_topology = !self.topology.is_member(&self.node_id);
+            let peer_left_topology = !self.topology.is_peer(peer_id);
+            let node_left_topology = !self.topology.is_peer(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
             let should_close_connection = peer_left_topology || node_left_topology;
             if should_close_connection {
@@ -538,6 +553,13 @@ impl ConnectionManager {
     fn handle_inbound_conn_attemp(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
         let node_id = self.node_id;
+        // AI-node peers always dial members, regardless of NodeId ordering
+        // (see `can_i_dial_to`). So when a member receives an inbound
+        // connection, the standard "lower id is dialer" rule must be
+        // bypassed if the connecting peer is an AI peer in our current
+        // topology. Snapshot the AI-peer set here so the validation
+        // future doesn't need to reach back into `&self.topology`.
+        let ai_peers = self.topology.get_ai_peers();
         let conn_fut = async move {
             let established =
                 incoming
@@ -563,8 +585,13 @@ impl ConnectionManager {
             let peer_id = node_id_from_certificate_der(rustls_cert.as_ref())
                 .map_err(|err| ConnectionEstablishError::AuthenticationFailed(err.to_string()))?;
 
-            // Lower ID is dialer. So we reject if this nodes id is higher.
-            if peer_id > node_id {
+            // Standard rule: lower NodeId is dialer, higher is acceptor.
+            // Exception: AI-node peers always dial regardless of ordering
+            // because they never accept inbound from us. Without this
+            // bypass an AI peer with a NodeId greater than ours would
+            // dial us, get rejected here as `InvalidIncomingPeerId`, and
+            // never make progress on state-sync.
+            if peer_id > node_id && !ai_peers.contains(&peer_id) {
                 return Err(ConnectionEstablishError::InvalidIncomingPeerId {
                     client: peer_id,
                     server: node_id,

@@ -272,25 +272,55 @@ fn main() -> io::Result<()> {
         &logger.inner_logger.root,
     );
 
-    info!(logger, "Constructing IC stack");
-    let (_, _, _, _p2p_thread_joiner, _xnet_endpoint) =
-        ic_replica::setup_ic_stack::construct_ic_stack(
+    let state_sync_only = matches!(&replica_args, Ok(args) if args.state_sync_only);
+    let cup_path = match &replica_args {
+        Ok(args) => args.catch_up_package.clone(),
+        Err(_) => None,
+    };
+    let _xnet_endpoint_holder;
+    let _p2p_thread_joiner_holder;
+    if state_sync_only {
+        info!(logger, "Constructing AI state-sync-only stack");
+        ic_replica::setup_ic_stack::construct_state_sync_only_stack(
             &logger,
             &metrics_registry,
             rt_main.handle(),
             rt_p2p.handle(),
-            rt_http.handle(),
-            rt_xnet.handle(),
             config.clone(),
             node_id,
             subnet_id,
             registry,
             crypto,
             cup_proto,
-            tracing_handle,
+            cup_path,
         )?;
-
-    info!(logger, "Constructed IC stack");
+        info!(logger, "Constructed AI state-sync-only stack");
+        // Tracing handle is unused in this mode; explicitly drop to avoid
+        // unused-variable warnings.
+        drop(tracing_handle);
+    } else {
+        info!(logger, "Constructing IC stack");
+        let (_, _, _, p2p_thread_joiner, xnet_endpoint) =
+            ic_replica::setup_ic_stack::construct_ic_stack(
+                &logger,
+                &metrics_registry,
+                rt_main.handle(),
+                rt_p2p.handle(),
+                rt_http.handle(),
+                rt_xnet.handle(),
+                config.clone(),
+                node_id,
+                subnet_id,
+                registry,
+                crypto,
+                cup_proto,
+                tracing_handle,
+            )?;
+        // Hold these so they live for the duration of the process.
+        _p2p_thread_joiner_holder = p2p_thread_joiner;
+        _xnet_endpoint_holder = xnet_endpoint;
+        info!(logger, "Constructed IC stack");
+    }
 
     std::thread::sleep(Duration::from_millis(5000));
 

@@ -27,6 +27,7 @@ pub const DEFAULT_INITIAL_DKG_SUBNET_ID_KEY: &str = "default_initial_dkg_subnet_
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
 
+pub const AI_NODE_RECORD_KEY_PREFIX: &str = "ai_node_record_";
 pub const API_BOUNDARY_NODE_RECORD_KEY_PREFIX: &str = "api_boundary_node_";
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
 pub const NODE_OPERATOR_RECORD_KEY_PREFIX: &str = "node_operator_record_";
@@ -299,6 +300,26 @@ pub fn is_data_center_record_key(key: &str) -> bool {
 /// the key is, in fact, a valid api_boundary_node_record_key.
 pub fn get_api_boundary_node_record_node_id(key: &str) -> Option<PrincipalId> {
     if let Some(key) = key.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX) {
+        PrincipalId::from_str(key).ok()
+    } else {
+        None
+    }
+}
+
+/// Makes a key for an AiNodeRecord registry entry.
+pub fn make_ai_node_record_key(node_id: NodeId) -> String {
+    format!("{}{}", AI_NODE_RECORD_KEY_PREFIX, node_id.get())
+}
+
+/// Checks whether a given key is an AI node record key.
+pub fn is_ai_node_record_key(key: &str) -> bool {
+    key.starts_with(AI_NODE_RECORD_KEY_PREFIX)
+}
+
+/// Returns the node_id associated with a given ai_node_record key if the key
+/// is, in fact, a valid ai_node_record_key.
+pub fn get_ai_node_record_node_id(key: &str) -> Option<PrincipalId> {
+    if let Some(key) = key.strip_prefix(AI_NODE_RECORD_KEY_PREFIX) {
         PrincipalId::from_str(key).ok()
     } else {
         None

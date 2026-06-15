@@ -3,6 +3,7 @@ use ic_consensus_cup_utils::make_registry_cup;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::{
+    ai_node::v1::AiNodeRecord,
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     firewall::v1::FirewallRuleSet,
     hostos_version::v1::HostosVersionRecord,
@@ -11,6 +12,7 @@ use ic_protobuf::registry::{
     subnet::v1::{SubnetRecord, SubnetType},
 };
 use ic_registry_client_helpers::{
+    ai_node::AiNodeRegistry,
     api_boundary_node::ApiBoundaryNodeRegistry,
     firewall::FirewallRegistry,
     hostos_version::HostosRegistry,
@@ -300,6 +302,17 @@ impl RegistryHelper {
     ) -> OrchestratorResult<Option<NodeRecord>> {
         self.registry_client
             .get_node_record(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
+    /// Returns the `AiNodeRecord` for `node_id` at `version`, if any.
+    pub(crate) fn get_ai_node_record(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<AiNodeRecord>> {
+        self.registry_client
+            .get_ai_node_record(node_id, version)
             .map_err(OrchestratorError::RegistryClientError)
     }
 

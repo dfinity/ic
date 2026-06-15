@@ -364,9 +364,18 @@ impl From<MessagePriority> for i32 {
 }
 
 /// Holds socket addresses of all peers in a subnet.
+///
+/// Two classes of peers are distinguished:
+///
+/// * `subnet_nodes` — full consensus members of the subnet.
+/// * `ai_node_peers` — nodes whose `AiNodeRecord.subnet_id` points at this
+///   subnet but which are NOT in the subnet's `membership`. These are
+///   passive state-sync clients: they may dial members and pull state, but
+///   they must never originate consensus or state-sync artifacts.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetTopology {
     subnet_nodes: HashMap<NodeId, SocketAddr>,
+    ai_node_peers: HashMap<NodeId, SocketAddr>,
     earliest_registry_version: RegistryVersion,
     latest_registry_version: RegistryVersion,
 }
@@ -379,21 +388,62 @@ impl SubnetTopology {
     ) -> Self {
         Self {
             subnet_nodes: HashMap::from_iter(subnet_nodes),
+            ai_node_peers: HashMap::new(),
             earliest_registry_version,
             latest_registry_version,
         }
     }
 
+    /// Construct a topology that includes both regular subnet members and
+    /// AI-node peers (passive state-sync clients).
+    pub fn new_with_ai_peers<T, U>(
+        subnet_nodes: T,
+        ai_node_peers: U,
+        earliest_registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+    ) -> Self
+    where
+        T: IntoIterator<Item = (NodeId, SocketAddr)>,
+        U: IntoIterator<Item = (NodeId, SocketAddr)>,
+    {
+        Self {
+            subnet_nodes: HashMap::from_iter(subnet_nodes),
+            ai_node_peers: HashMap::from_iter(ai_node_peers),
+            earliest_registry_version,
+            latest_registry_version,
+        }
+    }
+
+    /// Iterate over all peers (consensus members + AI-node peers).
     pub fn iter(&self) -> impl Iterator<Item = (&NodeId, &SocketAddr)> {
+        self.subnet_nodes.iter().chain(self.ai_node_peers.iter())
+    }
+
+    /// Iterate over consensus members only.
+    pub fn iter_members(&self) -> impl Iterator<Item = (&NodeId, &SocketAddr)> {
         self.subnet_nodes.iter()
     }
 
+    /// True iff `node` is a consensus member.
     pub fn is_member(&self, node: &NodeId) -> bool {
         self.subnet_nodes.contains_key(node)
     }
 
+    /// True iff `node` is an AI-node peer (not in consensus membership).
+    pub fn is_ai_peer(&self, node: &NodeId) -> bool {
+        self.ai_node_peers.contains_key(node)
+    }
+
+    /// True iff `node` is either a consensus member or an AI-node peer.
+    pub fn is_peer(&self, node: &NodeId) -> bool {
+        self.is_member(node) || self.is_ai_peer(node)
+    }
+
     pub fn get_addr(&self, node: &NodeId) -> Option<SocketAddr> {
-        self.subnet_nodes.get(node).copied()
+        self.subnet_nodes
+            .get(node)
+            .or_else(|| self.ai_node_peers.get(node))
+            .copied()
     }
 
     pub fn latest_registry_version(&self) -> RegistryVersion {
@@ -404,7 +454,23 @@ impl SubnetTopology {
         self.earliest_registry_version
     }
 
+    /// Returns the union of consensus-member node ids and AI-node peer node
+    /// ids. This is the set used to build the QUIC TLS server allowlist.
     pub fn get_subnet_nodes(&self) -> BTreeSet<NodeId> {
+        self.subnet_nodes
+            .keys()
+            .copied()
+            .chain(self.ai_node_peers.keys().copied())
+            .collect()
+    }
+
+    /// Returns only the consensus-member node ids.
+    pub fn get_consensus_members(&self) -> BTreeSet<NodeId> {
         self.subnet_nodes.keys().copied().collect()
+    }
+
+    /// Returns only the AI-node peer node ids.
+    pub fn get_ai_peers(&self) -> BTreeSet<NodeId> {
+        self.ai_node_peers.keys().copied().collect()
     }
 }

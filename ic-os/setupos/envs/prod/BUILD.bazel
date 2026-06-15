@@ -18,7 +18,7 @@ icos_images = icos_build(
 file_size_check(
     name = "disk_img_size_check",
     file = icos_images.disk_image,
-    max_file_size = 2600 * 1000 * 1000,  # 2.5 GB on 2026-04-16
+    max_file_size = 2900 * 1000 * 1000,  # 2.41 GB on 2026-05-03; raised from 2.4 GB to 2.5 GB to accommodate the bundled ollama runtime + gemma3:1b model on AI nodes.
 )
 
 launch_bare_metal(

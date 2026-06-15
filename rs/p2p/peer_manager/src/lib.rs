@@ -17,13 +17,15 @@ use std::{
     time::Duration,
 };
 
-use ic_base_types::{RegistryVersion, SubnetId};
+use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
-use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
+use ic_registry_client_helpers::{
+    ai_node::AiNodeRegistry, node::NodeRegistry, subnet::SubnetTransportRegistry,
+};
 use metrics::PeerManagerMetrics;
 use tokio::{
     runtime::Handle,
@@ -194,11 +196,90 @@ impl PeerManager {
             }
         }
 
-        SubnetTopology::new(
+        // Also collect AI-node peers: nodes whose `AiNodeRecord.subnet_id`
+        // points at this subnet but which are NOT in the consensus
+        // membership. They are passive state-sync clients only.
+        let ai_node_peers =
+            self.collect_ai_node_peers(latest_local_registry_version, &subnet_nodes);
+
+        SubnetTopology::new_with_ai_peers(
             subnet_nodes,
+            ai_node_peers,
             earliest_registry_version,
             latest_local_registry_version,
         )
+    }
+
+    /// Looks up AI-node peers that should be permitted to connect to this
+    /// subnet. We only resolve this at the latest registry version because
+    /// AI-node membership is independent of the consensus DKG window and
+    /// changes are rare.
+    fn collect_ai_node_peers(
+        &self,
+        version: RegistryVersion,
+        subnet_nodes: &HashMap<NodeId, SocketAddr>,
+    ) -> HashMap<NodeId, SocketAddr> {
+        let mut ai_peers = HashMap::new();
+
+        let ai_node_ids = match self
+            .registry_client
+            .get_ai_nodes_for_subnet(self.subnet_id, version)
+        {
+            Ok(ids) => ids,
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to get AI nodes for subnet {} at registry version {version}: {err}",
+                    self.subnet_id
+                );
+                return ai_peers;
+            }
+        };
+
+        for peer_id in ai_node_ids {
+            // Skip if this AI-node is also a consensus member (defensive: the
+            // registry invariant should prevent this, but if it happens we
+            // prefer the consensus-member entry).
+            if subnet_nodes.contains_key(&peer_id) {
+                continue;
+            }
+
+            let node_record = match self.registry_client.get_node_record(peer_id, version) {
+                Ok(Some(record)) => record,
+                Ok(None) => {
+                    warn!(
+                        self.log,
+                        "AI-node peer {peer_id} has no NodeRecord at registry version {version}"
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    warn!(
+                        self.log,
+                        "Failed to get NodeRecord for AI-node peer {peer_id}: {err}"
+                    );
+                    continue;
+                }
+            };
+
+            let Some(endpoint) = node_record.http else {
+                warn!(self.log, "AI-node peer {peer_id} has no http endpoint");
+                continue;
+            };
+            let ip_addr = match endpoint.ip_addr.parse::<IpAddr>() {
+                Ok(ip) => ip,
+                Err(err) => {
+                    warn!(
+                        self.log,
+                        "Failed to parse IP {} for AI-node peer {peer_id}: {err}", endpoint.ip_addr
+                    );
+                    continue;
+                }
+            };
+            ai_peers.insert(peer_id, SocketAddr::new(ip_addr, 4100));
+        }
+
+        ai_peers
     }
 }
 

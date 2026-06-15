@@ -1,0 +1,44 @@
+[package]
+name = "ic-ai-agent"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-ai-agent"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+hex = { workspace = true }
+ic-base-types = { path = "../types/base_types" }
+ic-config = { path = "../config" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
+ic-registry-local-store = { path = "../registry/local_store" }
+ic-state-layout = { path = "../state_layout" }
+ic-types = { path = "../types/types" }
+lru = "0.7.8"
+meval = "0.2"
+prometheus-parse = { workspace = true }
+reqwest = { workspace = true }
+rig-core = { version = "0.36", default-features = false, features = ["reqwest"] }
+rustls = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+slog-async = { workspace = true }
+slog-term = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+uuid = { workspace = true }

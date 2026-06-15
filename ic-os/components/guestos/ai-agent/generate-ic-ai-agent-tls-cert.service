@@ -1,0 +1,18 @@
+[Unit]
+Description=Generate self-signed TLS cert for the ic-ai-agent stunnel proxy
+Documentation=man:openssl-req(1)
+
+After=var.mount local-fs.target
+RequiresMountsFor=/var/lib
+
+ConditionPathExists=!/var/lib/ic-ai-agent-tls/stunnel.pem
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/generate-ic-ai-agent-tls-cert.sh
+
+[Install]
+# Disabled by default in the GuestOS Dockerfile. Started on demand by
+# manage-ai-agent.sh, itself driven by the orchestrator's AiNodeManager.
+WantedBy=multi-user.target

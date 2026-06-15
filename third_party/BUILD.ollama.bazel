@@ -1,0 +1,18 @@
+# Exposes the CPU-only bits of the upstream ollama-linux-amd64 tarball as
+# individual file targets. The upstream archive bundles GPU runners
+# (CUDA/MLX/Vulkan) under lib/ollama/<backend>/; those are intentionally
+# *not* exported here since GuestOS nodes run inference on the CPU only.
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "bin/ollama",
+    "lib/ollama/libggml-base.so.0.0.0",
+    "lib/ollama/libggml-cpu-alderlake.so",
+    "lib/ollama/libggml-cpu-haswell.so",
+    "lib/ollama/libggml-cpu-icelake.so",
+    "lib/ollama/libggml-cpu-sandybridge.so",
+    "lib/ollama/libggml-cpu-skylakex.so",
+    "lib/ollama/libggml-cpu-sse42.so",
+    "lib/ollama/libggml-cpu-x64.so",
+])

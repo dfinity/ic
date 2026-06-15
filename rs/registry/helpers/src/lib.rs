@@ -3,6 +3,7 @@
 //! Traits specific to a particular component (crypto comes to mind) will move
 //! to the respective crate/component at some point in the future.
 
+pub mod ai_node;
 pub mod api_boundary_node;
 pub mod chain_keys;
 pub mod crypto;

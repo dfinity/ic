@@ -113,7 +113,13 @@ RUN systemctl disable \
     motd-news.service \
     motd-news.timer \
     fstrim.service \
-    fstrim.timer
+    fstrim.timer \
+    ollama.service \
+    ollama-tls.service \
+    generate-ollama-tls-cert.service \
+    ic-ai-agent.service \
+    ic-ai-agent-tls.service \
+    generate-ic-ai-agent-tls-cert.service
 
 # ------ GUESTOS WORK --------------------------------------------
 
@@ -125,6 +131,17 @@ RUN ln -sf /run/ic-node/nftables-ruleset/nftables.conf /etc/nftables.conf
 RUN mkdir -p /var/lib/ic/backup \
              /var/lib/ic/crypto \
              /var/lib/ic/data
+
+# Pre-create the directories where the ollama binary and CPU runtime
+# libraries are injected at ext4-build time via the rootfs `extras` map in
+# ic-os/guestos/defs.bzl. The published guestos-base image referenced by
+# docker-base.{prod,dev} pre-dates the introduction of /opt/ollama, so
+# without this `mkdir -p` the ext4 builder's `cp` step fails with
+# "No such file or directory" for /opt/ollama/bin/ollama. Once the
+# updated base image (with `mkdir -p /opt/ollama/...` in Dockerfile.base)
+# is published and referenced from docker-base.{prod,dev}, this step
+# becomes a no-op but is harmless.
+RUN mkdir -p /opt/ollama/bin /opt/ollama/lib/ollama
 
 # Create two mount points for temporary use during setup of "var" partition
 RUN mkdir -p /mnt/var_old /mnt/var_new
@@ -230,6 +247,35 @@ RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group -
 RUN addgroup socks && \
     adduser --system --disabled-password --shell /usr/sbin/nologin socks && \
     adduser socks socks && chmod +s /usr/sbin/danted
+
+# The "ollama" account. Used to run the `ollama serve` binary when the
+# `ollama.service` unit is enabled (disabled by default; see
+# /lib/systemd/system/ollama.service).
+RUN addgroup --system ollama && \
+    adduser --system --disabled-password --home /var/lib/ollama --shell /usr/sbin/nologin --ingroup ollama -c "Ollama" ollama && \
+    mkdir -p /var/lib/ollama && \
+    chown ollama:ollama /var/lib/ollama && \
+    chmod 0750 /var/lib/ollama
+
+# The "ic-ai-agent" account. Used to run the `ic-ai-agent` HTTP service
+# (started on AI nodes by manage-ai-agent.sh, driven by the
+# orchestrator's AiNodeManager).
+#
+# The agent's IC-observability tools need read access to two on-disk
+# trees written by the state-sync replica:
+#
+#   * /var/lib/ic/data/ic_state            (group nonconfidential)
+#   * /var/lib/ic/data/ic_registry_local_store
+#                                          (group ic-registry-local-store)
+#
+# Both are set up by setup-permissions.sh as group-readable. We add
+# `ic-ai-agent` to those groups here so the unix permission check passes;
+# without this the service runs under DynamicUser/an isolated UID and
+# gets EACCES walking the checkpoints directory.
+RUN addgroup --system ic-ai-agent && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home --ingroup ic-ai-agent -c "IC-AI-Agent" ic-ai-agent && \
+    adduser ic-ai-agent nonconfidential && \
+    adduser ic-ai-agent ic-registry-local-store
 
 # ------ INSTALL SCRIPTS -----------------------------------------
 

@@ -32,6 +32,7 @@
 //! registry and writes them to disk for other components of the
 //! system to read.
 
+mod ai_node;
 pub mod args;
 mod boundary_node;
 mod catch_up_package_provider;
@@ -47,5 +48,6 @@ mod registration;
 mod registry_helper;
 mod signer;
 mod ssh_access_manager;
+mod state_cleanup;
 mod upgrade;
 mod utils;

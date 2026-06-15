@@ -51,6 +51,12 @@ ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
 
   chain OUTPUT {
     type filter hook output priority 0; policy accept;
+    # Allow ic-http-adapter to reach the ollama TLS reverse proxy on port
+    # 11434, and the IC AI agent TLS reverse proxy on port 11500. These
+    # accepts must come before the blanket 1-19999 reject below; nftables
+    # evaluates top-down, so the accepts short-circuit the reject.
+    meta skuid ic-http-adapter ct state { new } tcp dport { 11434 } accept # Allow ic-http-adapter outbound to ollama (port 11434)
+    meta skuid ic-http-adapter ct state { new } tcp dport { 11500 } accept # Allow ic-http-adapter outbound to ic-ai-agent (port 11500)
     meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access
     meta skuid ic-http-adapter ip daddr {1.1.1.1,3.0.0.3,3.0.0.4,3.0.0.5,3.0.0.6,3.0.0.7,4.0.0.4,4.0.0.5,4.0.0.6,4.0.0.7} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19523,19531} reject # Automatic blacklisting for ic-http-adapter
   }
@@ -100,6 +106,10 @@ table ip6 filter {
     ip6 saddr { ::/64 } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100, 19522 } accept
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept
+    # Allow access to the ollama HTTP API (disabled by default, started on-demand via systemctl enable --now ollama).
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 11434 } accept
+    # Allow access to the IC AI agent HTTP API (disabled by default, started on-demand on AI nodes).
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 11500 } accept
     # Custom templated rules
     ip6 saddr {2001:db8:85a3::8a2e:1370:7334,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {22,8080} accept # Automatic whitelisted nodes whitelisting
 ip6 saddr {2001:db8:85a3::8a2e:1370:7334,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {2497} accept # Automatic all nodes whitelisting
@@ -117,6 +127,12 @@ ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
 
   chain OUTPUT {
     type filter hook output priority 0; policy accept;
+    # Allow ic-http-adapter to reach the ollama TLS reverse proxy on port
+    # 11434, and the IC AI agent TLS reverse proxy on port 11500. These
+    # accepts must come before the blanket 1-19999 rejects below; nftables
+    # evaluates top-down, so the accepts short-circuit the rejects.
+    meta skuid ic-http-adapter ct state { new } tcp dport { 11434 } accept # Allow ic-http-adapter outbound to ollama (port 11434)
+    meta skuid ic-http-adapter ct state { new } tcp dport { 11500 } accept # Allow ic-http-adapter outbound to ic-ai-agent (port 11500)
     meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access
     meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access
     meta skuid ic-http-adapter ip6 daddr {2001:db8:85a3::8a2e:1370:7334,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e6,3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e7,a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19523,19531} reject # Automatic blacklisting for ic-http-adapter

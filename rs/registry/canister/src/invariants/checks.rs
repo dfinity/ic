@@ -1,6 +1,7 @@
 use crate::{
     common::LOG_PREFIX,
     invariants::{
+        ai_node::check_ai_node_invariants,
         api_boundary_node::check_api_boundary_node_invariants,
         assignment::check_node_assignment_invariants,
         common::RegistrySnapshot,
@@ -101,6 +102,9 @@ impl Registry {
 
         // API Boundary Node invariant
         result = result.and(check_api_boundary_node_invariants(&snapshot));
+
+        // AI Node invariant
+        result = result.and(check_ai_node_invariants(&snapshot));
 
         // HostOS version invariants
         result = result.and(check_hostos_version_invariants(&snapshot));

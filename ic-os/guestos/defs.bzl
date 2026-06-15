@@ -55,18 +55,39 @@ def image_deps(mode, malicious = False):
             "//rs/ic_os/release:custom_metrics": "/opt/ic/bin/custom_metrics:0755",  # Collects and reports custom metrics.
             "//rs/ic_os/remote_attestation/server": "/opt/ic/bin/remote_attestation_server:0755",  # Remote Attestation service
             "//rs/ic_os/guest_upgrade/client": "/opt/ic/bin/guest_upgrade_client:0755",  # Disk encryption key exchange client
+            "//rs/ai_agent:ic-ai-agent": "/opt/ic/bin/ic-ai-agent:0755",  # AI agent orchestration HTTP API (started on AI nodes)
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
             "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
+
+            # Ollama CPU-only runtime. The binary and CPU ggml libraries are
+            # injected via the extras path (not via Dockerfile.base) so that
+            # they get explicit 0755 perms via `install -m` in the ext4
+            # builder, bypassing rootless-podman's tendency to drop the
+            # exec bit during squash/export. The pre-pulled gemma3:1b model
+            # in /opt/ollama-models is still baked in via Dockerfile.base
+            # (model files are read-only 0644 data, no exec-bit concern).
+            "@ollama//:bin/ollama": "/opt/ollama/bin/ollama:0755",
+            "@ollama//:lib/ollama/libggml-base.so.0.0.0": "/opt/ollama/lib/ollama/libggml-base.so.0.0.0:0755",
+            "@ollama//:lib/ollama/libggml-cpu-alderlake.so": "/opt/ollama/lib/ollama/libggml-cpu-alderlake.so:0755",
+            "@ollama//:lib/ollama/libggml-cpu-haswell.so": "/opt/ollama/lib/ollama/libggml-cpu-haswell.so:0755",
+            "@ollama//:lib/ollama/libggml-cpu-icelake.so": "/opt/ollama/lib/ollama/libggml-cpu-icelake.so:0755",
+            "@ollama//:lib/ollama/libggml-cpu-sandybridge.so": "/opt/ollama/lib/ollama/libggml-cpu-sandybridge.so:0755",
+            "@ollama//:lib/ollama/libggml-cpu-skylakex.so": "/opt/ollama/lib/ollama/libggml-cpu-skylakex.so:0755",
+            "@ollama//:lib/ollama/libggml-cpu-sse42.so": "/opt/ollama/lib/ollama/libggml-cpu-sse42.so:0755",
+            "@ollama//:lib/ollama/libggml-cpu-x64.so": "/opt/ollama/lib/ollama/libggml-cpu-x64.so:0755",
         },
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/guestos/context:context-files"),
         "component_files": component_files(mode),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
+        # rootfs_size was bumped from 3G to 5G to accommodate the ollama
+        # binary + CPU runtime libraries (~50 MiB) and the pre-pulled
+        # gemma3:1b model (~815 MiB) baked into /opt/ollama-models.
         "expanded_size": "50G",
-        "rootfs_size": "3G",
+        "rootfs_size": "5G",
         "bootfs_size": "1G",
         "grub_config": Label("//ic-os/bootloader:guestos_grub.cfg"),
 

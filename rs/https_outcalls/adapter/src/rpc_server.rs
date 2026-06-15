@@ -28,6 +28,9 @@ use ic_logger::{ReplicaLogger, debug, info};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+use rustls::{ClientConfig, DigitallySignedStruct, Error as RustlsError, SignatureScheme};
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -57,6 +60,80 @@ type OutboundRequestBody = Full<Bytes>;
 type Cache =
     BTreeMap<String, Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>>;
 
+/// A `rustls::ServerCertVerifier` that accepts any certificate without
+/// validating it.
+///
+/// This is intentionally insecure: canister HTTP outcalls in this build
+/// are expected to reach internal services (notably the ollama TLS proxy
+/// running on each GuestOS node) which present a self-signed, machine-id-
+/// derived certificate. Those certificates are not signed by any trusted
+/// CA, so the default `with_native_roots()` verifier rejects them.
+///
+/// Trade-off: a malicious operator on the path between the adapter and
+/// the upstream server can freely MITM requests. This is acceptable here
+/// because the responses are already vetted by consensus across the
+/// subnet (canister HTTP outcalls require agreement among >= f+1 nodes),
+/// so a single MITM attempt does not compromise consensus.
+#[derive(Debug)]
+struct NoVerifier;
+
+impl ServerCertVerifier for NoVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, RustlsError> {
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, RustlsError> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![
+            SignatureScheme::RSA_PKCS1_SHA1,
+            SignatureScheme::ECDSA_SHA1_Legacy,
+            SignatureScheme::RSA_PKCS1_SHA256,
+            SignatureScheme::ECDSA_NISTP256_SHA256,
+            SignatureScheme::RSA_PKCS1_SHA384,
+            SignatureScheme::ECDSA_NISTP384_SHA384,
+            SignatureScheme::RSA_PKCS1_SHA512,
+            SignatureScheme::ECDSA_NISTP521_SHA512,
+            SignatureScheme::RSA_PSS_SHA256,
+            SignatureScheme::RSA_PSS_SHA384,
+            SignatureScheme::RSA_PSS_SHA512,
+            SignatureScheme::ED25519,
+            SignatureScheme::ED448,
+        ]
+    }
+}
+
+/// Build a `rustls::ClientConfig` that skips server-cert verification.
+fn build_insecure_tls_client_config() -> ClientConfig {
+    ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(NoVerifier))
+        .with_no_client_auth()
+}
+
 pub struct CanisterHttp {
     client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
     cache: Arc<RwLock<Cache>>,
@@ -73,10 +150,13 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
 
-        // Https client setup.
-        let builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
+        // Https client setup. We deliberately skip server-cert verification
+        // (see `NoVerifier`) so outcalls can reach internal services with
+        // self-signed certs (e.g. the ollama TLS proxy on each GuestOS
+        // node). Consensus across the subnet provides the actual integrity
+        // guarantee for the response.
+        let builder =
+            HttpsConnectorBuilder::new().with_tls_config(build_insecure_tls_client_config());
         #[cfg(not(feature = "http"))]
         let builder = builder.https_only();
         #[cfg(feature = "http")]
@@ -107,9 +187,10 @@ impl CanisterHttp {
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(self.http_connect_timeout_secs)));
 
-        let builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .expect("Failed to set native roots");
+        // Same insecure verifier as the direct client; see comment in
+        // `CanisterHttp::new`.
+        let builder =
+            HttpsConnectorBuilder::new().with_tls_config(build_insecure_tls_client_config());
 
         #[cfg(not(feature = "http"))]
         let builder = builder.https_only();

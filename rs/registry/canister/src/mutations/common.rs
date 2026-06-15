@@ -5,8 +5,8 @@ use ic_protobuf::registry::{
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    REPLICA_VERSION_KEY_PREFIX, make_api_boundary_node_record_key, make_node_record_key,
-    make_unassigned_nodes_config_record_key,
+    REPLICA_VERSION_KEY_PREFIX, make_ai_node_record_key, make_api_boundary_node_record_key,
+    make_node_record_key, make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
 use std::{cmp::Eq, collections::HashSet, convert::TryFrom, hash::Hash};
@@ -34,6 +34,19 @@ pub(crate) fn check_api_boundary_nodes_exist(registry: &Registry, node_ids: &[No
 
     node_ids.iter().copied().for_each(|node_id| {
         let key = make_api_boundary_node_record_key(node_id);
+
+        let record = registry.get(key.as_bytes(), version);
+        if record.is_none() {
+            panic!("record not found");
+        }
+    });
+}
+
+pub(crate) fn check_ai_nodes_exist(registry: &Registry, node_ids: &[NodeId]) {
+    let version = registry.latest_version();
+
+    node_ids.iter().copied().for_each(|node_id| {
+        let key = make_ai_node_record_key(node_id);
 
         let record = registry.get(key.as_bytes(), version);
         if record.is_none() {

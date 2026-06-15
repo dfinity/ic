@@ -41,6 +41,7 @@ use registry_canister::{
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
+        do_add_ai_nodes::AddAiNodesPayload,
         do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
@@ -51,6 +52,7 @@ use registry_canister::{
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_migrate_node_operator_directly::MigrateNodeOperatorPayload,
         do_recover_subnet::RecoverSubnetPayload,
+        do_remove_ai_nodes::RemoveAiNodesPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_node_operators::RemoveNodeOperatorsPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
@@ -60,6 +62,7 @@ use registry_canister::{
         do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
         do_split_subnet::SplitSubnetPayload,
         do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
+        do_update_ai_node_subnet::UpdateAiNodeSubnetPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
         },
@@ -134,15 +137,6 @@ fn check_caller_is_governance_and_log(method_name: &str) {
     );
 }
 
-fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
-    let caller = dfn_core::api::caller();
-    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
-    assert!(
-        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
-        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
-    );
-}
-
 fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
     println!("{LOG_PREFIX}call: {method_name} from: {caller}");
@@ -159,6 +153,15 @@ fn check_caller_is_subnet_rental_canister_and_log(method_name: &str) {
     assert_eq!(
         caller,
         SUBNET_RENTAL_CANISTER_ID.into(),
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
+    );
+}
+
+fn check_caller_is_governance_or_engine_controller_and_log(method_name: &str) {
+    let caller = dfn_core::api::caller();
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
+    assert!(
+        caller == GOVERNANCE_CANISTER_ID.into() || caller == ENGINE_CONTROLLER_CANISTER_ID.into(),
         "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
@@ -776,6 +779,76 @@ fn deploy_guestos_to_some_api_boundary_nodes() {
 fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestosToSomeApiBoundaryNodes) {
     registry_mut().do_deploy_guestos_to_some_api_boundary_nodes(payload);
     recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update add_ai_nodes")]
+fn add_ai_nodes() {
+    // This method can be called by anyone.
+    println!(
+        "{}call: add_ai_nodes from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over(candid_one, |payload: AddAiNodesPayload| {
+        add_ai_nodes_(payload)
+    });
+}
+
+#[candid_method(update, rename = "add_ai_nodes")]
+fn add_ai_nodes_(payload: AddAiNodesPayload) {
+    registry_mut().do_add_ai_nodes(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update remove_ai_nodes")]
+fn remove_ai_nodes() {
+    // This method can be called by anyone.
+    println!(
+        "{}call: remove_ai_nodes from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over(candid_one, |payload: RemoveAiNodesPayload| {
+        remove_ai_nodes_(payload)
+    });
+}
+
+#[candid_method(update, rename = "remove_ai_nodes")]
+fn remove_ai_nodes_(payload: RemoveAiNodesPayload) {
+    registry_mut().do_remove_ai_nodes(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update update_ai_node_subnet")]
+fn update_ai_node_subnet() {
+    // This method can be called by anyone.
+    println!(
+        "{}call: update_ai_node_subnet from: {}",
+        LOG_PREFIX,
+        dfn_core::api::caller()
+    );
+    over(candid_one, |payload: UpdateAiNodeSubnetPayload| {
+        update_ai_node_subnet_(payload)
+    });
+}
+
+#[candid_method(update, rename = "update_ai_node_subnet")]
+fn update_ai_node_subnet_(payload: UpdateAiNodeSubnetPayload) {
+    registry_mut().do_update_ai_node_subnet(payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_query get_ai_node_ids")]
+fn get_ai_node_ids() {
+    over(candid_one, |()| -> Result<Vec<PrincipalId>, String> {
+        get_ai_node_ids_()
+    })
+}
+
+#[candid_method(query, rename = "get_ai_node_ids")]
+fn get_ai_node_ids_() -> Result<Vec<PrincipalId>, String> {
+    let ids = registry().get_ai_node_ids()?;
+    Ok(ids.into_iter().map(|n| n.get()).collect())
 }
 
 #[unsafe(export_name = "canister_update remove_nodes")]

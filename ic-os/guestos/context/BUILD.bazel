@@ -13,6 +13,10 @@ filegroup(
         "Dockerfile",
         "docker-base.dev",
         "docker-base.prod",
+        # Used by Dockerfile.base to pre-pull the gemma3:1b ollama model into
+        # /opt/ollama-models. Only consumed by the local-base-* envs which
+        # rebuild the base image from Dockerfile.base.
+        "ollama-pull-gemma.sh",
         "packages.common",
         "packages.dev",
     ],

@@ -1,0 +1,51 @@
+[Unit]
+Description=Ollama LLM runtime (disabled by default)
+Documentation=https://ollama.com
+After=network-online.target
+Wants=network-online.target
+
+# This service is intentionally disabled by default and is started on
+# demand by `manage-ollama.sh` (driven by the orchestrator's
+# `AiNodeManager`) together with the TLS-cert generator and the stunnel
+# proxy. See the explicit `systemctl disable` lines in the GuestOS
+# Dockerfile which override the blanket enable loop.
+
+[Service]
+Type=simple
+User=ollama
+Group=ollama
+
+# systemd will create /var/lib/ollama (mode 0750, owned by ollama:ollama)
+# before ExecStart, and ensure it exists across upgrades. This avoids
+# relying on the rootfs-baked directory, which is not visible on the
+# separately-mounted /var filesystem.
+StateDirectory=ollama
+StateDirectoryMode=0750
+
+# OLLAMA_MODELS points at the baked-in read-only model store on the
+# dm-verity-signed root partition. This makes the pre-packaged models (e.g.
+# gemma3:1b) available offline, but prevents `ollama pull` of new models at
+# runtime. To allow pulling additional models, operators can override this
+# with a drop-in (e.g. /etc/systemd/system/ollama.service.d/override.conf)
+# pointing OLLAMA_MODELS at a writable location such as /var/lib/ollama/models
+# and seeding it from /opt/ollama-models.
+Environment=HOME=/var/lib/ollama
+Environment=OLLAMA_MODELS=/opt/ollama-models
+# Bind to loopback only on a non-privileged port. External clients must
+# reach ollama through the TLS-terminating stunnel proxy listening on
+# 0.0.0.0:11434 (see /etc/systemd/system/ollama-tls.service).
+Environment=OLLAMA_HOST=127.0.0.1:11435
+Environment=LD_LIBRARY_PATH=/opt/ollama/lib/ollama
+
+ExecStart=/opt/ollama/bin/ollama serve
+
+Restart=on-failure
+RestartSec=5s
+
+# No extra sandboxing: the GuestOS root is already dm-verity read-only and
+# the orchestrator/replica services run without sandbox flags either.
+# ProtectSystem/PrivateTmp/ReadWritePaths fail early in this environment
+# with status=226/NAMESPACE because of the dm-crypt+LVM /var layout.
+
+[Install]
+WantedBy=multi-user.target
