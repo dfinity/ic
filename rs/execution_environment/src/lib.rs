@@ -228,9 +228,9 @@ pub struct ExecutionServicesForTesting {
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: InternalHttpQueryHandler,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
+    pub local_query_execution_stats: Arc<QueryStatsCollector>,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
     pub execution_environment: Arc<ExecutionEnvironment>,
-    pub local_query_execution_stats: Arc<QueryStatsCollector>,
 }
 
 impl ExecutionServicesForTesting {
@@ -283,9 +283,9 @@ impl ExecutionServicesForTesting {
             ingress_history_reader,
             query_execution_service: sync_query_handler,
             query_stats_payload_builder,
+            local_query_execution_stats,
             cycles_account_manager,
             execution_environment,
-            local_query_execution_stats,
         }
     }
 }

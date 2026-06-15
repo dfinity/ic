@@ -307,6 +307,7 @@ impl QueryStatsPayloadBuilderImpl {
     ///
     /// This function also returns an error, if we are requesting data on an epoch,
     /// that has been already aggregated.
+    ///
     /// Returns `(previous_canister_ids, has_submitted)` where `has_submitted` is true if this
     /// node has already submitted any report (even empty) for the given epoch.
     fn get_previous_ids(
@@ -375,26 +376,25 @@ impl QueryStatsPayloadBuilderImpl {
         }
 
         // Check past payloads for stats already sent
-        let matching_past_payloads: Vec<_> = past_payloads
-            .iter()
-            .filter_map(|past_payload| {
-                QueryStatsPayload::deserialize(past_payload.payload)
-                    .inspect_err(|_| {
-                        error!(
-                            self.log,
-                            "Failed to deserialize past payload, this is a bug"
-                        );
-                    })
-                    .ok()
-                    .flatten()
-            })
-            .filter(|stats| stats.epoch == epoch && stats.proposer == node_id)
-            .collect();
-
-        let has_submitted_in_past = !matching_past_payloads.is_empty();
+        let mut has_submitted_in_past = false;
         previous_ids.extend(
-            matching_past_payloads
-                .into_iter()
+            past_payloads
+                .iter()
+                .filter_map(|past_payload| {
+                    QueryStatsPayload::deserialize(past_payload.payload)
+                        .inspect_err(|_| {
+                            error!(
+                                self.log,
+                                "Failed to deserialize past payload, this is a bug"
+                            );
+                        })
+                        .ok()
+                        .flatten()
+                })
+                .filter(|stats| stats.epoch == epoch && stats.proposer == node_id)
+                .inspect(|_| {
+                    has_submitted_in_past = true;
+                })
                 .flat_map(|stats| stats.stats.into_iter().map(|stat| stat.canister_id)),
         );
 
