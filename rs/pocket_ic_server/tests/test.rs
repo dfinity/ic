@@ -1016,28 +1016,28 @@ fn test_query_stats_live() {
             .query_stats;
         assert_eq!(query_stats.num_calls_total, candid::Nat::from(0_u64));
 
-        let mut n: u64 = 0;
-        loop {
-            // Make one query call per app subnet node.
-            for _ in 0..13 {
-                agent
-                    .query(&canister_id, "read")
-                    .with_arg(n.to_le_bytes().to_vec())
-                    .call()
-                    .await
-                    .unwrap();
-                n += 1;
-            }
+        // Make one query call per app subnet node to generate stats.
+        for i in 0_u64..13 {
+            agent
+                .query(&canister_id, "read")
+                .with_arg(i.to_le_bytes().to_vec())
+                .call()
+                .await
+                .unwrap();
+        }
 
+        // Wait for query stats to propagate without making additional query calls.
+        loop {
             let current_query_stats = ic00
                 .canister_status(&canister_id)
                 .await
                 .unwrap()
                 .0
                 .query_stats;
-            if query_stats.num_calls_total != current_query_stats.num_calls_total {
+            if current_query_stats.num_calls_total > candid::Nat::from(0_u64) {
                 break;
             }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     })
 }
