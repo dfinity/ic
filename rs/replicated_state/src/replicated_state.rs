@@ -1,7 +1,9 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
+use crate::canister_state::system_state::{
+    CallContextManager, CanisterOutputQueuesIterator, push_input,
+};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -888,13 +890,13 @@ impl ReplicatedState {
         // the respondent is on a deleted subnet and no response has been enqueued yet.
         let rejects: Vec<(CanisterId, CallbackId, CanisterId, CoarseTime)> = self
             .canister_states
-            .iter()
+            .all_iter()
             .flat_map(|(canister_id, canister)| {
                 let canister_id = *canister_id;
                 let callbacks: Vec<_> = canister
                     .system_state
                     .call_context_manager()
-                    .map(|ccm| ccm.callbacks().iter().collect())
+                    .map(|ccm: &CallContextManager| ccm.callbacks().iter().collect())
                     .unwrap_or_default();
                 let routing_table = Arc::clone(&routing_table);
                 callbacks
@@ -941,7 +943,7 @@ impl ReplicatedState {
                 own_subnet_type,
                 InputQueueType::RemoteSubnet,
             );
-            self.canister_states.insert(canister_id, canister);
+            self.canister_states.insert(canister);
         }
     }
 
