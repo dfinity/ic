@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:1c970082c03d3be21b6e6749dda175a65e4a26535962ce7795868c20f0edc141
+      image: ghcr.io/dfinity/ic-build@sha256:7864867d841249e0f156496c1bd3ed9bc26ba8b40fc142b504e61aa8322559a5
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -190,7 +190,7 @@ jobs:
     name: Bazel Test Local System Tests
     runs-on: *dind-large-setup
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:f365698c843792a5bba05ed46da294c46df9df503be5a5b005fe0fe642dabd3a
+      image: ghcr.io/dfinity/ic-build@sha256:7864867d841249e0f156496c1bd3ed9bc26ba8b40fc142b504e61aa8322559a5
       # `--group-add 993` gives the container -- and thus the bazel server that
       # spawns the QEMU-backed `*_local` system tests -- membership in the
       # runner's `kvm` group so it can open /dev/kvm. Supplementary group
