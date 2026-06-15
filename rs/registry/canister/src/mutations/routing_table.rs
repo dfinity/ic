@@ -303,8 +303,14 @@ impl Registry {
         subnet_id: SubnetId,
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
+            let target_in_routing_table = !routing_table.ranges(subnet_id).is_empty();
             for canister_id in canister_ids {
                 routing_table.assign_canister(canister_id, subnet_id);
+            }
+            if !target_in_routing_table {
+                // Target subnet has no canister ranges in the routing table: remove
+                // any canister ranges just assigned to it, keeping source subnets split.
+                routing_table.remove_subnet(subnet_id);
             }
             routing_table.optimize();
         })
