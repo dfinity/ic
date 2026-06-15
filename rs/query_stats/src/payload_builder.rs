@@ -399,7 +399,13 @@ impl QueryStatsPayloadBuilderImpl {
                     has_submitted_in_past = true;
                 })
                 // Map payload to CanisterIds
-                .flat_map(|stats| stats.stats.into_iter().map(|stat| stat.canister_id)),
+                .flat_map(|stats| {
+                    stats
+                        .stats
+                        .iter()
+                        .map(|stat| stat.canister_id)
+                        .collect::<Vec<CanisterId>>()
+                }),
         );
 
         Ok((
