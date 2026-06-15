@@ -350,8 +350,8 @@ async fn call_sync(
         error!(
             every_n_seconds => LOG_EVERY_N_SECONDS,
             log,
-            "Unknown status of call {} in the certificate at height {}. This is a critical error: {}",
-            message_id, certification.height, CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS
+            "{}: Unknown status of call {} in the certificate at height {}.",
+            CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, message_id, certification.height
         );
         metrics
             .critical_error_sync_call_unknown_certificate_status
