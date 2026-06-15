@@ -868,8 +868,8 @@ fn test_gap_in_delta_clears_store() {
     assert_eq!(s.records(None).len(), 2);
 
     // Build a delta that starts at idx 5 (gap: 2, 3, 4 evicted).
-    let mut delta =
-        ic_types::CanisterLog::new_aggregate(5, vec![make_canister_record(5, 202, "delta #2")]);
+    let mut delta = CanisterLog::new_delta_with_next_index(5, TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(202, b"delta #2".to_vec());
     s.append_delta_log(&mut delta);
 
     // The gap (5 > 2) triggers a clear; only the delta record survives.
