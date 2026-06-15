@@ -12,17 +12,20 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     InputQueueType, ReplicatedState, SubnetTopology,
-    metadata_state::testing::NetworkTopologyTesting, testing::ReplicatedStateTesting,
+    metadata_state::testing::NetworkTopologyTesting,
+    testing::{OutputRequestBuilder, ReplicatedStateTesting},
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, nonzero_values};
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::batch::BatchBuilder;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_test_utilities_types::messages::{RequestBuilder, SignedIngressBuilder};
 use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData};
-use ic_types::messages::{CallbackId, CanisterMessage, Payload, Response, SignedIngress};
+use ic_types::messages::{
+    CallbackId, CanisterMessage, NO_DEADLINE, Payload, Response, SignedIngress, StreamMessage,
+};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, Time,
@@ -275,20 +278,38 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
     // Initial state with a stream to SUBNET_2, which is not in the network topology.
     let mut initial_state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
+    let local_canister_id = CANISTER_RANGE_A.start;
+    // Use a canister ID outside the routing table range so it has no route,
+    // causing the stream builder to generate a reject for output requests.
+    let remote_canister_id = CANISTER_RANGE_B.start;
+    let deadline = CoarseTime::from_secs_since_unix_epoch(u32::MAX);
+    // Pre-populate the stream to the deleted subnet with bounded-wait and unbounded-wait
+    // responses — these are dropped silently when the stream is discarded.
     initial_state.modify_streams(|streams| {
-        streams.insert(SUBNET_2, Default::default());
+        let stream = streams.entry(SUBNET_2).or_default();
+        stream.push(StreamMessage::Response(Arc::new(Response {
+            originator: remote_canister_id,
+            respondent: local_canister_id,
+            originator_reply_callback: CallbackId::from(0),
+            refund: Cycles::zero(),
+            response_payload: Payload::Data(vec![]),
+            deadline,
+        })));
+        stream.push(StreamMessage::Response(Arc::new(Response {
+            originator: remote_canister_id,
+            respondent: local_canister_id,
+            originator_reply_callback: CallbackId::from(1),
+            refund: Cycles::zero(),
+            response_payload: Payload::Data(vec![]),
+            deadline: NO_DEADLINE,
+        })));
     });
     assert!(initial_state.get_stream(&SUBNET_2).is_some());
 
-    // Add a canister with a bounded-wait output request, a bounded-wait output response, and a
-    // bounded-wait subnet message (callee = the deleted subnet's ID), all destined for the
-    // deleted subnet. Also add a bounded-wait subnet output response (local subnet →
-    // remote canister) to the subnet queues.
-    let local_canister_id = CANISTER_RANGE_A.start;
-    // Use a canister ID outside the routing table range so it has no route,
-    // causing the stream builder to generate a reject for the output request.
-    let remote_canister_id = CANISTER_RANGE_B.start;
-    let deadline = CoarseTime::from_secs_since_unix_epoch(u32::MAX);
+    // Add a canister with bounded-wait and unbounded-wait output requests, a bounded-wait
+    // output response, an unbounded-wait output response, and a bounded-wait subnet message
+    // (callee = the deleted subnet's ID), all destined for the deleted subnet. Also add a
+    // bounded-wait subnet output response (local subnet → remote canister) to the subnet queues.
     let mut canister_state = new_canister_state(
         local_canister_id,
         PrincipalId::new_anonymous(),
@@ -296,19 +317,28 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         3600.into(),
     );
 
-    // Output request: local → remote (on the deleted subnet).
+    // Bounded-wait output request in output queue: local → remote (on the deleted subnet).
     // Requests with no route get a reject response — no critical error.
-    let callback_id = register_callback(&mut canister_state, remote_canister_id, deadline);
     canister_state
         .push_output_request(
-            Arc::new(
-                RequestBuilder::new()
-                    .sender(local_canister_id)
-                    .receiver(remote_canister_id)
-                    .sender_reply_callback(callback_id)
-                    .deadline(deadline)
-                    .build(),
-            ),
+            OutputRequestBuilder::default()
+                .sender(local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(deadline)
+                .build(),
+            UNIX_EPOCH,
+        )
+        .unwrap();
+
+    // Unbounded-wait output request in output queue: local → remote (on the deleted subnet).
+    // Requests with no route get a reject response — no critical error.
+    canister_state
+        .push_output_request(
+            OutputRequestBuilder::default()
+                .sender(local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(NO_DEADLINE)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();
@@ -368,18 +398,13 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     // Output subnet message: local → SUBNET_2 (callee = the deleted subnet's ID).
     // Subnet messages with no route get a reject response — no critical error.
     let subnet_as_canister_id = CanisterId::from(SUBNET_2);
-    let subnet_callback_id =
-        register_callback(&mut canister_state, subnet_as_canister_id, deadline);
     canister_state
         .push_output_request(
-            Arc::new(
-                RequestBuilder::new()
-                    .sender(local_canister_id)
-                    .receiver(subnet_as_canister_id)
-                    .sender_reply_callback(subnet_callback_id)
-                    .deadline(deadline)
-                    .build(),
-            ),
+            OutputRequestBuilder::default()
+                .sender(local_canister_id)
+                .receiver(subnet_as_canister_id)
+                .deadline(deadline)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();
@@ -397,37 +422,25 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     );
 
     // Bounded-wait callback with reserved input slot (simulating request in stream).
-    let be_callback_id = register_callback(&mut stream_canister, remote_canister_id, deadline);
     stream_canister
         .push_output_request(
-            Arc::new(
-                RequestBuilder::new()
-                    .sender(stream_local_canister_id)
-                    .receiver(remote_canister_id)
-                    .sender_reply_callback(be_callback_id)
-                    .deadline(deadline)
-                    .build(),
-            ),
+            OutputRequestBuilder::default()
+                .sender(stream_local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(deadline)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();
 
     // Unbounded-wait callback with reserved input slot (simulating request in stream).
-    let gr_callback_id = register_callback(
-        &mut stream_canister,
-        remote_canister_id,
-        ic_types::messages::NO_DEADLINE,
-    );
     stream_canister
         .push_output_request(
-            Arc::new(
-                RequestBuilder::new()
-                    .sender(stream_local_canister_id)
-                    .receiver(remote_canister_id)
-                    .sender_reply_callback(gr_callback_id)
-                    .deadline(ic_types::messages::NO_DEADLINE)
-                    .build(),
-            ),
+            OutputRequestBuilder::default()
+                .sender(stream_local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(ic_types::messages::NO_DEADLINE)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();
@@ -537,13 +550,14 @@ fn state_machine_handles_messages_to_deleted_subnet() {
                 .has_output()
         );
         assert!(!state.subnet_queues().has_output());
-        // Reject responses for both unroutable output requests (canister request and subnet
-        // message) are in the local canister's input queue.
+        // Reject responses for all 3 unroutable output requests (bounded-wait request,
+        // unbounded-wait request, and subnet message) are in the local canister's input queue.
         let canister = Arc::make_mut(state.canister_state_mut_arc(&local_canister_id).unwrap());
         let msg1 = canister.pop_input().unwrap();
         let msg2 = canister.pop_input().unwrap();
+        let msg3 = canister.pop_input().unwrap();
         assert!(canister.pop_input().is_none());
-        for msg in [msg1, msg2] {
+        for msg in [msg1, msg2, msg3] {
             assert!(matches!(
                 msg,
                 CanisterMessage::Response { response, .. }
