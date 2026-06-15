@@ -278,7 +278,16 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
                 "Call `list_canister_snapshots` for {} failed: {:?}",
                 canister_id, e
             );
-            ProcessingResult::NoProgress
+            match e {
+                CallError::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(())
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
@@ -298,7 +307,9 @@ pub struct SubnetInfoResponse {
     pub registry_version: u64,
 }
 
-pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64, Infallible> {
+pub async fn get_registry_version(
+    subnet_id: Principal,
+) -> ProcessingResult<Option<u64>, Infallible> {
     let args = SubnetInfoArgs { subnet_id };
     match Call::bounded_wait(subnet_id, "subnet_info")
         .with_arg(&args)
@@ -307,7 +318,7 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
         Ok(response) => match response.candid::<SubnetInfoResponse>() {
             Ok(SubnetInfoResponse {
                 registry_version, ..
-            }) => ProcessingResult::Success(registry_version),
+            }) => ProcessingResult::Success(Some(registry_version)),
             Err(e) => {
                 println!(
                     "Decoding `SubnetInfoResponse` for subnet: {} failed: {:?}",
@@ -321,7 +332,16 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
                 "Call `subnet_info` for subnet: {} failed: {:?}",
                 subnet_id, e
             );
-            ProcessingResult::NoProgress
+            match e {
+                CallFailed::CallRejected(e) => {
+                    if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
+                        ProcessingResult::Success(None)
+                    } else {
+                        ProcessingResult::NoProgress
+                    }
+                }
+                _ => ProcessingResult::NoProgress,
+            }
         }
     }
 }
