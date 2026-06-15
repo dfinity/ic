@@ -462,6 +462,35 @@ mod tests {
         assert_eq!(test, check_test);
     }
 
+    /// An epoch entry with an empty canister map must survive the as_query_stats() -> try_from() roundtrip.
+    #[test]
+    fn serialization_roundtrip_raw_query_stats_empty_epoch() {
+        // One node with two epochs: one that has canister stats and one that is empty.
+        let mut rng = ChaCha8Rng::seed_from_u64(1454);
+
+        let mut record = BTreeMap::new();
+        let mut inner = BTreeMap::new();
+        inner.insert(canister_test_id(1), rng_epoch_stats(&mut rng));
+        record.insert(QueryStatsEpoch::new(0), inner);
+        // Empty canister map — the sentinel path.
+        record.insert(QueryStatsEpoch::new(1), BTreeMap::new());
+
+        let mut stats = BTreeMap::new();
+        stats.insert(node_test_id(1), record);
+
+        let test = RawQueryStats {
+            highest_aggregated_epoch: None,
+            stats,
+        };
+
+        let pb_test = test.as_query_stats().unwrap();
+        let check_test = RawQueryStats::try_from(pb_test).unwrap();
+
+        assert_eq!(test, check_test);
+        // The empty epoch must be preserved as an empty map, not absent.
+        assert!(check_test.stats[&node_test_id(1)][&QueryStatsEpoch::new(1)].is_empty());
+    }
+
     fn rng_epoch_stats<R>(rng: &mut R) -> QueryStats
     where
         R: RngCore,
