@@ -303,7 +303,7 @@ impl Registry {
         subnet_id: SubnetId,
     ) -> Vec<RegistryMutation> {
         self.modify_routing_table(version, |routing_table| {
-            let target_in_routing_table = !routing_table.ranges(subnet_id).is_empty();
+            let target_in_routing_table = routing_table.iter().any(|(_range, sid)| *sid == subnet_id);
             for canister_id in canister_ids {
                 routing_table.assign_canister(canister_id, subnet_id);
             }
