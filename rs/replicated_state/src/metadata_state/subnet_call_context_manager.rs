@@ -23,6 +23,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::{From, TryFrom},
     sync::Arc,
+    time::Duration,
 };
 
 /// ECDSA message hash size in bytes.
@@ -30,6 +31,13 @@ const MESSAGE_HASH_SIZE: usize = 32;
 
 /// Threshold algorithm nonce size in bytes.
 const NONCE_SIZE: usize = 32;
+
+/// How long a `CanisterHttpRequestContext` whose response was already delivered
+/// to execution is retained before being removed.
+///
+/// The timeout is measured against the `time` of the original
+/// `CanisterHttpRequestContext` and the batch time, not wall-clock time.
+pub const DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
@@ -217,6 +225,10 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
+    /// `CanisterHttpRequestContext`s whose responses have already been delivered
+    /// to execution. They are kept here until they time out (see
+    /// [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`]).
+    pub delivered_canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
@@ -315,6 +327,11 @@ impl SubnetCallContextManager {
                             context.request.sender_reply_callback,
                             context.request.sender
                         );
+                        // Move the context into the collection of contexts that
+                        // have already been responded to, where it remains until
+                        // it times out.
+                        self.delivered_canister_http_request_contexts
+                            .insert(callback_id, context.clone());
                         SubnetCallContext::CanisterHttpRequest(context)
                     })
             })
@@ -344,6 +361,20 @@ impl SubnetCallContextManager {
                         SubnetCallContext::BitcoinSendTransactionInternal(context)
                     })
             })
+    }
+
+    /// Removes all delivered `CanisterHttpRequestContext`s that have been around
+    /// for longer than [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`].
+    ///
+    /// The timeout is measured against the `time` recorded in the original
+    /// `CanisterHttpRequestContext` and the provided `current_time` (the batch
+    /// time).
+    pub fn time_out_delivered_canister_http_request_contexts(&mut self, current_time: Time) {
+        self.delivered_canister_http_request_contexts
+            .retain(|_callback_id, context| {
+                current_time.saturating_duration_since(context.time)
+                    < DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            });
     }
 
     pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
@@ -743,6 +774,7 @@ mod testing {
             setup_initial_dkg_contexts: Default::default(),
             sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
+            delivered_canister_http_request_contexts: Default::default(),
             reshare_chain_key_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),

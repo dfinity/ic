@@ -14,7 +14,7 @@ const TIB: u64 = 1024 * GIB;
 const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
 
 // TODO(DSM-105): remove after the feature is enabled by default.
-pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
+pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
 pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
     FlagStatus::Enabled
 } else {
@@ -211,7 +211,7 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
 /// The maximum number of environment variables allowed per canister.
-pub const MAX_ENVIRONMENT_VARIABLES: usize = 20;
+pub const MAX_ENVIRONMENT_VARIABLES: usize = 32;
 
 /// The maximum length of an environment variable name.
 pub const MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;

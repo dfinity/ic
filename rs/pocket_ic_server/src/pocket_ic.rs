@@ -110,7 +110,8 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsW
 use ic_state_machine_tests::{
     FakeVerifier, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
     SubmitIngressError, Subnets, WasmResult, add_global_registry_records,
-    add_initial_registry_records, update_global_registry_records,
+    add_initial_registry_records, remove_chain_key_registry_records,
+    remove_subnet_local_registry_records, update_global_registry_records,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
@@ -2801,6 +2802,12 @@ impl PocketIcSubnets {
         for subnets in self.chain_keys.values_mut() {
             subnets.retain(|&sid| sid != subnet_id);
         }
+        let empty_chain_key_ids: Vec<MasterPublicKeyId> = self
+            .chain_keys
+            .iter()
+            .filter(|(_, subnets)| subnets.is_empty())
+            .map(|(key_id, _)| key_id.clone())
+            .collect();
         self.chain_keys.retain(|_, subnets| !subnets.is_empty());
 
         // Delete the subnet state directory from disk.
@@ -2822,6 +2829,11 @@ impl PocketIcSubnets {
         if self.nns_subnet.is_some() {
             let next_version =
                 RegistryVersion::new(self.registry_data_provider.latest_version().get() + 1);
+            remove_chain_key_registry_records(
+                &empty_chain_key_ids,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
             let subnet_list = self
                 .subnets
                 .get_all()
@@ -2834,6 +2846,12 @@ impl PocketIcSubnets {
                 subnet_list,
                 self.chain_keys.clone(),
                 self.registry_data_provider.clone(),
+            );
+            remove_subnet_local_registry_records(
+                subnet_id,
+                &subnet.state_machine.nodes,
+                self.registry_data_provider.clone(),
+                next_version,
             );
             self.persist_registry_changes();
         }

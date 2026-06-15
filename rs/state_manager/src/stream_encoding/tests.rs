@@ -17,6 +17,7 @@ fn stream_encode_decode_roundtrip(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -61,6 +62,7 @@ fn stream_encode_with_size_limit(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..1000_usize)] size_limit: usize,

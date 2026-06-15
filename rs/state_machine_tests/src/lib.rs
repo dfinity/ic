@@ -50,7 +50,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
-use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_registry::{RegistryClient, RegistryRecord};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
     StateManager, StateReader,
@@ -101,8 +101,9 @@ use ic_registry_client_helpers::{
 use ic_registry_keys::{
     NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, make_canister_migrations_record_key,
     make_canister_ranges_key, make_catch_up_package_contents_key,
-    make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
-    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_chain_key_enabled_subnet_list_key, make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -520,6 +521,56 @@ fn add_subnet_local_registry_records(
         subnet_id,
         record,
     );
+}
+
+pub fn remove_subnet_local_registry_records(
+    subnet_id: SubnetId,
+    nodes: &[StateMachineNode],
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
+    let mut keys = vec![
+        make_catch_up_package_contents_key(subnet_id),
+        make_crypto_threshold_signing_pubkey_key(subnet_id),
+        make_subnet_record_key(subnet_id),
+    ];
+    for node in nodes {
+        keys.push(make_node_record_key(node.node_id));
+        keys.push(make_crypto_tls_cert_key(node.node_id));
+        for key_purpose in [
+            KeyPurpose::NodeSigning,
+            KeyPurpose::CommitteeSigning,
+            KeyPurpose::DkgDealingEncryption,
+            KeyPurpose::IDkgMEGaEncryption,
+        ] {
+            keys.push(make_crypto_node_key(node.node_id, key_purpose));
+        }
+    }
+    let records = keys
+        .into_iter()
+        .map(|key| RegistryRecord {
+            key,
+            version: registry_version,
+            value: None,
+        })
+        .collect();
+    registry_data_provider.add_registry_records(records);
+}
+
+pub fn remove_chain_key_registry_records(
+    chain_key_ids: &[MasterPublicKeyId],
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
+    let records = chain_key_ids
+        .iter()
+        .map(|key_id| RegistryRecord {
+            key: make_chain_key_enabled_subnet_list_key(key_id),
+            version: registry_version,
+            value: None,
+        })
+        .collect();
+    registry_data_provider.add_registry_records(records);
 }
 
 fn add_cup_contents_and_key_record(
