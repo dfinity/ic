@@ -130,9 +130,9 @@ impl ExecutionServices {
             sync_query_handler,
             query_scheduler,
             query_stats_payload_builder,
+            query_stats_collector,
             cycles_account_manager,
             execution_environment,
-            query_stats_collector,
         ) = setup_execution_helper(
             logger.clone(),
             metrics_registry,
@@ -257,9 +257,9 @@ impl ExecutionServicesForTesting {
             sync_query_handler,
             _query_scheduler,
             query_stats_payload_builder,
+            local_query_execution_stats,
             cycles_account_manager,
             execution_environment,
-            local_query_execution_stats,
         ) = setup_execution_helper(
             logger,
             metrics_registry,
@@ -438,8 +438,8 @@ fn setup_execution_helper(
         sync_query_handler,
         query_scheduler,
         query_stats_payload_builder,
+        query_stats_collector,
         cycles_account_manager,
         exec_env,
-        query_stats_collector,
     )
 }
