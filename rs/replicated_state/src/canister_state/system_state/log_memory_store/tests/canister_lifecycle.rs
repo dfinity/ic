@@ -247,11 +247,13 @@ fn test_canister_uninstall_and_install_drops_logs_until_resized() {
     canister.uninstall_code();
     canister.install_code();
 
-    // Test that without settings update, log memory remains cleared and drops msg
+    // Test that without settings update, log memory remains cleared and drops msg.
+    // next_idx still advances (tracking the global monotone sequence) even though
+    // the record is dropped due to no allocated ring buffer.
     canister.log("Message 2 ignored");
     assert_eq!(canister.fetch_canister_logs().len(), 0);
     assert_eq!(canister.log_memory_usage().get(), 0);
-    assert_eq!(canister.next_idx(), 1);
+    assert_eq!(canister.next_idx(), 2);
 }
 
 #[test]

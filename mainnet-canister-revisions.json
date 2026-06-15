@@ -84,12 +84,12 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "34e7c805a34696cae9471c10dc30797c4daf8a14ebd53067a39ba3b66c9fe2b4",
-    "tag": "release-2026-06-05"
+    "sha256": "917a42d0f8621ab59921b3ad320bdc2fd30951721e1687e7e5d1be035936fce9",
+    "tag": "release-2026-06-12"
   },
   "internet_identity_frontend": {
-    "sha256": "208f1415ddffe00af2c10cdd07cfc8f747f487dd8011839e85514e5ca50be8de",
-    "tag": "release-2026-06-05"
+    "sha256": "7f9e8557d25544dc00e72afc0f0c677e9823d66d07f8e65b671c102a44170c35",
+    "tag": "release-2026-06-12"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -100,8 +100,8 @@
     "sha256": "0d9221e28781e8b627c0e0696b16c0301424d4387514ed5fdae4fa74ad4b696b"
   },
   "migration": {
-    "rev": "789e5a187985cedc654988f0f337467d6d5b3dcb",
-    "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
+    "rev": "8facd5635c5e05de9b423b64aeabc2e1ad58d66e",
+    "sha256": "7d8799644622662dc2eeb31d157c4f1d594d16fb91189396ce765121e750a5d7"
   },
   "nns_dapp_test": {
     "sha256": "2eba384142418f6f4e4eff1326119dbc59be29b9e5e0adcdca58a8df727f00cd",
