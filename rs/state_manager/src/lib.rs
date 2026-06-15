@@ -3883,7 +3883,10 @@ impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
         let mixed_hash_tree = {
             let lazy_tree = replicated_state_as_lazy_tree(self.get_state(), self.get_height());
             let partial_tree = materialize_partial(&lazy_tree, paths, exclusion.map(|v| &v[..]));
-            self.hash_tree.witness::<MixedHashTree>(&partial_tree)
+            // The hash tree stubs out per-canister subtrees; expanding them
+            // while building the witness requires the source lazy tree.
+            self.hash_tree
+                .witness_with_source::<MixedHashTree>(&partial_tree, Some(&lazy_tree))
         }
         .ok()?;
 

@@ -1,4 +1,4 @@
-use crate::lazy_tree::{LazyFork, LazyTree, SubtreeSource};
+use crate::lazy_tree::{LazyFork, LazyTree, SubtreeId};
 use crypto::WitnessGenerationError;
 use ic_crypto_tree_hash::{
     self as crypto, Digest, Label, LabeledTree, WitnessBuilder, hasher::Hasher,
@@ -8,7 +8,6 @@ use itertools::izip;
 use std::fmt;
 use std::iter::repeat_with;
 use std::ops::Range;
-use std::sync::Arc;
 
 /// The number of threads we use for building HashTree
 const NUMBER_OF_CERTIFICATION_THREADS: u32 = 16;
@@ -39,10 +38,13 @@ enum NodeKind {
     Fork,
     Leaf,
     Node,
-    /// A self-contained, reusable subtree: an `Arc<SubtreeNode>` wrapping a
-    /// complete `HashTree` plus the [`SubtreeSource`] it was built from. An
-    /// unchanged subtree (equal [`SubtreeId`](crate::lazy_tree::SubtreeId) from a
-    /// baseline tree can be reused verbatim with a single `Arc::clone`.
+    /// A subtree reduced to a single root digest (a "stub"): a [`SubtreeNode`]
+    /// holding that digest plus the [`SubtreeId`](crate::lazy_tree::SubtreeId)
+    /// it was built from. Its contents are not materialized; they are expanded
+    /// on demand from the source [`LazyTree`] when building a witness (see
+    /// [`HashTree::witness_with_source`]). For an unchanged subtree (equal
+    /// `SubtreeId`) found in a baseline tree, the stored digest is reused
+    /// instead of being recomputed.
     Subtree,
 }
 
@@ -305,24 +307,28 @@ pub struct HashTree {
     node_children_labels_ranges: Vec<Vec<NodeIndexRange>>,
 
     /// (i,j)-th element of this array contains the reusable subtree node with ID
-    /// `NodeId::subtree(i,j)`: an `Arc` wrapping a complete, self-contained
-    /// `HashTree` plus the [`SubtreeSource`] it was built from.
-    subtrees: Vec<Vec<Arc<SubtreeNode>>>,
+    /// `NodeId::subtree(i,j)`: the subtree's root digest plus the
+    /// [`SubtreeId`](crate::lazy_tree::SubtreeId) it was built from. The subtree's
+    /// contents are not materialized; they are expanded on demand from the source
+    /// [`LazyTree`] when building a witness (see [`HashTree::witness_with_source`]).
+    subtrees: Vec<Vec<SubtreeNode>>,
 }
 
-/// A self-contained, reusable subtree stored in a [`NodeKind::Subtree`] node. The
-/// node's digest is the inner tree's `root_hash()`.
+/// A reusable subtree stored as a single digest ("stub") in a
+/// [`NodeKind::Subtree`] node.
 ///
-/// Held behind a single `Arc` (see [`HashTree::subtrees`]) so that an unchanged
-/// subtree from a baseline tree can be reused with a single `Arc::clone`.
-#[derive(Debug)]
+/// Holds exactly one `Arc` (the [`SubtreeId`](crate::lazy_tree::SubtreeId)) plus
+/// a cheap [`Digest`], so it is stored inline (no outer `Arc`); cloning it on the
+/// baseline-reuse path bumps a single refcount.
+#[derive(Clone, Debug)]
 struct SubtreeNode {
-    /// The fully materialized subtree.
-    tree: HashTree,
-    /// Handle to the source this subtree was built from; its
-    /// [`SubtreeId`](crate::lazy_tree::SubtreeId) is used to detect that an
-    /// unchanged subtree can be reused from a baseline.
-    source: SubtreeSource,
+    /// The subtree's root digest. Its contents are not materialized; they are
+    /// expanded on demand from the source [`LazyTree`] during witness generation.
+    digest: Digest,
+    /// Identity of the source this subtree was built from, used to detect that an
+    /// unchanged subtree can be reused from a baseline. Holds an `Arc` into that
+    /// source, keeping it alive so the identity cannot be recycled (no ABA).
+    id: SubtreeId,
 }
 
 impl HashTree {
@@ -357,8 +363,8 @@ impl HashTree {
         let subtree_size: usize = self.subtrees.iter().map(|bucket| bucket.len()).sum();
 
         // Since this is for metrics only we don't care about potential overflows.
-        // Note: reusable subtree nodes are counted as a single node each; the
-        // nodes of the inner (shared) `Arc<HashTree>` are not counted here.
+        // Note: each reusable subtree node is counted as a single node (a stub);
+        // the nodes of its unmaterialized subtree are not counted here.
         // XXX: Where is this used? Should we also count nodes in subtrees?
         leaf_size + fork_size + node_size + subtree_size
     }
@@ -401,25 +407,6 @@ impl HashTree {
         self.subtrees.iter().map(|bucket| bucket.len()).sum()
     }
 
-    /// Number of this tree's reusable subtree nodes whose `Arc<SubtreeNode>`
-    /// was reused (is pointer-shared) from `baseline`.
-    ///
-    /// Diagnostics/test only.
-    #[doc(hidden)]
-    pub fn reused_subtree_count(&self, baseline: &HashTree) -> usize {
-        let baseline_ptrs: std::collections::HashSet<usize> = baseline
-            .subtrees
-            .iter()
-            .flatten()
-            .map(|node| Arc::as_ptr(node) as usize)
-            .collect();
-        self.subtrees
-            .iter()
-            .flatten()
-            .filter(|node| baseline_ptrs.contains(&(Arc::as_ptr(node) as usize)))
-            .count()
-    }
-
     /// Note that new forks are always added to fork_digests[0], but in order
     /// to access it, you use a NodeId with bucket set to self.bucket_offset.
     fn new_fork(&mut self, d: Digest, l: NodeId, r: NodeId) -> Result<NodeId, HashTreeError> {
@@ -446,9 +433,9 @@ impl HashTree {
         NodeId::leaf(self.bucket_offset, id)
     }
 
-    /// Appends an already-built reusable subtree `node` (either freshly created
-    /// or cloned verbatim from a baseline).
-    fn new_subtree(&mut self, node: Arc<SubtreeNode>) -> Result<NodeId, HashTreeError> {
+    /// Appends an already-built reusable subtree `node` (either freshly hashed or
+    /// reusing a baseline's digest).
+    fn new_subtree(&mut self, node: SubtreeNode) -> Result<NodeId, HashTreeError> {
         let idx = self.subtrees[0].len();
         self.subtrees[0].push(node);
         NodeId::subtree(self.bucket_offset, idx)
@@ -514,10 +501,9 @@ impl HashTree {
             NodeKind::Leaf => {
                 &self.leaf_digests[node_id.bucket() - self.bucket_offset][node_id.index()]
             }
-            NodeKind::Subtree => self.subtrees[node_id.bucket() - self.bucket_offset]
-                [node_id.index()]
-            .tree
-            .root_hash(),
+            NodeKind::Subtree => {
+                &self.subtrees[node_id.bucket() - self.bucket_offset][node_id.index()].digest
+            }
             NodeKind::Empty => &EMPTY_HASH,
         }
     }
@@ -565,8 +551,7 @@ impl HashTree {
                 self.node_children[bucket][idx],
             ),
             NodeKind::Leaf => HashTreeView::Leaf(&self.leaf_digests[bucket][idx]),
-            // XXX: Shouldn't this directly return the subtree root?
-            NodeKind::Subtree => HashTreeView::Subtree(&self.subtrees[bucket][idx].tree),
+            NodeKind::Subtree => HashTreeView::Subtree(&self.subtrees[bucket][idx].digest),
             NodeKind::Empty => HashTreeView::Empty,
         }
     }
@@ -577,10 +562,46 @@ impl HashTree {
     }
 
     /// Constructs a witness for the specified partial tree.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the requested `partial_tree` descends into a
+    /// [`NodeKind::Subtree`] stub (e.g. into a canister): expanding a stub
+    /// requires the source [`LazyTree`]. Use [`Self::witness_with_source`] in
+    /// that case.
     pub fn witness<B: WitnessBuilder>(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
     ) -> Result<B, WitnessGenerationError<B>> {
+        self.witness_with_source(partial_tree, None)
+    }
+
+    /// Constructs a witness for the specified partial tree, expanding any
+    /// [`NodeKind::Subtree`] stubs the `partial_tree` descends into from
+    /// `source`.
+    ///
+    /// `source` must be the same [`LazyTree`] that was used to build this tree
+    /// (e.g. the canonical state at the same height and certification version).
+    /// For trees without stubs, or partial trees that don't descend into one,
+    /// `source` may be `None`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `partial_tree` descends into a stub but `source` is `None`
+    /// (or doesn't contain the corresponding subtree).
+    pub fn witness_with_source<B: WitnessBuilder>(
+        &self,
+        partial_tree: &LabeledTree<Vec<u8>>,
+        source: Option<&LazyTree<'_>>,
+    ) -> Result<B, WitnessGenerationError<B>> {
+        /// Returns the subtree of `src` reachable via `label`, if `src` is a fork.
+        fn lazy_edge<'a>(src: Option<&LazyTree<'a>>, label: &Label) -> Option<LazyTree<'a>> {
+            match src {
+                Some(LazyTree::LazyFork(f)) => f.edge(label),
+                _ => None,
+            }
+        }
+
         fn add_forks<B: WitnessBuilder>(
             ht: &HashTree,
             pos: NodeId,
@@ -670,6 +691,7 @@ impl HashTree {
             pos: NodeId,
             l: &Label,
             subtree: &LabeledTree<Vec<u8>>,
+            src: Option<&LazyTree<'_>>,
         ) -> Result<B, WitnessGenerationError<B>> {
             let NodeIndexRange {
                 bucket,
@@ -683,9 +705,18 @@ impl HashTree {
                     let idx = label_range.start + offset;
                     // This expect can't fail because the same error would have occurred on ht's construction
                     let node_id = NodeId::node(bucket, idx).expect("Invalid hash tree.");
+                    // Descending through labeled node `l` corresponds to taking the `l`
+                    // edge in the source lazy tree (needed to expand subtree stubs).
+                    let child_src = lazy_edge(src, l);
                     let subwitness = B::make_node(
                         l.clone(),
-                        go::<B>(ht, node_id, ht.node_children[bucket][idx], subtree)?,
+                        go::<B>(
+                            ht,
+                            node_id,
+                            ht.node_children[bucket][idx],
+                            subtree,
+                            child_src.as_ref(),
+                        )?,
                     );
                     if pos.kind() == NodeKind::Node {
                         subwitness
@@ -714,12 +745,12 @@ impl HashTree {
                                 );
                                 B::make_pruned(digest.clone())
                             }
-                            HashTreeView::Subtree(inner) => {
+                            HashTreeView::Subtree(digest) => {
                                 debug_assert!(
                                     false,
                                     "a tree node without children must not be a subtree"
                                 );
-                                B::make_pruned(inner.root_hash().clone())
+                                B::make_pruned(digest.clone())
                             }
                         });
                     }
@@ -763,14 +794,24 @@ impl HashTree {
             parent: NodeId,
             pos: NodeId,
             t: &LabeledTree<Vec<u8>>,
+            src: Option<&LazyTree<'_>>,
         ) -> Result<B, WitnessGenerationError<B>> {
-            // A reusable subtree node embeds a complete `Arc<HashTree>`. To generate a
-            // witness we simply switch into that inner tree and continue there.
+            // A subtree node only stores its root digest (a stub). If the requested
+            // partial tree descends into it, expand it: rebuild the full subtree from
+            // the source lazy tree and continue witness generation there. Otherwise the
+            // stored digest is all the witness needs.
             if pos.kind() == NodeKind::Subtree {
-                let HashTreeView::Subtree(inner) = ht.view(pos) else {
-                    unreachable!("pos.kind() == Subtree")
+                return match t {
+                    LabeledTree::SubTree(children) if !children.is_empty() => {
+                        let src = src.expect(
+                            "witness descending into a subtree stub requires the source LazyTree",
+                        );
+                        let expanded =
+                            hash_lazy_tree(src).expect("expanding a subtree stub should not fail");
+                        go::<B>(&expanded, NodeId::empty(), expanded.root, t, Some(src))
+                    }
+                    _ => Ok(B::make_pruned(ht.digest(pos).clone())),
                 };
-                return go::<B>(inner, NodeId::empty(), inner.root, t);
             }
 
             match t {
@@ -781,26 +822,27 @@ impl HashTree {
                         B::make_node(label.clone(), B::make_pruned(ht.digest(child).clone()))
                     }
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
-                    // Intercepted above.
-                    HashTreeView::Subtree(inner) => B::make_pruned(inner.root_hash().clone()),
+                    // Intercepted above; a stub behaves like an opaque subtree.
+                    HashTreeView::Subtree(digest) => B::make_pruned(digest.clone()),
                 }),
                 LabeledTree::SubTree(children) if children.is_empty() => Ok(match ht.view(pos) {
                     HashTreeView::Empty => B::make_empty(),
                     HashTreeView::Leaf(digest) => B::make_pruned(digest.clone()),
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
                     HashTreeView::Node(digest, _label, _child) => B::make_pruned(digest.clone()),
-                    // Intercepted above.
-                    HashTreeView::Subtree(inner) => B::make_pruned(inner.root_hash().clone()),
+                    // Intercepted above; a stub behaves like an opaque subtree.
+                    HashTreeView::Subtree(digest) => B::make_pruned(digest.clone()),
                 }),
-                LabeledTree::SubTree(children) => children
-                    .iter()
-                    .try_fold(B::make_pruned(ht.digest(pos).clone()), |acc, (l, t)| {
-                        B::merge_trees(acc, child_witness::<B>(ht, parent, pos, l, t)?)
-                    }),
+                LabeledTree::SubTree(children) => children.iter().try_fold(
+                    B::make_pruned(ht.digest(pos).clone()),
+                    |acc, (l, t)| {
+                        B::merge_trees(acc, child_witness::<B>(ht, parent, pos, l, t, src)?)
+                    },
+                ),
             }
         }
 
-        go::<B>(self, NodeId::empty(), self.root, partial_tree)
+        go::<B>(self, NodeId::empty(), self.root, partial_tree, source)
     }
 
     /// Extends the current tree with the provided `subtree`. Produces an invalid
@@ -833,12 +875,10 @@ impl PartialEq<crypto::HashTree> for HashTree {
         fn eq_recursive(ht: &HashTree, ht_root: NodeId, other: &crypto::HashTree) -> bool {
             ht.digest(ht_root) == other.digest()
                 && match (ht_root.kind(), other) {
-                    // A reusable subtree node embeds a complete inner tree, so
-                    // compare structurally by recursing into it.
-                    (NodeKind::Subtree, _) => {
-                        let inner = &ht.subtrees[ht_root.bucket()][ht_root.index()].tree;
-                        eq_recursive(inner, inner.root, other)
-                    }
+                    // A subtree node collapses a whole subtree to its root digest,
+                    // which the top-level digest comparison above already checked;
+                    // there is no materialized structure left to compare.
+                    (NodeKind::Subtree, _) => true,
                     (NodeKind::Leaf | NodeKind::Empty, crypto::HashTree::Leaf { digest: _ }) => {
                         true
                     }
@@ -889,9 +929,9 @@ pub enum HashTreeView<'a> {
     Leaf(&'a Digest),
     Fork(&'a Digest, NodeId, NodeId),
     Node(&'a Digest, &'a Label, NodeId),
-    /// A reusable subtree node; holds the embedded, self-contained inner tree
-    /// (whose `root_hash()` is this node's digest).
-    Subtree(&'a HashTree),
+    /// A reusable subtree node reduced to its root digest (a stub); its
+    /// contents are expanded on demand from the source [`LazyTree`].
+    Subtree(&'a Digest),
 }
 
 /// Error produced when computing hash trees
@@ -930,8 +970,8 @@ impl<'a> Baseline<'a> {
     }
 
     /// If the baseline stored this position as a reusable [`NodeKind::Subtree`],
-    /// returns the shared subtree node (whose `id` identifies its source).
-    fn reusable(&self) -> Option<&'a Arc<SubtreeNode>> {
+    /// returns the subtree node (whose `id` identifies its source).
+    fn reusable(&self) -> Option<&'a SubtreeNode> {
         let content = self.content();
         if content.kind() == NodeKind::Subtree {
             // Sanity check: a complete `HashTree` has no bucket offset.
@@ -961,22 +1001,23 @@ impl<'a> Baseline<'a> {
 /// Materializes the provided lazy tree and builds its hash tree that can be
 /// used to produce witnesses.
 ///
-/// Subtrees that carry a [`LazyFork::subtree_id`] (e.g. canisters) are built as
-/// standalone trees and stored as self-contained [`NodeKind::Subtree`] nodes.
-/// The resulting tree has the exact same root hash as a fully materialized
-/// build and serves witnesses without any external source.
+/// Subtrees that carry a [`LazyFork::subtree_id`] (e.g. canisters) are collapsed
+/// to digest-only [`NodeKind::Subtree`] stub nodes. The resulting tree has the
+/// exact same root hash as a fully materialized build; witnesses that descend
+/// into a stubbed subtree expand it on demand from the source [`LazyTree`] (see
+/// [`HashTree::witness_with_source`]).
 pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
     hash_lazy_tree_impl(t, None)
 }
 
-/// Like [`hash_lazy_tree`], but reuses the already-built `Arc<SubtreeNode>` of
-/// every unchanged subtree from `baseline`.
+/// Like [`hash_lazy_tree`], but reuses the [`NodeKind::Subtree`] stub of every
+/// unchanged subtree from `baseline`.
 ///
 /// The new lazy tree and the baseline tree are traversed in lockstep (children
 /// merge-joined by label). Wherever a child carries a
 /// [`SubtreeId`](crate::lazy_tree::SubtreeId) equal to the one the baseline
-/// stores under the same label, the baseline's subtree node is reused verbatim
-/// instead of rebuilding and rehashing it.
+/// stores under the same label, the baseline's stored digest is reused instead
+/// of rebuilding and rehashing the subtree.
 ///
 /// The result is identical (same root hash, same witnesses) to a full
 /// [`hash_lazy_tree`] build. `baseline` must have been built by
@@ -1029,11 +1070,12 @@ fn hash_lazy_tree_impl(
     /// Builds the hash tree for `t`, returning the [`NodeId`] of its root.
     ///
     /// A fork that carries a [`LazyFork::subtree_id`] — and is not the root of
-    /// the tree being built (see `is_root`) — becomes a self-contained
-    /// [`NodeKind::Subtree`] node: its inner `Arc<HashTree>` is reused from the
+    /// the tree being built (see `is_root`) — becomes a digest-only
+    /// [`NodeKind::Subtree`] node (a stub): its digest is reused from the
     /// matching `baseline` position when the IDs are equal, otherwise it is
-    /// built standalone via [`hash_lazy_tree`]. Materializing the root of a
-    /// standalone build is what stops that recursion from looping forever.
+    /// computed by building the subtree standalone via [`hash_lazy_tree`].
+    /// Materializing the root of a standalone build is what stops that
+    /// recursion from looping forever.
     fn go(
         t: &LazyTree<'_>,
         ht: &mut HashTree,
@@ -1069,23 +1111,26 @@ fn hash_lazy_tree_impl(
                 ht.new_leaf(h.finalize())
             }
             LazyTree::LazyFork(f) => {
-                // A fork that carries a subtree identity is stored as a single, self-contained
-                // `SubtreeNode`: reuse the baseline's node verbatim (one `Arc::clone`) when the
-                // identity matches, otherwise (re)build it.
+                // A fork that carries a subtree identity is collapsed to a single
+                // `SubtreeNode` holding only its root digest (a stub): when the baseline
+                // holds the same identity, reuse its digest (skipping the rehash);
+                // otherwise build the subtree just to capture its digest.
                 //
-                // We compare cheap `SubtreeIds` here, so the owned `SubtreeSource` (and its
-                // `Arc::clone`) is only produced on the build branch. The root is always
-                // materialized to avoid an infinite loop.
+                // Either way we move the fork's freshly cloned `id` into the node (a single
+                // `Arc::clone`, the only one on this path). The root is always materialized
+                // to avoid an infinite loop.
                 if !is_root && let Some(id) = f.subtree_id() {
-                    // Sanity check: `subtree_id()` and `subtree_source()` must match.
-                    debug_assert_eq!(f.subtree_source().unwrap().id(), id);
-
                     let node = match baseline.and_then(|b| b.reusable()) {
-                        Some(base_node) if base_node.source.id() == id => Arc::clone(base_node),
-                        _ => Arc::new(SubtreeNode {
-                            tree: hash_lazy_tree(t)?,
-                            source: f.subtree_source().unwrap(),
-                        }),
+                        Some(base_node) if base_node.id == id => SubtreeNode {
+                            digest: base_node.digest.clone(),
+                            id,
+                        },
+                        _ => SubtreeNode {
+                            // Build the subtree standalone only to capture its root digest;
+                            // its contents are not retained (expanded on demand for witnesses).
+                            digest: hash_lazy_tree(t)?.root_hash().clone(),
+                            id,
+                        },
                     };
                     return ht.new_subtree(node);
                 }
@@ -1299,19 +1344,18 @@ fn hash_lazy_tree_impl(
     });
 
     let mut ht = HashTree::new();
+    // let strategy = &mut ParStrategy::Concurrent;
+    let strategy = &mut ParStrategy::Sequential;
+    // let strategy = if baseline.is_some() {
+    //     &mut ParStrategy::Sequential
+    // } else {
+    //     &mut ParStrategy::Concurrent
+    // };
     // The root is always materialized (`is_root = true`); `subtree_id` only
     // collapses *descendants* into reusable subtree nodes. (Building a
     // stand-alone subtree is just `hash_lazy_tree` on that subtree's root, which
     // is in turn materialized for the same reason.)
-    ht.root = go(
-        t,
-        &mut ht,
-        NodeId::empty(),
-        &mut ParStrategy::Concurrent,
-        0,
-        baseline,
-        true,
-    )?;
+    ht.root = go(t, &mut ht, NodeId::empty(), strategy, 0, baseline, true)?;
 
     ht.check_invariants();
 

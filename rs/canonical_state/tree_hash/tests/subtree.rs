@@ -1,19 +1,20 @@
-//! Tests for reusable subtree nodes.
+//! Tests for reusable subtree (stub) nodes.
 //!
 //! When building a [`HashTree`] from a [`LazyTree`], every subtree that carries
 //! a [`LazyFork::subtree_id`] (here a per-canister fork, mirroring `CanisterFork`
-//! in production) is built as a standalone tree and stored as a self-contained
-//! [`NodeKind::Subtree`] node (an `Arc<SubtreeNode>`). Such a tree:
+//! in production) is collapsed to a digest-only [`NodeKind::Subtree`] stub node.
+//! Such a tree:
 //!
-//!   * has the exact same root hash as a fully materialized build, and
-//!   * serves witnesses without any external source (it is self-contained), and
+//!   * has the exact same root hash as a fully materialized build,
+//!   * serves witnesses by expanding the stub on demand from the source
+//!     [`LazyTree`] (via `witness_with_source`), and
 //!   * when built with a baseline ([`hash_lazy_tree_with_baseline`]), reuses the
-//!     `Arc<SubtreeNode>` of every unchanged subtree (matched by `SubtreeId`).
+//!     stored digest of every unchanged subtree (matched by `SubtreeId`).
 
 use ic_canonical_state_tree_hash::hash_tree::{
     HashTree, hash_lazy_tree, hash_lazy_tree_with_baseline,
 };
-use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeId, SubtreeSource, fork};
+use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeId, fork};
 use ic_canonical_state_tree_hash_test_utils::as_lazy;
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, Witness, flatmap};
 use std::collections::BTreeMap;
@@ -108,10 +109,6 @@ impl<'a> LazyFork<'a> for CanisterArcFork<'a> {
     fn subtree_id(&self) -> Option<SubtreeId> {
         Some(SubtreeId::new(self.canister))
     }
-
-    fn subtree_source(&self) -> Option<SubtreeSource> {
-        Some(SubtreeSource::new(self.canister))
-    }
 }
 
 /// A `LazyFork` over the `/canister` subtree.
@@ -189,14 +186,20 @@ fn state_tree<'a>(canisters: &'a Canisters, time: &'a [u8]) -> LazyTree<'a> {
 }
 
 /// Asserts that `tree` produces exactly the same witness (both as
-/// `MixedHashTree` and `Witness`) as the `reference` full build, with no
-/// external source (the tree is self-contained).
-fn assert_same_witness(reference: &HashTree, tree: &HashTree, partial: &LabeledTree<Vec<u8>>) {
+/// `MixedHashTree` and `Witness`) as the `reference` full build. Stubbed
+/// subtrees are expanded from `source` (the same lazy tree both were built
+/// from).
+fn assert_same_witness(
+    reference: &HashTree,
+    tree: &HashTree,
+    partial: &LabeledTree<Vec<u8>>,
+    source: &LazyTree,
+) {
     let reference_mixed = reference
-        .witness::<MixedHashTree>(partial)
+        .witness_with_source::<MixedHashTree>(partial, Some(source))
         .expect("reference MixedHashTree");
     let tree_mixed = tree
-        .witness::<MixedHashTree>(partial)
+        .witness_with_source::<MixedHashTree>(partial, Some(source))
         .expect("MixedHashTree");
     assert_eq!(
         reference_mixed, tree_mixed,
@@ -209,9 +212,11 @@ fn assert_same_witness(reference: &HashTree, tree: &HashTree, partial: &LabeledT
     );
 
     let reference_witness = reference
-        .witness::<Witness>(partial)
+        .witness_with_source::<Witness>(partial, Some(source))
         .expect("reference Witness");
-    let tree_witness = tree.witness::<Witness>(partial).expect("Witness");
+    let tree_witness = tree
+        .witness_with_source::<Witness>(partial, Some(source))
+        .expect("Witness");
     assert_eq!(
         reference_witness, tree_witness,
         "Witness mismatch for partial {partial:?}"
@@ -246,16 +251,17 @@ fn every_canister_is_a_subtree() {
 }
 
 #[test]
-fn witnesses_into_canisters_are_self_contained() {
+fn witnesses_into_canisters_expand_from_source() {
     let canisters = canisters();
-    let tree = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
+    let source = state_tree(&canisters, TIME);
+    let tree = hash_lazy_tree(&source).unwrap();
 
     // Whole-canister witnesses across both the sequential and parallel ranges.
     for i in [0usize, 1, 99, 100, 101, NUM_CANISTERS - 1] {
         let partial = canister_partial(i);
         let mixed = tree
-            .witness::<MixedHashTree>(&partial)
-            .expect("self-contained witness");
+            .witness_with_source::<MixedHashTree>(&partial, Some(&source))
+            .expect("witness expanded from source");
         assert_eq!(&mixed.digest(), tree.root_hash());
         // The requested leaves must be present (not pruned).
         assert!(
@@ -277,29 +283,34 @@ fn witnesses_into_canisters_are_self_contained() {
             Label::from("module_hash") => LabeledTree::Leaf(module_hash(77)),
         }),
     );
-    let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
+    let mixed = tree
+        .witness_with_source::<MixedHashTree>(&partial, Some(&source))
+        .unwrap();
     assert_eq!(&mixed.digest(), tree.root_hash());
 }
 
 #[test]
-fn absence_witnesses_are_self_contained() {
+fn absence_witnesses_expand_from_source() {
     let canisters = canisters();
-    let tree = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
+    let source = state_tree(&canisters, TIME);
+    let tree = hash_lazy_tree(&source).unwrap();
 
-    // Absent canister id.
+    // Absent canister id (proven at the `/canister` node, no stub descent).
     let partial = LabeledTree::SubTree(flatmap! {
         Label::from(CANISTER_LABEL) => LabeledTree::SubTree(flatmap!{
             Label::from("zzzz") => LabeledTree::Leaf(vec![]),
         }),
     });
-    let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
+    let mixed = tree
+        .witness_with_source::<MixedHashTree>(&partial, Some(&source))
+        .unwrap();
     assert_eq!(&mixed.digest(), tree.root_hash());
     assert!(
         mixed.lookup(&[CANISTER_LABEL, b"zzzz"]).is_absent(),
         "expected absence proof, got {mixed:?}"
     );
 
-    // Absent label *inside* a canister (descends into the subtree node).
+    // Absent label *inside* a canister (descends into the subtree stub).
     for i in [3usize, 110] {
         let partial = canister_query(
             i,
@@ -307,7 +318,9 @@ fn absence_witnesses_are_self_contained() {
                 Label::from("nonexistent") => LabeledTree::Leaf(vec![]),
             }),
         );
-        let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
+        let mixed = tree
+            .witness_with_source::<MixedHashTree>(&partial, Some(&source))
+            .unwrap();
         assert_eq!(&mixed.digest(), tree.root_hash());
         assert!(
             mixed
@@ -345,7 +358,8 @@ fn baseline_build_matches_from_scratch() {
 
     // Witnesses must match between the two builds for the changed canister
     // (whose contents are now those of `canister_subtree(9999)`), an unchanged
-    // canister, and the changed `time` leaf.
+    // canister, and the changed `time` leaf. Stubs are expanded from `source`.
+    let source = state_tree(&next, new_time);
     for partial in [
         canister_query(50, canister_subtree(9999)),
         canister_partial(7),
@@ -353,38 +367,34 @@ fn baseline_build_matches_from_scratch() {
             Label::from(TIME_LABEL) => LabeledTree::Leaf(new_time.to_vec()),
         }),
     ] {
-        assert_same_witness(&from_scratch, &with_baseline, &partial);
+        assert_same_witness(&from_scratch, &with_baseline, &partial, &source);
     }
 }
 
-/// Building with a baseline reuses the `Arc<HashTree>` of every unchanged
-/// canister, and rebuilds only the changed one.
+/// Building with a baseline (reusing the stored digest of every unchanged
+/// canister, rebuilding only the changed one) must produce exactly the same tree
+/// as a from-scratch build. Digest reuse is an internal optimization and is not
+/// observable in the result.
 #[test]
-fn baseline_build_reuses_unchanged_subtrees() {
+fn baseline_build_with_partial_change_matches_from_scratch() {
     let canisters = canisters();
     let baseline = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
 
     // A `BTreeMap` clone shares the canister `Arc`s; only canister 50 gets a
-    // fresh `Arc` (a real mutation), so only it should be rebuilt.
+    // fresh `Arc` (a real mutation), so only it is rebuilt.
     let mut next = canisters.clone();
     next.insert(canister_id_label(50), Arc::new(canister_subtree(50)));
 
     let with_baseline = hash_lazy_tree_with_baseline(&state_tree(&next, TIME), &baseline).unwrap();
+    let from_scratch = hash_lazy_tree(&state_tree(&next, TIME)).unwrap();
 
     assert_eq!(with_baseline.subtree_count(), NUM_CANISTERS);
-    assert_eq!(
-        with_baseline.reused_subtree_count(&baseline),
-        NUM_CANISTERS - 1,
-        "every unchanged canister should reuse its baseline subtree"
-    );
-
-    // Sanity: a from-scratch build (no baseline) shares nothing with the baseline.
-    let from_scratch = hash_lazy_tree(&state_tree(&next, TIME)).unwrap();
-    assert_eq!(from_scratch.reused_subtree_count(&baseline), 0);
+    assert_eq!(with_baseline.root_hash(), from_scratch.root_hash());
 }
 
-/// Reuse must be by identity, not by value: two canisters with identical
-/// contents but distinct `Arc`s do not reuse each other's subtree.
+/// Reuse is by identity, not by value: replacing every canister with a fresh
+/// `Arc` of identical contents skips all digest reuse, yet still yields the same
+/// root hash (the canonical encoding depends only on the contents).
 #[test]
 fn reuse_is_by_identity_not_by_value() {
     let canisters = canisters();
@@ -397,8 +407,7 @@ fn reuse_is_by_identity_not_by_value() {
 
     let with_baseline = hash_lazy_tree_with_baseline(&state_tree(&next, TIME), &baseline).unwrap();
 
-    // Same root hash (contents unchanged) ...
+    // Same root hash, even though no subtree's digest was reused (every `Arc` is
+    // fresh, so no identity matches the baseline).
     assert_eq!(with_baseline.root_hash(), baseline.root_hash());
-    // ... but nothing is reused, since every `Arc` is fresh.
-    assert_eq!(with_baseline.reused_subtree_count(&baseline), 0);
 }

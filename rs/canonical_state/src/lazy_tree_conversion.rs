@@ -11,7 +11,7 @@ use LazyTree::Blob;
 use ic_canonical_state_tree_hash::{
     hash_tree::HashTree,
     lazy_tree::{
-        Lazy, LazyFork, LazyTree, SubtreeId, SubtreeSource, blob, fork,
+        Lazy, LazyFork, LazyTree, SubtreeId, blob, fork,
         materialize::materialize_partial, num, string,
     },
 };
@@ -859,10 +859,6 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
     /// [`CertificationVersion`], since the canonical encoding depends on it.
     fn subtree_id(&self) -> Option<SubtreeId> {
         Some(SubtreeId::new(self.canister))
-    }
-
-    fn subtree_source(&self) -> Option<SubtreeSource> {
-        Some(SubtreeSource::new(self.canister))
     }
 }
 
