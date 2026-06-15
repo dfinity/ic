@@ -1824,11 +1824,6 @@ impl StateMachine {
         self.do_execute_round(Some(blockmaker_metrics));
     }
 
-    pub fn advance_query_stats_epoch(&self) {
-        self.local_query_execution_stats
-            .set_epoch_from_height(self.state_manager.latest_state_height());
-    }
-
     /// Assemble a payload for a new round using `PayloadBuilderImpl`
     /// and execute a round with this payload.
     /// Note that only ingress messages submitted via `Self::submit_ingress`
@@ -1956,6 +1951,8 @@ impl StateMachine {
 
         // Finally execute the payload.
         self.execute_payload(payload);
+        self.local_query_execution_stats
+            .set_epoch_from_height(self.state_manager.latest_state_height());
     }
 
     /// Reload registry derived from a *shared* registry data provider

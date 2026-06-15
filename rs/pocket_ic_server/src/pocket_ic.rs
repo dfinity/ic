@@ -4051,9 +4051,6 @@ impl Operation for Tick {
                 Some(metrics) => state_machine.execute_round_with_blockmaker_metrics(metrics),
                 None => state_machine.execute_round(),
             }
-            // Advance the query stats epoch so that the previous epoch's stats are
-            // flushed to the payload builder even when no queries arrive.
-            state_machine.advance_query_stats_epoch();
         }
 
         OpOut::NoOutput
