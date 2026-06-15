@@ -870,6 +870,17 @@ pub fn load_canister_state(
         metrics,
     );
 
+    if system_state.log_memory_store.is_migrated() {
+        let lms_next_idx = system_state.log_memory_store.next_idx();
+        let log_next_idx = system_state.canister_log.next_idx();
+        if lms_next_idx != log_next_idx {
+            metrics.observe_broken_soft_invariant(format!(
+                "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
+                 != canister_log.next_idx ({log_next_idx})",
+            ));
+        }
+    }
+
     let canister_state = CanisterState {
         system_state,
         execution_state,
