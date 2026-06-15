@@ -1,16 +1,19 @@
-#![allow(deprecated)]
 use crate::logs::DEBUG;
 use async_trait::async_trait;
 use candid::{CandidType, Encode, Principal};
-use ic_base_types::PrincipalId;
 use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgs, InstallCodeArgs,
+use ic_cdk::call::{Call, CallFailed, OnewayError, RejectCode};
+use ic_cdk::management_canister::{
+    CanisterInstallMode, CanisterSettings, CanisterStatusArgs, CreateCanisterArgs,
+    DepositCyclesArgs, InstallCodeArgs, StartCanisterArgs, StopCanisterArgs, canister_status,
+    install_code, start_canister, stop_canister,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
 use std::fmt::Debug;
+
+#[cfg(test)]
+mod tests;
 
 // TODO: extract to common crate since copied form ckETH
 
@@ -75,16 +78,59 @@ impl fmt::Display for Reason {
 }
 
 impl Reason {
-    fn from_reject(reject_code: RejectionCode, reject_message: String) -> Self {
+    fn from_call_error(error: ic_cdk::call::Error) -> Self {
+        use ic_cdk::call::Error;
+        match error {
+            Error::CallRejected(rejected) => Self::from_reject_code_message(
+                rejected.reject_code(),
+                rejected.raw_reject_code(),
+                rejected.reject_message().to_string(),
+            ),
+            Error::InsufficientLiquidCycleBalance(_) => Self::OutOfCycles,
+            Error::CallPerformFailed(_) => Self::InternalError("call_perform failed".to_string()),
+            Error::CandidDecodeFailed(e) => {
+                Self::InternalError(format!("candid decode failed: {e}"))
+            }
+        }
+    }
+
+    fn from_call_failed(failed: CallFailed) -> Self {
+        match failed {
+            CallFailed::CallRejected(rejected) => Self::from_reject_code_message(
+                rejected.reject_code(),
+                rejected.raw_reject_code(),
+                rejected.reject_message().to_string(),
+            ),
+            CallFailed::InsufficientLiquidCycleBalance(_) => Self::OutOfCycles,
+            CallFailed::CallPerformFailed(_) => {
+                Self::InternalError("call_perform failed".to_string())
+            }
+        }
+    }
+
+    fn from_oneway_error(error: OnewayError) -> Self {
+        match error {
+            OnewayError::InsufficientLiquidCycleBalance(_) => Self::OutOfCycles,
+            OnewayError::CallPerformFailed(_) => {
+                Self::InternalError("call_perform failed".to_string())
+            }
+        }
+    }
+
+    fn from_reject_code_message(
+        reject_code: Result<RejectCode, ic_cdk::call::UnrecognizedRejectCode>,
+        raw_reject_code: u32,
+        message: String,
+    ) -> Self {
         match reject_code {
-            RejectionCode::SysTransient => Self::TransientInternalError(reject_message),
-            RejectionCode::CanisterError => Self::CanisterError(reject_message),
-            RejectionCode::CanisterReject => Self::Rejected(reject_message),
-            RejectionCode::NoError
-            | RejectionCode::SysFatal
-            | RejectionCode::DestinationInvalid
-            | RejectionCode::Unknown => Self::InternalError(format!(
-                "rejection code: {reject_code:?}, rejection message: {reject_message}"
+            Ok(RejectCode::SysTransient) => Self::TransientInternalError(message),
+            Ok(RejectCode::CanisterError) => Self::CanisterError(message),
+            Ok(RejectCode::CanisterReject) => Self::Rejected(message),
+            Ok(code) => Self::InternalError(format!(
+                "rejection code: {code:?}, rejection message: {message}"
+            )),
+            Err(_) => Self::InternalError(format!(
+                "unrecognized rejection code: {raw_reject_code}, rejection message: {message}"
             )),
         }
     }
@@ -149,42 +195,10 @@ pub trait CanisterRuntime {
 #[derive(Copy, Clone)]
 pub struct IcCanisterRuntime {}
 
-impl IcCanisterRuntime {
-    async fn call<I, O>(&self, method: &str, payment: u64, input: &I) -> Result<O, CallError>
-    where
-        I: CandidType,
-        O: CandidType + DeserializeOwned,
-    {
-        let balance = ic_cdk::api::canister_balance128();
-        if balance < payment as u128 {
-            return Err(CallError {
-                method: method.to_string(),
-                reason: Reason::OutOfCycles,
-            });
-        }
-
-        let res: Result<(O,), _> = ic_cdk::api::call::call_with_payment(
-            Principal::management_canister(),
-            method,
-            (input,),
-            payment,
-        )
-        .await;
-
-        match res {
-            Ok((output,)) => Ok(output),
-            Err((code, msg)) => Err(CallError {
-                method: method.to_string(),
-                reason: Reason::from_reject(code, msg),
-            }),
-        }
-    }
-}
-
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
     fn id(&self) -> Principal {
-        ic_cdk::id()
+        ic_cdk::api::canister_self()
     }
 
     fn time(&self) -> u64 {
@@ -206,44 +220,58 @@ impl CanisterRuntime for IcCanisterRuntime {
             "BUG: too many controllers. Expected at most 10, got {}",
             controllers.len()
         );
+        let payment = u128::from(cycles_for_canister_creation);
+        // Mirrors the ic-cdk pre-flight check inside `Call::await`, which uses
+        // `canister_liquid_cycle_balance` (i.e. excluding the freezing-threshold
+        // reserve). Using the same liquid balance here avoids issuing a Call we
+        // know will fail when the cycle balance is above `payment` but the
+        // liquid balance is not.
+        let balance = ic_cdk::api::canister_liquid_cycle_balance();
+        if balance < payment {
+            return Err(CallError {
+                method: "create_canister".to_string(),
+                reason: Reason::OutOfCycles,
+            });
+        }
         let create_args = CreateCanisterArgs {
             settings: Some(CanisterSettings {
-                controllers: controllers.into_iter().map(Into::into).collect(),
+                controllers: Some(controllers),
                 ..Default::default()
             }),
-            ..Default::default()
         };
-        let result: CanisterIdRecord = self
-            .call(
-                "create_canister",
-                cycles_for_canister_creation,
-                &create_args,
-            )
-            .await?;
+        let result = Call::unbounded_wait(Principal::management_canister(), "create_canister")
+            .with_arg(&create_args)
+            .with_cycles(payment)
+            .await
+            .map_err(|err| CallError {
+                method: "create_canister".to_string(),
+                reason: Reason::from_call_failed(err),
+            })?
+            .candid::<ic_cdk::management_canister::CreateCanisterResult>()
+            .map_err(|err| CallError {
+                method: "create_canister".to_string(),
+                reason: Reason::InternalError(format!("candid decode failed: {err}")),
+            })?;
 
         Ok(result.canister_id)
     }
 
     async fn stop_canister(&self, canister_id: Principal) -> Result<(), CallError> {
-        ic_cdk::api::management_canister::main::stop_canister(
-            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
-        )
-        .await
-        .map_err(|(code, msg)| CallError {
-            method: "stop_canister".to_string(),
-            reason: Reason::from_reject(code, msg),
-        })
+        stop_canister(&StopCanisterArgs { canister_id })
+            .await
+            .map_err(|err| CallError {
+                method: "stop_canister".to_string(),
+                reason: Reason::from_call_error(err),
+            })
     }
 
     async fn start_canister(&self, canister_id: Principal) -> Result<(), CallError> {
-        ic_cdk::api::management_canister::main::start_canister(
-            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
-        )
-        .await
-        .map_err(|(code, msg)| CallError {
-            method: "start_canister".to_string(),
-            reason: Reason::from_reject(code, msg),
-        })
+        start_canister(&StartCanisterArgs { canister_id })
+            .await
+            .map_err(|err| CallError {
+                method: "start_canister".to_string(),
+                reason: Reason::from_call_error(err),
+            })
     }
 
     async fn install_code(
@@ -252,17 +280,17 @@ impl CanisterRuntime for IcCanisterRuntime {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError> {
-        let install_code = InstallCodeArgs {
+        install_code(&InstallCodeArgs {
             mode: CanisterInstallMode::Install,
-            canister_id: PrincipalId::from(canister_id).into(),
+            canister_id,
             wasm_module,
             arg,
-            sender_canister_version: None,
-        };
-
-        () = self.call("install_code", 0, &install_code).await?;
-
-        Ok(())
+        })
+        .await
+        .map_err(|err| CallError {
+            method: "install_code".to_string(),
+            reason: Reason::from_call_error(err),
+        })
     }
 
     async fn upgrade_canister(
@@ -270,53 +298,39 @@ impl CanisterRuntime for IcCanisterRuntime {
         canister_id: Principal,
         wasm_module: Vec<u8>,
     ) -> Result<(), CallError> {
-        let install_code = InstallCodeArgs {
+        install_code(&InstallCodeArgs {
             mode: CanisterInstallMode::Upgrade(None),
-            canister_id: PrincipalId::from(canister_id).into(),
+            canister_id,
             wasm_module,
             arg: Encode!(&()).unwrap(),
-            sender_canister_version: None,
-        };
-
-        () = self.call("install_code", 0, &install_code).await?;
-
-        Ok(())
+        })
+        .await
+        .map_err(|err| CallError {
+            method: "install_code".to_string(),
+            reason: Reason::from_call_error(err),
+        })
     }
 
     async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError> {
-        let result = ic_cdk::api::management_canister::main::canister_status(
-            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
-        )
-        .await
-        .map_err(|(code, msg)| CallError {
-            method: "canister_status".to_string(),
-            reason: Reason::from_reject(code, msg),
-        })?
-        .0
-        .cycles
-        .0
-        .try_into()
-        .unwrap();
+        let result = canister_status(&CanisterStatusArgs { canister_id })
+            .await
+            .map_err(|err| CallError {
+                method: "canister_status".to_string(),
+                reason: Reason::from_call_error(err),
+            })?;
 
-        Ok(result)
+        Ok(result.cycles.0.try_into().unwrap())
     }
 
     fn send_cycles(&self, canister_id: Principal, cycles: u128) -> Result<(), CallError> {
-        #[derive(CandidType)]
-        struct DepositCyclesArgs {
-            canister_id: Principal,
-        }
-
-        ic_cdk::api::call::notify_with_payment128(
-            Principal::management_canister(),
-            "deposit_cycles",
-            (DepositCyclesArgs { canister_id },),
-            cycles,
-        )
-        .map_err(|reject_code| CallError {
-            method: "send_cycles".to_string(),
-            reason: Reason::from_reject(reject_code, String::default()),
-        })
+        Call::unbounded_wait(Principal::management_canister(), "deposit_cycles")
+            .with_arg(&DepositCyclesArgs { canister_id })
+            .with_cycles(cycles)
+            .oneway()
+            .map_err(|err| CallError {
+                method: "send_cycles".to_string(),
+                reason: Reason::from_oneway_error(err),
+            })
     }
 
     async fn call_canister<I, O>(
@@ -336,7 +350,19 @@ impl CanisterRuntime for IcCanisterRuntime {
             method,
             args
         );
-        let res: Result<(O,), _> = ic_cdk::api::call::call(canister_id, method, (&args,)).await;
+        let res: Result<O, _> = Call::unbounded_wait(canister_id, method)
+            .with_arg(&args)
+            .await
+            .map_err(|err| CallError {
+                method: method.to_string(),
+                reason: Reason::from_call_failed(err),
+            })
+            .and_then(|response| {
+                response.candid::<O>().map_err(|err| CallError {
+                    method: method.to_string(),
+                    reason: Reason::InternalError(format!("candid decode failed: {err}")),
+                })
+            });
         log!(
             DEBUG,
             "Result of calling canister '{}' with method '{}' and payload '{:?}': {:?}",
@@ -345,13 +371,6 @@ impl CanisterRuntime for IcCanisterRuntime {
             args,
             res
         );
-
-        match res {
-            Ok((output,)) => Ok(output),
-            Err((code, msg)) => Err(CallError {
-                method: method.to_string(),
-                reason: Reason::from_reject(code, msg),
-            }),
-        }
+        res
     }
 }

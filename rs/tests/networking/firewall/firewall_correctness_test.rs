@@ -100,10 +100,10 @@ pub fn setup(env: TestEnv) {
 
 pub fn firewall_correctness_test(env: TestEnv) {
     let logger = env.logger();
+    let topology_snapshot = env.topology_snapshot();
 
     let mut join_handles = vec![];
-    let all_nodes = env
-        .topology_snapshot()
+    let all_nodes = topology_snapshot
         .subnets()
         .flat_map(|s| s.nodes())
         .collect::<Vec<_>>();
@@ -115,27 +115,17 @@ pub fn firewall_correctness_test(env: TestEnv) {
         // The rule allows necessary ports (SSH and the metrics ports) to be open to everyone, such
         // that the test driver can still connect to the nodes and perform the test
         add_necessary_ports_registry_rule(
-            &env.topology_snapshot()
-                .root_subnet()
-                .nodes()
-                .next()
-                .unwrap(),
+            &topology_snapshot.root_subnet().nodes().next().unwrap(),
             &logger,
         )
         .await;
-        let new_registry_version = env
-            .topology_snapshot()
-            .block_for_newer_registry_version()
-            .await
-            .unwrap()
-            .get_registry_version();
 
         // Wait for a while to make sure that all nodes have updated their firewall rules according
         // to the new registry configuration.
-        for subnet in env.topology_snapshot().subnets() {
+        for subnet in topology_snapshot.subnets() {
             await_subnet_firewall_registry_version_with_retries_async(
                 &subnet,
-                new_registry_version,
+                topology_snapshot.get_registry_version().increment(),
                 &logger,
                 Duration::from_secs(60),
                 Duration::from_secs(10),

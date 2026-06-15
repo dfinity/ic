@@ -247,6 +247,12 @@ impl CanisterStates {
         self.hot.len() + self.cold.len()
     }
 
+    /// Returns the number of canisters in the `hot` pool (which may or may not be
+    /// actually hot).
+    pub fn hot_len(&self) -> usize {
+        self.hot.len()
+    }
+
     /// Returns true iff there are no canisters at all.
     pub fn is_empty(&self) -> bool {
         self.hot.is_empty() && self.cold.is_empty()
@@ -532,11 +538,6 @@ impl CanisterStates {
     /// subnet-wide guaranteed-response message memory usage.
     ///
     /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
-    //
-    // The only non-test caller of this method is
-    // `ReplicatedState::guaranteed_response_message_memory_taken`, which is wired
-    // up in the follow-up integration PR.
-    #[allow(dead_code)]
     pub(crate) fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
         let hot: NumBytes = self
             .hot
@@ -558,11 +559,6 @@ impl CanisterStates {
     ///
     /// `O(|hot canisters|)` — cold canisters by definition use no best-effort
     /// message memory (see `CanisterState::is_cold`).
-    //
-    // The only non-test caller of this method is
-    // `ReplicatedState::best_effort_message_memory_taken`, which is wired
-    // up in the follow-up integration PR.
-    #[allow(dead_code)]
     pub(crate) fn best_effort_message_memory_taken(&self) -> NumBytes {
         self.hot
             .values()
@@ -576,11 +572,6 @@ impl CanisterStates {
     /// `ReplicatedState::memory_taken` for the actual subnet-wide memory stats.
     ///
     /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
-    //
-    // The only non-test caller of this method is
-    // `ReplicatedState::memory_taken`, which is wired up in the follow-up
-    // integration PR.
-    #[allow(dead_code)]
     pub(crate) fn memory_taken(&self) -> MemoryTaken {
         // Start from the pre-aggregated `cold_stats`.
         let cold = &self.cold_stats;

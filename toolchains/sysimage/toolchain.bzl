@@ -160,6 +160,15 @@ build_container_filesystem = _icos_build_rule(
     },
 )
 
+# rules_foreign_cc exposes a tool's binaries (plus an include dir) under a single
+# target; pick out the binary we need by name. Mirrors the lookup done for
+# //:mkfs.ext4 in the ext4_image rule.
+def _find_tool(files, basename):
+    for f in files:
+        if f.basename == basename:
+            return f
+    fail("could not locate '{}' binary among tool outputs".format(basename))
+
 def _vfat_image_impl(ctx):
     args = []
     inputs = []
@@ -174,6 +183,10 @@ def _vfat_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    mkfs_fat = _find_tool(ctx.files._dosfstools, "mkfs.fat")
+    mtools = _find_tool(ctx.files._mtools, "mtools")
+    inputs.extend(ctx.files._dosfstools + ctx.files._mtools)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -183,6 +196,10 @@ def _vfat_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-fat",
+        mkfs_fat.path,
+        "--mtools",
+        mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -230,6 +247,16 @@ vfat_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_dosfstools": attr.label(
+            default = "//:mkfs.fat",
+            cfg = "exec",
+            allow_files = True,
+        ),
+        "_mtools": attr.label(
+            default = "//:mtools",
+            cfg = "exec",
+            allow_files = True,
+        ),
     },
 )
 
@@ -247,6 +274,11 @@ def _fat32_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    mkfs_fat = _find_tool(ctx.files._dosfstools, "mkfs.fat")
+    fatlabel = _find_tool(ctx.files._dosfstools, "fatlabel")
+    mtools = _find_tool(ctx.files._mtools, "mtools")
+    inputs.extend(ctx.files._dosfstools + ctx.files._mtools)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -256,6 +288,12 @@ def _fat32_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-fat",
+        mkfs_fat.path,
+        "--fatlabel",
+        fatlabel.path,
+        "--mtools",
+        mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -307,6 +345,16 @@ fat32_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_dosfstools": attr.label(
+            default = "//:mkfs.fat",
+            cfg = "exec",
+            allow_files = True,
+        ),
+        "_mtools": attr.label(
+            default = "//:mtools",
+            cfg = "exec",
+            allow_files = True,
+        ),
     },
 )
 
@@ -324,6 +372,17 @@ def _ext4_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    # Locate the mke2fs binary among the //:mkfs.ext4 outputs (configure_make
+    # also exposes an include/ dir, so filter by name).
+    mke2fs = None
+    for f in ctx.files._mkfs_ext4:
+        if f.basename == "mke2fs":
+            mke2fs = f
+            break
+    if not mke2fs:
+        fail("could not locate mke2fs binary among //:mkfs.ext4 outputs")
+    inputs.extend(ctx.files._mkfs_ext4)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -335,6 +394,8 @@ def _ext4_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-ext4",
+        mke2fs.path,
     ])
 
     if ctx.attr.file_contexts:
@@ -384,6 +445,11 @@ ext4_image = _icos_build_rule(
             default = "//toolchains/sysimage:build_ext4_image",
             executable = True,
             cfg = "exec",
+        ),
+        "_mkfs_ext4": attr.label(
+            default = "//:mkfs.ext4",
+            cfg = "exec",
+            allow_files = True,
         ),
         "_diroid": attr.label(
             default = "//rs/ic_os/build_tools/diroid",

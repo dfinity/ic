@@ -19,9 +19,24 @@ on the process that this file is part of, see
   leaves the existing list unchanged; `Some(vec![])` clears it; `Some(vec![..])`
   replaces it.
 * Added `vcpu_type` to `GuestLaunchMeasurementMetadata` to record the virtual CPU type used for a guest launch measurement.
+* Added a new endpoint `get_subnet` to the registry canister, returning the subnet record
+  of a given subnet.
 
 ## Changed
 
+* One-time post-upgrade migration converting the reward type of 100 currently
+  unassigned nodes from `type1.1` to `type4.5`. The migration only mutates nodes
+  whose reward type is still `type1.1`, so it is idempotent across upgrades.
+* The `create_subnet` and `delete_subnet` endpoints can now be called by the
+  engine controller canister (`si2b5-pyaaa-aaaaa-aaaja-cai`) in addition to the
+  governance canister.
+* The `update_subnet` and `deploy_guestos_to_all_subnet_nodes` endpoints can now
+  also be called by the engine controller canister
+  (`si2b5-pyaaa-aaaaa-aaaja-cai`) in addition to the governance canister. When
+  invoked by the engine controller, both endpoints are restricted to acting on
+  `CloudEngine` subnets only — any attempt to target a subnet of a different
+  type is rejected. Calls from the governance canister are unaffected and may
+  still target subnets of any type.
 * **SEV on existing subnets:** Reverted — `sev_enabled` can once again only be set at subnet creation;
   any update_subnet proposal that would change the effective `sev_enabled` value (in either direction,
   including via wholesale `features` replacement with `sev_enabled` left unset) is rejected.

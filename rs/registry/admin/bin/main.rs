@@ -81,7 +81,7 @@ use ic_protobuf::registry::{
     node_operator::v1::NodeOperatorRecord,
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::CanisterMigrations,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
@@ -89,15 +89,15 @@ use ic_protobuf::registry::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
     chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
-    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
+    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry,
+    replica_version::ReplicaVersionRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
     NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
     get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_canister_migrations_record_key, make_crypto_node_key,
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
+    is_node_record_key, make_api_boundary_node_record_key, make_canister_migrations_record_key,
+    make_crypto_node_key, make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -740,7 +740,7 @@ struct GetGuestOsVersionCmd {
 }
 
 /// Sub-command to submit a proposal to upgrade the replicas running a specific
-/// subnet to the given (blessed) version.
+/// subnet to the given (elected) version.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToDeployGuestosToAllSubnetNodesCmd {
@@ -4892,12 +4892,33 @@ async fn main() {
             .await;
         }
         SubCommand::GetElectedGuestosVersions => {
-            print_and_get_last_value::<BlessedReplicaVersions>(
-                make_blessed_replica_versions_key().as_bytes().to_vec(),
-                &registry_canister,
-                opts.json,
-            )
-            .await;
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let guestos_versions = registry_client
+                .get_all_replica_version_records(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap_or_default();
+
+            if opts.json {
+                let version_ids: Vec<String> = guestos_versions
+                    .into_iter()
+                    .map(|(version, _)| version)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
+                for (version, _) in guestos_versions {
+                    println!("{}", version);
+                }
+            }
         }
         SubCommand::GetRoutingTable(cmd) => {
             let registry_version = cmd.registry_version.map(RegistryVersion::from);
@@ -5847,9 +5868,16 @@ async fn main() {
 
             let hostos_versions = registry_client
                 .get_hostos_versions(registry_client.get_latest_version())
-                .unwrap();
+                .unwrap()
+                .unwrap_or_default();
 
-            if let Some(hostos_versions) = hostos_versions {
+            if opts.json {
+                let version_ids: Vec<String> = hostos_versions
+                    .into_iter()
+                    .map(|version| version.hostos_version_id)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
                 for version in hostos_versions {
                     println!("{}", version.hostos_version_id);
                 }

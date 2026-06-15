@@ -9,6 +9,8 @@ documentation.workspace = true
 [dependencies]
 hex-literal = "0.4.1"
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
+ic-canonical-state = { path = "../canonical_state" }
+ic-canonical-state-tree-hash = { path = "../canonical_state/tree_hash" }
 ic-config = { path = "../config" }
 ic-consensus-features = { path = "../consensus/features" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }

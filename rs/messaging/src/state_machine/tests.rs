@@ -617,7 +617,7 @@ fn test_online_split_subnet_a() {
         vec![&CANISTER_RANGE_A.start],
         state_after_split
             .canister_states()
-            .keys()
+            .all_keys()
             .collect::<Vec<_>>()
     );
 }
@@ -631,7 +631,7 @@ fn test_online_split_subnet_b() {
         vec![&CANISTER_RANGE_B.start],
         state_after_split
             .canister_states()
-            .keys()
+            .all_keys()
             .collect::<Vec<_>>()
     );
 }

@@ -4,19 +4,24 @@ use ic_error_types::RejectCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
-use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
-use ic_replicated_state::{ExecutionTask, InputQueueType, StateError, SystemState};
+use ic_replicated_state::testing::{
+    CanisterQueuesTesting, OutputRequestBuilder, SystemStateTesting,
+};
+use ic_replicated_state::{
+    CanisterStates, CanisterStatus, ExecutionTask, InputQueueType, OutputRequest, StateError,
+    SystemState,
+};
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::CanisterId;
 use ic_types::messages::{
-    CanisterMessage, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
-    RejectContext, Request, RequestOrResponse, Response,
+    CallbackId, CanisterMessage, CanisterMessageOrTask, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    Payload, RejectContext, RequestOrResponse, Response,
 };
 use ic_types::methods::Callback;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types_cycles::Cycles;
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 /// Figure out how many cycles a canister should have so that it can support the
 /// given amount of storage for the given amount of time, given the storage fee.
@@ -57,13 +62,12 @@ fn default_output_response() -> Arc<Response> {
         .into()
 }
 
-fn default_request_to_self() -> Arc<Request> {
-    RequestBuilder::default()
+fn default_request_to_self() -> OutputRequest {
+    OutputRequestBuilder::default()
         .sender(CANISTER_ID)
         .receiver(CANISTER_ID)
         .payment(Cycles::new(3))
         .build()
-        .into()
 }
 
 struct SystemStateFixture {
@@ -82,46 +86,30 @@ impl SystemStateFixture {
         }
     }
 
-    fn stopping() -> SystemStateFixture {
-        SystemStateFixture {
-            system_state: SystemState::new_stopping_for_testing(
-                CANISTER_ID,
-                user_test_id(1).get(),
-                Cycles::new(5_000_000_000_000),
-                NumSeconds::new(0),
-            ),
-        }
+    fn set_stopping(&mut self) {
+        self.system_state.set_status(CanisterStatus::Stopping {
+            call_context_manager: self.system_state.call_context_manager().unwrap().clone(),
+            stop_contexts: Vec::default(),
+        });
     }
 
-    fn stopped() -> SystemStateFixture {
-        SystemStateFixture {
-            system_state: SystemState::new_stopped_for_testing(
-                CANISTER_ID,
-                user_test_id(1).get(),
-                Cycles::new(5_000_000_000_000),
-                NumSeconds::new(0),
-            ),
-        }
+    fn set_stopped(&mut self) {
+        self.system_state.set_status(CanisterStatus::Stopped);
     }
 
-    /// Produces a request and response pair for a call to `callee`, backed by a
-    /// registered callback.
-    fn prepare_call(
+    fn issue_outbound_call(
         &mut self,
         callee: CanisterId,
         deadline: CoarseTime,
-    ) -> (Arc<Request>, Arc<Response>, Arc<Callback>) {
-        // Register a callback.
-        let (callback_id, callback) = self.system_state.with_callback(callee, deadline);
-
-        let request = RequestBuilder::default()
+    ) -> (Arc<Response>, Arc<Callback>) {
+        let request = OutputRequestBuilder::default()
             .sender(CANISTER_ID)
             .receiver(callee)
-            .sender_reply_callback(callback_id)
             .deadline(deadline)
             .payment(Cycles::new(10))
-            .build()
-            .into();
+            .build();
+        let callback_id = self.push_output_request(request).unwrap();
+
         let response = ResponseBuilder::default()
             .respondent(callee)
             .originator(CANISTER_ID)
@@ -130,7 +118,11 @@ impl SystemStateFixture {
             .refund(Cycles::new(5))
             .build()
             .into();
-        (request, response, callback)
+
+        let call_context_manager = self.system_state.call_context_manager().unwrap();
+        let callback = call_context_manager.callback(callback_id).unwrap().clone();
+
+        (response, callback.into())
     }
 
     fn push_input(
@@ -151,10 +143,7 @@ impl SystemStateFixture {
         self.system_state.push_output_response(response);
     }
 
-    fn push_output_request(
-        &mut self,
-        request: Arc<Request>,
-    ) -> Result<(), (StateError, Arc<Request>)> {
+    fn push_output_request(&mut self, request: OutputRequest) -> Result<CallbackId, StateError> {
         self.system_state.push_output_request(request, UNIX_EPOCH)
     }
 
@@ -173,9 +162,11 @@ impl SystemStateFixture {
     /// number of expired callbacks.
     fn time_out_callbacks(&mut self, current_time: CoarseTime) -> (usize, Vec<StateError>) {
         let input_responses_before = self.system_state.queues().input_queues_response_count();
-        let (expired, errors) =
-            self.system_state
-                .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new());
+        let (expired, errors) = self.system_state.time_out_callbacks(
+            current_time,
+            &CANISTER_ID,
+            &CanisterStates::default(),
+        );
         let input_responses_after = self.system_state.queues().input_queues_response_count();
 
         assert_eq!(
@@ -232,10 +223,27 @@ fn correct_charging_target_canister_for_a_response() {
 }
 
 #[test]
+fn push_output_request_in_stopped_status_does_not_work() {
+    let mut fixture = SystemStateFixture::running();
+    fixture.set_stopped();
+
+    assert_matches!(
+        fixture.push_output_request(default_request_to_self()),
+        Err(StateError::CanisterStopped(CANISTER_ID))
+    );
+
+    assert!(!fixture.system_state.queues().has_output());
+}
+
+#[test]
 fn induct_messages_to_self_in_running_status_works() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request_to_self, _, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    let request_to_self = OutputRequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(CANISTER_ID)
+        .deadline(NO_DEADLINE)
+        .build();
     fixture.push_output_request(request_to_self).unwrap();
     fixture.induct_messages_to_self();
 
@@ -245,11 +253,12 @@ fn induct_messages_to_self_in_running_status_works() {
 
 #[test]
 fn induct_messages_to_self_in_stopped_status_does_not_work() {
-    let mut fixture = SystemStateFixture::stopped();
-
+    let mut fixture = SystemStateFixture::running();
     fixture
         .push_output_request(default_request_to_self())
         .unwrap();
+
+    fixture.set_stopped();
     fixture.induct_messages_to_self();
 
     assert!(!fixture.system_state.has_input());
@@ -258,11 +267,12 @@ fn induct_messages_to_self_in_stopped_status_does_not_work() {
 
 #[test]
 fn induct_messages_to_self_in_stopping_status_does_not_work() {
-    let mut fixture = SystemStateFixture::stopping();
-
+    let mut fixture = SystemStateFixture::running();
     fixture
         .push_output_request(default_request_to_self())
         .unwrap();
+
+    fixture.set_stopping();
     fixture.induct_messages_to_self();
 
     assert!(!fixture.system_state.has_input());
@@ -325,18 +335,12 @@ fn induct_messages_to_self_memory_limit_test_impl(
 ) {
     let mut fixture = SystemStateFixture::running();
 
-    // One guaranteed response self-call response and one self-call request.
-    let (request0, response, callback) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
-    let (request, _, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
-
-    // A second request that might exceed the available memory (if guaranteed
-    // response; and on an application subnet).
-    let (second_request, _, _) = fixture.prepare_call(
-        CANISTER_ID,
-        CoarseTime::from_secs_since_unix_epoch(deadline),
-    );
-
-    // Make a slot reservation for `response``.
+    // Simulate issuing and inducting a guaranteed-response self-call.
+    let (response, callback) = fixture.issue_outbound_call(CANISTER_ID, NO_DEADLINE);
+    let RequestOrResponse::Request(request0) = fixture.pop_output().unwrap() else {
+        panic!("Expected a request");
+    };
+    // Induct the request and pop it.
     assert_eq!(
         Ok(None),
         fixture.push_input(
@@ -348,11 +352,16 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
     // Pushing an outgoing response will release `MAX_RESPONSE_COUNT_BYTES`.
     fixture.push_output_response(response.clone());
+
     // So there should be memory for this request.
-    fixture.push_output_request(request.clone()).unwrap();
+    fixture.issue_outbound_call(CANISTER_ID, NO_DEADLINE);
+
     // But potentially not for this one (if guaranteed response; and on an
     // application subnet).
-    fixture.push_output_request(second_request.clone()).unwrap();
+    fixture.issue_outbound_call(
+        CANISTER_ID,
+        CoarseTime::from_secs_since_unix_epoch(deadline),
+    );
 
     fixture
         .system_state
@@ -363,21 +372,15 @@ fn induct_messages_to_self_memory_limit_test_impl(
         Some(CanisterMessage::Response { response, callback }),
         fixture.pop_input(),
     );
-    assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input(),);
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Request(_)));
 
     if should_enforce_limit {
         assert_eq!(None, fixture.pop_input());
 
         // Expect the second request to still be in the output queue.
-        assert_eq!(
-            Some(RequestOrResponse::Request(second_request)),
-            fixture.pop_output(),
-        );
+        assert_matches!(fixture.pop_output(), Some(RequestOrResponse::Request(_)));
     } else {
-        assert_eq!(
-            Some(CanisterMessage::Request(second_request)),
-            fixture.pop_input()
-        );
+        assert_matches!(fixture.pop_input(), Some(CanisterMessage::Request(_)));
     }
 
     // Expect both the input and the output queues to be empty.
@@ -390,25 +393,16 @@ fn induct_messages_to_self_memory_limit_test_impl(
 fn induct_messages_to_self_full_queue() {
     let mut fixture = SystemStateFixture::running();
 
-    // Push`DEFAULT_QUEUE_CAPACITY` requests.
-    let mut requests = Vec::new();
+    // Enqueue `DEFAULT_QUEUE_CAPACITY` outbound requests to self.
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
-        let (request, _, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
-        requests.push(request.clone());
-        assert_eq!(
-            Ok(None),
-            fixture.push_input(
-                RequestOrResponse::Request(request),
-                InputQueueType::LocalSubnet,
-            )
-        );
+        fixture.issue_outbound_call(CANISTER_ID, NO_DEADLINE);
     }
 
     fixture.induct_messages_to_self();
 
     // Expect all requests to have been inducted.
-    for request in requests {
-        assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
+    for _ in 0..DEFAULT_QUEUE_CAPACITY {
+        assert_matches!(fixture.pop_input(), Some(CanisterMessage::Request(_)));
     }
 
     assert_eq!(None, fixture.pop_input());
@@ -424,17 +418,14 @@ fn induct_messages_to_self_full_queue() {
 fn induct_messages_to_self_duplicate_best_effort_response() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request, response, callback) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
-
-    // Enqueue the outgoing request.
-    fixture.push_output_request(request.clone()).unwrap();
+    let (response, callback) = fixture.issue_outbound_call(CANISTER_ID, SOME_DEADLINE);
 
     // Induct it into the input queue.
     fixture.induct_messages_to_self();
 
     // Pop and start executing it (pretend it's waiting multiple rounds for
     // downstream calls).
-    assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Request(_)));
 
     // Expire the callback.
     assert_eq!(
@@ -473,17 +464,14 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
 fn induct_messages_to_self_best_effort_callback_gone() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request, response, _) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
-
-    // Enqueue the outgoing request.
-    fixture.push_output_request(request.clone()).unwrap();
+    let (response, _) = fixture.issue_outbound_call(CANISTER_ID, SOME_DEADLINE);
 
     // Induct it into the input queue.
     fixture.induct_messages_to_self();
 
     // Pop and start executing it (pretend it's waiting multiple rounds for
     // downstream calls).
-    assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Request(_)));
 
     // Expire the callback.
     fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
@@ -515,17 +503,14 @@ fn induct_messages_to_self_best_effort_callback_gone() {
 fn induct_messages_to_self_guaranteed_response_callback_gone() {
     let mut fixture = SystemStateFixture::running();
 
-    let (request, response, _) = fixture.prepare_call(CANISTER_ID, NO_DEADLINE);
+    let (response, _) = fixture.issue_outbound_call(CANISTER_ID, NO_DEADLINE);
     let callback = response.originator_reply_callback;
-
-    // Enqueue the outgoing request.
-    fixture.push_output_request(request.clone()).unwrap();
 
     // Induct it into the input queue.
     fixture.induct_messages_to_self();
 
     // Pop and execute it, producing a response.
-    assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input());
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Request(_)));
     fixture.push_output_response(response.clone());
 
     // Pretend that a duplicate response has consumed the callback.
@@ -544,10 +529,9 @@ fn simulate_outbound_call(
     fixture: &mut SystemStateFixture,
     deadline: CoarseTime,
 ) -> (Arc<Response>, Arc<Callback>) {
-    let (request, response, callback) = fixture.prepare_call(OTHER_CANISTER_ID, deadline);
+    let (response, callback) = fixture.issue_outbound_call(OTHER_CANISTER_ID, deadline);
 
     // Reserve a response slot.
-    fixture.push_output_request(request).unwrap();
     fixture.pop_output().unwrap();
 
     (response, callback)

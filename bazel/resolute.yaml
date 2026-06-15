@@ -7,14 +7,14 @@ version: 1
 
 # Various channels used to pull packages from
 sources:
-  - channel: noble main
-    url: https://snapshot.ubuntu.com/ubuntu/20260131T000000Z
-  - channel: noble universe
-    url: https://snapshot.ubuntu.com/ubuntu/20260131T000000Z
-  - channel: noble-security main
-    url: https://snapshot.ubuntu.com/ubuntu/20260131T000000Z
-  - channel: noble-updates main
-    url: https://snapshot.ubuntu.com/ubuntu/20260131T000000Z
+  - channel: resolute main
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+  - channel: resolute universe
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+  - channel: resolute-security main
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+  - channel: resolute-updates main
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
 archs:
   - "amd64"
 

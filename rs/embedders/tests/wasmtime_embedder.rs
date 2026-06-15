@@ -6,11 +6,7 @@ use ic_config::{
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasm_utils::instrumentation::instruction_to_cost,
-    wasmtime_embedder::{
-        CanisterMemoryType,
-        system_api::{ApiType, sandbox_safe_system_state::CallbackUpdate},
-        system_api_complexity,
-    },
+    wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
@@ -3375,40 +3371,32 @@ fn wasm64_saturate_fun_index() {
         .unwrap()
         .take_system_state_modifications();
 
-    // call_perform should trigger one callback update
-    let callback_update = system_state_modifications
-        .callback_updates
+    // call_perform should enqueue one OutputRequest carrying its callback closures.
+    let output_request = system_state_modifications
+        .requests()
         .first()
-        .unwrap()
-        .clone();
-    match callback_update {
-        CallbackUpdate::Register(_id, callback) => {
-            assert_eq!(
-                callback.on_reply,
-                WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 22
-                }
-            );
-            assert_eq!(
-                callback.on_reject,
-                WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 44
-                }
-            );
-            assert_eq!(
-                callback.on_cleanup,
-                Some(WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 66
-                })
-            );
+        .expect("Expected an outgoing request with its callback");
+    assert_eq!(
+        output_request.on_reply,
+        WasmClosure {
+            func_idx: u32::MAX,
+            env: 22
         }
-        CallbackUpdate::Unregister(_) => {
-            panic!("Expected registration of new calback")
+    );
+    assert_eq!(
+        output_request.on_reject,
+        WasmClosure {
+            func_idx: u32::MAX,
+            env: 44
         }
-    }
+    );
+    assert_eq!(
+        output_request.on_cleanup,
+        Some(WasmClosure {
+            func_idx: u32::MAX,
+            env: 66
+        })
+    );
 }
 
 #[test]

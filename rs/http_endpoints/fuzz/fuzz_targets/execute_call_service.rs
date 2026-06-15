@@ -32,7 +32,7 @@ use tower::{
 };
 use tower_test::mock::Handle;
 
-#[path = "../../public/tests/common/mod.rs"]
+#[path = "../fuzz_test_common.rs"]
 pub mod common;
 use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingress_filter_mock};
 

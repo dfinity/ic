@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -7,7 +7,9 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    SystemState, canister_state::execution_state::WasmExecutionMode, testing::SystemStateTesting,
+    SystemState,
+    canister_state::execution_state::WasmExecutionMode,
+    testing::{OutputRequestBuilder, SystemStateTesting},
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -16,7 +18,7 @@ use ic_test_utilities_state::{
 };
 use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
-    messages::{RequestBuilder, SignedIngressBuilder},
+    messages::SignedIngressBuilder,
 };
 use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
@@ -500,17 +502,16 @@ fn charge_canister_for_memory_usage() {
         canister.system_state.memory_allocation = MemoryAllocation::from(MEMORY_ALLOCATION);
         canister
             .push_output_request(
-                RequestBuilder::new().sender(canister_id).build().into(),
+                OutputRequestBuilder::default().sender(canister_id).build(),
                 UNIX_EPOCH,
             )
             .unwrap();
         canister
             .push_output_request(
-                RequestBuilder::new()
+                OutputRequestBuilder::default()
                     .sender(canister_id)
                     .deadline(CoarseTime::from_secs_since_unix_epoch(1))
-                    .build()
-                    .into(),
+                    .build(),
                 UNIX_EPOCH,
             )
             .unwrap();
@@ -567,17 +568,16 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
         canister.system_state.memory_allocation = MemoryAllocation::from(MEMORY_ALLOCATION);
         canister
             .push_output_request(
-                RequestBuilder::new().sender(canister_id).build().into(),
+                OutputRequestBuilder::default().sender(canister_id).build(),
                 UNIX_EPOCH,
             )
             .unwrap();
         canister
             .push_output_request(
-                RequestBuilder::new()
+                OutputRequestBuilder::default()
                     .sender(canister_id)
                     .deadline(CoarseTime::from_secs_since_unix_epoch(1))
-                    .build()
-                    .into(),
+                    .build(),
                 UNIX_EPOCH,
             )
             .unwrap();
@@ -626,17 +626,16 @@ fn do_not_charge_canister_for_compute_allocation_free_schedule() {
         canister.system_state.compute_allocation = compute_allocation;
         canister
             .push_output_request(
-                RequestBuilder::new().sender(canister_id).build().into(),
+                OutputRequestBuilder::default().sender(canister_id).build(),
                 UNIX_EPOCH,
             )
             .unwrap();
         canister
             .push_output_request(
-                RequestBuilder::new()
+                OutputRequestBuilder::default()
                     .sender(canister_id)
                     .deadline(CoarseTime::from_secs_since_unix_epoch(1))
-                    .build()
-                    .into(),
+                    .build(),
                 UNIX_EPOCH,
             )
             .unwrap();
@@ -1353,7 +1352,7 @@ fn test_storage_reservation_cycles() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     const GB: u64 = 1024 * 1024 * 1024;
 
-    let cfg = CyclesAccountManagerConfig::application_subnet();
+    let cfg = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
     let cam = CyclesAccountManagerBuilder::new().build();
 
     // Allocation of 100GB below the threshold.

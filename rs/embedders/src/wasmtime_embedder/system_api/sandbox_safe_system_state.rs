@@ -22,13 +22,12 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    CallOrigin, NetworkTopology, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
+    CallOrigin, NetworkTopology, OutputRequest, SystemState, canister_state::DEFAULT_QUEUE_CAPACITY,
 };
 use ic_types::canister_log::CanisterLogMetrics;
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumInstructions, Time,
-    messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
-    methods::Callback,
+    messages::{CallContextId, NO_DEADLINE, RejectContext, RequestMetadata},
     time::CoarseTime,
 };
 use ic_types_cycles::{
@@ -58,13 +57,6 @@ impl CanisterStatusView {
             CanisterStatusType::Stopped => Self::Stopped,
         }
     }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
-pub enum CallbackUpdate {
-    Register(CallbackId, Callback),
-    Unregister(CallbackId),
 }
 
 /// Cycles consumed via System API calls during message execution.
@@ -130,8 +122,6 @@ impl ConsumedCyclesDuringExecution {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SystemStateModifications {
     pub(super) new_certified_data: Option<Vec<u8>>,
-    // pub for testing
-    pub callback_updates: Vec<CallbackUpdate>,
     pub(super) cycles_balance_change: CyclesBalanceChange,
     // The cycles that move from the main balance to the reserved balance.
     // Invariant: `cycles_balance_change` contains
@@ -140,7 +130,7 @@ pub struct SystemStateModifications {
     pub(super) consumed_cycles_by_use_case: ConsumedCyclesDuringExecution,
     pub(super) call_context_balance_taken: Option<(CallContextId, Cycles)>,
     pub(super) request_slots_used: BTreeMap<CanisterId, usize>,
-    pub(super) requests: Vec<Request>,
+    pub(super) requests: Vec<OutputRequest>,
     pub(super) new_global_timer: Option<CanisterTimer>,
     pub(super) canister_log: CanisterLog,
     pub(super) should_bump_canister_version: bool,
@@ -150,7 +140,6 @@ impl Default for SystemStateModifications {
     fn default() -> Self {
         Self {
             new_certified_data: None,
-            callback_updates: vec![],
             cycles_balance_change: CyclesBalanceChange::zero(),
             reserved_cycles: Cycles::zero(),
             consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -210,6 +199,11 @@ impl SystemStateModifications {
         self.reserved_cycles
     }
 
+    /// Returns the requests that have been enqueued.
+    pub fn requests(&self) -> &[OutputRequest] {
+        &self.requests
+    }
+
     /// Returns number of newly created callbacks (i.e. enqueued requests).
     pub fn callbacks_created(&self) -> usize {
         self.requests.len()
@@ -224,7 +218,7 @@ impl SystemStateModifications {
     fn reject_subnet_message_routing(
         system_state: &mut SystemState,
         subnet_ids: &BTreeSet<PrincipalId>,
-        msg: Request,
+        msg: OutputRequest,
         err: ResolveDestinationError,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<()> {
@@ -251,7 +245,7 @@ impl SystemStateModifications {
     fn reject_subnet_message_user_error(
         system_state: &mut SystemState,
         subnet_ids: &BTreeSet<PrincipalId>,
-        msg: Request,
+        msg: OutputRequest,
         err: UserError,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<()> {
@@ -273,13 +267,13 @@ impl SystemStateModifications {
     fn push_message(
         system_state: &mut SystemState,
         time: Time,
-        msg: Request,
+        msg: OutputRequest,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<()> {
         let sent_cycles = msg.payment.get();
         let msg_receiver = msg.receiver;
         system_state
-            .push_output_request(msg.into(), time)
+            .push_output_request(msg, time)
             .map_err(|e| Self::error(format!("Failed to push output request: {e:?}")))?;
         if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
             info!(
@@ -293,9 +287,9 @@ impl SystemStateModifications {
         Ok(())
     }
 
-    fn get_sender_canister_version(msg: &Request) -> Result<Option<u64>, UserError> {
+    fn get_sender_canister_version(msg: &OutputRequest) -> Result<Option<u64>, UserError> {
         let method = Ic00Method::from_str(&msg.method_name);
-        let payload = msg.method_payload();
+        let payload = msg.method_payload.as_slice();
         match method {
             Ok(Ic00Method::InstallCode) => InstallCodeArgsV2::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
@@ -363,7 +357,7 @@ impl SystemStateModifications {
     }
 
     fn validate_sender_canister_version(
-        msg: &Request,
+        msg: &OutputRequest,
         canister_version_from_system: u64,
     ) -> Result<(), UserError> {
         match Self::get_sender_canister_version(msg)? {
@@ -456,7 +450,6 @@ impl SystemStateModifications {
         };
 
         // Push outgoing messages.
-        let mut callback_changes = BTreeMap::new();
         let nns_subnet_id = network_topology.nns_subnet_id;
         let subnet_ids: BTreeSet<PrincipalId> =
             network_topology.subnets().keys().map(|s| s.get()).collect();
@@ -465,8 +458,7 @@ impl SystemStateModifications {
                 match Self::validate_sender_canister_version(&msg, system_state.canister_version())
                 {
                     Ok(()) => {
-                        // This is a request to ic:00. Update the receiver to be the appropriate
-                        // subnet and also update the corresponding callback.
+                        // This is a request to ic:00. Update the receiver to the appropriate subnet.
                         match routing::resolve_destination(
                             network_topology,
                             msg.method_name.as_str(),
@@ -480,8 +472,6 @@ impl SystemStateModifications {
                         {
                             Ok(destination_subnet) => {
                                 msg.receiver = destination_subnet;
-                                callback_changes
-                                    .insert(msg.sender_reply_callback, destination_subnet);
                                 Self::push_message(system_state, time, msg, logger)?;
                             }
                             Err(err) => {
@@ -536,31 +526,6 @@ impl SystemStateModifications {
                 }
             } else {
                 Self::push_message(system_state, time, msg, logger)?;
-            }
-        }
-
-        // Register and unregister callbacks.
-        for update in self.callback_updates {
-            match update {
-                CallbackUpdate::Register(expected_id, mut callback) => {
-                    if let Some(receiver) = callback_changes.get(&expected_id) {
-                        callback.respondent = *receiver;
-                    }
-                    let id = system_state
-                        .register_callback(callback)
-                        .map_err(|_| Self::error("Call context manager does not exist"))?;
-                    if id != expected_id {
-                        return Err(Self::error("Failed to register update callback"));
-                    }
-                }
-                CallbackUpdate::Unregister(callback_id) => {
-                    system_state
-                        .unregister_callback(callback_id)
-                        .map_err(|_| Self::error("Call context manager does not exist"))?
-                        .ok_or_else(|| {
-                            Self::error("Tried to unregister callback with an ID that isn't in use")
-                        })?;
-                }
             }
         }
 
@@ -680,10 +645,6 @@ pub struct SandboxSafeSystemState {
     call_context_balance: Option<Cycles>,
     call_context_deadline: Option<CoarseTime>,
     cycles_account_manager: CyclesAccountManager,
-    // None indicates that we are in a context where the canister cannot
-    // register callbacks (e.g. running the `start` method when installing a
-    // canister.)
-    next_callback_id: Option<u64>,
     /// The number of calls / callbacks that can still be made. This is the maximum
     /// available in either the subnet shared pool or the canister quota.
     available_callbacks: u64,
@@ -718,7 +679,6 @@ impl SandboxSafeSystemState {
         call_context_balance: Option<Cycles>,
         call_context_deadline: Option<CoarseTime>,
         cycles_account_manager: CyclesAccountManager,
-        next_callback_id: Option<u64>,
         available_callbacks: u64,
         available_request_slots: BTreeMap<CanisterId, usize>,
         ic00_available_request_slots: usize,
@@ -764,7 +724,6 @@ impl SandboxSafeSystemState {
             call_context_balance,
             call_context_deadline,
             cycles_account_manager,
-            next_callback_id,
             available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
@@ -887,9 +846,6 @@ impl SandboxSafeSystemState {
             call_context_balance,
             call_context_deadline,
             cycles_account_manager,
-            system_state
-                .call_context_manager()
-                .map(|c| c.next_callback_id()),
             available_callbacks,
             available_request_slots,
             ic00_available_request_slots,
@@ -937,33 +893,6 @@ impl SandboxSafeSystemState {
 
     pub fn take_changes(&mut self) -> SystemStateModifications {
         std::mem::take(&mut self.system_state_modifications)
-    }
-
-    /// Only public for use in tests.
-    #[doc(hidden)]
-    pub fn register_callback(&mut self, callback: Callback) -> HypervisorResult<CallbackId> {
-        match &mut self.next_callback_id {
-            Some(next_callback_id) => {
-                *next_callback_id += 1;
-                let id = CallbackId::from(*next_callback_id);
-                self.system_state_modifications
-                    .callback_updates
-                    .push(CallbackUpdate::Register(id, callback));
-                Ok(id)
-            }
-            None => Err(HypervisorError::ToolchainContractViolation {
-                error: "Tried to register a callback in a context where it isn't allowed."
-                    .to_string(),
-            }),
-        }
-    }
-
-    /// Only public for use in tests.
-    #[doc(hidden)]
-    pub fn unregister_callback(&mut self, id: CallbackId) {
-        self.system_state_modifications
-            .callback_updates
-            .push(CallbackUpdate::Unregister(id))
     }
 
     /// Computes the current main balance of the canister based
@@ -1193,10 +1122,8 @@ impl SandboxSafeSystemState {
         &mut self,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: MessageMemoryUsage,
-        msg: Request,
-        prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
-    ) -> Result<(), Request> {
+        msg: OutputRequest,
+    ) -> Result<(), OutputRequest> {
         if self.available_callbacks == 0 {
             return Err(msg);
         }
@@ -1213,8 +1140,8 @@ impl SandboxSafeSystemState {
                 canister_current_memory_usage,
                 canister_current_message_memory_usage,
                 self.compute_allocation,
-                prepayment_for_response_execution,
-                prepayment_for_call_transmission,
+                msg.prepayment_for_response_execution,
+                msg.prepayment_for_call_transmission,
                 self.subnet_size,
                 self.cost_schedule,
                 self.reserved_balance(),
@@ -1249,13 +1176,14 @@ impl SandboxSafeSystemState {
         if *used_slots >= *initial_available_slots {
             return Err(msg);
         }
-        self.system_state_modifications.requests.push(msg);
+
         *used_slots += 1;
         let consumed_cycles = ConsumedCyclesDuringExecution {
-            instructions: Some(prepayment_for_response_execution),
-            request_and_response_transmission: Some(prepayment_for_call_transmission),
+            instructions: Some(msg.prepayment_for_response_execution),
+            request_and_response_transmission: Some(msg.prepayment_for_call_transmission),
             ..Default::default()
         };
+        self.system_state_modifications.requests.push(msg);
         self.update_balance_change_consuming(new_balance, consumed_cycles);
         Ok(())
     }
@@ -1533,7 +1461,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -1662,9 +1590,8 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(),
+                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
             ),
-            Some(0),
             0,
             BTreeMap::new(),
             0,
