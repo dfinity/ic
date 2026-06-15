@@ -42,9 +42,9 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, SubnetId,
     batch::{
-        CanisterHttpPayload, CanisterHttpRefund, ConsensusResponse, FlexibleCanisterHttpError,
-        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpAsyncRefund, CanisterHttpPayload, CanisterHttpRefunds, ConsensusResponse,
+        FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
     },
     canister_http::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
@@ -919,7 +919,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 impl
     IntoMessages<(
         Vec<ConsensusResponse>,
-        Vec<CanisterHttpRefund>,
+        CanisterHttpRefunds,
         CanisterHttpBatchStats,
     )> for CanisterHttpPayloadBuilderImpl
 {
@@ -927,7 +927,7 @@ impl
         payload: &[u8],
     ) -> (
         Vec<ConsensusResponse>,
-        Vec<CanisterHttpRefund>,
+        CanisterHttpRefunds,
         CanisterHttpBatchStats,
     ) {
         let mut stats = CanisterHttpBatchStats::default();
@@ -1002,15 +1002,18 @@ impl
             .flatten();
 
         let mut consensus_responses = Vec::new();
-        let mut refunds = Vec::new();
+        let mut refunds = CanisterHttpRefunds::default();
         for (consensus_response, refund_shares) in responses
             .chain(timeouts)
             .chain(divergence_responses)
             .chain(flexible_ok_responses)
             .chain(flexible_errors)
         {
+            // The per-replica shares signed over by the participating nodes are
+            // delivered as asynchronous refunds. The initial (collective) refund
+            // is not produced here yet.
             if !refund_shares.is_empty() {
-                refunds.push(CanisterHttpRefund {
+                refunds.asynchronous.push(CanisterHttpAsyncRefund {
                     callback: consensus_response.callback,
                     shares: refund_shares,
                 });

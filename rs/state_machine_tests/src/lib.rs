@@ -144,7 +144,7 @@ use ic_types::{
     SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpRefund,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpRefunds,
         ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
         ValidationContext, XNetPayload,
     },
@@ -5369,7 +5369,7 @@ pub struct PayloadBuilder {
     ingress_messages: Vec<SignedIngress>,
     xnet_payload: XNetPayload,
     consensus_responses: Vec<ConsensusResponse>,
-    refunds: Vec<CanisterHttpRefund>,
+    refunds: CanisterHttpRefunds,
     query_stats: Option<QueryStatsPayload>,
     self_validating: Option<SelfValidatingPayload>,
     blockmaker_metrics: Option<BlockmakerMetrics>,
@@ -5441,7 +5441,7 @@ impl PayloadBuilder {
         }
     }
 
-    pub fn with_refunds(self, refunds: Vec<CanisterHttpRefund>) -> Self {
+    pub fn with_refunds(self, refunds: CanisterHttpRefunds) -> Self {
         Self { refunds, ..self }
     }
 

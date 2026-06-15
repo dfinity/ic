@@ -26,7 +26,7 @@ use ic_protobuf::{
 use ic_types::{
     Height, PrincipalId, SubnetId,
     batch::{
-        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpRefund,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpRefunds,
         ChainKeyData, ConsensusResponse,
     },
     consensus::{
@@ -315,9 +315,9 @@ fn generate_responses_to_subnet_calls(
     block: &Block,
     stats: &mut BatchStats,
     log: &ReplicaLogger,
-) -> (Vec<ConsensusResponse>, Vec<CanisterHttpRefund>) {
+) -> (Vec<ConsensusResponse>, CanisterHttpRefunds) {
     let mut consensus_responses = Vec::new();
-    let mut refunds = Vec::new();
+    let mut refunds = CanisterHttpRefunds::default();
     match block.payload.as_ref() {
         BlockPayload::Summary(summary_payload) => {
             info!(
@@ -344,7 +344,8 @@ fn generate_responses_to_subnet_calls(
             let (mut http_responses, mut http_refunds, http_stats) =
                 CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
             consensus_responses.append(&mut http_responses);
-            refunds.append(&mut http_refunds);
+            refunds.initial.append(&mut http_refunds.initial);
+            refunds.asynchronous.append(&mut http_refunds.asynchronous);
             stats.canister_http = http_stats;
 
             let mut chain_key_responses =

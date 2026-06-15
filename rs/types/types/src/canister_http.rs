@@ -487,6 +487,45 @@ fn validate_url_length(url: &str) -> Result<(), CanisterHttpRequestContextError>
     Ok(())
 }
 
+// Base-cost fee constants for HTTPS outcalls pricing.
+//
+// Every outcall's cost is split into three parts: the base cost (charged
+// up-front when the request context is created and reflected in the refundable
+// amount below), the per-replica cost (charged as-you-go by the budget tracker
+// in the adapter client), and the consensus cost (ignored for now).
+//
+// The base-cost formula depends on the replication strategy:
+//
+//   Fully/non-replicated:
+//     N * (1M + 50 * request_bytes + 140k * N + 800 * N * N)
+//   Flexible:
+//     N * (1M + 50 * request_bytes + 90k * N)
+//
+// where `N` is the total number of nodes on the subnet and `request_bytes` is
+// the variable (unbounded) part of the request.
+const BASE_FEE: u128 = 1_000_000;
+const BASE_PER_REQUEST_BYTE_FEE: u128 = 50;
+const BASE_PER_NODE_FEE_FULLY_REPLICATED: u128 = 140_000;
+const BASE_QUADRATIC_NODE_FEE_FULLY_REPLICATED: u128 = 800;
+const BASE_PER_NODE_FEE_FLEXIBLE: u128 = 90_000;
+
+fn base_cost_fully_replicated(request_bytes: u64, n: u64) -> Cycles {
+    let n = n as u128;
+    let per_replica = BASE_FEE
+        + BASE_PER_REQUEST_BYTE_FEE * request_bytes as u128
+        + BASE_PER_NODE_FEE_FULLY_REPLICATED * n
+        + BASE_QUADRATIC_NODE_FEE_FULLY_REPLICATED * n * n;
+    Cycles::new(per_replica * n)
+}
+
+fn base_cost_flexible(request_bytes: u64, n: u64) -> Cycles {
+    let n = n as u128;
+    let per_replica = BASE_FEE
+        + BASE_PER_REQUEST_BYTE_FEE * request_bytes as u128
+        + BASE_PER_NODE_FEE_FLEXIBLE * n;
+    Cycles::new(per_replica * n)
+}
+
 impl CanisterHttpRequestContext {
     /// Calculate the size of all unbounded struct elements.
     pub fn variable_parts_size(&self) -> NumBytes {
@@ -571,7 +610,7 @@ impl CanisterHttpRequestContext {
             _ => Replication::FullyReplicated,
         };
 
-        Ok(CanisterHttpRequestContext {
+        let mut context = CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
             max_response_bytes,
@@ -588,14 +627,21 @@ impl CanisterHttpRequestContext {
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
-            refund_status: RefundStatus {
-                //TODO(IC-1937): subtract the base fee from the refundable amount.
-                refundable_cycles: request.payment,
-                per_replica_allowance: request.payment / node_ids.len(),
-                refunded_cycles: Cycles::new(0),
-                refunding_nodes: BTreeSet::new(),
-            },
-        })
+            refund_status: RefundStatus::default(),
+        };
+
+        // Charge the base cost up-front. Fully/non-replicated outcalls use the
+        // fully-replicated base formula. `N` is the total number of nodes.
+        let base_cost =
+            base_cost_fully_replicated(context.variable_parts_size().get(), node_ids.len() as u64);
+        let refundable_cycles = request.payment - base_cost;
+        context.refund_status = RefundStatus {
+            refundable_cycles,
+            per_replica_allowance: refundable_cycles / node_ids.len(),
+            refunded_cycles: Cycles::new(0),
+            refunding_nodes: BTreeSet::new(),
+        };
+        Ok(context)
     }
 
     pub fn generate_from_flexible_args(
@@ -682,7 +728,7 @@ impl CanisterHttpRequestContext {
             .into_iter()
             .collect();
 
-        Ok(CanisterHttpRequestContext {
+        let mut context = CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
             max_response_bytes: None,
@@ -697,14 +743,21 @@ impl CanisterHttpRequestContext {
                 max_responses,
             },
             pricing_version: PricingVersion::PayAsYouGo,
-            refund_status: RefundStatus {
-                //TODO(IC-1937): subtract the base fee from the refundable amount.
-                refundable_cycles: request.payment,
-                per_replica_allowance: request.payment / (total_requests as usize).max(1),
-                refunded_cycles: Cycles::new(0),
-                refunding_nodes: BTreeSet::new(),
-            },
-        })
+            refund_status: RefundStatus::default(),
+        };
+
+        // Charge the base cost up-front using the flexible base formula. `N` is
+        // the total number of nodes on the subnet, while the per-replica
+        // allowance is shared among the `total_requests` committee members.
+        let base_cost = base_cost_flexible(context.variable_parts_size().get(), n as u64);
+        let refundable_cycles = request.payment - base_cost;
+        context.refund_status = RefundStatus {
+            refundable_cycles,
+            per_replica_allowance: refundable_cycles / (total_requests as usize).max(1),
+            refunded_cycles: Cycles::new(0),
+            refunding_nodes: BTreeSet::new(),
+        };
+        Ok(context)
     }
 }
 
@@ -831,6 +884,11 @@ pub struct CanisterHttpRequest {
     /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
     /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
+    /// The total number of nodes on the subnet (`N`) at the time the request is
+    /// dispatched, as known by the pool manager from the subnet membership.
+    /// This is required by the pay-as-you-go pricing formula and cannot be
+    /// reliably recovered from the request context alone.
+    pub subnet_size: usize,
 }
 
 /// The content of a response after the transformation

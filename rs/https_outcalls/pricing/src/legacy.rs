@@ -45,6 +45,13 @@ impl BudgetTracker for LegacyTracker {
         Ok(())
     }
 
+    fn subtract_transformed_response_usage(
+        &mut self,
+        _transformed_response_size: NumBytes,
+    ) -> Result<(), PricingError> {
+        Ok(())
+    }
+
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
         // Legacy pricing does not perform cycles accounting, so no cycles
         // are ever refunded.

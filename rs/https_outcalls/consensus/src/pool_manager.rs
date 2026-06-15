@@ -249,12 +249,32 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     /// Inform the HttpAdapterShim of any new requests that must be made.
-    fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
+    fn make_new_requests(
+        &self,
+        canister_http_pool: &dyn CanisterHttpPool,
+        finalized_height: Height,
+    ) {
         let _time = self
             .metrics
             .op_duration
             .with_label_values(&["make_new_requests"])
             .start_timer();
+
+        // The total number of nodes on the subnet (`N`), needed by the
+        // pay-as-you-go pricing formula. Derived from the subnet membership,
+        // which the pool manager already tracks.
+        let subnet_size = match self.membership.get_nodes(finalized_height) {
+            Ok(nodes) => nodes.len(),
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to determine subnet size for http outcall pricing at height {}: {:?}",
+                    finalized_height,
+                    err
+                );
+                0
+            }
+        };
 
         let http_requests = &self
             .latest_state()
@@ -301,6 +321,7 @@ impl CanisterHttpPoolManagerImpl {
                         id: *id,
                         context: context.clone(),
                         socks_proxy_addrs: socks_proxy_addrs.clone(),
+                        subnet_size,
                     })
                 {
                     warn!(
@@ -640,7 +661,7 @@ impl CanisterHttpPoolManagerImpl {
             .unwrap_or(false)
         {
             // Make any requests that need to be made
-            self.make_new_requests(canister_http_pool);
+            self.make_new_requests(canister_http_pool, finalized_height);
 
             // Create shares from any responses that are now available
             change_set.extend(self.create_shares_from_responses(finalized_height));
@@ -2728,6 +2749,7 @@ pub mod test {
                         id: CallbackId::from(7),
                         context: request.clone(),
                         socks_proxy_addrs: vec![],
+                        subnet_size: 4,
                     }))
                     .times(1)
                     .return_const(Ok(()));
