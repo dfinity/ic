@@ -402,6 +402,28 @@ mod tests {
         assert!(original_stats.stats.len() > deserialized_stats.stats.len());
     }
 
+    /// Empty stats serialize to a metadata-only payload that round-trips correctly.
+    #[test]
+    fn empty_stats_metadata_only_roundtrip() {
+        let epoch = QueryStatsEpoch::new(42);
+        let proposer = NodeId::from(PrincipalId::new_node_test_id(7));
+        let payload = QueryStatsPayload {
+            epoch,
+            proposer,
+            stats: vec![],
+        };
+
+        let serialized = payload.serialize_with_limit(NumBytes::new(2 * 1024 * 1024));
+        assert!(!serialized.is_empty());
+
+        let deserialized = QueryStatsPayload::deserialize(&serialized)
+            .unwrap()
+            .unwrap();
+        assert_eq!(deserialized.epoch, epoch);
+        assert_eq!(deserialized.proposer, proposer);
+        assert!(deserialized.stats.is_empty());
+    }
+
     fn test_message(num_stats: u64) -> QueryStatsPayload {
         let mut rng = ChaCha8Rng::seed_from_u64(1454);
 
