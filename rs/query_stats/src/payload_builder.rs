@@ -760,6 +760,78 @@ mod tests {
         }
     }
 
+    /// When current stats are empty and the node has not yet submitted for the epoch,
+    /// the builder must emit a non-empty metadata-only payload so the aggregator can
+    /// see that this node has moved past the epoch.
+    #[test]
+    fn idle_epoch_first_build_returns_metadata_only_payload() {
+        let test_stats = test_epoch_stats(0, 0);
+        let state = test_state(RawQueryStats::default());
+        let payload_builder = setup_payload_builder_impl(state, test_stats);
+        let validation_context = test_validation_context();
+
+        let payload = payload_builder.build_payload_impl(
+            Height::new(1),
+            MAX_PAYLOAD_SIZE,
+            &[],
+            &validation_context,
+        );
+
+        assert!(!payload.is_empty());
+        let deserialized = QueryStatsPayload::deserialize(&payload).unwrap().unwrap();
+        assert_eq!(deserialized.epoch, QueryStatsEpoch::new(0));
+        assert_eq!(deserialized.proposer, node_test_id(1));
+        assert!(deserialized.stats.is_empty());
+    }
+
+    /// Once an empty-stats payload from a prior block is in past_payloads, subsequent
+    /// builds must return vec![] to avoid sending duplicate epoch-advancement signals.
+    #[test]
+    fn idle_epoch_subsequent_build_returns_empty_after_past_payload() {
+        let test_stats = test_epoch_stats(0, 0);
+        let state = test_state(RawQueryStats::default());
+        let payload_builder = setup_payload_builder_impl(state, test_stats.clone());
+        let validation_context = test_validation_context();
+
+        let prior_empty_payload = payload_from_range(&test_stats, 0..0, node_test_id(1));
+        let prior_past_payload = as_past_payload(&prior_empty_payload, 1);
+
+        let payload = payload_builder.build_payload_impl(
+            Height::new(2),
+            MAX_PAYLOAD_SIZE,
+            &[prior_past_payload],
+            &validation_context,
+        );
+
+        assert!(payload.is_empty());
+    }
+
+    /// Once an empty-epoch sentinel is recorded in replicated state, subsequent builds
+    /// must also return vec![] (the has_submitted_in_state path).
+    #[test]
+    fn idle_epoch_subsequent_build_returns_empty_after_state_submission() {
+        let test_stats = test_epoch_stats(0, 0);
+        // epoch_stats_for_state with an empty range inserts node -> epoch -> {} into
+        // state, which is the sentinel for a prior empty submission.
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..0,
+            node_test_id(1),
+            None,
+        ));
+        let payload_builder = setup_payload_builder_impl(state, test_stats);
+        let validation_context = test_validation_context();
+
+        let payload = payload_builder.build_payload_impl(
+            Height::new(1),
+            MAX_PAYLOAD_SIZE,
+            &[],
+            &validation_context,
+        );
+
+        assert!(payload.is_empty());
+    }
+
     fn test_validation_context() -> ValidationContext {
         ValidationContext {
             registry_version: RegistryVersion::new(0),
