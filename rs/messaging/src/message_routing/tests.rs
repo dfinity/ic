@@ -728,7 +728,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
             features: SubnetFeatures {
-                canister_sandboxing: true,
                 http_requests: true,
                 ..Default::default()
             },
@@ -2062,7 +2061,6 @@ fn process_batch_updates_subnet_metrics() {
             membership: &[node_test_id(1), node_test_id(2)],
             subnet_type: SubnetType::Application,
             features: SubnetFeatures {
-                canister_sandboxing: true,
                 http_requests: true,
                 ..Default::default()
             },

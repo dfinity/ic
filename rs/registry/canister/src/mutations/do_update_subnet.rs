@@ -778,7 +778,6 @@ mod tests {
             halt_at_cup_height: Some(false),
             features: Some(
                 SubnetFeatures {
-                    canister_sandboxing: false,
                     http_requests: false,
                     sev_enabled: false,
                 }
@@ -829,7 +828,6 @@ mod tests {
                 halt_at_cup_height: false,
                 features: Some(
                     SubnetFeatures {
-                        canister_sandboxing: false,
                         http_requests: false,
                         sev_enabled: false,
                     }
