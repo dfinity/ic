@@ -306,6 +306,7 @@ message SubnetCallContextManager {
   repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
   repeated PreSignatureStashTree pre_signature_stashes = 19;
+  repeated CanisterHttpRequestContextTree delivered_canister_http_request_contexts = 20;
 }
 
 message SubnetMetrics {

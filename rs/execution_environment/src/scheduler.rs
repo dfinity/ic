@@ -1331,6 +1331,15 @@ impl Scheduler for SchedulerImpl {
                 );
                 state = new_state;
             }
+
+            // Remove `CanisterHttpRequestContext`s whose responses were delivered
+            // to execution more than the configured timeout ago.
+            let now = state.time();
+            state
+                .metadata
+                .subnet_call_context_manager
+                .time_out_delivered_canister_http_request_contexts(now);
+
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
             // Throughout a checkpoint interval, the heap delta limit smoothly increases
