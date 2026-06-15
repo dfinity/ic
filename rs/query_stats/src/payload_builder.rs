@@ -380,6 +380,7 @@ impl QueryStatsPayloadBuilderImpl {
         previous_ids.extend(
             past_payloads
                 .iter()
+                // Deserialize the payload
                 .filter_map(|past_payload| {
                     QueryStatsPayload::deserialize(past_payload.payload)
                         .inspect_err(|_| {
@@ -391,10 +392,13 @@ impl QueryStatsPayloadBuilderImpl {
                         .ok()
                         .flatten()
                 })
+                // Filter out payloads that have a different epoch or are sent from different node
                 .filter(|stats| stats.epoch == epoch && stats.proposer == node_id)
+                // Track whether this node has submitted anything for this epoch
                 .inspect(|_| {
                     has_submitted_in_past = true;
                 })
+                // Map payload to CanisterIds
                 .flat_map(|stats| stats.stats.into_iter().map(|stat| stat.canister_id)),
         );
 
