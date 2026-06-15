@@ -369,10 +369,12 @@ impl QueryStatsPayloadBuilderImpl {
         }
 
         // Check the certified state for stats that we have already sent
-        let node_record = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch);
-        let has_submitted_in_state = node_record.is_some();
-        if let Some(record) = node_record {
-            previous_ids.extend(record.keys().copied());
+        let mut has_submitted_in_state = false;
+        if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
+            .inspect(|_| has_submitted_in_state = true)
+            .map(|record| record.keys())
+        {
+            previous_ids.extend(state_stats);
         }
 
         // Check past payloads for stats already sent
