@@ -1034,7 +1034,7 @@ fn test_query_stats_live() {
                 .unwrap()
                 .0
                 .query_stats;
-            if current_query_stats.num_calls_total > candid::Nat::from(0_u64) {
+            if current_query_stats.num_calls_total > 0_u64 {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
