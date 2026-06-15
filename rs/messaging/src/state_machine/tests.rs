@@ -305,7 +305,11 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         })));
     });
     assert_eq!(
-        initial_state.get_stream(&SUBNET_2).unwrap().messages().len(),
+        initial_state
+            .get_stream(&SUBNET_2)
+            .unwrap()
+            .messages()
+            .len(),
         2
     );
 
