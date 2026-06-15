@@ -868,6 +868,7 @@ fn subnet_call_contexts_deserialization() {
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
+        subnet_size: 4,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,

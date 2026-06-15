@@ -492,6 +492,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         replication,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
+        subnet_size: 4,
     }
 }
 

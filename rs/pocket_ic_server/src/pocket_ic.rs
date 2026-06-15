@@ -3755,7 +3755,6 @@ impl Operation for ProcessCanisterHttpInternal {
                     id,
                     context,
                     socks_proxy_addrs: vec![],
-                    subnet_size: sm.nodes.len(),
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -3930,7 +3929,6 @@ fn process_mock_canister_https_response(
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
-                    subnet_size: subnet.nodes.len(),
                 })
                 .unwrap();
             let response = loop {

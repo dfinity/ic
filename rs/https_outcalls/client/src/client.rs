@@ -135,10 +135,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 id: request_id,
                 context: request_context,
                 socks_proxy_addrs,
-                subnet_size,
             } = canister_http_request;
 
-            let mut budget = pricing_factory.new_tracker(&request_context, subnet_size);
+            let mut budget = pricing_factory.new_tracker(&request_context);
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {
@@ -664,9 +663,9 @@ mod tests {
                 replication: Replication::FullyReplicated,
                 pricing_version: PricingVersion::Legacy,
                 refund_status: RefundStatus::default(),
+                subnet_size: 13,
             },
             socks_proxy_addrs: vec![],
-            subnet_size: 13,
         }
     }
 

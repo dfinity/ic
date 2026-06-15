@@ -183,6 +183,15 @@ impl StateMachine for StateMachineImpl {
         // can include the accumulated refund when it delivers the response.
         deliver_canister_http_refunds(&refunds, &mut state, &self.log);
 
+        // Remove already-responded `CanisterHttpRequestContext`s that have timed
+        // out. This is done after delivering the refunds above, so that refunds
+        // for a just-responded context can still be applied within the timeout.
+        let batch_time = state.time();
+        state
+            .metadata
+            .subnet_call_context_manager
+            .time_out_delivered_canister_http_request_contexts(batch_time);
+
         // Time out expired messages.
         //
         // Preservation of cycles is validated (in debug builds) here for timing out and

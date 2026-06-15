@@ -88,13 +88,9 @@ impl PricingFactory {
         }
     }
 
-    /// Creates the tracker for a request. `subnet_size` is the total number of
-    /// nodes on the subnet (`N`), as determined by the pool manager.
-    pub fn new_tracker(
-        &self,
-        context: &CanisterHttpRequestContext,
-        subnet_size: usize,
-    ) -> Box<dyn BudgetTracker> {
+    /// Creates the tracker for a request. The subnet size (`N`) needed by the
+    /// pay-as-you-go formula is read from `context.subnet_size`.
+    pub fn new_tracker(&self, context: &CanisterHttpRequestContext) -> Box<dyn BudgetTracker> {
         match context.pricing_version {
             // Legacy pricing is what is actually charged today. We run the
             // PayAsYouGo tracker as a shadow next to it so we can measure how
@@ -102,14 +98,14 @@ impl PricingFactory {
             // pricing without changing any observable behaviour.
             PricingVersion::Legacy => Box::new(DarkLaunchTracker::new(
                 Box::new(LegacyTracker::new(context.max_response_bytes)),
-                Box::new(PayAsYouGoTracker::new(context, subnet_size)),
+                Box::new(PayAsYouGoTracker::new(context)),
                 context.request.sender,
                 self.metrics.clone(),
                 self.log.clone(),
             )),
             // PayAsYouGo requests are not served yet (the client rejects them),
             // but we still hand back the matching tracker for completeness.
-            PricingVersion::PayAsYouGo => Box::new(PayAsYouGoTracker::new(context, subnet_size)),
+            PricingVersion::PayAsYouGo => Box::new(PayAsYouGoTracker::new(context)),
         }
     }
 }

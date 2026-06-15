@@ -50,9 +50,9 @@ pub struct PayAsYouGoTracker {
 }
 
 impl PayAsYouGoTracker {
-    pub fn new(context: &CanisterHttpRequestContext, subnet_size: usize) -> Self {
+    pub fn new(context: &CanisterHttpRequestContext) -> Self {
         Self {
-            n: subnet_size as u64,
+            n: context.subnet_size as u64,
             is_flexible: matches!(context.replication, Replication::Flexible { .. }),
             allowance: context.refund_status.per_replica_allowance.get(),
             max_response_size: context
@@ -141,6 +141,7 @@ mod tests {
     fn context(
         replication: Replication,
         per_replica_allowance: u128,
+        subnet_size: usize,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
             request: Request {
@@ -168,6 +169,7 @@ mod tests {
                 refunded_cycles: Cycles::zero(),
                 refunding_nodes: BTreeSet::new(),
             },
+            subnet_size,
         }
     }
 
@@ -186,8 +188,8 @@ mod tests {
     fn does_not_charge_base_cost() {
         // The base cost is handled at context creation, so a freshly created
         // tracker has spent nothing and a zero-usage request refunds everything.
-        let ctx = context(Replication::FullyReplicated, 1_000_000);
-        let tracker = PayAsYouGoTracker::new(&ctx, 13);
+        let ctx = context(Replication::FullyReplicated, 1_000_000, 13);
+        let tracker = PayAsYouGoTracker::new(&ctx);
         assert_eq!(tracker.spent, 0);
         assert_eq!(
             tracker.create_payment_receipt().refund,
@@ -198,8 +200,8 @@ mod tests {
     #[test]
     fn charges_per_replica_cost_fully_replicated() {
         let allowance = 1_000_000_000u128;
-        let ctx = context(Replication::FullyReplicated, allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13);
+        let ctx = context(Replication::FullyReplicated, allowance, 13);
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let response_size = 1_000u64;
         let response_ms = 2_000u128;
@@ -238,8 +240,8 @@ mod tests {
     fn charges_transformed_response_for_flexible() {
         let allowance = 1_000_000_000u128;
         let n = 13usize;
-        let ctx = context(flexible(n), allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, n);
+        let ctx = context(flexible(n), allowance, n);
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
 
         let transformed_size = 500u64;
         assert_eq!(
@@ -253,8 +255,8 @@ mod tests {
 
     #[test]
     fn returns_pricing_error_when_budget_is_exceeded() {
-        let ctx = context(Replication::FullyReplicated, 100);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13);
+        let ctx = context(Replication::FullyReplicated, 100, 13);
+        let mut tracker = PayAsYouGoTracker::new(&ctx);
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
                 response_size: NumBytes::from(1_000),

@@ -137,6 +137,11 @@ pub struct CanisterHttpRequestContext {
     pub replication: Replication,
     pub pricing_version: PricingVersion,
     pub refund_status: RefundStatus,
+    /// The total number of nodes on the subnet (`N`) at the time the request
+    /// context was created, as known from the subnet membership. This is
+    /// required by the pay-as-you-go pricing formula and is carried on the
+    /// context so that it survives all the way to the adapter client.
+    pub subnet_size: usize,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -281,6 +286,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             replication: Some(replication_message),
             pricing_version: Some(pricing_message),
             refund_status: Some(refund_status),
+            subnet_size: context.subnet_size as u32,
         }
     }
 }
@@ -405,6 +411,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             replication,
             pricing_version,
             refund_status,
+            subnet_size: context.subnet_size as usize,
         })
     }
 }
@@ -628,6 +635,7 @@ impl CanisterHttpRequestContext {
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
             refund_status: RefundStatus::default(),
+            subnet_size: node_ids.len(),
         };
 
         // Charge the base cost up-front. Fully/non-replicated outcalls use the
@@ -744,6 +752,7 @@ impl CanisterHttpRequestContext {
             },
             pricing_version: PricingVersion::PayAsYouGo,
             refund_status: RefundStatus::default(),
+            subnet_size: node_ids.len(),
         };
 
         // Charge the base cost up-front using the flexible base formula. `N` is
@@ -884,11 +893,6 @@ pub struct CanisterHttpRequest {
     /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
     /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
-    /// The total number of nodes on the subnet (`N`) at the time the request is
-    /// dispatched, as known by the pool manager from the subnet membership.
-    /// This is required by the pay-as-you-go pricing formula and cannot be
-    /// reliably recovered from the request context alone.
-    pub subnet_size: usize,
 }
 
 /// The content of a response after the transformation
@@ -1322,6 +1326,7 @@ mod tests {
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
+            subnet_size: 13,
         };
 
         let expected_size = context.url.len()
@@ -1367,6 +1372,7 @@ mod tests {
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
+            subnet_size: 13,
         };
 
         let expected_size = context.url.len()
@@ -1446,6 +1452,7 @@ mod tests {
                     refunded_cycles: Cycles::new(123),
                     refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
                 },
+                subnet_size: 13,
             };
 
             let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
