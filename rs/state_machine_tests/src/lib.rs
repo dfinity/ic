@@ -92,6 +92,7 @@ use ic_protobuf::{
         v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
     },
 };
+use ic_query_stats::QueryStatsCollector;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -1249,6 +1250,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
+    local_query_execution_stats: Arc<QueryStatsCollector>,
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -2000,6 +2002,8 @@ impl StateMachine {
 
         // Finally execute the payload.
         self.execute_payload(payload);
+        self.local_query_execution_stats
+            .set_epoch_from_height(self.state_manager.latest_state_height());
     }
 
     /// Reload registry derived from a *shared* registry data provider
@@ -2434,6 +2438,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
+            local_query_execution_stats: execution_services.local_query_execution_stats,
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
