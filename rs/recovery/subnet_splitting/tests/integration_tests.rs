@@ -182,8 +182,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 20,
-                destination: 19,
+                source: 19,
+                destination: 20,
             }
         );
         assert_eq!(
@@ -196,8 +196,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 15,
-                destination: 13,
+                source: 13,
+                destination: 15,
             }
         );
         assert_eq!(
@@ -210,8 +210,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 276,
-                destination: 418,
+                source: 418,
+                destination: 276,
             }
         );
         // Check if the split finder found a split satisfying the load constraints

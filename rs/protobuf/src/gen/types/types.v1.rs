@@ -590,6 +590,8 @@ pub struct CanisterHttpResponseSignature {
     pub signer: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub payment_receipt: ::core::option::Option<CanisterHttpPaymentReceipt>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseWithConsensus {

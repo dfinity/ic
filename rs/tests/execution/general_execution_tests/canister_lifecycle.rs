@@ -106,7 +106,7 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
 pub fn update_settings_of_frozen_canister(env: TestEnv) {
     use ic_base_types::NumBytes;
     use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
     use ic_cycles_account_manager::CyclesAccountManager;
 
     let logger = env.logger();
@@ -220,7 +220,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                 SchedulerConfig::application_subnet().max_instructions_per_message,
                 SubnetType::Application,
                 app_node.subnet_id().unwrap(),
-                CyclesAccountManagerConfig::application_subnet(),
+                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
             );
 
             assert!(

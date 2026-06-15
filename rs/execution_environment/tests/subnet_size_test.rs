@@ -2,7 +2,7 @@ use candid::{Decode, Encode};
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfig, SubnetSecurity},
 };
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
@@ -304,7 +304,8 @@ fn simulate_one_gib_per_second_cost(
     env.advance_time(duration_between_allocation_charges);
 
     let balance_before = env.cycle_balance(canister_id);
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
     let balance_after = env.cycle_balance(canister_id);
 
     // Scale the cost from a defined in config value to a 1 second duration.
@@ -359,7 +360,7 @@ fn apply_filter(
 /// Create a `SubnetConfig` with a redacted `CyclesAccountManagerConfig` to have only the fees
 /// for specific operation.
 fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> SubnetConfig {
-    let mut subnet_config = SubnetConfig::new(subnet_type);
+    let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
     subnet_config.cycles_account_manager_config =
         apply_filter(subnet_config.cycles_account_manager_config, filter);
 
@@ -821,8 +822,10 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 http_request_per_byte_fee: Cycles::new(400),
                 http_response_per_byte_fee: Cycles::new(800),
                 max_storage_reservation_period: Duration::from_secs(0),
-                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
-                    .default_reserved_balance_limit,
+                default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet(
+                    SubnetSecurity::None,
+                )
+                .default_reserved_balance_limit,
                 fetch_canister_logs_base_fee: Cycles::new(5_000_000),
                 fetch_canister_logs_per_byte_fee: Cycles::new(80),
             }

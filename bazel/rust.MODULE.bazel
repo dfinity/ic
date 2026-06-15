@@ -1850,7 +1850,7 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     default_features = False,
@@ -1858,15 +1858,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.248.0",
+    version = "^0.251.0",
 )
 crate.spec(
     default_features = False,
@@ -1878,15 +1878,15 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^44.0.1",
+    version = "^45.0.0",
 )
 crate.spec(
     package = "wast",
-    version = "^248.0.0",
+    version = "^251.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "~1.248.0",
+    version = "~1.251.0",
 )
 crate.spec(
     package = "webpki-roots",
@@ -2132,6 +2132,16 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
+)
+crate.annotation(
+    crate = "rustix",
+    # Patch for determinism issues: rustix's build script leaves a
+    # non-deterministic compiler-probe artifact (`rustix_test_can_compile`) in
+    # `OUT_DIR`, which rules_rust captures as a cacheable build output. This is
+    # the upstream fix: https://github.com/bytecodealliance/rustix/pull/1628
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:rustix.patch"],
+    version = "1.1.4",
 )
 crate.annotation(
     crate = "ic-wasm",

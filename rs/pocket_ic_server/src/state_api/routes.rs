@@ -10,10 +10,11 @@ use super::state::{
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, GetCanisterHttp,
-    GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
-    IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
+    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, DeleteSubnet,
+    GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
+    GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest,
+    SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    SubnetReadStateRequest, Tick,
 };
 use crate::{
     BlobStore, InstanceId, OpId, Operation, SubnetBlockmakers, async_trait, pocket_ic::PocketIc,
@@ -146,6 +147,7 @@ where
             "/canister_snapshot_upload",
             post(handler_canister_snapshot_upload),
         )
+        .directory_route("/delete_subnet", post(handler_delete_subnet))
 }
 
 async fn handle_limit_error(req: Request, next: Next) -> Response {
@@ -806,6 +808,21 @@ pub async fn handler_pub_key(
         &subnet_id,
     )));
     let op = PubKey { subnet_id };
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(res))
+}
+
+pub async fn handler_delete_subnet(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(RawSubnetId { subnet_id }): extract::Json<RawSubnetId>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let subnet_id = ic_types::SubnetId::new(ic_types::PrincipalId(candid::Principal::from_slice(
+        &subnet_id,
+    )));
+    let op = DeleteSubnet { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }

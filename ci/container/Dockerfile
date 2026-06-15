@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# ubuntu:noble-20250910
-FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d as base
+# ubuntu:resolute-20260413
+FROM ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4 as base
 
 ENV TZ=UTC
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -18,13 +18,14 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
+# Drop troublesome SSH file (Potentially related: Debian #1072221)
+RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
+
 ## The image carries two users so the runtime UID can match the host's:
 ## - ubuntu (1000): DFINITY devenv
 ## - buildifier (1001): CI runners and namespace.so devboxes
-## User convention below:
-## - Build tools (needed regardless of runtime user): installed as root.
-## - Dev tools (convenience only): installed as ubuntu under ~ubuntu.
-##   buildifier has read access via its `ubuntu` supplementary group.
+## All tools are installed as root and usable by all. The extra users are only
+## there for convenience to avoid running the image as root.
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -65,23 +66,14 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Install AFLplusplus for fuzzing
-# LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
+# Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
 ARG LLVM_VERSION=21
-RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" | tee -a /etc/apt/sources.list.d/llvm.list && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev && \
-    mkdir -p /afl && \
-    chown -R ubuntu:ubuntu /afl && \
+RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
     cd /afl && \
-    git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
-    cd AFLplusplus && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
-    mv afl-fuzz afl-showmap  /afl && \
-    cd .. && rm -rf AFLplusplus
+    rm -rf /afl
 
 # Install rustup proxies system-wide as root:
 # - Binaries land in /opt/cargo/bin/ owned by root, world-readable.
@@ -95,7 +87,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
       sh -s -- -y --default-toolchain none --no-modify-path \
     && rm -rf /opt/rustup
 
-USER root
 WORKDIR /
 CMD ["/bin/bash"]
 
@@ -104,9 +95,6 @@ FROM base as build
 USER buildifier
 
 FROM base as dev
-
-# Add zshrc generated from zsh-newuser-install (option 2)
-COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
 # Add GitHub CLI repository to get the latest version
 RUN mkdir -p -m 755 /etc/apt/keyrings \
@@ -122,5 +110,8 @@ COPY ${PACKAGE_DEV_FILE} /tmp/
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_DEV_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_DEV_FILE)"
+
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY ./ci/container/files/zshrc /etc/zsh/zshrc
 
 USER ubuntu
