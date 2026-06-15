@@ -395,20 +395,24 @@ http_file(
 # downloading solc from https://binaries.soliditylang.org at test runtime, which
 # made the test flaky in data centers with unreliable IPv4 connectivity.
 # The sha256 hashes are taken from https://binaries.soliditylang.org/linux-amd64/list.json.
+#
+# `solc` is used to compile most contracts. `EthDepositHelper.sol` pins an older
+# Solidity version to stay faithful to its immutable mainnet deployment, so it
+# gets its own `solc_eth_deposit_helper`.
 http_file(
-    name = "solc_linux_amd64_0_8_18",
-    downloaded_file_path = "solc-0.8.18",
-    executable = True,
-    sha256 = "95e6ed4949a63ad89afb443ecba1fb8302dd2860ee5e9baace3e674a0f48aa77",
-    url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.18+commit.87f61d96",
-)
-
-http_file(
-    name = "solc_linux_amd64_0_8_20",
-    downloaded_file_path = "solc-0.8.20",
+    name = "solc",
+    downloaded_file_path = "solc",
     executable = True,
     sha256 = "0479d44fdf9c501c25337fdc540419f1593b884a87b47f023da4f1c700fda782",
     url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.20+commit.a1b79de6",
+)
+
+http_file(
+    name = "solc_eth_deposit_helper",
+    downloaded_file_path = "solc_eth_deposit_helper",
+    executable = True,
+    sha256 = "95e6ed4949a63ad89afb443ecba1fb8302dd2860ee5e9baace3e674a0f48aa77",
+    url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.18+commit.87f61d96",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test

@@ -52,10 +52,14 @@ const FOUNDRY_PORT: u16 = 8545;
 /// File names of the `solc` compilers vendored via Bazel (see `MODULE.bazel`)
 /// and shipped in the foundry UVM config image. They are used by
 /// `deploy_smart_contract` so that `forge` compiles the helper smart contracts
-/// offline instead of downloading `solc` at runtime. The version of each
-/// compiler matches the `pragma solidity` of the contracts it compiles.
-const SOLC_V0_8_18: &str = "solc-0.8.18";
-const SOLC_V0_8_20: &str = "solc-0.8.20";
+/// offline instead of downloading `solc` at runtime. Each compiler must satisfy
+/// the `pragma solidity` of the contracts it compiles.
+///
+/// Most contracts are compiled with `SOLC`. `EthDepositHelper.sol` pins an older
+/// Solidity version to stay faithful to its immutable mainnet deployment, so it
+/// is compiled with its own `SOLC_ETH_DEPOSIT_HELPER`.
+const SOLC: &str = "solc";
+const SOLC_ETH_DEPOSIT_HELPER: &str = "solc_eth_deposit_helper";
 const ENCODED_PRINCIPAL: &str =
     "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000";
 
@@ -109,9 +113,9 @@ fn setup_anvil(env: &TestEnv) {
 docker load -i /config/foundry.tar
 docker network create {DOCKER_NETWORK_NAME}
 docker run --net {DOCKER_NETWORK_NAME} --detach --rm --name anvil -p {FOUNDRY_PORT}:{FOUNDRY_PORT} foundry:latest "anvil --host 0.0.0.0"
-cp /config/{SOLC_V0_8_18} /tmp/{SOLC_V0_8_18}
-cp /config/{SOLC_V0_8_20} /tmp/{SOLC_V0_8_20}
-chmod +x /tmp/{SOLC_V0_8_18} /tmp/{SOLC_V0_8_20}
+cp /config/{SOLC_ETH_DEPOSIT_HELPER} /tmp/{SOLC_ETH_DEPOSIT_HELPER}
+cp /config/{SOLC} /tmp/{SOLC}
+chmod +x /tmp/{SOLC_ETH_DEPOSIT_HELPER} /tmp/{SOLC}
 "#
             ))
             .unwrap();
@@ -398,7 +402,7 @@ fn deploy_eth_deposit_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "EthDepositHelper.sol",
-        SOLC_V0_8_18,
+        SOLC_ETH_DEPOSIT_HELPER,
         "CkEthDeposit",
         &minter_address.to_string(),
         logger,
@@ -731,7 +735,7 @@ fn deploy_erc20_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "ERC20DepositHelper.sol",
-        SOLC_V0_8_20,
+        SOLC,
         "CkErc20Deposit",
         &minter_address.to_string(),
         logger,
@@ -757,7 +761,7 @@ fn deploy_erc20_contract(
         foundry,
         &EthereumAccount::Erc20Deployer,
         "ERC20.sol",
-        SOLC_V0_8_20,
+        SOLC,
         "EXLToken",
         &format!("0x{initial_supply:x}"),
         logger,
@@ -789,7 +793,7 @@ fn deploy_deposit_with_subaccount_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "DepositHelperWithSubaccount.sol",
-        SOLC_V0_8_20,
+        SOLC,
         "CkDeposit",
         &minter_address.to_string(),
         logger,
