@@ -14695,6 +14695,7 @@ dependencies = [
  "ic-messaging",
  "ic-metrics",
  "ic-protobuf",
+ "ic-query-stats",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",

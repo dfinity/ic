@@ -104,6 +104,7 @@ pub struct ExecutionServices {
     pub transform_execution_service: TransformExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
+    pub local_query_execution_stats: Arc<QueryStatsCollector>,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
@@ -181,7 +182,6 @@ impl ExecutionServices {
             config.rate_limiting_of_instructions,
             config.log_memory_store_feature,
             Arc::clone(&fd_factory),
-            query_stats_collector,
         ));
 
         Self {
@@ -192,6 +192,7 @@ impl ExecutionServices {
             transform_execution_service,
             scheduler,
             query_stats_payload_builder,
+            local_query_execution_stats: query_stats_collector,
             cycles_account_manager,
         }
     }
@@ -228,7 +229,6 @@ pub struct ExecutionServicesForTesting {
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: InternalHttpQueryHandler,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
-    pub local_query_execution_stats: Arc<QueryStatsCollector>,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
     pub execution_environment: Arc<ExecutionEnvironment>,
 }
@@ -257,7 +257,7 @@ impl ExecutionServicesForTesting {
             sync_query_handler,
             _query_scheduler,
             query_stats_payload_builder,
-            local_query_execution_stats,
+            _query_stats_collector,
             cycles_account_manager,
             execution_environment,
         ) = setup_execution_helper(
@@ -283,7 +283,6 @@ impl ExecutionServicesForTesting {
             ingress_history_reader,
             query_execution_service: sync_query_handler,
             query_stats_payload_builder,
-            local_query_execution_stats,
             cycles_account_manager,
             execution_environment,
         }
@@ -311,9 +310,9 @@ fn setup_execution_helper(
     InternalHttpQueryHandler,
     QueryScheduler,
     QueryStatsPayloadBuilderParams,
+    Arc<QueryStatsCollector>,
     Arc<CyclesAccountManager>,
     Arc<ExecutionEnvironment>,
-    Arc<QueryStatsCollector>,
 ) {
     let scheduler_config = subnet_config.scheduler_config;
 

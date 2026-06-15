@@ -28,7 +28,6 @@ use ic_interfaces::execution_environment::{
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
 use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
-use ic_query_stats::QueryStatsCollector;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
@@ -42,7 +41,7 @@ use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound, Height,
+    CanisterId, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
     MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
     ReplicaVersion, Time,
 };
@@ -157,7 +156,6 @@ pub(crate) struct SchedulerImpl {
     rate_limiting_of_instructions: FlagStatus,
     log_memory_store_feature: FlagStatus,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    local_query_execution_stats: Arc<QueryStatsCollector>,
 }
 
 impl SchedulerImpl {
@@ -174,7 +172,6 @@ impl SchedulerImpl {
         rate_limiting_of_instructions: FlagStatus,
         log_memory_store_feature: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        local_query_execution_stats: Arc<QueryStatsCollector>,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
         Self {
@@ -190,7 +187,6 @@ impl SchedulerImpl {
             rate_limiting_of_instructions,
             log_memory_store_feature,
             fd_factory,
-            local_query_execution_stats,
         }
     }
 
@@ -1136,11 +1132,6 @@ impl Scheduler for SchedulerImpl {
         // When making changes to this method, please make sure each piece of code is covered by duration metrics.
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
-
-        // Advance the query stats epoch unconditionally so that the previous epoch's
-        // stats are flushed to the payload builder even when no queries arrive.
-        self.local_query_execution_stats
-            .set_epoch_from_height(Height::from(current_round.get()));
 
         if !state.metadata.logs_migrated {
             let _timer = self
