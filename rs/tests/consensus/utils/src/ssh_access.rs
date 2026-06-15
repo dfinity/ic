@@ -80,21 +80,35 @@ impl Default for SshSession {
 }
 
 impl SshSession {
-    /// Opens a TCP connection to the node and performs the SSH transport handshake
-    /// (protocol-version banner exchange and key exchange). This is the transport
-    /// layer, established before any authentication takes place. Failures here (e.g.
-    /// "Failed getting banner" when the node is briefly unresponsive right after a
-    /// restart) are transient and unrelated to whether a key grants access.
-    fn connect(&mut self, ip: &IpAddr) -> Result<(), String> {
+    pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
+        // The SSH transport handshake (TCP connect + protocol banner and key
+        // exchange) is retried for a bounded time because it can fail transiently
+        // (e.g. with "Failed getting banner") when the node is briefly unresponsive,
+        // for instance right after the replica/orchestrator is restarted. Such
+        // transport-level failures are unrelated to whether the key grants access,
+        // which is what the callers actually test. The authentication step below is
+        // not retried, so an actual loss of access (e.g. a key being incorrectly
+        // removed) is still reported immediately.
         let ip_str = format!("[{ip}]:22");
-        let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
-        self.session.set_tcp_stream(tcp);
-        self.session.handshake().map_err(|err| err.to_string())
-    }
+        let start = std::time::Instant::now();
+        loop {
+            let handshake_result = TcpStream::connect(&ip_str)
+                .map_err(|err| err.to_string())
+                .and_then(|tcp| {
+                    self.session.set_tcp_stream(tcp);
+                    self.session.handshake().map_err(|err| err.to_string())
+                });
+            match handshake_result {
+                Ok(()) => break,
+                Err(_) if start.elapsed() < SSH_ACCESS_TIMEOUT => {
+                    std::thread::sleep(SSH_ACCESS_BACKOFF);
+                    // A failed handshake can leave the session unusable, so replace it.
+                    self.session = Session::new().unwrap();
+                }
+                Err(err) => return Err(err),
+            }
+        }
 
-    /// Attempts to authenticate as `username` using `mean` on an already-handshaken
-    /// session. The result reflects whether the key actually grants access.
-    fn authenticate(&self, username: &str, mean: &AuthMean) -> Result<(), String> {
         match mean {
             AuthMean::PrivateKey(pk) => self
                 .session
@@ -104,35 +118,10 @@ impl SshSession {
         }
         .map_err(|err| err.to_string())
     }
-
-    pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
-        self.connect(ip)?;
-        self.authenticate(username, mean)
-    }
 }
 
 pub fn assert_authentication_works(ip: &IpAddr, username: &str, mean: &AuthMean) {
-    // The SSH transport handshake is retried for a bounded time because it can fail
-    // transiently (e.g. with "Failed getting banner") when the node is briefly
-    // unresponsive, for instance right after the replica/orchestrator is restarted.
-    // Such transport-level failures are unrelated to whether the key grants access.
-    // The authentication step itself is *not* retried, so an actual loss of access
-    // (e.g. a key being incorrectly removed) is still reported immediately.
-    let start = std::time::Instant::now();
-    let session = loop {
-        let mut session = SshSession::default();
-        match session.connect(ip) {
-            Ok(()) => break session,
-            Err(err) => {
-                assert!(
-                    start.elapsed() < SSH_ACCESS_TIMEOUT,
-                    "Failed to establish an SSH connection to {ip}: {err}"
-                );
-                std::thread::sleep(SSH_ACCESS_BACKOFF);
-            }
-        }
-    };
-    session.authenticate(username, mean).unwrap();
+    SshSession::default().login(ip, username, mean).unwrap();
 }
 
 pub fn assert_authentication_fails(ip: &IpAddr, username: &str, mean: &AuthMean) {
