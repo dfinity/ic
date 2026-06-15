@@ -1012,6 +1012,56 @@ fn test_canister_log_in_state_stays_within_limit() {
 }
 
 #[test]
+fn test_canister_log_overflow_evicts_oldest_records() {
+    // First update: 2 debug prints of 8 bytes (indices 0, 1).
+    // Second update: 16 debug prints of 256 bytes (indices 2..17).
+    //
+    // With DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT = 4096 bytes:
+    //   data_size(8)   = 40 + 8   = 48 bytes
+    //   data_size(256) = 40 + 256 = 296 bytes
+    //
+    // The delta for the second update has capacity 4096 bytes and holds
+    // floor(4096 / 296) = 13 records (indices 5..17, bytes_used = 3848).
+    //
+    // Appending the delta to the aggregate (96 bytes for records 0 and 1):
+    //   delta.first.idx (5) > aggregate.next_idx (2) => gap detected => aggregate cleared.
+    //
+    // Result: records 5..17 (256-byte content) = 13 records.
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_id) = setup_with_controller(
+        user_controller,
+        wat_canister()
+            .update(
+                "update1",
+                wat_fn().debug_print(&[1_u8; 8]).debug_print(&[1_u8; 8]),
+            )
+            .update(
+                "update2",
+                wat_fn().repeat(16, wat_fn().debug_print(&[2_u8; 256])),
+            )
+            .build_wasm(),
+    );
+
+    env.advance_time(Duration::from_secs(1));
+    let _ = env.execute_ingress(canister_id, "update1", vec![]);
+    env.advance_time(Duration::from_secs(1));
+    let _ = env.execute_ingress(canister_id, "update2", vec![]);
+
+    let records = fetch_log_records(&env, user_controller, canister_id);
+    // The delta evicted records idx 2, 3, 4 (16 prints > floor(4096/296)=13 capacity),
+    // so the delta starts at idx 5 > aggregate next_idx 2. Both first-update records
+    // are dropped to maintain index continuity. Result: 13 records with 256-byte content.
+    assert_eq!(records.len(), 13);
+    for record in &records {
+        assert_eq!(record.content, vec![2_u8; 256]);
+    }
+    // First record has idx 5 = 2 + (16 - 13) (second update starts at idx 2).
+    assert_eq!(records[0].idx, 5);
+    // Last record has idx 17 = 2 + 16 - 1.
+    assert_eq!(records.last().unwrap().idx, 17);
+}
+
+#[test]
 fn test_logging_trap_in_heartbeat() {
     let user_controller = PrincipalId::new_user_test_id(42);
     let (env, canister_id) = setup_with_controller(
