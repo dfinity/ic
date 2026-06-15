@@ -87,7 +87,7 @@ mod test {
         let target_subnet_id =
             registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0, 1, 2, 3]);
 
-        // The target subnet must already appear in the routing table for migration to proceed;
+        // The target subnet must already appear in the routing table for the migration to keep it assigned;
         // give it a dedicated range (256–256) in addition to the system subnet's range.
         let mut initial_routing_table = RoutingTable::new();
         initial_routing_table
