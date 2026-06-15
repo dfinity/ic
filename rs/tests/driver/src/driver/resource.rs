@@ -244,7 +244,7 @@ pub fn get_resource_request_for_nested_nodes(
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "4ae74df520a1f9b3975c5612c04abc8abbc6712423417be3e9704784f48616a8";
+    "37cbe9d112058f066bad26d2428a56ba4f55f13e425f5be12768885fe7ca84ee";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
