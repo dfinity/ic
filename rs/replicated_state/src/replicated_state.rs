@@ -13,7 +13,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_btc_replica_types::BitcoinAdapterResponse;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::messaging::{
     IngressInductionError, LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING,
@@ -30,12 +30,13 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
-        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
+        CallbackId, Ingress, MessageId, Payload, Refund, RejectContext, RequestOrResponse,
+        Response, SubnetMessage,
     },
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -46,7 +47,7 @@ use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
 #[cfg(debug_assertions)]
-use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
+use ic_types_cycles::{CyclesUseCase, NominalCycles};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -825,6 +826,77 @@ impl ReplicatedState {
                 .contains_key(subnet_id)
         });
         self.put_streams(streams);
+    }
+
+    /// Generates synthetic reject responses for callbacks to deleted subnets.
+    ///
+    /// Must be called after `build_streams()` has processed all output queues,
+    /// so that callbacks whose requests are still in output queues have already
+    /// received reject responses from the stream builder.
+    pub fn generate_reject_responses_for_deleted_subnets(&mut self) {
+        let routing_table = self.routing_table();
+        let own_subnet_id = self.metadata.own_subnet_id;
+        let own_subnet_type = self.metadata.own_subnet_type;
+
+        // Collect all (canister_id, callback_id, respondent, deadline) tuples where
+        // the respondent is on a deleted subnet and no response has been enqueued yet.
+        let rejects: Vec<(CanisterId, CallbackId, CanisterId, CoarseTime)> = self
+            .canister_states
+            .iter()
+            .flat_map(|(canister_id, canister)| {
+                let canister_id = *canister_id;
+                let callbacks: Vec<_> = canister
+                    .system_state
+                    .call_context_manager()
+                    .map(|ccm| ccm.callbacks().iter().collect())
+                    .unwrap_or_default();
+                let routing_table = Arc::clone(&routing_table);
+                callbacks
+                    .into_iter()
+                    .filter_map(move |(callback_id, callback)| {
+                        let callback_id = *callback_id;
+                        let respondent = callback.respondent;
+                        let deadline = callback.deadline;
+                        if routing_table.lookup_entry(respondent).is_none()
+                            && respondent.get() != own_subnet_id.get()
+                            && !canister
+                                .system_state
+                                .queues()
+                                .has_enqueued_response(&callback_id)
+                        {
+                            Some((canister_id, callback_id, respondent, deadline))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        let mut available_guaranteed_response_memory = i64::MAX / 2;
+        for (canister_id, callback_id, respondent, deadline) in rejects {
+            let response = RequestOrResponse::Response(Arc::new(Response {
+                originator: canister_id,
+                respondent,
+                originator_reply_callback: callback_id,
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    RejectCode::CanisterReject,
+                    "Canister has been uninstalled.",
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                )),
+                deadline,
+            }));
+
+            let mut canister = self.canister_states.remove(&canister_id).unwrap();
+            let _ = Arc::make_mut(&mut canister).push_input(
+                response,
+                &mut available_guaranteed_response_memory,
+                own_subnet_type,
+                InputQueueType::RemoteSubnet,
+            );
+            self.canister_states.insert(canister_id, canister);
+        }
     }
 
     /// Returns the sum of reserved compute allocations of all currently

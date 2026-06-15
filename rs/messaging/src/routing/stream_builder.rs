@@ -574,25 +574,19 @@ impl StreamBuilderImpl {
                             requests_to_reject.push(req);
                         }
                         RequestOrResponse::Response(rep) => {
-                            // A Response: discard it.
-                            if rep.is_best_effort() && rep.refund.is_zero() {
-                                // Expected when the destination subnet has been deleted: bounded-wait
-                                // responses with no cycles refund can be safely discarded.
+                            // A Response: discard it silently when the destination subnet has been deleted.
+                            if rep.is_best_effort() {
                                 debug!(
                                     self.log,
                                     "Discarding bounded-wait response, destination not found: {:?}",
                                     rep
                                 );
                             } else {
-                                error!(
+                                warn!(
                                     self.log,
-                                    "{}: Discarding response, destination not found: {:?}",
-                                    CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
+                                    "Discarding unbounded-wait response, destination not found: {:?}",
                                     rep
                                 );
-                                self.metrics
-                                    .critical_error_response_destination_not_found
-                                    .inc();
                             }
                         }
                     }

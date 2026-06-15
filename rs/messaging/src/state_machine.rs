@@ -286,6 +286,7 @@ impl StateMachine for StateMachineImpl {
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
 
+        state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
         state_after_stream_builder
     }
 }

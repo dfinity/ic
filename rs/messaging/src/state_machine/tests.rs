@@ -339,6 +339,32 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         deadline,
     }));
 
+    // Output response: local → remote (unbounded-wait, no deadline).
+    // Unbounded-wait responses with no route are now dropped without a critical error.
+    // First push then pop a matching input request to create the output-queue reservation.
+    canister_state
+        .push_input(
+            RequestBuilder::new()
+                .sender(remote_canister_id)
+                .receiver(local_canister_id)
+                .deadline(ic_types::messages::NO_DEADLINE)
+                .build()
+                .into(),
+            &mut subnet_available_memory,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    canister_state.pop_input().unwrap();
+    canister_state.push_output_response(Arc::new(Response {
+        originator: remote_canister_id,
+        respondent: local_canister_id,
+        originator_reply_callback: CallbackId::from(0),
+        refund: Cycles::zero(),
+        response_payload: Payload::Data(vec![]),
+        deadline: ic_types::messages::NO_DEADLINE,
+    }));
+
     // Output subnet message: local → SUBNET_2 (callee = the deleted subnet's ID).
     // Subnet messages with no route get a reject response — no critical error.
     let subnet_as_canister_id = CanisterId::from(SUBNET_2);
@@ -359,6 +385,60 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         .unwrap();
 
     initial_state.put_canister_state(canister_state);
+
+    // Second local canister: has callbacks to the deleted subnet but requests
+    // already in the stream (output queues cleared). Synthetic rejects should be generated.
+    let stream_local_canister_id = CanisterId::from_u64(CANISTER_IDS_PER_SUBNET + 1);
+    let mut stream_canister = new_canister_state(
+        stream_local_canister_id,
+        PrincipalId::new_anonymous(),
+        Cycles::new(1_000_000_000_000),
+        3600.into(),
+    );
+
+    // Bounded-wait callback with reserved input slot (simulating request in stream).
+    let be_callback_id = register_callback(&mut stream_canister, remote_canister_id, deadline);
+    stream_canister
+        .push_output_request(
+            Arc::new(
+                RequestBuilder::new()
+                    .sender(stream_local_canister_id)
+                    .receiver(remote_canister_id)
+                    .sender_reply_callback(be_callback_id)
+                    .deadline(deadline)
+                    .build(),
+            ),
+            UNIX_EPOCH,
+        )
+        .unwrap();
+
+    // Unbounded-wait callback with reserved input slot (simulating request in stream).
+    let gr_callback_id = register_callback(
+        &mut stream_canister,
+        remote_canister_id,
+        ic_types::messages::NO_DEADLINE,
+    );
+    stream_canister
+        .push_output_request(
+            Arc::new(
+                RequestBuilder::new()
+                    .sender(stream_local_canister_id)
+                    .receiver(remote_canister_id)
+                    .sender_reply_callback(gr_callback_id)
+                    .deadline(ic_types::messages::NO_DEADLINE)
+                    .build(),
+            ),
+            UNIX_EPOCH,
+        )
+        .unwrap();
+
+    // Simulate the requests being moved from output queues to the stream
+    // (so output queues are empty but input slots are still reserved).
+    stream_canister
+        .system_state
+        .output_queues_for_each(|_, _| Ok(()));
+
+    initial_state.put_canister_state(stream_canister);
 
     // Subnet output response: local subnet → remote (bounded-wait).
     // Bounded-wait responses with no route are dropped without a critical error.
@@ -475,6 +555,25 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         assert!(
             nonzero_values(fetch_int_counter_vec(&metrics_registry, "critical_errors")).is_empty()
         );
+
+        // The second canister (with callbacks to the deleted subnet, requests in stream)
+        // should have 2 synthetic reject responses in its input queue.
+        let stream_canister = Arc::make_mut(
+            state
+                .canister_state_mut_arc(&stream_local_canister_id)
+                .unwrap(),
+        );
+        let sr1 = stream_canister.pop_input().unwrap();
+        let sr2 = stream_canister.pop_input().unwrap();
+        assert!(stream_canister.pop_input().is_none());
+        for sr in [sr1, sr2] {
+            assert!(matches!(
+                sr,
+                CanisterMessage::Response { response, .. }
+                    if response.originator == stream_local_canister_id
+                        && matches!(response.response_payload, Payload::Reject(_))
+            ));
+        }
     });
 }
 
