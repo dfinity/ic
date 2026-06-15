@@ -304,7 +304,10 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             deadline: NO_DEADLINE,
         })));
     });
-    assert!(initial_state.get_stream(&SUBNET_2).is_some());
+    assert_eq!(
+        initial_state.get_stream(&SUBNET_2).unwrap().messages().len(),
+        2
+    );
 
     // Add a canister with bounded-wait and unbounded-wait output requests, a bounded-wait
     // output response, an unbounded-wait output response, and a bounded-wait subnet message
@@ -539,7 +542,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             Default::default(),
         );
 
-        // Stream to the deleted subnet is gone.
+        // Stream to the deleted subnet (which contained 2 responses) is gone — both
+        // the bounded-wait and unbounded-wait responses were dropped silently.
         assert!(state.get_stream(&SUBNET_2).is_none());
         // Output queues are empty: requests were consumed,
         // bounded-wait responses were dropped.
