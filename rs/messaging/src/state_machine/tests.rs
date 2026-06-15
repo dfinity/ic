@@ -12,12 +12,13 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     InputQueueType, ReplicatedState, SubnetTopology,
-    metadata_state::testing::NetworkTopologyTesting, testing::ReplicatedStateTesting,
+    metadata_state::testing::NetworkTopologyTesting, testing::OutputRequestBuilder,
+    testing::ReplicatedStateTesting,
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, nonzero_values};
-use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::batch::BatchBuilder;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_test_utilities_types::messages::{RequestBuilder, SignedIngressBuilder};
@@ -298,17 +299,13 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
     // Output request: local → remote (on the deleted subnet).
     // Requests with no route get a reject response — no critical error.
-    let callback_id = register_callback(&mut canister_state, remote_canister_id, deadline);
     canister_state
         .push_output_request(
-            Arc::new(
-                RequestBuilder::new()
-                    .sender(local_canister_id)
-                    .receiver(remote_canister_id)
-                    .sender_reply_callback(callback_id)
-                    .deadline(deadline)
-                    .build(),
-            ),
+            OutputRequestBuilder::new()
+                .sender(local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(deadline)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();
@@ -342,18 +339,13 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     // Output subnet message: local → SUBNET_2 (callee = the deleted subnet's ID).
     // Subnet messages with no route get a reject response — no critical error.
     let subnet_as_canister_id = CanisterId::from(SUBNET_2);
-    let subnet_callback_id =
-        register_callback(&mut canister_state, subnet_as_canister_id, deadline);
     canister_state
         .push_output_request(
-            Arc::new(
-                RequestBuilder::new()
-                    .sender(local_canister_id)
-                    .receiver(subnet_as_canister_id)
-                    .sender_reply_callback(subnet_callback_id)
-                    .deadline(deadline)
-                    .build(),
-            ),
+            OutputRequestBuilder::new()
+                .sender(local_canister_id)
+                .receiver(subnet_as_canister_id)
+                .deadline(deadline)
+                .build(),
             UNIX_EPOCH,
         )
         .unwrap();

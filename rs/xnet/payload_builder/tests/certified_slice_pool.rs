@@ -1367,6 +1367,7 @@ fn pool_garbage_collect_deleted_subnet(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
