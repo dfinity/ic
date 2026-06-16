@@ -1310,6 +1310,7 @@ impl ExecutionTest {
             canister_id,
             result.instructions_used.unwrap(),
             cost_schedule,
+            self.get_own_subnet_cycles_config(),
         );
         self.check_invariants();
     }
@@ -1468,7 +1469,12 @@ impl ExecutionTest {
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
 
         state.metadata.heap_delta_estimate += heap_delta;
-        self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+        self.update_execution_stats(
+            canister_id,
+            instructions_used,
+            cost_schedule,
+            state.get_own_subnet_cycles_config(),
+        );
         state.put_canister_state(canister);
         self.state = Some(state);
         self.check_invariants();
@@ -1761,6 +1767,7 @@ impl ExecutionTest {
                             canister_id,
                             capped_slice_instructions_used,
                             cost_schedule,
+                            self.get_own_subnet_cycles_config(),
                         );
                     }
                 }
@@ -1839,7 +1846,12 @@ impl ExecutionTest {
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+                    self.update_execution_stats(
+                        canister_id,
+                        instructions_used,
+                        cost_schedule,
+                        state.get_own_subnet_cycles_config(),
+                    );
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -1947,6 +1959,7 @@ impl ExecutionTest {
                             canister_id,
                             capped_instructions_used,
                             cost_schedule,
+                            self.get_own_subnet_cycles_config(),
                         );
                     }
                     ExecuteSubnetMessageResultType::Processing => {
@@ -1984,7 +1997,12 @@ impl ExecutionTest {
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
                 if let Some(instructions_used) = result.instructions_used {
-                    self.update_execution_stats(canister_id, instructions_used, cost_schedule);
+                    self.update_execution_stats(
+                        canister_id,
+                        instructions_used,
+                        cost_schedule,
+                        state.get_own_subnet_cycles_config(),
+                    );
                 }
                 canister = result.canister;
                 if let Some(ir) = result.ingress_status {
@@ -2020,6 +2038,7 @@ impl ExecutionTest {
         canister_id: CanisterId,
         executed: NumInstructions,
         cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) {
         let mgr = &self.cycles_account_manager;
         *self
@@ -2029,11 +2048,8 @@ impl ExecutionTest {
 
         let is_wasm64_execution = self.canister_wasm_execution_mode(canister_id);
 
-        let instruction_cost = mgr.execution_cost(
-            executed,
-            self.get_own_subnet_cycles_config(),
-            is_wasm64_execution,
-        );
+        let instruction_cost =
+            mgr.execution_cost(executed, subnet_cycles_config, is_wasm64_execution);
         *self
             .execution_cost
             .entry(canister_id)
