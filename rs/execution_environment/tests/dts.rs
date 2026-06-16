@@ -40,13 +40,14 @@ const DTS_WAT: &str = r#"
             )
             (import "ic0" "canister_version" (func $canister_version (result i64)))
             (func $work
-                (memory.fill (i32.const 0) (i32.const 12) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 23) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 34) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 45) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 56) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 67) (i32.const 10000))
-                (memory.fill (i32.const 0) (i32.const 78) (i32.const 10000))
+                (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 23) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 45) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 56) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 67) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 78) (i32.const 50000))
+                
             )
             (start $work)
 
@@ -559,7 +560,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     let controller = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -644,7 +645,7 @@ fn dts_scheduling_of_install_code() {
 
     let controller = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -798,7 +799,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
     for _ in 0..n {
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -985,7 +986,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
         let user_id = PrincipalId::new_anonymous();
         let other_canister_id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -993,7 +994,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             .unwrap();
         let aborted_canister_id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 vec![],
                 Some(
                     CanisterSettingsArgsBuilder::new()
@@ -1090,7 +1091,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
     let user_id = PrincipalId::new_anonymous();
     let long_canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1098,7 +1099,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
         .unwrap();
     let other_canister_id = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1242,7 +1243,7 @@ fn dts_long_running_install_and_update() {
     for _ in 0..n {
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -1262,7 +1263,7 @@ fn dts_long_running_install_and_update() {
 
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 vec![],
                 settings.clone(),
                 INITIAL_CYCLES_BALANCE,
@@ -1273,7 +1274,7 @@ fn dts_long_running_install_and_update() {
 
     let short = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1285,7 +1286,7 @@ fn dts_long_running_install_and_update() {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Upgrade,
             canister[i],
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
         );
         let payload = wasm()
@@ -1368,7 +1369,7 @@ fn dts_long_running_calls() {
     for _ in 0..n {
         let id = env
             .install_canister_with_cycles(
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 vec![],
                 None,
                 INITIAL_CYCLES_BALANCE,
@@ -1379,7 +1380,7 @@ fn dts_long_running_calls() {
 
     let short = env
         .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
             vec![],
             None,
             INITIAL_CYCLES_BALANCE,
@@ -1501,7 +1502,7 @@ fn dts_unrelated_subnet_messages_make_progress() {
 fn dts_ingress_status_of_update_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(170_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1514,10 +1515,9 @@ fn dts_ingress_status_of_update_is_correct() {
 
     // advance time so that time does not grow implicitly when executing a round
     env.advance_time(Duration::from_secs(1));
-    let original_time = env.time();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
-
     env.tick();
+    let original_time = env.time();
 
     assert_eq!(
         ingress_state(env.ingress_status(&update)),
@@ -1568,7 +1568,7 @@ fn dts_ingress_status_of_update_is_correct() {
 fn dts_ingress_status_of_install_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(170_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1587,8 +1587,6 @@ fn dts_ingress_status_of_install_is_correct() {
         let args = InstallCodeArgs::new(CanisterInstallMode::Reinstall, canister, binary, vec![]);
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
-
-    env.tick();
 
     assert_eq!(
         ingress_state(env.ingress_status(&install)),
@@ -1713,7 +1711,7 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         NumInstructions::from(10_000),
     );
 
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let user_id = PrincipalId::new_anonymous();
 
@@ -1807,7 +1805,7 @@ fn impl_dts_canister_with_upgrade_is_uninstalled_due_to_resource_charges(
 ) -> Result<WasmResult, UserError> {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(170000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1823,7 +1821,6 @@ fn impl_dts_canister_with_upgrade_is_uninstalled_due_to_resource_charges(
     let canister = env
         .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
         .unwrap();
-
     // Checkpointing will abort the upgrade after each round.
     env.set_checkpoints_enabled(aborted);
 
@@ -1841,7 +1838,7 @@ fn impl_dts_canister_with_upgrade_is_uninstalled_due_to_resource_charges(
     // Enable normal message execution.
     env.set_checkpoints_enabled(false);
 
-    env.await_ingress(upgrade, 30)
+    env.await_ingress(upgrade, 60)
 }
 
 #[test]
@@ -1866,9 +1863,15 @@ fn dts_canister_with_paused_upgrade_is_not_uninstalled_due_to_resource_charges()
 fn impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(
     aborted: bool,
 ) -> Result<WasmResult, UserError> {
+    // A single `memory.fill` in `$work` now costs ~170_000 instructions: the
+    // first write to a Wasm page is charged the full deterministic-memory-tracker
+    // page overhead (2x16 OS pages * 5_000) plus the ~10_000 byte copy cost. The
+    // slice limit must exceed that so the (un-splittable) operation fits in one
+    // slice, while staying below the total `$work` cost (~230_000) so execution
+    // still spans multiple rounds and can be aborted mid-flight.
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(200_000),
     );
     let binary = wat2wasm(DTS_WAT);
     let user_id = PrincipalId::new_anonymous();
@@ -1933,7 +1936,7 @@ fn dts_serialized_and_runtime_states_are_equal() {
         for _ in 0..num_canisters {
             let canister_id = env
                 .install_canister_with_cycles(
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
+                    UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                     vec![],
                     None,
                     INITIAL_CYCLES_BALANCE,
@@ -1994,7 +1997,7 @@ fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
 fn dts_heartbeat_works() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2007,7 +2010,7 @@ fn dts_heartbeat_works() {
     assert_eq!(2, get_canister_version(&env, canister_id));
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2042,7 +2045,7 @@ fn dts_heartbeat_works() {
 fn dts_heartbeat_resume_after_abort() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2055,7 +2058,7 @@ fn dts_heartbeat_resume_after_abort() {
     assert_eq!(2, get_canister_version(&env, canister_id));
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2103,7 +2106,7 @@ fn dts_heartbeat_resume_after_abort() {
 fn dts_heartbeat_with_trap() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2116,7 +2119,7 @@ fn dts_heartbeat_with_trap() {
     assert_eq!(2, get_canister_version(&env, canister_id));
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .trap()
         .build();
@@ -2151,7 +2154,7 @@ fn dts_heartbeat_with_trap() {
 fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2161,7 +2164,7 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
         .unwrap();
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2195,7 +2198,7 @@ fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
 fn dts_heartbeat_does_not_prevent_upgrade() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2205,7 +2208,7 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
         .unwrap();
 
     let heartbeat = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
@@ -2238,29 +2241,26 @@ fn dts_heartbeat_does_not_prevent_upgrade() {
 fn dts_global_timer_one_shot_works() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let canister_id = env
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    // 1) canister create and 2) install code.
-    assert_eq!(2, get_canister_version(&env, canister_id));
+    // 1) canister installation.
+    assert_eq!(1, get_canister_version(&env, canister_id));
 
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
-    let disable_heartbeats = wasm().trap().build();
-
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .build();
 
-    let set_heartbeat_and_global_timer = wasm()
-        .set_heartbeat(disable_heartbeats)
+    let set_global_timer = wasm()
         .set_global_timer_method(timer)
         .api_global_timer_set(now_nanos)
         .get_global_counter()
@@ -2268,14 +2268,14 @@ fn dts_global_timer_one_shot_works() {
         .build();
 
     let result = env
-        .execute_ingress(canister_id, "update", set_heartbeat_and_global_timer)
+        .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
 
     assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
-    // 3) the update.
+    // 2) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(3, base_canister_version);
+    assert_eq!(2, base_canister_version);
 
     for i in 1..10 {
         env.tick();
@@ -2302,7 +2302,7 @@ fn dts_global_timer_one_shot_works() {
 fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(75_000),
+        NumInstructions::from(500_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2316,10 +2316,10 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
-    let heartbeat = wasm().instruction_counter_is_at_least(150_000).build();
+    let heartbeat = wasm().instruction_counter_is_at_least(1_100_000).build();
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2385,10 +2385,10 @@ fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
 fn dts_global_timer_resume_after_abort() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(500_000),
     );
 
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let canister_id = env
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
@@ -2397,7 +2397,7 @@ fn dts_global_timer_resume_after_abort() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2435,10 +2435,10 @@ fn dts_global_timer_resume_after_abort() {
 fn dts_global_timer_does_not_prevent_canister_from_stopping() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(500_000),
     );
 
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let canister_id = env
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
@@ -2447,7 +2447,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2483,24 +2483,24 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
 fn dts_global_timer_with_trap() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(500_000),
     );
 
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let canister_id = env
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    // 1) canister create and 2) install code.
-    assert_eq!(2, get_canister_version(&env, canister_id));
+    // 1) install code.
+    assert_eq!(1, get_canister_version(&env, canister_id));
 
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let disable_heartbeats = wasm().trap().build();
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .trap()
@@ -2520,9 +2520,9 @@ fn dts_global_timer_with_trap() {
 
     assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
 
-    // 3) the update.
+    // 2) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(3, base_canister_version);
+    assert_eq!(2, base_canister_version);
 
     for _ in 1..10 {
         env.tick();
@@ -2538,10 +2538,10 @@ fn dts_global_timer_with_trap() {
 fn dts_global_timer_does_not_prevent_upgrade() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(500_000),
     );
 
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let canister_id = env
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
@@ -2550,7 +2550,7 @@ fn dts_global_timer_does_not_prevent_upgrade() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(150_000)
+        .instruction_counter_is_at_least(1_100_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2567,7 +2567,6 @@ fn dts_global_timer_does_not_prevent_upgrade() {
         .unwrap();
 
     assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().to_vec()));
-
     for i in 1..10 {
         env.tick();
         // Each timer takes three rounds to execute.
@@ -2583,13 +2582,19 @@ fn dts_global_timer_does_not_prevent_upgrade() {
 
 #[test]
 fn dts_abort_paused_execution_on_state_switch() {
+    // Installing the universal canister copies its data segment into memory in a
+    // single (un-splittable) bulk memory operation that now costs ~240K
+    // instructions: the first write to each touched Wasm page is charged the full
+    // deterministic-memory-tracker page overhead (2 * OS pages * 5_000). The slice
+    // limit must therefore exceed that op, hence 300K (round = slice + slice / 2 =
+    // 450K).
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(300_000),
     );
 
     let user_id = PrincipalId::new_anonymous();
-    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+    let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
     let canister_id = env
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
@@ -2631,9 +2636,21 @@ fn dts_abort_paused_execution_on_state_switch() {
 
 #[test]
 fn dts_abort_after_dropping_memory_on_state_switch() {
+    // A single `memory.fill` over the whole 1000-page heap (16_000 OS pages) now
+    // costs ~225M instructions: the first write to each Wasm page is charged the
+    // full deterministic-memory-tracker page overhead (2 * 16_000 OS pages *
+    // 5_000) plus the ~65M byte copy cost. A `memory.fill` can't be split across
+    // slices, so the slice limit must exceed that single-fill cost. Subsequent
+    // fills only pay the ~65M byte cost (the pages are already accessed/dirty).
+    //
+    // The round limit is `slice + slice / 2` (see `dts_subnet_config`), so with a
+    // 250M slice a round executes ~375M instructions. `long_update` does 8 fills
+    // (~225M + 7 * 65M ≈ 684M) which is well above a single round, guaranteeing it
+    // stays paused (`ContinueLong`) after the first tick so it can be aborted,
+    // while still fitting within the 1B per-message limit.
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(100_000_000),
+        NumInstructions::from(250_000_000),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -2648,6 +2665,10 @@ fn dts_abort_after_dropping_memory_on_state_switch() {
                 (call $msg_reply)
             )
             (func (export "canister_update long_update")
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
                 (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
                 (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
                 (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
@@ -2828,7 +2849,7 @@ fn heavy_install_code_prevents_another_install_code_to_start_in_the_same_round()
             InstallCodeArgs::new(
                 CanisterInstallMode::Reinstall,
                 canister_id,
-                UNIVERSAL_CANISTER_WASM.to_vec(),
+                UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
                 canister_init,
             )
             .encode(),
