@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:73632ae77e22f72a2beb3873b475e6e329c381b76bcffb7e692444f66309ced6",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:34f2713d09170e6def94ea81f1175af1505bb408162bcf3a613ac43b58a699e1",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
