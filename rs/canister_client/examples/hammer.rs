@@ -147,6 +147,7 @@ async fn storm(
     concurrency: usize,
     dur: Duration,
     make_payload: Arc<dyn Fn() -> Vec<u8> + Send + Sync>,
+    is_query: bool,
 ) -> Stats {
     let stats = Arc::new(Stats::default());
     let deadline = Instant::now() + dur;
@@ -164,7 +165,11 @@ async fn storm(
                 let canister = canisters[idx];
                 let payload = make_payload();
                 let started = Instant::now();
-                let res = update(&agent, &canister, payload).await;
+                let res = if is_query {
+                    agent.execute_query(&canister, "query", payload).await
+                } else {
+                    update(&agent, &canister, payload).await
+                };
                 stats.record(started, &res);
             }
         }));
@@ -195,6 +200,9 @@ async fn main() {
     // probe mode: skip the throughput/compute/growth storms, run only the
     // per-message dirty-page-limit probe (Phase C).
     let probe_only = std::env::var("HAMMER_MODE").map(|m| m == "probe").unwrap_or(false);
+    // read mode: populate canisters with large state, then read-heavy updates on
+    // all-but-one and read-heavy queries on the last; plus a read-limit probe.
+    let read_mode = std::env::var("HAMMER_MODE").map(|m| m == "read").unwrap_or(false);
 
     let agent = Arc::new(Agent::new(
         Url::parse(&url).expect("bad url"),
@@ -226,6 +234,70 @@ async fn main() {
     println!("  deployed {} canisters in {:.1}s", canisters.len(), t0.elapsed().as_secs_f64());
     let canisters = Arc::new(canisters);
 
+    if read_mode {
+        // Populate each canister with ~120 MiB of real stable data (written in
+        // <=24 MiB chunks to respect the 32 MiB per-message dirty limit).
+        const BIG_MIB: u32 = 120;
+        let chunk: u32 = 24 * MIB;
+        let pages: u32 = (BIG_MIB * MIB) / 65536; // 64 KiB Wasm pages
+        println!("\n[read] populating {} canisters to ~{BIG_MIB} MiB stable each...", canisters.len());
+        for (i, c) in canisters.iter().enumerate() {
+            let _ = update(&agent, c, wasm().stable_grow(pages).reply().build()).await;
+            let mut off = 0u32;
+            while off + chunk <= BIG_MIB * MIB {
+                let _ = update(&agent, c, wasm().stable_fill(off, 0x40 + i as u32, chunk).reply().build()).await;
+                off += chunk;
+            }
+            println!("  canister {i} = {c} populated");
+        }
+        println!("[read] waiting ~25s for a checkpoint to flush state to disk...");
+        tokio::time::sleep(Duration::from_secs(25)).await;
+
+        // Read 24 MiB (< 32 MiB accessed limit) per call, cycling the offset
+        // window across the populated range.
+        let off_ctr = Arc::new(AtomicU64::new(0));
+        let mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
+            let off_ctr = off_ctr.clone();
+            Arc::new(move || {
+                let n = off_ctr.fetch_add(1, Ordering::Relaxed);
+                let off = ((n % 4) as u32) * chunk;
+                wasm().stable_read(off, chunk).reply().build()
+            })
+        };
+        let upd_cans = Arc::new(canisters[..canisters.len() - 1].to_vec());
+        let qry_cans = Arc::new(vec![canisters[canisters.len() - 1]]);
+        println!(
+            "\n[read] read storm ({secs}s): 24 MiB stable_read/call — UPDATES on {} canisters, QUERIES on 1",
+            upd_cans.len()
+        );
+        let t = Instant::now();
+        let (us, qs) = tokio::join!(
+            storm(agent.clone(), upd_cans, concurrency, Duration::from_secs(secs), mk.clone(), false),
+            storm(agent.clone(), qry_cans.clone(), concurrency, Duration::from_secs(secs), mk.clone(), true),
+        );
+        us.report("READ-UPDATE (24 MiB stable_read)", t.elapsed());
+        qs.report("READ-QUERY (24 MiB stable_read)", t.elapsed());
+
+        // Read-limit probe: access 48 MiB in one execution (> 32 MiB accessed
+        // limit) -> expect a trap, for both update and query.
+        println!("\n[read] read-limit probe: 48 MiB stable_read in one execution (accessed limit 32 MiB)");
+        let ru = update(&agent, &canisters[0], wasm().stable_read(0, 48 * MIB).reply().build()).await;
+        println!(
+            "  update read 48 MiB: {}",
+            if ru.is_ok() { "OK (no limit!)".to_string() } else { format!("TRAP {}", ru.as_ref().err().unwrap().chars().take(220).collect::<String>()) }
+        );
+        let rq = agent
+            .execute_query(&canisters[canisters.len() - 1], "query", wasm().stable_read(0, 48 * MIB).reply().build())
+            .await;
+        println!(
+            "  query  read 48 MiB: {}",
+            if rq.is_ok() { "OK (no limit!)".to_string() } else { format!("TRAP {}", rq.as_ref().err().unwrap().chars().take(220).collect::<String>()) }
+        );
+
+        println!("\n== done ==");
+        return;
+    }
+
     if !probe_only {
     // ---- Phase A: ingress/throughput storm (near-empty updates) ----
     println!("\n[2/5] THROUGHPUT storm: empty update calls, {concurrency} concurrent, {secs}s");
@@ -236,6 +308,7 @@ async fn main() {
         concurrency,
         Duration::from_secs(secs),
         Arc::new(|| wasm().reply().build()),
+        false,
     )
     .await;
     stats.report("THROUGHPUT (empty updates)", t.elapsed());
@@ -249,6 +322,7 @@ async fn main() {
         concurrency,
         Duration::from_secs(secs),
         Arc::new(|| wasm().stable_fill(0, 0x61, 8 * MIB).reply().build()),
+        false,
     )
     .await;
     stats.report("COMPUTE (8 MiB fill)", t.elapsed());
