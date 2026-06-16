@@ -16,7 +16,7 @@ use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -425,7 +425,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         round_log: &ReplicaLogger,
     ) -> ReplicatedState {
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
 
@@ -526,8 +526,7 @@ impl SchedulerImpl {
                 current_round,
                 state.time(),
                 Arc::new(state.metadata.network_topology.clone()),
-                registry_settings.subnet_size,
-                cost_schedule,
+                subnet_cycles_config,
                 &mut round_limits,
                 state.resource_limits(),
                 &measurement_scope,
@@ -640,8 +639,7 @@ impl SchedulerImpl {
         round_id: ExecutionRound,
         time: Time,
         network_topology: Arc<NetworkTopology>,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         round_limits: &mut RoundLimits,
         resource_limits: ResourceLimits,
         measurement_scope: &MeasurementScope,
@@ -695,8 +693,7 @@ impl SchedulerImpl {
                         time,
                         network_topology,
                         rate_limiting_of_heap_delta,
-                        subnet_size,
-                        cost_schedule,
+                        subnet_cycles_config,
                         round_limits,
                         resource_limits,
                         metrics,
@@ -1630,8 +1627,7 @@ fn execute_canisters_on_thread(
     time: Time,
     network_topology: Arc<NetworkTopology>,
     rate_limiting_of_heap_delta: FlagStatus,
-    subnet_size: usize,
-    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     mut round_limits: RoundLimits,
     resource_limits: ResourceLimits,
     metrics: Arc<SchedulerMetrics>,
@@ -1708,8 +1704,7 @@ fn execute_canisters_on_thread(
                 time,
                 &mut round_limits,
                 resource_limits,
-                subnet_size,
-                cost_schedule,
+                subnet_cycles_config,
             );
             ingress_results.extend(ingress_status);
             let round_instructions_executed =

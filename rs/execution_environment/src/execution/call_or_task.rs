@@ -48,13 +48,11 @@ pub fn execute_call_or_task(
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let subnet_cycles_config =
-        CyclesAccountManagerSubnetConfig::new(subnet_size, round.cost_schedule);
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),

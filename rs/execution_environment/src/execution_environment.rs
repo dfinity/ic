@@ -2212,8 +2212,7 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         resource_limits: ResourceLimits,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> ExecuteMessageResult {
         if canister.has_long_execution_or_install_code() {
             panic!(
@@ -2240,7 +2239,7 @@ impl ExecutionEnvironment {
             counters: round_counters,
             log: &self.log,
             time,
-            cost_schedule,
+            cost_schedule: subnet_cycles_config.cost_schedule,
         };
 
         let req = match input {
@@ -2253,7 +2252,7 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     resource_limits,
-                    subnet_size,
+                    subnet_cycles_config,
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Response { response, callback }) => {
@@ -2266,8 +2265,7 @@ impl ExecutionEnvironment {
                     network_topology,
                     round_limits,
                     resource_limits,
-                    subnet_size,
-                    cost_schedule,
+                    subnet_cycles_config,
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
@@ -2317,7 +2315,7 @@ impl ExecutionEnvironment {
                     time,
                     round,
                     round_limits,
-                    subnet_size,
+                    subnet_cycles_config,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
                     self.deallocator_thread.sender(),
@@ -2353,7 +2351,7 @@ impl ExecutionEnvironment {
                     time,
                     round,
                     round_limits,
-                    subnet_size,
+                    subnet_cycles_config,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
                     self.deallocator_thread.sender(),
@@ -2375,7 +2373,7 @@ impl ExecutionEnvironment {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         resource_limits: ResourceLimits,
-        subnet_size: usize,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> ExecuteMessageResult {
         let execution_parameters = self.execution_parameters(
             &canister,
@@ -2392,7 +2390,7 @@ impl ExecutionEnvironment {
             round.time,
             round,
             round_limits,
-            subnet_size,
+            subnet_cycles_config,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
             self.deallocator_thread.sender(),
@@ -3178,8 +3176,7 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         resource_limits: ResourceLimits,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> ExecuteMessageResult {
         let execution_parameters = self.execution_parameters(
             &canister,
@@ -3206,7 +3203,7 @@ impl ExecutionEnvironment {
             counters: round_counters,
             log: &self.log,
             time,
-            cost_schedule,
+            cost_schedule: subnet_cycles_config.cost_schedule,
         };
         execute_response(
             canister,
@@ -3216,7 +3213,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             round,
             round_limits,
-            subnet_size,
+            subnet_cycles_config,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
             self.deallocator_thread.sender(),
@@ -4777,8 +4774,7 @@ fn execute_canister_input(
     time: Time,
     round_limits: &mut RoundLimits,
     resource_limits: ResourceLimits,
-    subnet_size: usize,
-    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> ExecuteCanisterResult {
     let info = input.to_string();
     let load_metrics = &mut canister
@@ -4821,8 +4817,7 @@ fn execute_canister_input(
         network_topology,
         round_limits,
         resource_limits,
-        subnet_size,
-        cost_schedule,
+        subnet_cycles_config,
     );
     let (canister, instructions_used, heap_delta, ingress_status) = exec_env.process_result(result);
     ExecuteCanisterResult {
@@ -4845,8 +4840,7 @@ pub fn execute_canister(
     time: Time,
     round_limits: &mut RoundLimits,
     resource_limits: ResourceLimits,
-    subnet_size: usize,
-    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> ExecuteCanisterResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -4884,13 +4878,13 @@ pub fn execute_canister(
                     counters: round_counters,
                     log: &exec_env.log,
                     time,
-                    cost_schedule,
+                    cost_schedule: subnet_cycles_config.cost_schedule,
                 };
                 let result = paused.resume(
                     canister,
                     round_context,
                     round_limits,
-                    subnet_size,
+                    subnet_cycles_config.subnet_size,
                     &exec_env.call_tree_metrics,
                     exec_env.deallocator_thread.sender(),
                 );
@@ -4945,8 +4939,7 @@ pub fn execute_canister(
         time,
         round_limits,
         resource_limits,
-        subnet_size,
-        cost_schedule,
+        subnet_cycles_config,
     )
 }
 
