@@ -10,7 +10,7 @@ use ic_cycles_account_manager::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, MessageMemoryUsage};
-use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
@@ -746,7 +746,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> Self {
         Self::new(
             system_state,
@@ -760,7 +760,7 @@ impl SandboxSafeSystemState {
             call_context_id,
             // We can assume a Wasm32 environment in tests for now.
             false,
-            cost_schedule,
+            subnet_cycles_config,
         )
     }
 
@@ -775,7 +775,7 @@ impl SandboxSafeSystemState {
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
         is_wasm64_execution: bool,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> Self {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
@@ -816,12 +816,6 @@ impl SandboxSafeSystemState {
             })
             .min()
             .unwrap_or(DEFAULT_QUEUE_CAPACITY);
-        let subnet_size = network_topology
-            .get_subnet_size(&cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-        let subnet_cycles_config =
-            CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule);
-
         let (next_canister_log_record_idx, canister_log_memory_limit) =
             if system_state.log_memory_store.is_migrated() {
                 let lms = &system_state.log_memory_store;
@@ -1453,7 +1447,7 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
-    use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{NetworkTopology, SystemState};
@@ -1587,8 +1581,10 @@ mod tests {
             BTreeMap::new(),
             0,
             BTreeSet::new(),
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+            ),
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,

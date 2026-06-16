@@ -1,7 +1,7 @@
 use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
@@ -25,7 +25,6 @@ use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
     methods::FuncRef,
 };
-use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
 use std::{path::Path, sync::Arc};
@@ -307,7 +306,7 @@ impl Hypervisor {
         state_changes_error: &IntCounter,
         call_tree_metrics: &dyn CallTreeMetrics,
         call_context_creation_time: Time,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -325,7 +324,7 @@ impl Hypervisor {
             RequestMetadata::for_new_call_tree(time),
             round_limits,
             network_topology,
-            cost_schedule,
+            subnet_cycles_config,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
             WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -370,7 +369,7 @@ impl Hypervisor {
         request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> WasmExecutionResult {
         assert_ge!(
             execution_parameters.instruction_limits.message(),
@@ -400,7 +399,7 @@ impl Hypervisor {
             api_type.caller(),
             api_type.call_context_id(),
             execution_state.wasm_execution_mode.is_wasm64(),
-            cost_schedule,
+            subnet_cycles_config,
         );
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

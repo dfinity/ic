@@ -90,7 +90,10 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         Default::default(),
         Some(request.sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        ),
     );
 
     assert_eq!(
@@ -148,7 +151,10 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         Default::default(),
         Some(request.sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        ),
     );
 
     assert_eq!(
@@ -186,7 +192,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         Default::default(),
         caller,
         None,
-        cost_schedule,
+        CyclesAccountManagerSubnetConfig::new(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule),
     );
 
     let mut request = OutputRequestBuilder::default().build();
@@ -247,7 +253,10 @@ fn correct_charging_source_canister_for_a_request() {
         Default::default(),
         Some(request.sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        ),
     );
 
     request.prepayment_for_response_execution = cycles_account_manager
@@ -473,7 +482,10 @@ fn is_controller_test() {
         Default::default(),
         caller,
         None,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        ),
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -558,7 +570,10 @@ fn test_inter_canister_call(
         Default::default(),
         Some(sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        ),
     );
 
     let prepayment_for_response_execution = cycles_account_manager

@@ -398,11 +398,6 @@ impl<'a> QueryContext<'a> {
                 )),
             );
         }
-        let cost_schedule = self.get_cost_schedule();
-        let subnet_size = self
-            .network_topology
-            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         if self
             .cycles_account_manager
             .can_withdraw_cycles_with_threshold(
@@ -411,7 +406,7 @@ impl<'a> QueryContext<'a> {
                 canister.memory_usage(),
                 canister.message_memory_usage(),
                 canister.system_state.reserved_balance(),
-                CyclesAccountManagerSubnetConfig::new(subnet_size, self.get_cost_schedule()),
+                self.get_own_subnet_cycles_config(),
                 false,
             )
             .is_err()
@@ -435,6 +430,7 @@ impl<'a> QueryContext<'a> {
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (mut canister, instructions_left, result, call_context_id, system_api_call_counters) =
             execute_non_replicated_query(
                 query_kind,
@@ -448,7 +444,7 @@ impl<'a> QueryContext<'a> {
                 self.hypervisor,
                 &mut self.round_limits,
                 self.query_critical_error,
-                cost_schedule,
+                own_subnet_cycles_config,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -652,8 +648,7 @@ impl<'a> QueryContext<'a> {
             ),
         };
 
-        let cost_schedule = self.get_cost_schedule();
-
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -668,7 +663,7 @@ impl<'a> QueryContext<'a> {
             self.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
-            cost_schedule,
+            own_subnet_cycles_config,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -749,7 +744,7 @@ impl<'a> QueryContext<'a> {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
-        let cost_schedule = self.get_cost_schedule();
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
@@ -770,7 +765,7 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
-                cost_schedule,
+                own_subnet_cycles_config,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
@@ -1127,5 +1122,13 @@ impl<'a> QueryContext<'a> {
 
     pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
         self.state.get_ref().get_own_cost_schedule()
+    }
+
+    fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        let subnet_size = self
+            .network_topology
+            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        CyclesAccountManagerSubnetConfig::new(subnet_size, self.get_cost_schedule())
     }
 }

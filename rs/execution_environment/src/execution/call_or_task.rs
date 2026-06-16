@@ -200,7 +200,7 @@ pub fn execute_call_or_task(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
-        round.cost_schedule,
+        original.subnet_cycles_config,
     );
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {

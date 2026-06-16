@@ -1069,7 +1069,7 @@ pub fn execute_response(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
-        round.cost_schedule,
+        original.subnet_cycles_config,
     );
 
     process_response_result(
@@ -1147,7 +1147,7 @@ fn execute_response_cleanup(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
-        round.cost_schedule,
+        original.subnet_cycles_config,
     );
     process_cleanup_result(
         result,

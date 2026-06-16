@@ -3347,7 +3347,7 @@ impl ExecutionEnvironment {
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
-            state.get_own_cost_schedule(),
+            state.get_own_subnet_cycles_config(),
         )
         .1
     }
