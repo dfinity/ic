@@ -161,6 +161,7 @@ message CanisterHttpRequestContext {
   optional Replication replication = 11;
   optional PricingVersion pricing_version = 12;
   optional RefundStatus refund_status = 13;
+  uint64 registry_version = 14;
   reserved 5;
 }
 

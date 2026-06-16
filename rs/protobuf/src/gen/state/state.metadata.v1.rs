@@ -227,6 +227,8 @@ pub struct CanisterHttpRequestContext {
     pub pricing_version: ::core::option::Option<PricingVersion>,
     #[prost(message, optional, tag = "13")]
     pub refund_status: ::core::option::Option<RefundStatus>,
+    #[prost(uint64, tag = "14")]
+    pub registry_version: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefundStatus {
