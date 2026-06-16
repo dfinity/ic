@@ -263,6 +263,8 @@ async fn main() {
     // N outstanding calls per in-flight ingress, to stress the guaranteed-
     // response memory reservation and callback limits.
     let fanout_mode = std::env::var("HAMMER_MODE").map(|m| m == "fanout").unwrap_or(false);
+    // hybrid mode: reads + writes + inter-canister messaging all at once.
+    let hybrid_mode = std::env::var("HAMMER_MODE").map(|m| m == "hybrid").unwrap_or(false);
     // heapread mode: large heap-memory reads pulling lots of distinct state into
     // RAM. Each canister holds a 96 MiB heap global (built via append, small
     // transient); reads use queries (heap reads via update would OOM because
@@ -298,6 +300,71 @@ async fn main() {
     }
     println!("  deployed {} canisters in {:.1}s", canisters.len(), t0.elapsed().as_secs_f64());
     let canisters = Arc::new(canisters);
+
+    if hybrid_mode {
+        // ---- Hybrid: heavy reads + writes + inter-canister messaging at once ----
+        const BIG_MIB: u32 = 96;
+        let chunk: u32 = 24 * MIB;
+        let grow_pages = chunk / 65536;
+        let windows = ((BIG_MIB * MIB) / chunk) as u64;
+        println!("\n[hybrid] populating {} canisters to ~{BIG_MIB} MiB stable each...", canisters.len());
+        for (i, c) in canisters.iter().enumerate() {
+            let mut off = 0u32;
+            while off + chunk <= BIG_MIB * MIB {
+                let _ = update(&agent, c, wasm().stable_grow(grow_pages).stable_fill(off, 0x40 + i as u32, chunk).reply().build()).await;
+                off += chunk;
+            }
+        }
+        println!("[hybrid] waiting ~20s for a checkpoint...");
+        tokio::time::sleep(Duration::from_secs(20)).await;
+
+        // Three concurrent storms over the full canister pool, splitting the
+        // concurrency budget. Each canister sees a mix of query-reads,
+        // update-writes, and inter-canister call chains simultaneously.
+        let each = (concurrency / 3).max(1);
+        let roff = Arc::new(AtomicU64::new(0));
+        let woff = Arc::new(AtomicU64::new(0));
+        let mctr = Arc::new(AtomicU64::new(0));
+        let read_mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
+            let roff = roff.clone();
+            Arc::new(move || {
+                let n = roff.fetch_add(1, Ordering::Relaxed);
+                wasm().stable_read(((n % windows) as u32) * chunk, chunk).reply().build()
+            })
+        };
+        let write_mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
+            let woff = woff.clone();
+            Arc::new(move || {
+                let n = woff.fetch_add(1, Ordering::Relaxed);
+                // overwrite 8 MiB within an existing window (dirties, no growth)
+                wasm().stable_fill(((n % windows) as u32) * chunk, 0x77, 8 * MIB).reply().build()
+            })
+        };
+        let msg_cans = canisters.clone();
+        let msg_mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
+            let msg_cans = msg_cans.clone();
+            Arc::new(move || {
+                let n = mctr.fetch_add(1, Ordering::Relaxed) as usize;
+                chain_payload(&msg_cans, n % msg_cans.len(), 3)
+            })
+        };
+        println!(
+            "\n[hybrid] storm ({secs}s): reads(query 24 MiB) + writes(update 8 MiB) + messages(3-hop chains), {each} concurrent each over {} canisters",
+            canisters.len()
+        );
+        let t = Instant::now();
+        let (rs, ws, ms) = tokio::join!(
+            storm(agent.clone(), canisters.clone(), each, Duration::from_secs(secs), read_mk, true),
+            storm(agent.clone(), canisters.clone(), each, Duration::from_secs(secs), write_mk, false),
+            storm(agent.clone(), canisters.clone(), each, Duration::from_secs(secs), msg_mk, false),
+        );
+        rs.report("HYBRID reads (query, 24 MiB stable_read)", t.elapsed());
+        ws.report("HYBRID writes (update, 8 MiB stable_fill)", t.elapsed());
+        ms.report("HYBRID messages (3-hop call chains)", t.elapsed());
+
+        println!("\n== done ==");
+        return;
+    }
 
     if calls_mode {
         // ---- Inter-canister call thrash ----
