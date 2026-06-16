@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-# Uploads a dependency to shared storage and returns the download URL.
+# Uploads a dependency to the local cluster's bazel-remote cache and returns the
+# download URL.
 #
 # The path to the dependency should be specified as the first (and only) argument.
 #
@@ -10,58 +11,79 @@ set -euo pipefail
 
 # NOTE: This script uses bazel-remote as the CAS storage (implementation detail).
 
-# Look up a CAS key (provided as $1) through the redirect server.
-# If the key exists, then then download URL is returned (through stdout).
-# If the key does not exist, the empty string is returned.
-lookup_dep_url() {
-    REDIRECT_SERVER_URL="https://artifacts.idx.dfinity.network"
-    local redirect_url="$REDIRECT_SERVER_URL/cas/$1"
-    local result
-    result=$(curl --silent --head \
-        -w '%{http_code} %{redirect_url}' \
-        "$redirect_url" \
-        | tail -n1)
+# The local cluster's bazel-remote, reachable in-cluster both from CI runners and
+# from devenvs. We talk to it directly instead of going through the (cross-cluster)
+# redirect server: we only ever check & upload to the *local* cluster's cache.
+BAZEL_REMOTE_URL="http://server.bazel-remote.svc.cluster.local:8080"
 
-    local result_code
-    result_code=$(cut -d' ' -f1 <<<"$result")
-    if [ "$result_code" == "404" ]; then
-        # The key was not found
+# Returns 0 if the CAS key (provided as $1) already exists in the local
+# bazel-remote cache, 1 if it does not. Exits the script on unexpected responses.
+dep_in_cache() {
+    local key="$1"
+    local url="$BAZEL_REMOTE_URL/cas/$key"
+    local code
+    if ! code=$(curl --silent --show-error --max-time 30 \
+        -o /dev/null -w '%{http_code}' --head "$url"); then
+        echo "Failed to reach bazel-remote at '$url'" >&2
+        exit 1
+    fi
+
+    case "$code" in
+        200) return 0 ;;
+        404) return 1 ;;
+        *)
+            echo "Unexpected HTTP code '$code' when looking up dependency '$key' at '$url'" >&2
+            exit 1
+            ;;
+    esac
+}
+
+# Determines the name of the local cluster (e.g. "zh1-idx1"), used to build the
+# download URL served at artifacts.<cluster>.dfinity.network.
+resolve_cluster() {
+    # Allow an explicit override (e.g. for manual runs or unusual environments).
+    if [ -n "${SYSTEST_UPLOAD_CLUSTER:-}" ]; then
+        echo "$SYSTEST_UPLOAD_CLUSTER"
         return
     fi
 
-    if [ "$result_code" != "307" ]; then
-        echo "Expected 404 or 307 when looking up dependency '$1', got '$result_code'" >&2
+    # Otherwise auto-detect from the in-cluster Kubernetes API server certificate,
+    # which carries a SAN of the form 'api.<cluster>.dfinity.network'. This works
+    # both on CI runners and in devenvs, and yields the exact cluster name.
+    local cluster=""
+    cluster=$(openssl s_client -connect kubernetes.default.svc:443 </dev/null 2>/dev/null \
+        | openssl x509 -noout -text 2>/dev/null \
+        | grep -oE 'api\.[a-z0-9][a-z0-9-]*\.dfinity\.network' \
+        | head -n1 \
+        | sed -E 's/^api\.(.*)\.dfinity\.network$/\1/') || true
+
+    if [ -z "$cluster" ]; then
+        echo "could not determine the local cluster name; set SYSTEST_UPLOAD_CLUSTER explicitly" >&2
         exit 1
     fi
 
-    local result_url
-    result_url=$(cut -d' ' -f2 <<<"$result")
-    if [ -z "$result_url" ]; then
-        echo "Looking up dependency '$1' did not return a URL, got: '$result'" >&2
-        exit 1
-    fi
-
-    echo "$result_url"
+    echo "$cluster"
 }
 
 dep_filename="${1:?Dependency not specified}"
 dep_sha256=$(sha256sum "$dep_filename" | cut -d' ' -f1)
 
 echo "Found dep to upload $dep_filename ($dep_sha256)" >&2
-result_url=$(lookup_dep_url "$dep_sha256")
 
-# First, figure out _if_ the dep should be uploaded (no point re-uploading several GBs
-# if it's been uploaded already)
-if [ -n "$result_url" ]; then
+# Determine the local cluster up front so we fail fast (before any upload) if it
+# cannot be determined.
+cluster=$(resolve_cluster)
+echo "dep '$dep_filename': local cluster is '$cluster'" >&2
+
+# Figure out _if_ the dep should be uploaded (no point re-uploading several GBs
+# if it's already in the local cache).
+if dep_in_cache "$dep_sha256"; then
     echo "dep '$dep_filename': already uploaded" >&2
 else
     echo "dep '$dep_filename': not uploaded yet" >&2
 
-    # We use bazel-remote as a CAS storage
-    UPLOAD_URL="http://server.bazel-remote.svc.cluster.local:8080/cas"
-
-    # Upload the dep
-    dep_upload_url="$UPLOAD_URL/$dep_sha256"
+    # Upload the dep to the local cluster's bazel-remote (used as CAS storage).
+    dep_upload_url="$BAZEL_REMOTE_URL/cas/$dep_sha256"
     echo "Using upload URL: '$dep_upload_url'" >&2
     curl_out=$(mktemp)
     curl --silent --show-error --fail --retry 3 "$dep_upload_url" --upload-file "$dep_filename" -w '%{size_upload} %{time_total} %{speed_upload}\n' | tee "$curl_out" >&2
@@ -72,17 +94,10 @@ else
 
     rm "$curl_out"
 
-    # Check that it was actually uploaded and can be served (this sometimes takes a minute)
+    # Check that it was actually uploaded and can be served (this sometimes takes a moment)
     attempt=1
-    result_url=
-    while true; do
-        result_url=$(lookup_dep_url "$dep_sha256")
-
-        if [ -n "$result_url" ]; then
-            break
-        fi
-
-        echo "attempt $attempt failed" >&2
+    while ! dep_in_cache "$dep_sha256"; do
+        echo "attempt $attempt: dep not served yet" >&2
         if [ "$attempt" -ge 10 ]; then
             echo "  giving up" >&2
             exit 1
@@ -95,17 +110,7 @@ else
     done
 fi
 
-# extract cluster
-# NOTE: this assumes the result URL is https://artifacts.<CLUSTER>.dfinity.network/...
-cluster=$(sed <<<"$result_url" -n -E 's$^https://artifacts.([^.]+).*$\1$p')
-if [ -z "$cluster" ]; then
-    echo "could not read cluster from '$result_url'" >&2
-    exit 1
-fi
-
-echo "dep '$dep_filename': cluster is '$cluster'" >&2
-
-# Use the DC-local bazel cache directly, without going through the redirect server
+# Use the DC-local bazel cache directly, without going through the redirect server.
 dep_download_url="https://artifacts.$cluster.dfinity.network/cas/$dep_sha256"
 echo "dep '$dep_filename': download_url: '$dep_download_url'" >&2
 echo "$dep_download_url"
