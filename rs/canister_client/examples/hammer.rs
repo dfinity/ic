@@ -251,13 +251,15 @@ async fn main() {
         let chunk: u32 = 24 * MIB;
         let pages: u32 = (BIG_MIB * MIB) / 65536; // 64 KiB Wasm pages
         println!("\n[read] populating {} canisters to ~{BIG_MIB} MiB stable each...", canisters.len());
+        let _ = pages; // grow incrementally below instead of one big grow
+        let grow_pages = chunk / 65536; // pages per 24 MiB step
         for (i, c) in canisters.iter().enumerate() {
-            if let Err(e) = update(&agent, c, wasm().stable_grow(pages).reply().build()).await {
-                println!("  canister {i}: GROW FAILED: {}", e.chars().take(160).collect::<String>());
-            }
             let (mut off, mut werr) = (0u32, 0u32);
+            // Grow + fill one 24 MiB window at a time: a single 128 MiB grow can
+            // be rejected, but small incremental grows reliably build the state.
             while off + chunk <= BIG_MIB * MIB {
-                if update(&agent, c, wasm().stable_fill(off, 0x40 + i as u32, chunk).reply().build()).await.is_err() {
+                let p = wasm().stable_grow(grow_pages).stable_fill(off, 0x40 + i as u32, chunk).reply().build();
+                if update(&agent, c, p).await.is_err() {
                     werr += 1;
                 }
                 off += chunk;
@@ -279,19 +281,14 @@ async fn main() {
                 wasm().stable_read(off, chunk).reply().build()
             })
         };
-        let upd_cans = Arc::new(canisters[..canisters.len() - 1].to_vec());
-        let qry_cans = Arc::new(vec![canisters[canisters.len() - 1]]);
+        let all_cans = Arc::new(canisters.as_ref().clone());
         println!(
-            "\n[read] read storm ({secs}s): 24 MiB stable_read/call — UPDATES on {} canisters, QUERIES on 1",
-            upd_cans.len()
+            "\n[read] read storm ({secs}s): 24 MiB stable_read/call — QUERIES across all {} canisters (cycling full range)",
+            all_cans.len()
         );
         let t = Instant::now();
-        let (us, qs) = tokio::join!(
-            storm(agent.clone(), upd_cans, concurrency, Duration::from_secs(secs), mk.clone(), false),
-            storm(agent.clone(), qry_cans.clone(), concurrency, Duration::from_secs(secs), mk.clone(), true),
-        );
-        us.report("READ-UPDATE (24 MiB stable_read)", t.elapsed());
-        qs.report("READ-QUERY (24 MiB stable_read)", t.elapsed());
+        let qs = storm(agent.clone(), all_cans, concurrency, Duration::from_secs(secs), mk.clone(), true).await;
+        qs.report("READ-QUERY (24 MiB stable_read, all canisters)", t.elapsed());
 
         // Read-limit probe: access 48 MiB in one execution (> 32 MiB accessed
         // limit) -> expect a trap, for both update and query.
