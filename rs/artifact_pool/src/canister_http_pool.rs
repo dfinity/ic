@@ -270,7 +270,6 @@ mod tests {
                     is_reject: false,
                     registry_version: RegistryVersion::from(id),
                     replica_version: ReplicaVersion::default(),
-                    subnet_size: 4,
                 },
                 payment_receipt: CanisterHttpPaymentReceipt::default(),
             },

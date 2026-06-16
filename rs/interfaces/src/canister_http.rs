@@ -46,11 +46,13 @@ pub enum InvalidCanisterHttpPayloadReason {
         metadata_is_reject: bool,
         calculated_is_reject: bool,
     },
-    /// The subnet size in the signed metadata does not match the subnet size
-    /// recorded in the request context.
-    SubnetSizeMismatch {
-        metadata_subnet_size: u32,
-        context_subnet_size: u32,
+    /// The collective initial refund included in the payload does not match the
+    /// value recomputed from the request context's subnet size and the signed
+    /// per-replica receipts.
+    InitialRefundMismatch {
+        callback_id: CallbackId,
+        payload_refund: Cycles,
+        computed_refund: Cycles,
     },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),

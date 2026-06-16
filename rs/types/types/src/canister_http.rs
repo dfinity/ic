@@ -1069,12 +1069,20 @@ impl From<HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
+    /// The collective initial refund to credit to the calling canister,
+    /// computed during payload building from the subnet size in the request
+    /// context and validated during payload validation.
+    pub initial_refund: Cycles,
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponseWithConsensus { content, proof } = &self;
-        proof.count_bytes() + content.count_bytes()
+        let CanisterHttpResponseWithConsensus {
+            content,
+            proof,
+            initial_refund,
+        } = &self;
+        proof.count_bytes() + content.count_bytes() + size_of_val(initial_refund)
     }
 }
 
@@ -1122,11 +1130,6 @@ pub struct CanisterHttpResponseMetadata {
     pub is_reject: bool,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
-    /// The size of the subnet (`N`) at the time the request context was
-    /// created, copied from [`CanisterHttpRequestContext::subnet_size`]. Since
-    /// the metadata is signed over by every replica, this value must be
-    /// consistent with the request context during payload validation.
-    pub subnet_size: u32,
 }
 
 impl CountBytes for CanisterHttpResponseMetadata {
@@ -1138,7 +1141,6 @@ impl CountBytes for CanisterHttpResponseMetadata {
             is_reject,
             registry_version,
             replica_version,
-            subnet_size,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
@@ -1146,7 +1148,6 @@ impl CountBytes for CanisterHttpResponseMetadata {
             + size_of_val(is_reject)
             + size_of_val(registry_version)
             + replica_version.as_ref().len()
-            + size_of_val(subnet_size)
     }
 }
 
@@ -1181,10 +1182,6 @@ impl CanisterHttpResponseReceipt {
 
     pub fn content_size(&self) -> u32 {
         self.metadata.content_size
-    }
-
-    pub fn subnet_size(&self) -> u32 {
-        self.metadata.subnet_size
     }
 
     pub fn is_reject(&self) -> bool {

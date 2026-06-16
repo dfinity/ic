@@ -1075,12 +1075,11 @@ mod crypto_hash_stability {
             is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
-            subnet_size: 0,
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "28dd261752edaaf437786290b54687c99afc24bd60f2c1f8dc2736cf7d1b670e",
+            "ebf5373f06dadd9a3d7d3b59ce457533428ff27d4d588b8434f786d1d8c1a9db",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1095,7 +1094,6 @@ mod crypto_hash_stability {
             is_reject: false,
             registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
-            subnet_size: 0,
         };
         let receipt_share = CanisterHttpResponseReceipt {
             metadata,
@@ -1113,7 +1111,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "687a8f5b3da76a6ec906de9d4c3418482c34b2f924562ac9e9c1153066ac0313",
+            "a9372188df0e1057515013fa0208e8a6bf6aec7a5f5271c02585454c2bd32a2a",
             "Hash of CanisterHttpResponseShare changed"
         );
     }

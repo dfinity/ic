@@ -388,7 +388,6 @@ impl CanisterHttpPoolManagerImpl {
                             content_size: response.content.count_bytes() as u32,
                             is_reject: response.content.is_reject(),
                             replica_version: ReplicaVersion::default(),
-                            subnet_size: context.subnet_size as u32,
                         },
                         payment_receipt,
                     };
@@ -506,15 +505,6 @@ impl CanisterHttpPoolManagerImpl {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         "Refund is greater than replica allowance".to_string(),
-                    ));
-                }
-
-                // Invalidate shares whose signed subnet size disagrees with the
-                // subnet size recorded in the request context.
-                if share.content.subnet_size() != context.subnet_size as u32 {
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        "Subnet size does not match the request context".to_string(),
                     ));
                 }
 
@@ -849,7 +839,6 @@ pub mod test {
                             content_size: 0,
                             is_reject: false,
                             replica_version: ReplicaVersion::default(),
-                            subnet_size: 4,
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -950,7 +939,6 @@ pub mod test {
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1060,7 +1048,6 @@ pub mod test {
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1192,7 +1179,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1395,7 +1381,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1497,7 +1482,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -1639,7 +1623,6 @@ pub mod test {
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
                             replica_version: ReplicaVersion::default(),
-                            subnet_size: 4,
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1709,7 +1692,6 @@ pub mod test {
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
                             replica_version: ReplicaVersion::default(),
-                            subnet_size: 4,
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -1817,7 +1799,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2163,7 +2144,6 @@ pub mod test {
                         content_size: dishonest_response.content.count_bytes() as u32,
                         is_reject: true,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2306,7 +2286,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2388,7 +2367,6 @@ pub mod test {
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2793,7 +2771,6 @@ pub mod test {
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -2961,7 +2938,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3064,7 +3040,6 @@ pub mod test {
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt::default(),
                 };
@@ -3303,7 +3278,6 @@ pub mod test {
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
                             replica_version: ReplicaVersion::default(),
-                            subnet_size: 4,
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3371,7 +3345,6 @@ pub mod test {
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
                             replica_version: ReplicaVersion::default(),
-                            subnet_size: 4,
                         },
                         payment_receipt: CanisterHttpPaymentReceipt::default(),
                     };
@@ -3550,7 +3523,6 @@ pub mod test {
                         content_size: 0,
                         is_reject: false,
                         replica_version: ReplicaVersion::default(),
-                        subnet_size: 4,
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
                         refund: Cycles::new(200),

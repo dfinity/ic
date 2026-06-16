@@ -75,21 +75,54 @@ pub(crate) fn check_response_consistency(
     Ok(())
 }
 
-/// Enforces that the `subnet_size` signed into the response metadata matches
-/// the subnet size recorded in the request context. Since the metadata is
-/// signed over by every replica, an inconsistent value indicates a malicious
-/// or buggy signer and must be rejected.
-pub(crate) fn check_subnet_size(
-    metadata: &CanisterHttpResponseMetadata,
-    context_subnet_size: u32,
-) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    if metadata.subnet_size != context_subnet_size {
-        return Err(InvalidCanisterHttpPayloadReason::SubnetSizeMismatch {
-            metadata_subnet_size: metadata.subnet_size,
-            context_subnet_size,
-        });
+/// Per-replica consensus cost coefficient `10 * N + 600`, where `N` is the
+/// subnet size recorded in the request context.
+fn consensus_cost_coefficient(subnet_size: u32) -> u128 {
+    let n = subnet_size as u128;
+    n * (10 * n + 600)
+}
+
+/// Computes the collective initial refund for a fully-replicated (or
+/// non-replicated) HTTP outcall response.
+///
+/// The refund is the sum of the per-replica refunds claimed in the proof's
+/// payment receipts, minus the consensus cost `N x (10 x N + 600) x
+/// <response_size>`, saturating to zero.
+pub(crate) fn fully_replicated_initial_refund(
+    proof: &CanisterHttpResponseProof,
+    subnet_size: u32,
+) -> Cycles {
+    let refund_sum: Cycles = proof
+        .signatures
+        .values()
+        .map(|sig| sig.payment_receipt.refund)
+        .sum();
+    let consensus_cost =
+        Cycles::from(consensus_cost_coefficient(subnet_size) * proof.metadata.content_size as u128);
+    // `Sub` for `Cycles` saturates at zero.
+    refund_sum - consensus_cost
+}
+
+/// Computes the collective initial refund for a group of flexible HTTP outcall
+/// responses (used both for successful responses and `TooManyRejects` errors).
+///
+/// The refund is the sum of the per-replica refunds claimed in the shares'
+/// payment receipts, minus the consensus cost
+/// `N x (10 x N + 600) x sum over K replicas (181 + <transformed_response_size_i>)`,
+/// saturating to zero.
+pub(crate) fn flexible_initial_refund<'a>(
+    shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
+    subnet_size: u32,
+) -> Cycles {
+    let mut refund_sum = Cycles::zero();
+    let mut size_term: u128 = 0;
+    for share in shares {
+        refund_sum += share.content.payment_receipt.refund;
+        size_term += 181 + share.content.content_size() as u128;
     }
-    Ok(())
+    let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
+    // `Sub` for `Cycles` saturates at zero.
+    refund_sum - consensus_cost
 }
 
 /// Enforces the per-replica refund allowance from the request context: the
@@ -168,7 +201,6 @@ pub(crate) fn validate_flexible_response_with_proof(
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
     per_replica_allowance: Cycles,
-    context_subnet_size: u32,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
         return Err(
@@ -186,7 +218,6 @@ pub(crate) fn validate_flexible_response_with_proof(
         seen_signers,
         consensus_registry_version,
         per_replica_allowance,
-        context_subnet_size,
     )?;
 
     let calculated_hash = crypto_hash(&response_with_proof.response);
@@ -231,10 +262,8 @@ pub(crate) fn validate_response_share(
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
     per_replica_allowance: Cycles,
-    context_subnet_size: u32,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     check_refund_allowance(&share.content.payment_receipt, per_replica_allowance)?;
-    check_subnet_size(&share.content.metadata, context_subnet_size)?;
 
     if share.content.id() != callback_id {
         return Err(
@@ -374,6 +403,7 @@ pub(crate) fn group_shares_by_callback_id<
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
+    subnet_size: u32,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -381,9 +411,14 @@ pub(crate) fn find_fully_replicated_response(
         if signers.len() >= threshold {
             pool_access
                 .get_response_content_by_hash(&metadata.content_hash)
-                .map(|content| CanisterHttpResponseWithConsensus {
-                    content,
-                    proof: aggregate_shares(metadata.clone(), shares),
+                .map(|content| {
+                    let proof = aggregate_shares(metadata.clone(), shares);
+                    let initial_refund = fully_replicated_initial_refund(&proof, subnet_size);
+                    CanisterHttpResponseWithConsensus {
+                        content,
+                        proof,
+                        initial_refund,
+                    }
                 })
         } else {
             None
@@ -398,6 +433,7 @@ pub(crate) fn find_fully_replicated_response(
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
+    subnet_size: u32,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -407,9 +443,14 @@ pub(crate) fn find_non_replicated_response(
             .and_then(|correct_share| {
                 pool_access
                     .get_response_content_by_hash(&metadata.content_hash)
-                    .map(|content| CanisterHttpResponseWithConsensus {
-                        content,
-                        proof: aggregate_shares(metadata.clone(), &[correct_share]),
+                    .map(|content| {
+                        let proof = aggregate_shares(metadata.clone(), &[correct_share]);
+                        let initial_refund = fully_replicated_initial_refund(&proof, subnet_size);
+                        CanisterHttpResponseWithConsensus {
+                            content,
+                            proof,
+                            initial_refund,
+                        }
                     })
             })
     })
@@ -448,6 +489,7 @@ pub(crate) fn find_flexible_result(
     max_responses: u32,
     accumulated_size: usize,
     max_payload_size: NumBytes,
+    subnet_size: u32,
     pool_access: &dyn CanisterHttpPool,
 ) -> FlexibleFindResult {
     let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
@@ -455,7 +497,7 @@ pub(crate) fn find_flexible_result(
 
     let min_responses = min_responses as usize;
     let mut ok_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
-    let mut ok_responses_size = size_of::<CallbackId>();
+    let mut ok_responses_size = size_of::<CallbackId>() + size_of::<Cycles>();
     // Tracks all signers processed (both OK and reject)
     let mut seen_signers = BTreeSet::new();
     let mut reject_responses: Vec<(CanisterHttpResponse, &CanisterHttpResponseShare)> = Vec::new();
@@ -499,6 +541,8 @@ pub(crate) fn find_flexible_result(
 
     // 1. Enough OK responses collected?
     if ok_responses.len() >= min_responses {
+        let initial_refund =
+            flexible_initial_refund(ok_responses.iter().map(|(_, share)| *share), subnet_size);
         return FlexibleFindResult::OkResponses(
             FlexibleCanisterHttpResponses {
                 callback_id,
@@ -509,6 +553,7 @@ pub(crate) fn find_flexible_result(
                         proof: share.clone(),
                     })
                     .collect(),
+                initial_refund,
             },
             ok_responses_size,
         );
@@ -516,6 +561,10 @@ pub(crate) fn find_flexible_result(
 
     // 2. Too many nodes returned rejects (so that we can never reach min_responses OK responses)?
     if reject_responses.len() > committee.len().saturating_sub(min_responses) {
+        let initial_refund = flexible_initial_refund(
+            reject_responses.iter().map(|(_, share)| *share),
+            subnet_size,
+        );
         let error = FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_responses
@@ -525,6 +574,7 @@ pub(crate) fn find_flexible_result(
                     proof: share.clone(),
                 })
                 .collect(),
+            initial_refund,
         };
         let error_size = error.count_bytes();
         return FlexibleFindResult::Error(error, error_size);

@@ -55,7 +55,6 @@ use ic_types::{
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
 };
-use ic_types_cycles::Cycles;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::{Arc, RwLock},
@@ -266,9 +265,12 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 match &request.replication {
                     Replication::FullyReplicated => {
-                        if let Some(response) =
-                            find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
-                        {
+                        if let Some(response) = find_fully_replicated_response(
+                            grouped_shares,
+                            threshold,
+                            request.subnet_size as u32,
+                            &*pool_access,
+                        ) {
                             let candidate_size = response.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
@@ -300,6 +302,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         if let Some(response) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
+                            request.subnet_size as u32,
                             &*pool_access,
                         ) {
                             let candidate_size = response.count_bytes();
@@ -323,6 +326,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         *max_responses,
                         accumulated_size,
                         max_payload_size,
+                        request.subnet_size as u32,
                         &*pool_access,
                     ) {
                         FlexibleFindResult::OkResponses(group, group_size) => {
@@ -473,10 +477,6 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
-            // The subnet size signed into the metadata must match the context.
-            utils::check_subnet_size(&response.proof.metadata, request_context.subnet_size as u32)
-                .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
                 Replication::FullyReplicated => {
@@ -531,6 +531,21 @@ impl CanisterHttpPayloadBuilderImpl {
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             }
+
+            // The collective initial refund must match the value recomputed from
+            // the request context's subnet size and the signed per-replica receipts.
+            let computed_refund = utils::fully_replicated_initial_refund(
+                &response.proof,
+                request_context.subnet_size as u32,
+            );
+            if response.initial_refund != computed_refund {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialRefundMismatch {
+                    callback_id,
+                    payload_refund: response.initial_refund,
+                    computed_refund,
+                });
+            }
+
             // Reconstruct the per-signer shares from the response proof.
             reconstructed_shares.extend(utils::reconstruct_individual_shares(&response.proof));
         }
@@ -581,16 +596,13 @@ impl CanisterHttpPayloadBuilderImpl {
                     );
                 }
 
-                // Enforce per-replica refund allowance and subnet-size
-                // consistency for divergence shares.
+                // Enforce per-replica refund allowance for divergence shares.
                 for share in grouped_shares.values().flatten() {
                     utils::check_refund_allowance(
                         &share.content.payment_receipt,
                         context.refund_status.per_replica_allowance,
                     )
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-                    utils::check_subnet_size(&share.content.metadata, context.subnet_size as u32)
-                        .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                 }
 
                 if !grouped_shares_meet_divergence_criteria(&grouped_shares, faults_tolerated) {
@@ -652,7 +664,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     &mut seen_signers,
                     consensus_registry_version,
                     context.refund_status.per_replica_allowance,
-                    context.subnet_size as u32,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -663,6 +674,20 @@ impl CanisterHttpPayloadBuilderImpl {
                         },
                     );
                 }
+            }
+
+            // The collective initial refund must match the value recomputed from
+            // the request context's subnet size and the signed per-replica receipts.
+            let computed_refund = utils::flexible_initial_refund(
+                group.responses.iter().map(|r| &r.proof),
+                context.subnet_size as u32,
+            );
+            if group.initial_refund != computed_refund {
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialRefundMismatch {
+                    callback_id,
+                    payload_refund: group.initial_refund,
+                    computed_refund,
+                });
             }
 
             // Defer signature verification.
@@ -708,7 +733,9 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
                 }
                 FlexibleCanisterHttpError::TooManyRejects {
-                    reject_responses, ..
+                    reject_responses,
+                    initial_refund,
+                    ..
                 } => {
                     let mut seen_signers = HashSet::new();
 
@@ -720,7 +747,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             &mut seen_signers,
                             consensus_registry_version,
                             context.refund_status.per_replica_allowance,
-                            context.subnet_size as u32,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -740,6 +766,22 @@ impl CanisterHttpPayloadBuilderImpl {
                                 callback_id,
                                 reject_count: reject_responses.len(),
                                 min_needed: max_allowed_rejects + 1,
+                            },
+                        );
+                    }
+
+                    // The collective initial refund must match the value recomputed
+                    // from the request context's subnet size and the signed receipts.
+                    let computed_refund = utils::flexible_initial_refund(
+                        reject_responses.iter().map(|r| &r.proof),
+                        context.subnet_size as u32,
+                    );
+                    if *initial_refund != computed_refund {
+                        return invalid_artifact(
+                            InvalidCanisterHttpPayloadReason::InitialRefundMismatch {
+                                callback_id,
+                                payload_refund: *initial_refund,
+                                computed_refund,
                             },
                         );
                     }
@@ -786,7 +828,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             &mut seen_signers,
                             consensus_registry_version,
                             context.refund_status.per_replica_allowance,
-                            context.subnet_size as u32,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }
@@ -948,10 +989,10 @@ impl
         let mut consensus_responses = Vec::new();
         let mut refunds = CanisterHttpRefunds::default();
 
-        // Fully-replicated responses: deliver an initial (collective) refund
-        // equal to the sum of the per-replica refund shares minus the consensus
-        // cost. Refunds for flexible and divergence responses are dropped for
-        // now.
+        // Fully-replicated (and non-replicated) responses: deliver the
+        // collective initial refund that was computed during payload building
+        // and validated during payload validation. Divergence and timeout
+        // responses carry no refund.
         for response in messages.responses {
             if response.proof.signatures.len() == 1 {
                 stats.single_signature_responses += 1;
@@ -960,20 +1001,7 @@ impl
 
             let callback = response.content.id;
             let nodes: BTreeSet<NodeId> = response.proof.signatures.keys().copied().collect();
-            let refund_sum: Cycles = response
-                .proof
-                .signatures
-                .values()
-                .map(|signature| signature.payment_receipt.refund)
-                .sum();
-
-            // Consensus cost for fully-replicated outcalls:
-            // N x (10 x N + 600) x <response_size>.
-            let n = response.proof.metadata.subnet_size as u128;
-            let response_size = response.proof.metadata.content_size as u128;
-            let consensus_cost = Cycles::from(n * (10 * n + 600) * response_size);
-            // `Cycles` subtraction saturates at zero.
-            let amount = refund_sum - consensus_cost;
+            let amount = response.initial_refund;
 
             consensus_responses.push(ConsensusResponse::new(
                 callback,
@@ -984,11 +1012,13 @@ impl
                     }
                 },
             ));
-            refunds.initial.push(CanisterHttpInitialRefund {
-                callback,
-                amount,
-                nodes,
-            });
+            if !nodes.is_empty() {
+                refunds.initial.push(CanisterHttpInitialRefund {
+                    callback,
+                    amount,
+                    nodes,
+                });
+            }
         }
 
         // Timeouts: map to a rejected response. A timed-out request has no
@@ -1012,17 +1042,25 @@ impl
         }
 
         for response_group in messages.flexible_responses {
-            // Compute the refund before the group is consumed by the conversion.
-            let refund = flexible_initial_refund(
-                response_group.callback_id,
-                response_group.responses.iter().map(|r| &r.proof),
-            );
+            // The collective initial refund was computed during payload building
+            // and validated during payload validation.
+            let callback = response_group.callback_id;
+            let amount = response_group.initial_refund;
+            let nodes: BTreeSet<NodeId> = response_group
+                .responses
+                .iter()
+                .map(|r| r.proof.signature.signer)
+                .collect();
             match flexible_ok_responses_into_consensus_response(response_group) {
                 Some(consensus_response) => {
                     stats.flexible_ok_responses += 1;
                     consensus_responses.push(consensus_response);
-                    if !refund.nodes.is_empty() {
-                        refunds.initial.push(refund);
+                    if !nodes.is_empty() {
+                        refunds.initial.push(CanisterHttpInitialRefund {
+                            callback,
+                            amount,
+                            nodes,
+                        });
                     }
                 }
                 None => stats.flexible_ok_responses_candid_failures += 1,
@@ -1034,11 +1072,20 @@ impl
             // an initial refund; timeouts and responses-too-large do not.
             let refund = match &error {
                 FlexibleCanisterHttpError::TooManyRejects {
-                    reject_responses, ..
-                } => Some(flexible_initial_refund(
-                    error.callback_id(),
-                    reject_responses.iter().map(|r| &r.proof),
-                )),
+                    reject_responses,
+                    initial_refund,
+                    ..
+                } => {
+                    let nodes: BTreeSet<NodeId> = reject_responses
+                        .iter()
+                        .map(|r| r.proof.signature.signer)
+                        .collect();
+                    Some(CanisterHttpInitialRefund {
+                        callback: error.callback_id(),
+                        amount: *initial_refund,
+                        nodes,
+                    })
+                }
                 _ => None,
             };
             match flexible_error_into_consensus_response(error) {
@@ -1056,39 +1103,6 @@ impl
         }
 
         (consensus_responses, refunds, stats)
-    }
-}
-
-/// Computes the initial (collective) refund for a flexible outcall section
-/// containing `K` full responses, one per participating replica.
-///
-/// The consensus cost for flexible outcalls is
-/// `N x (10 x N + 600) x sum over K replicas (181 + transformed_response_size_i)`,
-/// where `N` is the subnet size signed into each share's metadata and
-/// `transformed_response_size_i` is replica `i`'s response size. The refund is
-/// the sum of the per-replica refund shares minus this consensus cost.
-fn flexible_initial_refund<'a>(
-    callback: CallbackId,
-    proofs: impl Iterator<Item = &'a CanisterHttpResponseShare>,
-) -> CanisterHttpInitialRefund {
-    let mut nodes = BTreeSet::new();
-    let mut refund_sum = Cycles::zero();
-    let mut n: u128 = 0;
-    let mut size_term: u128 = 0;
-    for proof in proofs {
-        nodes.insert(proof.signature.signer);
-        refund_sum += proof.content.refund();
-        // All shares in a section agree on the subnet size (validated).
-        n = proof.content.subnet_size() as u128;
-        size_term += 181 + proof.content.content_size() as u128;
-    }
-    let consensus_cost = Cycles::from(n * (10 * n + 600) * size_term);
-    // `Cycles` subtraction saturates at zero.
-    let amount = refund_sum - consensus_cost;
-    CanisterHttpInitialRefund {
-        callback,
-        amount,
-        nodes,
     }
 }
 

@@ -209,6 +209,7 @@ fn multiple_payload_test() {
                             metadata: past_metadata,
                             signatures: BTreeMap::new(),
                         },
+                        initial_refund: ic_types_cycles::Cycles::zero(),
                     }],
                     timeouts: vec![],
                     divergence_responses: vec![],
@@ -1154,6 +1155,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
                 response,
                 proof: share_with_excess_refund(0, &metadata),
             }],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }],
         ..Default::default()
     };
@@ -1186,6 +1188,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
                 response,
                 proof: share_with_excess_refund(0, &metadata),
             }],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }],
         ..Default::default()
     };
@@ -1544,7 +1547,6 @@ fn test_response_and_metadata_with_content(
         is_reject: response.content.is_reject(),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
-        subnet_size: 4,
     };
     (response, metadata)
 }
@@ -1648,6 +1650,7 @@ pub(crate) fn response_and_metadata_to_proof(
             metadata: metadata.clone(),
             signatures: BTreeMap::new(),
         },
+        initial_refund: ic_types_cycles::Cycles::zero(),
     }
 }
 
@@ -2155,6 +2158,7 @@ fn flexible_valid_mixed_content_responses() {
                 flexible_response(42, 1, b"response_b"),
                 flexible_response(42, 2, b"response_c"),
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2179,6 +2183,7 @@ fn flexible_valid_at_min_responses_boundary() {
                 flexible_response(42, 0, b"a"),
                 flexible_response(42, 1, b"b"),
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2205,6 +2210,7 @@ fn flexible_valid_at_max_responses_boundary() {
                 flexible_response(42, 2, b"c"),
                 flexible_response(42, 3, b"d"),
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2226,6 +2232,7 @@ fn flexible_valid_with_zero_min_and_max_responses() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2248,10 +2255,12 @@ fn flexible_invalid_duplicate_callback_id_within_payload() {
             FlexibleCanisterHttpResponses {
                 callback_id,
                 responses: vec![flexible_response(42, 0, b"a")],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             },
             FlexibleCanisterHttpResponses {
                 callback_id,
                 responses: vec![flexible_response(42, 1, b"b")],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             },
         ]);
 
@@ -2281,6 +2290,7 @@ fn flexible_invalid_already_delivered_callback_id() {
         let group = FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![flexible_response(42, 0, b"a")],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         };
         let past_payload = flexible_payload(vec![group.clone()]);
         let past_payload_bytes = payload_to_bytes_max_4mb(past_payload);
@@ -2294,6 +2304,7 @@ fn flexible_invalid_already_delivered_callback_id() {
         let current_payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![flexible_response(42, 1, b"b")],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2322,6 +2333,7 @@ fn flexible_invalid_fewer_than_min_responses() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![flexible_response(42, 0, b"only_one")],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2359,6 +2371,7 @@ fn flexible_invalid_more_than_max_responses() {
                 flexible_response(42, 1, b"b"),
                 flexible_response(42, 2, b"c"),
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2392,6 +2405,7 @@ fn flexible_invalid_empty_group_with_nonzero_min() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2425,6 +2439,7 @@ fn flexible_valid_empty_group_with_zero_min() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2450,6 +2465,7 @@ fn flexible_invalid_callback_id_mismatch_in_proof() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![entry],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2481,6 +2497,7 @@ fn flexible_invalid_duplicate_signer() {
                 flexible_response(42, 0, b"a"),
                 flexible_response(42, 0, b"b"), // same signer
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2512,6 +2529,7 @@ fn flexible_invalid_signer_not_in_committee() {
                 flexible_response(42, 0, b"a"),
                 flexible_response(42, 3, b"b"), // node 3 not in committee
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2545,6 +2563,7 @@ fn flexible_invalid_content_hash_mismatch() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![entry],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2581,6 +2600,7 @@ fn flexible_invalid_content_size_mismatch() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![entry],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2615,6 +2635,7 @@ fn flexible_invalid_is_reject_mismatch() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![entry],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2681,6 +2702,7 @@ fn non_flexible_response_in_flexible_section_rejected() {
                     flexible_response(42, 0, b"a"),
                     flexible_response(42, 1, b"b"),
                 ],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }]);
 
             let result = payload_builder.validate_payload(
@@ -2719,6 +2741,7 @@ fn flexible_invalid_unknown_callback_id() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id: unknown_id,
             responses: vec![flexible_response(999, 0, b"a")],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2751,6 +2774,7 @@ fn flexible_invalid_rejects_in_ok_responses() {
                 flexible_reject_response(42, 1),
                 flexible_response(42, 2, b"another_good"),
             ],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2785,6 +2809,7 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![entry],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2819,6 +2844,7 @@ fn flexible_invalid_registry_version_mismatch() {
         let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
             callback_id,
             responses: vec![entry],
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }]);
 
         let result = payload_builder.validate_payload(
@@ -2858,6 +2884,7 @@ fn flexible_invalid_signature_error() {
             let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
                 callback_id,
                 responses: vec![flexible_response(42, 0, b"data")],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }]);
 
             let result = payload_builder.validate_payload(
@@ -2902,6 +2929,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
         callback_id,
         responses: vec![entry_a, entry_b],
+        initial_refund: ic_types_cycles::Cycles::zero(),
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
@@ -2949,6 +2977,7 @@ fn flexible_ok_responses_into_messages_skips_reject_entries() {
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
         callback_id,
         responses: vec![success_entry, reject_entry],
+        initial_refund: ic_types_cycles::Cycles::zero(),
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
@@ -2980,14 +3009,17 @@ fn flexible_ok_responses_into_messages_stats_count_multiple_groups() {
     let group_a = FlexibleCanisterHttpResponses {
         callback_id: CallbackId::from(1),
         responses: vec![flexible_response(1, 0, &payload_data)],
+        initial_refund: ic_types_cycles::Cycles::zero(),
     };
     let group_b = FlexibleCanisterHttpResponses {
         callback_id: CallbackId::from(2),
         responses: vec![flexible_response(2, 1, &payload_data)],
+        initial_refund: ic_types_cycles::Cycles::zero(),
     };
     let group_c = FlexibleCanisterHttpResponses {
         callback_id: CallbackId::from(3),
         responses: vec![flexible_response(3, 2, &payload_data)],
+        initial_refund: ic_types_cycles::Cycles::zero(),
     };
 
     let payload = flexible_payload(vec![group_a, group_b, group_c]);
@@ -3016,6 +3048,7 @@ fn flexible_ok_responses_into_messages_decode_failure_is_skipped() {
     let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
         callback_id,
         responses: vec![valid_entry, invalid_entry],
+        initial_refund: ic_types_cycles::Cycles::zero(),
     }]);
     let bytes = payload_to_bytes_max_4mb(payload);
 
@@ -3070,6 +3103,7 @@ fn flexible_error_into_messages_too_many_rejects() {
         flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
             callback_id,
             reject_responses: reject_entries,
+            initial_refund: ic_types_cycles::Cycles::zero(),
         }],
         ..Default::default()
     };
@@ -3477,6 +3511,7 @@ fn flexible_build_too_many_rejects() {
             FlexibleCanisterHttpError::TooManyRejects {
                 callback_id: cb,
                 reject_responses,
+                ..
             } => {
                 assert_eq!(*cb, callback_id);
                 assert_eq!(reject_responses.len(), 2);
@@ -3755,6 +3790,7 @@ fn flexible_error_duplicate_callback_id_cross_type() {
             flexible_responses: vec![FlexibleCanisterHttpResponses {
                 callback_id,
                 responses: vec![flexible_response(42, 0, b"a")],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
             ..Default::default()
@@ -4297,6 +4333,7 @@ fn flexible_error_too_many_rejects_valid() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: reject_entries,
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4327,6 +4364,7 @@ fn flexible_error_too_many_rejects_insufficient_rejects() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: reject_entries,
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4365,6 +4403,7 @@ fn flexible_error_too_many_rejects_non_reject_content() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![ok_entry, reject_entry],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4399,6 +4438,7 @@ fn flexible_error_too_many_rejects_duplicate_signer() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_a, entry_b],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4434,6 +4474,7 @@ fn flexible_error_too_many_rejects_signer_not_in_committee() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_a, entry_b],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4469,6 +4510,7 @@ fn flexible_error_too_many_rejects_callback_id_mismatch_in_response() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_wrong],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4504,6 +4546,7 @@ fn flexible_error_too_many_rejects_registry_version_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4540,6 +4583,7 @@ fn flexible_error_too_many_rejects_content_hash_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4575,6 +4619,7 @@ fn flexible_error_too_many_rejects_content_size_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4610,6 +4655,7 @@ fn flexible_error_too_many_rejects_is_reject_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4646,6 +4692,7 @@ fn flexible_error_too_many_rejects_proof_id_mismatch() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: vec![entry_ok, entry_bad],
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4686,6 +4733,7 @@ fn flexible_error_too_many_rejects_invalid_signature() {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
                 callback_id,
                 reject_responses: reject_entries,
+                initial_refund: ic_types_cycles::Cycles::zero(),
             }],
             ..Default::default()
         };
@@ -4868,7 +4916,6 @@ fn metadata_share_with_content_size(
         is_reject: false,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
-        subnet_size: 4,
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -4881,7 +4928,6 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         is_reject: true,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
-        subnet_size: 4,
     };
     metadata_to_share(signer_node, &metadata)
 }

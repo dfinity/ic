@@ -113,6 +113,7 @@ rust_bench(
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
         "//rs/test_utilities/types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
     ],

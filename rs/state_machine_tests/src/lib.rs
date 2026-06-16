@@ -2779,7 +2779,6 @@ impl StateMachine {
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),
                     replica_version: ReplicaVersion::default(),
-                    subnet_size: self.nodes.len() as u32,
                 },
                 payment_receipt: CanisterHttpPaymentReceipt::default(),
             };
