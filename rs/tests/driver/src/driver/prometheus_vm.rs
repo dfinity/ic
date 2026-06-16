@@ -42,7 +42,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/prometheus-vm/<SHA256-HASH>/x86_64-linux/prometheus-vm.img.zst
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "b9f77f869eda83b242b585f397a26f16d54199d764d52b5e69ea98b2510be67b";
+    "3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!(
