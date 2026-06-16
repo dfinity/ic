@@ -665,11 +665,9 @@ impl SchedulerTest {
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
-        let subnet_size = self.subnet_size();
         self.scheduler
             .charge_canisters_for_resource_allocation_and_usage(
                 self.state.as_mut().unwrap(),
-                subnet_size,
                 ExecutionRound::from(0),
                 ExecutionRoundType::CheckpointRound,
             )
@@ -704,10 +702,6 @@ impl SchedulerTest {
     /// Advances the time in `ReplicatedState` by the provided duration.
     pub(crate) fn advance_time(&mut self, duration: Duration) {
         self.state_mut().metadata.batch_time += duration;
-    }
-
-    pub fn subnet_size(&self) -> usize {
-        self.registry_settings.subnet_size
     }
 
     pub(crate) fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {

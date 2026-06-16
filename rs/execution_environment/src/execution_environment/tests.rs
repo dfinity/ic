@@ -2,7 +2,6 @@ use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_management_canister_types_private::{

@@ -135,12 +135,7 @@ fn induct_message_with_successful_history_update() {
         let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
         insert_canister(&mut state, canister_id);
 
-        valid_set_rule.induct_message(
-            &mut state,
-            signed_ingress,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, signed_ingress, ExecutionRound::from(0));
         assert_eq!(ingress_queue_size(&state, canister_id), 1);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 1)]),
@@ -200,12 +195,7 @@ fn induct_message_fails_for_stopping_canister() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopping_canister(canister_id));
 
-        valid_set_rule.induct_message(
-            &mut state,
-            signed_ingress,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, signed_ingress, ExecutionRound::from(0));
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPING)], 1)]),
@@ -263,12 +253,7 @@ fn induct_message_fails_for_stopped_canister() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(get_stopped_canister(canister_id));
 
-        valid_set_rule.induct_message(
-            &mut state,
-            signed_ingress,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, signed_ingress, ExecutionRound::from(0));
         assert_eq!(ingress_queue_size(&state, canister_id), 0);
         assert_inducted_ingress_messages_eq(
             metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_CANISTER_STOPPED)], 1)]),
@@ -314,12 +299,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX), |_| {});
-        valid_set_rule.induct_message(
-            &mut state,
-            signed_ingress,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, signed_ingress, ExecutionRound::from(0));
     });
 }
 
@@ -369,12 +349,7 @@ fn update_history_if_induction_failed() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         // The induction is expected to fail because there is no canister 0 in the
         // ReplicatedState.
-        valid_set_rule.induct_message(
-            &mut state,
-            signed_ingress.clone(),
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, signed_ingress.clone(), ExecutionRound::from(0));
         assert!(state.canister_state(&canister_id).is_none());
         assert_eq!(state.get_ingress_status(&msg.id()), &status_clone);
         assert_inducted_ingress_messages_eq(
@@ -613,7 +588,7 @@ fn ingress_to_stopping_canister_is_rejected() {
         .canister_id(canister_test_id(0))
         .build();
     assert_eq!(
-        valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
+        valid_set_rule.enqueue(&mut state, ingress),
         Err(IngressInductionError::CanisterStopping(canister_test_id(0)))
     );
 }
@@ -643,7 +618,7 @@ fn ingress_to_stopped_canister_is_rejected() {
         .build();
 
     assert_eq!(
-        valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
+        valid_set_rule.enqueue(&mut state, ingress),
         Err(IngressInductionError::CanisterStopped(canister_test_id(0)))
     );
 }
@@ -682,12 +657,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             )
             .cost();
 
-        valid_set_rule.induct_message(
-            &mut state,
-            ingress,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, ingress, ExecutionRound::from(0));
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -726,12 +696,7 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
         state.put_canister_state(canister);
 
         let ingress = SignedIngressBuilder::new().build();
-        valid_set_rule.induct_message(
-            &mut state,
-            ingress,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            ExecutionRound::from(0),
-        );
+        valid_set_rule.induct_message(&mut state, ingress, ExecutionRound::from(0));
 
         let balance_after = state
             .canister_state(&canister_id)
@@ -765,7 +730,7 @@ fn management_message_with_unknown_method_is_not_inducted() {
         .method_name("test")
         .build();
     assert_eq!(
-        valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
+        valid_set_rule.enqueue(&mut state, ingress),
         Err(IngressInductionError::CanisterMethodNotFound(String::from(
             "test"
         )))
@@ -796,7 +761,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
         .build();
 
     assert_eq!(
-        valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
+        valid_set_rule.enqueue(&mut state, ingress),
         Err(IngressInductionError::InvalidManagementPayload)
     );
 }
@@ -836,11 +801,7 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
         .method_name("update_settings")
         .method_payload(payload)
         .build();
-    assert!(
-        valid_set_rule
-            .enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE)
-            .is_ok()
-    );
+    assert!(valid_set_rule.enqueue(&mut state, ingress).is_ok());
 
     let balance_after = state
         .canister_state(&canister_id)

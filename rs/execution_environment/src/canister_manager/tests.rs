@@ -36,7 +36,6 @@ use ic_embedders::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
@@ -2429,7 +2428,6 @@ fn failed_upgrade_hooks_consume_instructions() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
                 ResourceSaturation::default(),
                 &no_op_counter(),
@@ -2574,7 +2572,6 @@ fn failed_install_hooks_consume_instructions() {
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
                 &mut round_limits,
                 ResourceSaturation::default(),
                 &no_op_counter(),
@@ -2659,7 +2656,6 @@ fn install_code_respects_instruction_limit() {
             CanisterSettings::default(),
             MAX_NUMBER_OF_CANISTERS,
             &mut state,
-            SMALL_APP_SUBNET_MAX_SIZE,
             &mut round_limits,
             ResourceSaturation::default(),
             &no_op_counter(),

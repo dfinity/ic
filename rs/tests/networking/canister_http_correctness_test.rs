@@ -27,6 +27,7 @@ use ic_agent::{
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
     HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
@@ -2696,8 +2697,7 @@ fn expected_cycle_cost(
     let cycle_fee = cm.http_request_fee(
         req_size,
         Some(NumBytes::from(response_size)),
-        subnet_size,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(subnet_size, CanisterCyclesCostSchedule::Normal),
     );
     cycle_fee.real().get().try_into().unwrap()
 }
