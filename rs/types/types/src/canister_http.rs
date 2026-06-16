@@ -137,6 +137,8 @@ pub struct CanisterHttpRequestContext {
     pub replication: Replication,
     pub pricing_version: PricingVersion,
     pub refund_status: RefundStatus,
+    /// The registry version at which this request is being processed.
+    pub registry_version: RegistryVersion,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -281,6 +283,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             replication: Some(replication_message),
             pricing_version: Some(pricing_message),
             refund_status: Some(refund_status),
+            registry_version: context.registry_version.get(),
         }
     }
 }
@@ -405,6 +408,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             replication,
             pricing_version,
             refund_status,
+            registry_version: RegistryVersion::from(context.registry_version),
         })
     }
 }
@@ -588,6 +592,8 @@ impl CanisterHttpRequestContext {
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
+            // TODO: populate with the actual registry version this request is processed at.
+            registry_version: RegistryVersion::from(0),
         })
     }
 
@@ -695,6 +701,8 @@ impl CanisterHttpRequestContext {
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
+            // TODO: populate with the actual registry version this request is processed at.
+            registry_version: RegistryVersion::from(0),
         })
     }
 }
@@ -1247,6 +1255,7 @@ mod tests {
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
         };
 
         let expected_size = context.url.len()
@@ -1292,6 +1301,7 @@ mod tests {
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
         };
 
         let expected_size = context.url.len()
@@ -1371,6 +1381,7 @@ mod tests {
                     refunded_cycles: Cycles::new(123),
                     refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
                 },
+                registry_version: RegistryVersion::from(7),
             };
 
             let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
