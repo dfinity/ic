@@ -1279,4 +1279,4 @@ archive_override(
 )
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
-motoko.toolchain(version = "0.16.3")
+motoko.toolchain(version = "0.16.3")  # NOTE: keep version in line with Dockerfile
