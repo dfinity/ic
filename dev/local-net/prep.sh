@@ -139,6 +139,13 @@ for i in 0 1 2 3; do
   crypto: {
     crypto_root: "/etc/ic/crypto",
   },
+  hypervisor: {
+    // Nano profile: threshold == subnet memory capacity disables the storage
+    // cycle-reservation mechanism; small reservation lets canisters allocate
+    // up to ~the full subnet memory capacity.
+    subnet_memory_threshold: 536870912,
+    subnet_memory_reservation: 16777216,
+  },
   http_handler: {
     listen_addr: "[::]:$HTTP_PORT",
   },

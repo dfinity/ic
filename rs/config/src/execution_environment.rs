@@ -33,8 +33,12 @@ pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABL
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
 /// capacity, then the subnet is never considered to have high usage.
-// Nano-replica profile: scaled down to run on a 512 MiB - 1 GiB VM.
-const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(384 * MIB);
+// Nano-replica profile: set equal to the subnet memory capacity so the subnet
+// is never considered "high usage" and the storage cycle-reservation mechanism
+// stays disabled — canisters can allocate freely up to the subnet capacity
+// without reserving cycles (reservation pricing is calibrated for mainnet and
+// would otherwise reject growth on a tiny subnet).
+const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(512 * MIB);
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
@@ -94,10 +98,12 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(16 *
 pub(crate) const NUMBER_OF_EXECUTION_THREADS: usize = 2;
 
 /// The number of bytes reserved for response callback executions.
-/// Nano-replica profile: 64MiB per thread (must stay well below the subnet
-/// memory capacity, otherwise no memory is left for canister state).
+/// Nano-replica profile: keep this small (8 MiB per thread) so canisters can
+/// allocate almost the entire subnet memory capacity. The reservation only
+/// guards response-callback execution headroom; on a best-effort-leaning nano
+/// subnet a small reservation is sufficient.
 pub const SUBNET_MEMORY_RESERVATION: NumBytes =
-    NumBytes::new(64 * MIB * NUMBER_OF_EXECUTION_THREADS as u64);
+    NumBytes::new(8 * MIB * NUMBER_OF_EXECUTION_THREADS as u64);
 
 /// The soft limit on the subnet-wide number of callbacks.
 pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 4_096;
