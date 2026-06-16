@@ -22,7 +22,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:52b9ea7fdfe15769dc6b1da27708208f4d31565864fa9a11777ea2546acb6c6a
+      image: ghcr.io/dfinity/ic-build@sha256:11d1df3bfc3e4edf1c28c93f4433dc28b004b3391eab05e735e597914957f0be
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     environment: DockerHub
