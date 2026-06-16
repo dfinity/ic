@@ -83,10 +83,15 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(16 *
 //    We needs to ensure:
 //    `SUBNET_MEMORY_CAPACITY / number_of_threads >= max_canister_memory`
 //    If you change this number please adjust other constants as well.
-// Nano-replica profile: a single update-execution thread. This also sets
-// `SchedulerConfig::scheduler_cores` and divides the (small) subnet memory
-// capacity by a single thread.
-pub(crate) const NUMBER_OF_EXECUTION_THREADS: usize = 1;
+// Nano-replica profile: minimum viable update-execution parallelism. This also
+// sets `SchedulerConfig::scheduler_cores` and divides the (small) subnet memory
+// capacity across threads.
+//
+// NOTE: the DTS scheduler requires at least 2 cores — compute capacity is
+// `(scheduler_cores - 1) * 100%` (see `round_schedule::compute_capacity_percent`),
+// so a single core yields 0% allocatable capacity and trips a scheduler
+// invariant on every round. 2 is the floor.
+pub(crate) const NUMBER_OF_EXECUTION_THREADS: usize = 2;
 
 /// The number of bytes reserved for response callback executions.
 /// Nano-replica profile: 64MiB per thread (must stay well below the subnet
