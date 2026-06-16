@@ -25,7 +25,6 @@ use ic_interfaces::execution_environment::{
     SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
@@ -42,7 +41,7 @@ use ic_types::{
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -1120,15 +1119,7 @@ impl<'a> QueryContext<'a> {
         self.transient_errors
     }
 
-    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.state.get_ref().get_own_cost_schedule()
-    }
-
     fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
-        let subnet_size = self
-            .network_topology
-            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-        CyclesAccountManagerSubnetConfig::new(subnet_size, self.get_cost_schedule())
+        self.state.get_ref().get_own_subnet_cycles_config()
     }
 }
