@@ -13,7 +13,7 @@ use crate::execution_environment::{
 use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
 use crate::hypervisor::Hypervisor;
 use crate::types::{IngressResponse, Response};
-use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
+use crate::util::MIGRATION_CANISTER_ID;
 
 use ic_base_types::EnvironmentVariables;
 use ic_config::embedders::Config as EmbeddersConfig;
@@ -654,8 +654,6 @@ impl CanisterManager {
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
-        validate_controller(canister, &sender)?;
-
         let heap_delta_increase = self.validate_and_update_canister_settings(
             canister,
             round_limits,
@@ -944,18 +942,8 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        let sender = origin.origin();
-
-        // Skip the controller or subnet admins validation if the sender is the
-        // governance canister. The governance canister can forcefully
-        // uninstall the code of any canister.
-        if sender != GOVERNANCE_CANISTER_ID.get() {
-            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
-        }
-
         let rejects = uninstall_canister(
             &self.log,
             canister,
@@ -1003,10 +991,7 @@ impl CanisterManager {
         msg: &mut CanisterCall,
         call_id: StopCanisterCallId,
         canister: &mut CanisterState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
-
         // If the canister did not begin stopping, i.e., if the canister is already stopped,
         // then we produce a reply immediately and return the `call_id` to be closed.
         let (reply, stop_call_id_to_remove) = if !canister.system_state.begin_stopping(msg, call_id)
@@ -1041,12 +1026,8 @@ impl CanisterManager {
     /// returned.
     pub(crate) fn start_canister(
         &self,
-        sender: PrincipalId,
         canister: &mut CanisterState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
-
         let stop_contexts_to_reject = canister.system_state.start_canister();
         canister.system_state.bump_canister_version();
 
@@ -1683,11 +1664,6 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Allow the canister itself to perform this operation.
-        if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?
-        }
-
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
         // since that check involves hash computation that we also want to charge for.
         let instructions = self.config.upload_wasm_chunk_instructions;
@@ -1789,11 +1765,6 @@ impl CanisterManager {
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Allow the canister itself to perform this operation.
-        if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?
-        }
-
         let memory_usage = canister.memory_usage();
         let wasm_chunk_store_size = canister.wasm_chunk_store_memory_usage();
         debug_assert_ge!(memory_usage, wasm_chunk_store_size);
@@ -1993,9 +1964,6 @@ impl CanisterManager {
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
-
         let replace_snapshot_size = match replace_snapshot {
             Some(replace_snapshot_id) => self.get_snapshot(canister, replace_snapshot_id)?.size(),
             None => {
@@ -2172,8 +2140,6 @@ impl CanisterManager {
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -2509,9 +2475,6 @@ impl CanisterManager {
         cost_schedule: CanisterCyclesCostSchedule,
         resource_saturation: &ResourceSaturation,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
-
         // perform access validation, but don't use the result
         let snapshot = self.get_snapshot(canister, delete_snapshot_id)?;
 
@@ -2699,9 +2662,6 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         time: Time,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
-
         // validate args:
         let wasm_mode = canister
             .execution_state
@@ -2816,8 +2776,6 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
 
         let snapshot = self.get_snapshot(canister, snapshot_id)?;

@@ -947,7 +947,7 @@ fn stop_a_running_canister() {
 
 #[test]
 fn stop_a_stopped_canister() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, _subnet_admins| {
         let sender = user_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
@@ -963,7 +963,7 @@ fn stop_a_stopped_canister() {
         let call_id = StopCanisterCallId::new(0);
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let response = canister_manager
-            .stop_canister(&mut msg, call_id, canister, subnet_admins)
+            .stop_canister(&mut msg, call_id, canister)
             .unwrap();
         assert!(response.reply.is_some());
         assert!(response.stop_call_id_to_remove.is_some());
@@ -978,7 +978,7 @@ fn stop_a_stopped_canister() {
 
 #[test]
 fn stop_a_stopped_canister_from_another_canister() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
+    with_setup(|canister_manager, mut state, _, _subnet_admins| {
         let controller = canister_test_id(1);
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister_with_controller(canister_id, controller.get());
@@ -994,7 +994,7 @@ fn stop_a_stopped_canister_from_another_canister() {
         let call_id = StopCanisterCallId::new(0);
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let response = canister_manager
-            .stop_canister(&mut msg, call_id, canister, subnet_admins)
+            .stop_canister(&mut msg, call_id, canister)
             .unwrap();
         assert!(response.reply.is_some());
         assert!(response.stop_call_id_to_remove.is_some());
@@ -1308,8 +1308,8 @@ fn canister_only_accept_calls_if_running() {
 
 #[test]
 fn start_a_stopped_canister_succeeds() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
-        let sender = user_test_id(1).get();
+    with_setup(|canister_manager, mut state, _, _subnet_admins| {
+        let _sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopped_canister(canister_id);
         state.put_canister_state(canister);
@@ -1322,9 +1322,7 @@ fn start_a_stopped_canister_succeeds() {
 
         // Start the canister.
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
-        canister_manager
-            .start_canister(sender, canister, subnet_admins)
-            .unwrap();
+        canister_manager.start_canister(canister).unwrap();
 
         // Canister should now be running.
         assert_eq!(
@@ -1336,8 +1334,8 @@ fn start_a_stopped_canister_succeeds() {
 
 #[test]
 fn start_a_stopping_canister_with_no_stop_contexts() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
-        let sender = user_test_id(1).get();
+    with_setup(|canister_manager, mut state, _, _subnet_admins| {
+        let _sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let canister = get_stopping_canister(canister_id);
 
@@ -1345,7 +1343,7 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let stop_contexts_to_reject = canister_manager
-            .start_canister(sender, canister, subnet_admins)
+            .start_canister(canister)
             .unwrap()
             .stop_contexts_to_reject;
         assert_eq!(stop_contexts_to_reject, Vec::new());
@@ -1354,8 +1352,8 @@ fn start_a_stopping_canister_with_no_stop_contexts() {
 
 #[test]
 fn start_a_stopping_canister_with_stop_contexts() {
-    with_setup(|canister_manager, mut state, _, subnet_admins| {
-        let sender = user_test_id(1).get();
+    with_setup(|canister_manager, mut state, _, _subnet_admins| {
+        let _sender = user_test_id(1).get();
         let canister_id = canister_test_id(0);
         let mut canister = get_stopping_canister(canister_id);
         let stop_context = StopCanisterContext::Ingress {
@@ -1369,7 +1367,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
 
         let canister = state.canister_state_make_mut(&canister_id).unwrap();
         let stop_contexts_to_reject = canister_manager
-            .start_canister(sender, canister, subnet_admins)
+            .start_canister(canister)
             .unwrap()
             .stop_contexts_to_reject;
         assert_eq!(stop_contexts_to_reject, vec![stop_context]);
@@ -3079,7 +3077,6 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
             canister,
             &mut round_limits,
-            None,
             time,
         )
         .unwrap();

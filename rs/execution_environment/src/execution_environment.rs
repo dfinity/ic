@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::validate_controller;
+use crate::execution::common::{validate_controller, validate_controller_or_subnet_admin};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -15,6 +15,7 @@ use crate::execution_environment_metrics::{
 use crate::hypervisor::Hypervisor;
 use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics};
+use crate::util::GOVERNANCE_CANISTER_ID;
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
@@ -610,6 +611,7 @@ impl ExecutionEnvironment {
     fn execute_mgmt_operation_on_canister<F>(
         &self,
         canister_id: CanisterId,
+        method: Ic00Method,
         op: F,
         state: &mut ReplicatedState,
         msg: &mut CanisterCall,
@@ -626,6 +628,8 @@ impl ExecutionEnvironment {
         ) -> Result<CanisterManagerResponse, CanisterManagerError>,
     {
         let cost_schedule = state.get_own_cost_schedule();
+        let permissions = Ic00MethodPermissions::new(method);
+        let subnet_admins = state.get_own_subnet_admins();
         let mut consumed_cycles = ConsumedCyclesForInstructions::new(
             &self.cycles_account_manager,
             cost_schedule,
@@ -633,6 +637,33 @@ impl ExecutionEnvironment {
         );
         match state.canister_state_make_mut(&canister_id) {
             Some(canister) => {
+                let sender = *msg.sender();
+                if permissions.allow_only_controllers {
+                    // UploadChunk and ClearChunkStore allow the canister to call itself.
+                    let is_self = matches!(
+                        method,
+                        Ic00Method::UploadChunk | Ic00Method::ClearChunkStore
+                    ) && sender == canister.canister_id().get();
+                    if !is_self && let Err(err) = validate_controller(canister, &sender) {
+                        return ExecuteSubnetMessageResult::Finished {
+                            response: Err(err.into()),
+                            refund: msg.take_cycles(),
+                        };
+                    }
+                } else if permissions.allow_only_controllers_and_subnet_admins {
+                    // The governance canister can forcefully uninstall any canister's code.
+                    let is_governance = method == Ic00Method::UninstallCode
+                        && sender == GOVERNANCE_CANISTER_ID.get();
+                    if !is_governance
+                        && let Err(err) =
+                            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)
+                    {
+                        return ExecuteSubnetMessageResult::Finished {
+                            response: Err(err.into()),
+                            refund: msg.take_cycles(),
+                        };
+                    }
+                }
                 let saved_canister = canister.clone();
                 let saved_msg = msg.clone();
                 let saved_round_limits = round_limits.clone();
@@ -978,7 +1009,6 @@ impl ExecutionEnvironment {
                     refund: msg.take_cycles(),
                 },
                 Ok(args) => {
-                    let subnet_admins = state.get_own_subnet_admins();
                     let time = state.time();
                     self.uninstall_code(
                         msg.canister_change_origin(args.get_sender_canister_version()),
@@ -986,7 +1016,6 @@ impl ExecutionEnvironment {
                         &mut state,
                         &mut msg,
                         round_limits,
-                        subnet_admins,
                         time,
                         registry_settings,
                         current_round,
@@ -1137,19 +1166,14 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => {
-                    let subnet_admins = state.get_own_subnet_admins();
-                    self.start_canister(
-                        args.get_canister_id(),
-                        *msg.sender(),
-                        &mut state,
-                        &mut msg,
-                        subnet_admins,
-                        round_limits,
-                        registry_settings,
-                        current_round,
-                    )
-                }
+                Ok(args) => self.start_canister(
+                    args.get_canister_id(),
+                    &mut state,
+                    &mut msg,
+                    round_limits,
+                    registry_settings,
+                    current_round,
+                ),
             },
 
             Ok(Ic00Method::StopCanister) => match CanisterIdRecord::decode(payload) {
@@ -1157,18 +1181,14 @@ impl ExecutionEnvironment {
                     response: Err(err),
                     refund: msg.take_cycles(),
                 },
-                Ok(args) => {
-                    let subnet_admins = state.get_own_subnet_admins();
-                    self.stop_canister(
-                        args.get_canister_id(),
-                        &mut msg,
-                        &mut state,
-                        subnet_admins,
-                        round_limits,
-                        registry_settings,
-                        current_round,
-                    )
-                }
+                Ok(args) => self.stop_canister(
+                    args.get_canister_id(),
+                    &mut msg,
+                    &mut state,
+                    round_limits,
+                    registry_settings,
+                    current_round,
+                ),
             },
 
             Ok(Ic00Method::DeleteCanister) => {
@@ -1828,6 +1848,7 @@ impl ExecutionEnvironment {
                                     let subnet_size = registry_settings.subnet_size;
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
+                                        Ic00Method::FetchCanisterLogs,
                                         |canister, msg, _round_limits, _consumed_cycles| {
                                             fetch_canister_logs(
                                                 sender,
@@ -2507,6 +2528,7 @@ impl ExecutionEnvironment {
         let subnet_size = registry_settings.subnet_size;
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::UpdateSettings,
             |canister, _msg, round_limits, _consumed_cycles| {
                 self.canister_manager.update_settings(
                     timestamp_nanos,
@@ -2535,21 +2557,16 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         msg: &mut CanisterCall,
         round_limits: &mut RoundLimits,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::UninstallCode,
             |canister, _msg, round_limits, _consumed_cycles| {
-                self.canister_manager.uninstall_code(
-                    origin,
-                    canister,
-                    round_limits,
-                    subnet_admins,
-                    time,
-                )
+                self.canister_manager
+                    .uninstall_code(origin, canister, round_limits, time)
             },
             state,
             msg,
@@ -2562,19 +2579,17 @@ impl ExecutionEnvironment {
     fn start_canister(
         &self,
         canister_id: CanisterId,
-        sender: PrincipalId,
         state: &mut ReplicatedState,
         msg: &mut CanisterCall,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::StartCanister,
             |canister, _msg, _round_limits, _consumed_cycles| {
-                self.canister_manager
-                    .start_canister(sender, canister, subnet_admins)
+                self.canister_manager.start_canister(canister)
             },
             state,
             msg,
@@ -2697,7 +2712,6 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         msg: &mut CanisterCall,
         state: &mut ReplicatedState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
@@ -2712,9 +2726,9 @@ impl ExecutionEnvironment {
             });
         let result = self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::StopCanister,
             |canister, msg, _round_limits, _consumed_cycles| {
-                self.canister_manager
-                    .stop_canister(msg, call_id, canister, subnet_admins)
+                self.canister_manager.stop_canister(msg, call_id, canister)
             },
             state,
             msg,
@@ -2745,6 +2759,7 @@ impl ExecutionEnvironment {
     ) -> ExecuteSubnetMessageResult {
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::ProvisionalTopUpCanister,
             |canister, _msg, _round_limits, _consumed_cycles| {
                 self.canister_manager
                     .add_cycles(sender, cycles, canister, provisional_whitelist)
@@ -2773,6 +2788,7 @@ impl ExecutionEnvironment {
         let chunk = args.chunk;
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::UploadChunk,
             |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.upload_chunk(
                     sender,
@@ -2808,6 +2824,7 @@ impl ExecutionEnvironment {
         let canister_id = args.get_canister_id();
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::ClearChunkStore,
             |canister, _msg, round_limits, _consumed_cycles| {
                 self.canister_manager.clear_chunk_store(
                     sender,
@@ -2861,6 +2878,7 @@ impl ExecutionEnvironment {
         let uninstall_code = args.uninstall_code().unwrap_or_default();
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::TakeCanisterSnapshot,
             |canister, _msg, round_limits, _consumed_cycles| {
                 self.canister_manager.take_canister_snapshot(
                     registry_settings.subnet_size,
@@ -2940,6 +2958,7 @@ impl ExecutionEnvironment {
         let expected_compiled_wasms = Arc::clone(&state.metadata.expected_compiled_wasms);
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::LoadCanisterSnapshot,
             |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.load_canister_snapshot(
                     registry_settings.subnet_size,
@@ -2996,6 +3015,7 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::DeleteCanisterSnapshot,
             |canister, _msg, round_limits, _consumed_cycles| {
                 self.canister_manager.delete_canister_snapshot(
                     sender,
@@ -3029,6 +3049,7 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::ReadCanisterSnapshotData,
             |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.read_snapshot_data(
                     sender,
@@ -3128,6 +3149,7 @@ impl ExecutionEnvironment {
         let time = state.time();
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::UploadCanisterSnapshotMetadata,
             |canister, _msg, round_limits, _consumed_cycles| {
                 self.canister_manager.create_snapshot_from_metadata(
                     sender,
@@ -3166,6 +3188,7 @@ impl ExecutionEnvironment {
         );
         self.execute_mgmt_operation_on_canister(
             canister_id,
+            Ic00Method::UploadCanisterSnapshotData,
             |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.write_snapshot_data(
                     sender,

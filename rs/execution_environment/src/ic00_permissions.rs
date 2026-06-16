@@ -13,6 +13,10 @@ pub struct Ic00MethodPermissions {
     allow_remote_subnet_sender: bool,
     /// Call initiated only by the NNS subnet.
     allow_only_nns_subnet_sender: bool,
+    /// The call can only be made by a controller of the target canister.
+    pub(crate) allow_only_controllers: bool,
+    /// The call can only be made by a controller of the target canister or a subnet admin.
+    pub(crate) allow_only_controllers_and_subnet_admins: bool,
     /// Due to the substantial complexity of this call, it must be counted toward the round limit.
     counts_toward_round_limit: bool,
     /// As this call modifies the canister state (changes to the cycles balance are ignored here),
@@ -30,12 +34,33 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: true,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::CanisterStatus
-            | Ic00Method::CanisterInfo
+            Ic00Method::CanisterStatus | Ic00Method::CanisterMetrics => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: true,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
+            Ic00Method::StoredChunks => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                allow_only_controllers: true,
+                allow_only_controllers_and_subnet_admins: false,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
+            Ic00Method::CanisterInfo
             | Ic00Method::CanisterMetadata
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
@@ -55,12 +80,12 @@ impl Ic00MethodPermissions {
             | Ic00Method::SubnetInfo
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
-            | Ic00Method::StoredChunks
-            | Ic00Method::ListCanisterSnapshots
-            | Ic00Method::CanisterMetrics => Self {
+            | Ic00Method::ListCanisterSnapshots => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -71,6 +96,8 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -83,6 +110,8 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: true,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
@@ -90,12 +119,22 @@ impl Ic00MethodPermissions {
             Ic00Method::StartCanister
             | Ic00Method::StopCanister
             | Ic00Method::UninstallCode
-            | Ic00Method::ClearChunkStore
-            | Ic00Method::DeleteCanisterSnapshot
             | Ic00Method::DeleteCanister => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: true,
+                counts_toward_round_limit: false,
+                does_not_run_on_aborted_canister: true,
+                installs_code: false,
+            },
+            Ic00Method::ClearChunkStore | Ic00Method::DeleteCanisterSnapshot => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                allow_only_controllers: true,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
@@ -107,6 +146,8 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -115,6 +156,8 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_only_controllers: true,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 // Only one install code message allowed at a time.
@@ -124,6 +167,8 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -133,6 +178,8 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
+                allow_only_controllers: false,
+                allow_only_controllers_and_subnet_admins: false,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
