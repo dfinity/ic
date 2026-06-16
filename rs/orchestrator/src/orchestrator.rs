@@ -7,8 +7,7 @@ use crate::{
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::SingleProcessRunner,
-    processes::ProcessManager,
+    processes::{IcBoundaryProcessConfig, MultipleProcessesManager, ReplicaProcessConfig},
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
@@ -37,7 +36,7 @@ use std::{
     future::Future,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     path::Path,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
@@ -241,16 +240,10 @@ impl Orchestrator {
             Arc::clone(&crypto) as _,
         );
 
-        let process_manager = Arc::new(Mutex::new(ProcessManager::new(
-            Box::new(SingleProcessRunner::new(logger.clone())),
-            Box::new(SingleProcessRunner::new(logger.clone())),
-        )));
         let ic_binary_directory = args.ic_binary_directory;
         let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
             ic_binary_directory.join("manageboot.sh"),
         ));
-
-        let ic_boundary_env = args.ic_boundary_env_file;
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
         // They read from the same file, so they'll see the same persisted CUP
@@ -265,6 +258,25 @@ impl Orchestrator {
             logger.clone(),
             node_id,
         );
+
+        let replica_process_config = ReplicaProcessConfig {
+            ic_binary_dir: ic_binary_directory.clone(),
+            cup_path: local_cup_reader.get_cup_path(),
+            replica_config_file: args.replica_config_file.clone(),
+        };
+        let ic_boundary_process_config = IcBoundaryProcessConfig {
+            ic_binary_dir: ic_binary_directory.clone(),
+            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
+            crypto_config: config.crypto.clone(),
+        };
+
+        let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
+            replica_process_config,
+            ic_boundary_process_config.clone(),
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            logger.clone(),
+        )));
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -283,21 +295,18 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&process_manager),
+                Arc::clone(&processes_manager),
                 manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
                 args.replica_config_file.clone(),
                 node_id,
-                ic_binary_directory.clone(),
-                ic_boundary_env.clone(),
                 Arc::clone(&registry_replicator) as _,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
                 disk_encryption_key_exchange_agent,
-                config.crypto.clone(),
             )
             .await,
         );
@@ -330,12 +339,9 @@ impl Orchestrator {
 
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
-            Arc::clone(&metrics),
+            processes_manager.read().unwrap().ic_boundary_manager(),
             replica_version.clone(),
             node_id,
-            ic_binary_directory.clone(),
-            ic_boundary_env,
-            config.crypto.clone(),
             logger.clone(),
         );
 
@@ -371,7 +377,7 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
-            process_manager,
+            processes_manager,
             Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),

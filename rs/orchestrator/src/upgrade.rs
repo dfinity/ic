@@ -3,13 +3,11 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
     orchestrator::SubnetAssignment,
-    process_manager::{Process, ProcessRunner},
-    processes::{IcBoundaryProcess, ProcessManager, ReplicaProcess},
+    processes::MultipleProcessesManager,
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
-use ic_config::crypto::CryptoConfig;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
@@ -20,7 +18,7 @@ use ic_image_upgrader::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::{proxy::try_from_option_field, registry::subnet::v1::SubnetType};
+use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
@@ -34,8 +32,8 @@ use ic_types::{
 };
 use std::{
     collections::BTreeMap,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    path::PathBuf,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -91,14 +89,12 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    process_manager: Arc<Mutex<ProcessManager>>,
+    processes_manager: Arc<RwLock<MultipleProcessesManager>>,
     manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
-    pub ic_binary_dir: PathBuf,
-    ic_boundary_env_file: PathBuf,
     pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
     init_time: Instant,
@@ -108,7 +104,6 @@ pub(crate) struct Upgrade {
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
     pub orchestrator_data_directory: PathBuf,
-    crypto_config: CryptoConfig,
 }
 
 impl Upgrade {
@@ -116,36 +111,31 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        process_manager: Arc<Mutex<ProcessManager>>,
+        processes_manager: Arc<RwLock<MultipleProcessesManager>>,
         manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
         node_id: NodeId,
-        ic_binary_dir: PathBuf,
-        ic_boundary_env_file: PathBuf,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
         orchestrator_data_directory: PathBuf,
         disk_encryption_key_exchange_agent: Option<DiskEncryptionKeyExchangeServerAgent>,
-        crypto_config: CryptoConfig,
     ) -> Self {
         let init_time = Instant::now();
 
         let value = Self {
             registry,
             metrics,
-            process_manager,
+            processes_manager,
             manageboot_runner,
             cup_provider,
             subnet_assignment,
             node_id,
             replica_version,
             replica_config_file,
-            ic_binary_dir,
-            ic_boundary_env_file,
             image_path: release_content_dir.join("image.bin"),
             registry_replicator,
             init_time,
@@ -153,7 +143,6 @@ impl Upgrade {
             prepared_upgrade_version: None,
             orchestrator_data_directory,
             disk_encryption_key_exchange_agent,
-            crypto_config,
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
@@ -589,17 +578,6 @@ impl Upgrade {
         Ok(())
     }
 
-    /// Stop the current replica process.
-    fn stop_replica(&self) -> OrchestratorResult<()> {
-        let mut process_manager = self.process_manager.lock().unwrap();
-        <ProcessManager as ProcessRunner<ReplicaProcess>>::stop(&mut process_manager).map_err(|e| {
-            OrchestratorError::IoError(
-                "Error when attempting to stop replica during upgrade".into(),
-                e,
-            )
-        })
-    }
-
     /// Stop the replica if the given CUP is unsigned and higher than the given height.
     /// Without restart, consensus would reject the unsigned artifact.
     /// If stopping the replica fails, restart the current process instead.
@@ -616,7 +594,7 @@ impl Upgrade {
             );
             // Restarting the replica is enough to pass the unsigned CUP forward.
             // If we fail, restart the current process instead.
-            if let Err(e) = self.stop_replica() {
+            if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
                 warn!(self.logger, "Failed to stop replica with error {:?}", e);
                 reexec_current_process(&self.logger);
             }
@@ -625,140 +603,22 @@ impl Upgrade {
 
     /// Stop all child processes, including the replica.
     pub fn stop_children(&self) -> OrchestratorResult<()> {
-        self.stop_replica()?;
-        stop_ic_boundary(&mut *self.process_manager.lock().unwrap())?;
-
-        Ok(())
+        self.processes_manager.write().unwrap().stop_all()
     }
 
-    fn ensure_replica_is_running(
-        &self,
-        replica_version: &ReplicaVersion,
-        subnet_id: SubnetId,
-    ) -> OrchestratorResult<()> {
-        let mut process_manager = self.process_manager.lock().unwrap();
-        if <ProcessManager as ProcessRunner<ReplicaProcess>>::is_running(&process_manager) {
-            return Ok(());
-        }
-
-        info!(self.logger, "Starting new {} process", ReplicaProcess::NAME);
-        self.metrics
-            .processes_start_attempts
-            .with_label_values(&[ReplicaProcess::NAME])
-            .inc();
-        process_manager
-            .start(ReplicaProcess {
-                ic_binary_dir: self.ic_binary_dir.clone(),
-                replica_version: replica_version.clone(),
-                cup_path: self.cup_provider.get_cup_path(),
-                config_file: self.replica_config_file.clone(),
-                subnet_id,
-            })
-            .map_err(|e| {
-                OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
-            })
-    }
-
-    fn ensure_ic_boundary_is_running(
-        &self,
-        replica_version: &ReplicaVersion,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<()> {
-        let domain_name = self
-            .registry
-            .get_node_domain_name(registry_version)?
-            .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
-
-        start_ic_boundary(
-            &mut *self.process_manager.lock().unwrap(),
-            &self.ic_binary_dir,
-            &self.ic_boundary_env_file,
-            replica_version,
-            domain_name,
-            &self.crypto_config,
-            &self.logger,
-            &self.metrics,
-        )
-    }
-
-    /// Start the child processes if not running already.
+    /// Start all child processes appropriate for this node.
     fn ensure_children_are_running(
         &self,
         replica_version: &ReplicaVersion,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        // First ensure the replica is running before launching any other processes
-        self.ensure_replica_is_running(replica_version, subnet_id)?;
-
-        match self.registry.get_subnet_type(subnet_id, registry_version)? {
-            None
-            | Some(SubnetType::Unspecified)
-            | Some(SubnetType::Application)
-            | Some(SubnetType::System)
-            | Some(SubnetType::VerifiedApplication) => {}
-            Some(SubnetType::CloudEngine) => {
-                // Cloud engines are self-contained and also run boundary nodes' stack
-                self.ensure_ic_boundary_is_running(replica_version, registry_version)?;
-            }
-        }
-
-        Ok(())
+        self.processes_manager.write().unwrap().start_all(
+            replica_version,
+            subnet_id,
+            registry_version,
+        )
     }
-}
-
-pub(crate) fn start_ic_boundary(
-    process: &mut dyn ProcessRunner<IcBoundaryProcess>,
-    ic_binary_dir: &Path,
-    ic_boundary_env_file: &Path,
-    replica_version: &ReplicaVersion,
-    domain_name: String,
-    crypto_config: &CryptoConfig,
-    logger: &ReplicaLogger,
-    metrics: &OrchestratorMetrics,
-) -> OrchestratorResult<()> {
-    if process.is_running() {
-        return Ok(());
-    }
-
-    let crypto_config = serde_json::to_string(&crypto_config)
-        .map_err(OrchestratorError::SerializeCryptoConfigError)?;
-
-    let env = match env_file_reader::read_file(ic_boundary_env_file) {
-        Ok(env) => env,
-        Err(e) => {
-            return Err(OrchestratorError::IoError(
-                "unable to read ic-boundary environment variables".to_string(),
-                e,
-            ));
-        }
-    };
-
-    info!(logger, "Starting new {} process", IcBoundaryProcess::NAME);
-    metrics
-        .processes_start_attempts
-        .with_label_values(&[IcBoundaryProcess::NAME])
-        .inc();
-    process
-        .start(IcBoundaryProcess {
-            ic_binary_dir: ic_binary_dir.to_path_buf(),
-            replica_version: replica_version.clone(),
-            domain_name,
-            crypto_config,
-            env,
-        })
-        .map_err(|e| {
-            OrchestratorError::IoError("Error when attempting to start ic-boundary".into(), e)
-        })
-}
-
-/// Stop the current boundary node process.
-pub(crate) fn stop_ic_boundary(
-    process: &mut dyn ProcessRunner<IcBoundaryProcess>,
-) -> OrchestratorResult<()> {
-    process.stop().map_err(|e| {
-        OrchestratorError::IoError("Error when attempting to stop ic-boundary".into(), e)
-    })
 }
 
 #[async_trait]
@@ -1237,6 +1097,7 @@ fn report_master_public_key_changed_metric(
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
+    use crate::processes::ReplicaProcessConfig;
 
     use super::*;
     use assert_matches::assert_matches;
@@ -1307,19 +1168,37 @@ mod tests {
     };
     use tempfile::{TempDir, tempdir};
 
+    impl MultipleProcessesManager {
+        pub(crate) fn replica_manager(&self) -> Arc<RwLock<ReplicaManager>> {
+            self.replica_manager.clone()
+        }
+    }
+
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
         }
 
         pub fn is_replica_running(&self) -> bool {
-            let process_manager = self.process_manager.lock().unwrap();
-            <ProcessManager as ProcessRunner<ReplicaProcess>>::is_running(&process_manager)
+            self.processes_manager
+                .read()
+                .unwrap()
+                .replica_manager()
+                .read()
+                .unwrap()
+                .process_runner
+                .is_running()
         }
 
         pub fn is_ic_boundary_running(&self) -> bool {
-            let process_manager = self.process_manager.lock().unwrap();
-            <ProcessManager as ProcessRunner<IcBoundaryProcess>>::is_running(&process_manager)
+            self.processes_manager
+                .read()
+                .unwrap()
+                .ic_boundary_manager()
+                .read()
+                .unwrap()
+                .process_runner
+                .is_running()
         }
     }
 
@@ -1642,47 +1521,6 @@ mod tests {
 
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
 
-        let ic_binary_dir = dir.join("ic_binary");
-        std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        let ic_boundary_env_file = dir.join("ic-boundary.env");
-        std::fs::write(&ic_boundary_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
-
-        let crypto_config = CryptoConfig::default();
-
-        let process_manager = Arc::new(Mutex::new(ProcessManager::new(
-            Box::new(FakeRunner::new()),
-            Box::new(FakeRunner::new()),
-        )));
-        // Start the replica process if the test scenario indicates so
-        if test_scenario.were_child_processes_started_previously() {
-            process_manager
-                .lock()
-                .unwrap()
-                .start(ReplicaProcess {
-                    ic_binary_dir: ic_binary_dir.clone(),
-                    replica_version: current_replica_version.clone(),
-                    cup_path: PathBuf::new(),
-                    config_file: PathBuf::new(),
-                    subnet_id: SUBNET_1,
-                })
-                .unwrap();
-            if matches!(subnet_type, SubnetType::CloudEngine) {
-                process_manager
-                    .lock()
-                    .unwrap()
-                    .start(IcBoundaryProcess {
-                        ic_binary_dir: ic_binary_dir.clone(),
-                        replica_version: current_replica_version.clone(),
-                        domain_name: "domain.name".to_string(),
-                        crypto_config: serde_json::to_string(&crypto_config).unwrap(),
-                        env: HashMap::new(),
-                    })
-                    .unwrap();
-            }
-        }
-
-        let manageboot_runner = Box::new(FakeManagebootRunner);
-
         let cup_dir = dir.join("cups");
         std::fs::create_dir_all(&cup_dir).unwrap();
         if let Some(local_cup) = has_local_cup {
@@ -1704,9 +1542,65 @@ mod tests {
             node_id,
         );
 
-        let subnet_assignment = Arc::new(RwLock::new(initial_subnet_assignment));
-
         let replica_config_file = dir.join("ic.json5");
+        let ic_binary_dir = dir.join("ic_binary");
+        std::fs::create_dir_all(&ic_binary_dir).unwrap();
+        let ic_boundary_env_file = dir.join("ic-boundary.env");
+        std::fs::write(&ic_boundary_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
+
+        let crypto_config = CryptoConfig::default();
+
+        let replica_process_config = ReplicaProcessConfig {
+            ic_binary_dir: ic_binary_dir.clone(),
+            cup_path: cup_file,
+            replica_config_file: replica_config_file.clone(),
+        };
+        let ic_boundary_process_config = IcBoundaryProcessConfig {
+            ic_binary_dir: ic_binary_dir.clone(),
+            ic_boundary_env_file,
+            crypto_config,
+        };
+
+        let processes_manager = MultipleProcessesManager::new(
+            replica_process_config.clone(),
+            ic_boundary_process_config.clone(),
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
+        // Start the replica process if the test scenario indicates so
+        if test_scenario.were_child_processes_started_previously() {
+            processes_manager
+                .replica_manager()
+                .write()
+                .unwrap()
+                .process_runner
+                .start(ReplicaProcess::new(
+                    replica_process_config,
+                    current_replica_version.clone(),
+                    SUBNET_1,
+                ))
+                .unwrap();
+            if matches!(subnet_type, SubnetType::CloudEngine) {
+                // Simulate ic-boundary already running by faking a start.
+                processes_manager
+                    .ic_boundary_manager()
+                    .write()
+                    .unwrap()
+                    .process_runner
+                    .start(IcBoundaryProcess::new(
+                        ic_boundary_process_config,
+                        current_replica_version.clone(),
+                        "domain.name".to_string(),
+                    ))
+                    .unwrap();
+            }
+        }
+        let processes_manager = Arc::new(RwLock::new(processes_manager));
+
+        let manageboot_runner = Box::new(FakeManagebootRunner);
+
+        let subnet_assignment = Arc::new(RwLock::new(initial_subnet_assignment));
 
         let mut registry_replicator = MockRegistryReplicatorForUpgrade::new();
         registry_replicator
@@ -1735,21 +1629,18 @@ mod tests {
         let mut upgrade_loop = Upgrade::new(
             registry,
             metrics,
-            process_manager,
+            processes_manager,
             manageboot_runner,
             cup_provider,
             subnet_assignment,
             current_replica_version.clone(),
             replica_config_file,
             node_id,
-            ic_binary_dir,
-            ic_boundary_env_file,
             Arc::new(registry_replicator),
             release_content_dir,
             logger,
             orchestrator_data_dir,
             None,
-            crypto_config,
         )
         .await;
 

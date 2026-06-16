@@ -12,6 +12,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+};
+
 type PIDCell = Arc<Mutex<Option<Pid>>>;
 
 /// Captures a process that should be run by a [`ProcessRunner`]
@@ -210,4 +215,31 @@ fn wait_on_exit(
         }
         let _pid = pid_cell.lock().unwrap().take();
     }
+}
+
+// start_orchestrator_process — common "check-running / log / metric / start"
+// logic
+//
+// Any new process type automatically benefits from this without duplicating
+// the boilerplate.
+pub(crate) fn start_orchestrator_process<P: Process + Send>(
+    runner: &mut dyn ProcessRunner<P>,
+    process: P,
+    metrics: &OrchestratorMetrics,
+    logger: &ReplicaLogger,
+) -> OrchestratorResult<()> {
+    if runner.is_running() {
+        return Ok(());
+    }
+    info!(logger, "Starting new {} process", P::NAME);
+    metrics
+        .processes_start_attempts
+        .with_label_values(&[P::NAME])
+        .inc();
+    runner.start(process).map_err(|e| {
+        OrchestratorError::IoError(
+            format!("Error when attempting to start {} process", P::NAME),
+            e,
+        )
+    })
 }
