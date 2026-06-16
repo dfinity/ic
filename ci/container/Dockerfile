@@ -63,6 +63,8 @@ RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
+# This is only used by Cargo; Bazel pulls its own via rules_motoko
+# NOTE: keep version in line with rules_motoko
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
