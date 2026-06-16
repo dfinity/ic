@@ -4296,7 +4296,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
             self.sandbox_safe_system_state.subnet_size,
             self.get_cost_schedule(),
         );
@@ -4307,7 +4307,7 @@ impl SystemApi for SystemApiImpl {
             .get_cycles_account_manager()
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
-                subnet_config,
+                subnet_cycles_config,
                 execution_mode,
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
@@ -4316,14 +4316,14 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
-        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
             self.sandbox_safe_system_state.subnet_size,
             self.get_cost_schedule(),
         );
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .canister_creation_fee(subnet_config);
+            .canister_creation_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
@@ -4336,7 +4336,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
             self.sandbox_safe_system_state.subnet_size,
             self.get_cost_schedule(),
         );
@@ -4346,7 +4346,7 @@ impl SystemApi for SystemApiImpl {
             .http_request_fee(
                 request_size.into(),
                 Some(max_res_bytes.into()),
-                subnet_config,
+                subnet_cycles_config,
             );
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
@@ -4388,7 +4388,7 @@ impl SystemApi for SystemApiImpl {
                 }
             })?;
 
-        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
             self.sandbox_safe_system_state.subnet_size,
             self.get_cost_schedule(),
         );
@@ -4401,7 +4401,7 @@ impl SystemApi for SystemApiImpl {
                 cost_params_v2.raw_response_bytes.into(),
                 cost_params_v2.transform_instructions.into(),
                 cost_params_v2.transformed_response_bytes.into(),
-                subnet_config,
+                subnet_cycles_config,
             );
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request_v2")?;
         trace_syscall!(self, CostHttpRequestV2, cost);

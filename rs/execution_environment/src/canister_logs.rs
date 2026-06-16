@@ -19,9 +19,9 @@ pub(crate) fn fetch_canister_logs(
     log_memory_store_feature: FlagStatus,
     msg: &mut CanisterCall,
     cycles_account_manager: &CyclesAccountManager,
-    subnet_config: CyclesAccountManagerSubnetConfig,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-    let max_fee = cycles_account_manager.max_fetch_canister_logs_fee(subnet_config);
+    let max_fee = cycles_account_manager.max_fetch_canister_logs_fee(subnet_cycles_config);
     let payment = msg.cycles();
     if payment < max_fee {
         return Err(CanisterManagerError::FetchCanisterLogsNotEnoughCycles {
@@ -33,7 +33,7 @@ pub(crate) fn fetch_canister_logs(
     let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
     msg.deduct_cycles(
         cycles_account_manager
-            .fetch_canister_logs_fee(NumBytes::new(reply.len() as u64), subnet_config),
+            .fetch_canister_logs_fee(NumBytes::new(reply.len() as u64), subnet_cycles_config),
     );
     Ok(CanisterManagerResponse {
         canister_id,

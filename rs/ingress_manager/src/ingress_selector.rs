@@ -552,14 +552,14 @@ impl IngressManager {
         let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
-        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
             state.get_own_subnet_size(),
             state.get_own_cost_schedule(),
         );
         match self.cycles_account_manager.ingress_induction_cost(
             signed_ingress,
             effective_canister_id,
-            subnet_config,
+            subnet_cycles_config,
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -576,7 +576,7 @@ impl IngressManager {
                             canister.memory_usage(),
                             canister.message_memory_usage(),
                             canister.system_state.reserved_balance(),
-                            subnet_config,
+                            subnet_cycles_config,
                             false, // error here is not returned back to the user => no need to reveal top up balance
                         )
                     {
