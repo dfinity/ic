@@ -119,6 +119,20 @@ system_test_nns(
     ],
 )
 
+system_test(
+    name = "cloud_engine_ic_gateway_test",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+    ],
+)
+
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
     tags = [
