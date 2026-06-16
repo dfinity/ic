@@ -47,6 +47,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatchContent {
     /// The payload messages to be processed.

@@ -51,10 +51,20 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
             let latest_state = self.state_reader.get_latest_state();
             let subnet_call_context_manger =
                 &latest_state.get_ref().metadata.subnet_call_context_manager;
+            // Accept shares both for active request contexts and for contexts
+            // whose responses have already been delivered to execution. The
+            // latter are kept around (until they time out) so that replicas
+            // responding late can still be refunded, which requires their
+            // shares to keep being fetched.
             let known_request_ids: BTreeSet<_> = subnet_call_context_manger
                 .canister_http_request_contexts
-                .iter()
-                .map(|item| *item.0)
+                .keys()
+                .chain(
+                    subnet_call_context_manger
+                        .delivered_canister_http_request_contexts
+                        .keys(),
+                )
+                .copied()
                 .collect();
             let next_callback_id = subnet_call_context_manger.next_callback_id();
             (known_request_ids, next_callback_id)
@@ -78,7 +88,8 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
                 CallbackId::from(next_callback_id.get() + MAX_NUMBER_OF_REQUESTS_AHEAD);
 
             // The https outcalls share should be fetched in two cases:
-            //  - The Id of the share is part of the state which means it is active.
+            //  - The Id of the share is part of the state, which means it is either an active request
+            //    or a request whose response was already delivered but is retained for late refunds.
             //  - The callback Id is higher than the next callback Id (the next callback Id is the Id used next in execution round), but
             //    not higher that `MAX_NUMBER_OF_REQUESTS_AHEAD`.
             //    Receiving an callback Id higher is possible because the priority fn is updated periodically (every 3s) with the latest state
