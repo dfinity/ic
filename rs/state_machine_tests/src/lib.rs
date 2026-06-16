@@ -23,9 +23,7 @@ use ic_crypto_tree_hash::{
     sparse_labeled_tree_from_paths,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_cycles_account_manager::{
-    CyclesAccountManager, CyclesAccountManagerSubnetConfig, IngressInductionCost,
-};
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::RejectCode;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
@@ -1256,7 +1254,6 @@ pub struct StateMachine {
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
 }
 
@@ -2444,7 +2441,6 @@ impl StateMachine {
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            cost_schedule,
             hypervisor_config,
         }
     }
@@ -4679,11 +4675,10 @@ impl StateMachine {
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
-        let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             &msg,
             effective_canister_id,
-            CyclesAccountManagerSubnetConfig::new(subnet_size, self.cost_schedule),
+            self.get_latest_state().get_own_subnet_cycles_config(),
         )
     }
 
