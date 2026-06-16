@@ -97,6 +97,7 @@ docker run --rm \
     --nns-subnet-index "$SUBNET_IDX" \
     --provisional-whitelist /bootstrap/.provisional_whitelist.json \
     --use-specified-ids-allocation-range \
+    --dkg-interval-length 49 \
     "${NODE_ARGS[@]}"
 
 # Permissions: ic-prep wrote as root inside the container. Make the
