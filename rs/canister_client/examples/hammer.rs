@@ -57,8 +57,8 @@ impl Stats {
             Err(e) => {
                 self.err.fetch_add(1, Ordering::Relaxed);
                 // Collapse to a short class so the histogram stays readable.
-                let class: String = e.split_whitespace().take(10).collect::<Vec<_>>().join(" ");
-                let class: String = class.chars().take(120).collect();
+                let class: String = e.split_whitespace().take(60).collect::<Vec<_>>().join(" ");
+                let class: String = class.chars().take(400).collect();
                 *self.err_classes.lock().unwrap().entry(class).or_insert(0) += 1;
             }
         }
@@ -192,6 +192,9 @@ async fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(48);
+    // probe mode: skip the throughput/compute/growth storms, run only the
+    // per-message dirty-page-limit probe (Phase C).
+    let probe_only = std::env::var("HAMMER_MODE").map(|m| m == "probe").unwrap_or(false);
 
     let agent = Arc::new(Agent::new(
         Url::parse(&url).expect("bad url"),
@@ -223,6 +226,7 @@ async fn main() {
     println!("  deployed {} canisters in {:.1}s", canisters.len(), t0.elapsed().as_secs_f64());
     let canisters = Arc::new(canisters);
 
+    if !probe_only {
     // ---- Phase A: ingress/throughput storm (near-empty updates) ----
     println!("\n[2/5] THROUGHPUT storm: empty update calls, {concurrency} concurrent, {secs}s");
     let t = Instant::now();
@@ -248,19 +252,30 @@ async fn main() {
     )
     .await;
     stats.report("COMPUTE (8 MiB fill)", t.elapsed());
-
-    // ---- Phase C: per-message dirty-page limit (expect traps) ----
-    println!("\n[4/5] DIRTY-LIMIT probe: 48 MiB dirty in one message (limit is 32 MiB) x16");
-    let probe = Stats::default();
-    for _ in 0..16 {
-        let c = canisters[0];
-        let p = wasm().stable_grow(1024).stable_fill(0, 0x62, 48 * MIB).reply().build();
-        let started = Instant::now();
-        let res = update(&agent, &c, p).await;
-        probe.record(started, &res);
     }
-    probe.report("DIRTY-LIMIT (48 MiB/msg)", Duration::from_secs(1));
 
+    // ---- Phase C: per-message dirty-page limit (32 MiB) ----
+    // Grow in a separate (committed) message first, then fill in-bounds amounts
+    // so we isolate the *dirty-page* limit from any grow/bounds effects.
+    println!("\n[4/5] DIRTY-LIMIT probe (per-message stable dirty limit = 32 MiB)");
+    let c = canisters[0];
+    let g = update(&agent, &c, wasm().stable_grow(1024).reply().build()).await; // +64 MiB, commit
+    println!(
+        "  grow +64 MiB (own message): {}",
+        if g.is_ok() { "OK".to_string() } else { format!("ERR {}", g.as_ref().err().unwrap().chars().take(200).collect::<String>()) }
+    );
+    let small = update(&agent, &c, wasm().stable_fill(0, 0x62, 24 * MIB).reply().build()).await;
+    println!(
+        "  fill 24 MiB (UNDER 32 MiB limit): {}",
+        if small.is_ok() { "OK".to_string() } else { format!("ERR {}", small.as_ref().err().unwrap().chars().take(260).collect::<String>()) }
+    );
+    let big = update(&agent, &c, wasm().stable_fill(0, 0x62, 48 * MIB).reply().build()).await;
+    println!(
+        "  fill 48 MiB (OVER 32 MiB limit):  {}",
+        if big.is_ok() { "OK — NO LIMIT ENFORCED".to_string() } else { format!("TRAP {}", big.as_ref().err().unwrap().chars().take(320).collect::<String>()) }
+    );
+
+    if !probe_only {
     // ---- Phase D: grow stable memory toward the 512 MiB subnet cap ----
     println!("\n[5/5] MEMORY-GROWTH storm: grow 16 MiB + fill per call across all canisters until rejected");
     let grow = Arc::new(Stats::default());
@@ -294,6 +309,7 @@ async fn main() {
         "  approx stable memory successfully grown across subnet: ~{} MiB",
         total_mib.load(Ordering::Relaxed)
     );
+    }
 
     println!("\n== done ==");
 }
