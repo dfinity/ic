@@ -7655,7 +7655,6 @@ fn create_canister_with_cycles_sender_in_whitelist() {
             MAX_NUMBER_OF_CANISTERS,
             &mut round_limits,
             ResourceSaturation::default(),
-            SMALL_APP_SUBNET_MAX_SIZE,
             &no_op_counter(),
         )
         .unwrap();
@@ -7697,7 +7696,6 @@ fn create_canister_with_specified_id(
         MAX_NUMBER_OF_CANISTERS,
         &mut round_limits,
         ResourceSaturation::default(),
-        SMALL_APP_SUBNET_MAX_SIZE,
         &no_op_counter(),
     );
 
@@ -8224,7 +8222,6 @@ fn create_canister_reverts_round_limits_on_failure() {
             MAX_NUMBER_OF_CANISTERS,
             &mut round_limits,
             subnet_memory_saturation,
-            SMALL_APP_SUBNET_MAX_SIZE,
             &no_op_counter(),
         )
         .unwrap_err();

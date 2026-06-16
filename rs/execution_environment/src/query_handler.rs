@@ -19,7 +19,7 @@ use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
@@ -280,10 +280,7 @@ impl InternalHttpQueryHandler {
                     let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
-                        CyclesAccountManagerSubnetConfig::new(
-                            state.get_ref().get_own_subnet_size(),
-                            state.get_ref().get_own_cost_schedule(),
-                        ),
+                        state.get_ref().get_own_subnet_cycles_config(),
                         ready_for_migration,
                         state.get_ref().get_own_subnet_admins(),
                     )?;

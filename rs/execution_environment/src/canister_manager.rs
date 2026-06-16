@@ -745,7 +745,6 @@ impl CanisterManager {
         settings: CanisterSettings,
         max_number_of_canisters: u64,
         state: &mut ReplicatedState,
-        subnet_size: usize,
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: ResourceSaturation,
         canister_creation_error: &IntCounter,
@@ -774,9 +773,9 @@ impl CanisterManager {
             }
         };
 
-        let fee = self.cycles_account_manager.canister_creation_fee(
-            CyclesAccountManagerSubnetConfig::new(subnet_size, state.get_own_cost_schedule()),
-        );
+        let fee = self
+            .cycles_account_manager
+            .canister_creation_fee(state.get_own_subnet_cycles_config());
         if cycles < fee.real() {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -804,7 +803,6 @@ impl CanisterManager {
             round_limits,
             None,
             subnet_memory_saturation,
-            subnet_size,
             canister_creation_error,
         ) {
             Ok(canister_id) => canister_id,
@@ -902,7 +900,7 @@ impl CanisterManager {
             prepaid_execution_cycles,
             time,
             compilation_cost_handling,
-            subnet_size: subnet_cycles_config.subnet_size,
+            subnet_cycles_config,
             sender: context.sender(),
             canister_id: canister.canister_id(),
             log_dirty_pages,
@@ -1354,7 +1352,6 @@ impl CanisterManager {
         max_number_of_canisters: u64,
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: ResourceSaturation,
-        subnet_size: usize,
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
@@ -1384,7 +1381,6 @@ impl CanisterManager {
             round_limits,
             specified_id,
             subnet_memory_saturation,
-            subnet_size,
             canister_creation_error,
         )
     }
@@ -1435,7 +1431,6 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         specified_id: Option<PrincipalId>,
         subnet_memory_saturation: ResourceSaturation,
-        subnet_size: usize,
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
@@ -1499,7 +1494,7 @@ impl CanisterManager {
             &settings,
             sender,
             subnet_memory_saturation,
-            CyclesAccountManagerSubnetConfig::new(subnet_size, state.get_own_cost_schedule()),
+            state.get_own_subnet_cycles_config(),
             None,
         ) {
             *round_limits = round_limits_snapshot;

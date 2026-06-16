@@ -17,9 +17,10 @@ use ic_types::{
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
 use ic_types_cycles::{
-    CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase,
-    CyclesUseCaseKind, DeletedCanisters, ECDSAOutcalls, HTTPOutcalls, IngressInduction,
-    Instructions, Memory, RequestAndResponseTransmission, SchnorrOutcalls, VetKd,
+    CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
+    CyclesAccountManagerSubnetConfig, CyclesUseCase, CyclesUseCaseKind, DeletedCanisters,
+    ECDSAOutcalls, HTTPOutcalls, IngressInduction, Instructions, Memory,
+    RequestAndResponseTransmission, SchnorrOutcalls, VetKd,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -27,22 +28,6 @@ use std::{cmp::min, str::FromStr, time::Duration};
 
 mod types;
 pub use types::{CyclesAccountManagerError, IngressInductionCost, ResourceSaturation};
-
-/// Groups the subnet configuration parameters needed for cycle cost calculations.
-#[derive(Clone, Copy, Debug)]
-pub struct CyclesAccountManagerSubnetConfig {
-    pub subnet_size: usize,
-    pub cost_schedule: CanisterCyclesCostSchedule,
-}
-
-impl CyclesAccountManagerSubnetConfig {
-    pub fn new(subnet_size: usize, cost_schedule: CanisterCyclesCostSchedule) -> Self {
-        Self {
-            subnet_size,
-            cost_schedule,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests;

@@ -27,10 +27,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::{NumBytes, NumInstructions, Time};
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
-    RequestAndResponseTransmission,
-};
+use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
@@ -180,7 +177,7 @@ impl ResponseHelper {
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
                 original.callback.prepayment_for_response_transmission,
-                CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
+                original.subnet_cycles_config,
             );
 
         let canister = clean_canister.clone();
@@ -601,7 +598,7 @@ impl ResponseHelper {
             original.message_instruction_limit,
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
-            CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
+            original.subnet_cycles_config,
             wasm_execution_mode,
             round.log,
         );
@@ -700,11 +697,10 @@ struct OriginalContext {
     request_metadata: RequestMetadata,
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     canister_id: CanisterId,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
-    cost_schedule: CanisterCyclesCostSchedule,
     /// Sender info from the ingress message that created the call context.
     /// `None` for call contexts created by inter-canister calls.
     sender_info: Option<SenderInfo>,
@@ -819,7 +815,10 @@ impl PausedExecution for PausedResponseExecution {
         // No cycles were prepaid for execution during this DTS execution.
         (
             CanisterMessageOrTask::Message(message),
-            CompoundCycles::new(Cycles::zero(), self.original.cost_schedule),
+            CompoundCycles::new(
+                Cycles::zero(),
+                self.original.subnet_cycles_config.cost_schedule,
+            ),
         )
     }
 
@@ -931,7 +930,10 @@ impl PausedExecution for PausedCleanupExecution {
         // No cycles were prepaid for execution during this DTS execution.
         (
             CanisterMessageOrTask::Message(message),
-            CompoundCycles::new(Cycles::zero(), self.original.cost_schedule),
+            CompoundCycles::new(
+                Cycles::zero(),
+                self.original.subnet_cycles_config.cost_schedule,
+            ),
         )
     }
 
@@ -992,11 +994,13 @@ pub fn execute_response(
         request_metadata: call_context.metadata().clone(),
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
-        subnet_size,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig::new(
+            subnet_size,
+            round.cost_schedule,
+        ),
         canister_id: clean_canister.canister_id(),
         instructions_executed: call_context.instructions_executed(),
         log_dirty_pages,
-        cost_schedule: round.cost_schedule,
         sender_info: call_context.sender_info().cloned(),
     };
 

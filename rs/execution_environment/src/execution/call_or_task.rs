@@ -53,6 +53,8 @@ pub fn execute_call_or_task(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
+    let subnet_cycles_config =
+        CyclesAccountManagerSubnetConfig::new(subnet_size, round.cost_schedule);
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
@@ -78,7 +80,7 @@ pub fn execute_call_or_task(
                         message_memory_usage,
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
-                        CyclesAccountManagerSubnetConfig::new(subnet_size, round.cost_schedule),
+                        subnet_cycles_config,
                         reveal_top_up,
                         wasm_execution_mode,
                     ) {
@@ -132,7 +134,7 @@ pub fn execute_call_or_task(
         call_or_task,
         prepaid_execution_cycles,
         execution_parameters,
-        subnet_size,
+        subnet_cycles_config,
         time,
         request_metadata,
         canister_id: clean_canister.canister_id(),
@@ -283,7 +285,7 @@ fn finish_err(
         instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
-        CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
+        original.subnet_cycles_config,
         wasm_execution_mode,
         round.log,
     );
@@ -308,7 +310,7 @@ struct OriginalContext {
     prepaid_execution_cycles: CompoundCycles<Instructions>,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     time: Time,
     request_metadata: RequestMetadata,
     canister_id: CanisterId,
@@ -516,7 +518,7 @@ impl CallOrTaskHelper {
                 new_memory_usage,
                 new_message_memory_usage,
                 new_reserved_balance,
-                CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
+                original.subnet_cycles_config,
                 reveal_top_up,
             )
         {
@@ -658,7 +660,7 @@ impl CallOrTaskHelper {
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
-            CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
+            original.subnet_cycles_config,
             wasm_execution_mode,
             round.log,
         );

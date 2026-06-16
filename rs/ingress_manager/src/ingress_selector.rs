@@ -3,7 +3,7 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::{CustomRandomState, IngressManager};
-use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, IngressInductionCost};
+use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
     consensus::PayloadWithSizeEstimate,
     execution_environment::{IngressHistoryError, IngressHistoryReader},
@@ -552,10 +552,7 @@ impl IngressManager {
         let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            state.get_own_subnet_size(),
-            state.get_own_cost_schedule(),
-        );
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         match self.cycles_account_manager.ingress_induction_cost(
             signed_ingress,
             effective_canister_id,
@@ -770,6 +767,7 @@ pub(crate) mod tests {
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
+    use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,

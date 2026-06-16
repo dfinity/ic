@@ -4296,10 +4296,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            self.sandbox_safe_system_state.subnet_size,
-            self.get_cost_schedule(),
-        );
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let execution_mode =
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
@@ -4316,10 +4313,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            self.sandbox_safe_system_state.subnet_size,
-            self.get_cost_schedule(),
-        );
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
@@ -4336,10 +4330,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            self.sandbox_safe_system_state.subnet_size,
-            self.get_cost_schedule(),
-        );
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
@@ -4388,10 +4379,7 @@ impl SystemApi for SystemApiImpl {
                 }
             })?;
 
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            self.sandbox_safe_system_state.subnet_size,
-            self.get_cost_schedule(),
-        );
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()

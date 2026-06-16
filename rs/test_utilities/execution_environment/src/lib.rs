@@ -1919,7 +1919,6 @@ impl ExecutionTest {
                         &canister_id,
                         self.install_code_instruction_limits.clone(),
                         &mut round_limits,
-                        self.subnet_size(),
                         ExecutionRound::from(0),
                     );
                 let slice_instructions_used =

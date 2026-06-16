@@ -16,7 +16,7 @@ use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -199,7 +199,6 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         long_running_canisters: &[CanisterId],
         measurement_scope: &MeasurementScope,
-        subnet_size: usize,
         current_round: ExecutionRound,
     ) -> ReplicatedState {
         let mut ongoing_long_install_code = false;
@@ -221,7 +220,6 @@ impl SchedulerImpl {
                     canister_id,
                     instruction_limits,
                     round_limits,
-                    subnet_size,
                     current_round,
                 );
             state = new_state;
@@ -363,8 +361,7 @@ impl SchedulerImpl {
     ) -> BTreeSet<CanisterId> {
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
         let now = state.time();
-        let cost_schedule = state.get_own_cost_schedule();
-        let subnet_size = state.get_own_subnet_size();
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
 
         for canister in state.hot_canisters_iter_mut() {
             // Add `Heartbeat` or `GlobalTimer` for running canisters only.
@@ -392,7 +389,7 @@ impl SchedulerImpl {
                 .can_prepay_execution_cycles(
                     canister,
                     self.config.max_instructions_per_message,
-                    CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
+                    subnet_cycles_config,
                 )
                 .is_err()
             {
@@ -825,7 +822,6 @@ impl SchedulerImpl {
     fn charge_canisters_for_resource_allocation_and_usage(
         &self,
         state: &mut ReplicatedState,
-        subnet_size: usize,
         current_round: ExecutionRound,
         current_round_type: ExecutionRoundType,
     ) {
@@ -843,6 +839,7 @@ impl SchedulerImpl {
         }
 
         let cost_schedule = state.get_own_cost_schedule();
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         let state_time = state.time();
         let threshold_last_allocation_charge = state_time.saturating_sub(
             self.cycles_account_manager
@@ -876,7 +873,7 @@ impl SchedulerImpl {
                     &self.log,
                     canister,
                     duration_since_last_charge,
-                    CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
+                    subnet_cycles_config,
                 )
                 .is_err()
             {
@@ -1422,7 +1419,6 @@ impl Scheduler for SchedulerImpl {
                 &mut subnet_round_limits,
                 &long_running_canisters,
                 &measurement_scope,
-                registry_settings.subnet_size,
                 current_round,
             );
 
@@ -1541,7 +1537,6 @@ impl Scheduler for SchedulerImpl {
                 let _timer = self.metrics.round_finalization_charge.start_timer();
                 self.charge_canisters_for_resource_allocation_and_usage(
                     &mut final_state,
-                    registry_settings.subnet_size,
                     current_round,
                     current_round_type,
                 );
