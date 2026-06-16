@@ -4784,7 +4784,7 @@ pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestCo
         replication,
         pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         refund_status: ic_types::canister_http::RefundStatus::default(),
-        registry_version: ic_types::RegistryVersion::from(0),
+        registry_version: RegistryVersion::from(1),
     }
 }
 
@@ -4809,7 +4809,7 @@ fn flexible_request_context(
         },
         pricing_version: ic_types::canister_http::PricingVersion::PayAsYouGo,
         refund_status: ic_types::canister_http::RefundStatus::default(),
-        registry_version: ic_types::RegistryVersion::from(0),
+        registry_version: RegistryVersion::from(1),
     }
 }
 
