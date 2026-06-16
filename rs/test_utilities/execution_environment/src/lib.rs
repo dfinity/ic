@@ -435,6 +435,10 @@ impl ExecutionTest {
         self.state.as_ref().unwrap().get_own_cost_schedule()
     }
 
+    pub fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.state.as_ref().unwrap().get_own_subnet_cycles_config()
+    }
+
     pub fn executed_instructions(&self) -> NumInstructions {
         self.executed_instructions.values().sum()
     }
@@ -457,10 +461,7 @@ impl ExecutionTest {
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
         self.cycles_account_manager
-            .management_canister_cost(
-                instructions,
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
-            )
+            .management_canister_cost(instructions, self.get_own_subnet_cycles_config())
             .real()
     }
 
@@ -492,7 +493,7 @@ impl ExecutionTest {
             memory_usage,
             message_memory_usage,
             compute_allocation,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -509,7 +510,7 @@ impl ExecutionTest {
             memory_usage,
             message_memory_usage,
             compute_allocation,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+            self.get_own_subnet_cycles_config(),
             canister.system_state.reserved_balance(),
         )
     }
@@ -520,27 +521,24 @@ impl ExecutionTest {
         payload: &[u8],
     ) -> CompoundCycles<RequestAndResponseTransmission> {
         self.cycles_account_manager
-            .xnet_call_performed_fee(CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size(),
-                self.cost_schedule(),
-            ))
+            .xnet_call_performed_fee(self.get_own_subnet_cycles_config())
             + self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
                 NumBytes::from((payload.len() + method_name.to_string().len()) as u64),
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+                self.get_own_subnet_cycles_config(),
             )
     }
 
     pub fn max_response_fee(&self) -> CompoundCycles<RequestAndResponseTransmission> {
         self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
     pub fn reply_fee(&self, payload: &[u8]) -> CompoundCycles<RequestAndResponseTransmission> {
         self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
             NumBytes::from(payload.len() as u64),
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -551,16 +549,13 @@ impl ExecutionTest {
         let bytes = reject_message.to_string().len() + std::mem::size_of::<RejectCode>();
         self.cycles_account_manager.xnet_call_bytes_transmitted_fee(
             NumBytes::from(bytes as u64),
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
     pub fn canister_creation_fee(&self) -> CompoundCycles<CanisterCreation> {
         self.cycles_account_manager
-            .canister_creation_fee(CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size(),
-                self.cost_schedule(),
-            ))
+            .canister_creation_fee(self.get_own_subnet_cycles_config())
     }
 
     pub fn http_request_fee(
@@ -571,7 +566,7 @@ impl ExecutionTest {
         self.cycles_account_manager.http_request_fee(
             request_size,
             response_size_limit,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -597,7 +592,7 @@ impl ExecutionTest {
         self.cycles_account_manager
             .execution_cost(
                 num_instructions,
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+                self.get_own_subnet_cycles_config(),
                 WasmExecutionMode::Wasm32, // For this test, we can assume a Wasm32 execution.
             )
             .real()
@@ -1304,8 +1299,7 @@ impl ExecutionTest {
             self.time,
             &mut round_limits,
             self.resource_limits,
-            self.subnet_size(),
-            cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
@@ -1456,8 +1450,7 @@ impl ExecutionTest {
             network_topology,
             &mut round_limits,
             self.resource_limits,
-            self.subnet_size(),
-            cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
         );
         let (canister, response, instructions_used, heap_delta) = match result {
             ExecuteMessageResult::Finished {
@@ -1549,8 +1542,6 @@ impl ExecutionTest {
             0,
             "expected_cycles_metrics_change assumes that some instructions were actually used"
         );
-        let subnet_size = self.subnet_size();
-        let cost_schedule = self.cost_schedule();
         let message = match message {
             SubnetMessage::Response(_) => return NominalCycles::zero(),
             SubnetMessage::Request(request) => CanisterCall::Request(request),
@@ -1602,7 +1593,7 @@ impl ExecutionTest {
                 self.cycles_account_manager()
                     .execution_cost(
                         instructions_used,
-                        CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
+                        self.get_own_subnet_cycles_config(),
                         execution_mode,
                     )
                     .nominal()
@@ -1616,7 +1607,7 @@ impl ExecutionTest {
                 self.cycles_account_manager()
                     .execution_cost(
                         instructions_used,
-                        CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
+                        self.get_own_subnet_cycles_config(),
                         execution_mode,
                     )
                     .nominal()
@@ -1628,10 +1619,7 @@ impl ExecutionTest {
             | Ok(Method::UploadCanisterSnapshotMetadata)
             | Ok(Method::UploadCanisterSnapshotData) => self
                 .cycles_account_manager()
-                .management_canister_cost(
-                    instructions_used,
-                    CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
-                )
+                .management_canister_cost(instructions_used, self.get_own_subnet_cycles_config())
                 .nominal(),
             _ => {
                 // no instructions should be charged for other methods and thus
@@ -1682,7 +1670,7 @@ impl ExecutionTest {
         } else {
             let baseline_cost = self.cycles_account_manager().execution_cost(
                 NumInstructions::new(0),
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+                self.get_own_subnet_cycles_config(),
                 WasmExecutionMode::Wasm32,
             );
             // the base cost could still be charged in some cases even if no instructions
@@ -1846,8 +1834,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.resource_limits,
-                    self.subnet_size(),
-                    cost_schedule,
+                    CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1991,8 +1978,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.resource_limits,
-                    self.subnet_size(),
-                    cost_schedule,
+                    CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -2281,17 +2267,14 @@ impl ExecutionTest {
             .storage_reservation_cycles(
                 allocated_bytes,
                 subnet_memory_saturation,
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+                self.get_own_subnet_cycles_config(),
             )
             .real()
     }
 
     pub fn prepayment_for_response_execution(&self, mode: WasmExecutionMode) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
-                mode,
-            )
+            .prepayment_for_response_execution(self.get_own_subnet_cycles_config(), mode)
             .real()
     }
 
@@ -2299,17 +2282,14 @@ impl ExecutionTest {
         let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size(),
-                self.cost_schedule(),
-            ));
+            .prepayment_for_response_transmission(self.get_own_subnet_cycles_config());
         self.cycles_account_manager
             .refund_for_response_transmission(
                 &self.log,
                 &no_op_counter,
                 response,
                 prepayment_for_response_transmission,
-                CyclesAccountManagerSubnetConfig::new(self.subnet_size(), self.cost_schedule()),
+                self.get_own_subnet_cycles_config(),
             )
             .real()
     }

@@ -256,10 +256,7 @@ impl SchedulerTest {
             .cycles_account_manager
             .execution_cost(
                 num_instructions,
-                CyclesAccountManagerSubnetConfig::new(
-                    self.subnet_size(),
-                    self.state.as_ref().unwrap().get_own_cost_schedule(),
-                ),
+                self.get_own_subnet_cycles_config(),
                 WasmExecutionMode::Wasm32,
             )
             .real()
@@ -713,22 +710,20 @@ impl SchedulerTest {
         self.registry_settings.subnet_size
     }
 
+    pub(crate) fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.state().get_own_subnet_cycles_config()
+    }
+
     pub fn ecdsa_signature_fee(&self) -> CompoundCycles<ECDSAOutcalls> {
-        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
-            CyclesAccountManagerSubnetConfig::new(
-                self.registry_settings.subnet_size,
-                self.state().get_own_cost_schedule(),
-            ),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .ecdsa_signature_fee(self.get_own_subnet_cycles_config())
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
         self.scheduler
             .cycles_account_manager
-            .schnorr_signature_fee(CyclesAccountManagerSubnetConfig::new(
-                self.registry_settings.subnet_size,
-                self.state().get_own_cost_schedule(),
-            ))
+            .schnorr_signature_fee(self.get_own_subnet_cycles_config())
             .real()
     }
 
@@ -740,10 +735,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.http_request_fee(
             request_size,
             response_size_limit,
-            CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size(),
-                self.state.as_ref().unwrap().get_own_cost_schedule(),
-            ),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -755,10 +747,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.memory_cost(
             bytes,
             duration,
-            CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size(),
-                self.state.as_ref().unwrap().get_own_cost_schedule(),
-            ),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -770,10 +759,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.canister_base_cost(
             bytes,
             duration,
-            CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size(),
-                self.state.as_ref().unwrap().get_own_cost_schedule(),
-            ),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -787,10 +773,7 @@ impl SchedulerTest {
             .compute_allocation_cost(
                 compute_allocation,
                 duration,
-                CyclesAccountManagerSubnetConfig::new(
-                    self.subnet_size(),
-                    self.state.as_ref().unwrap().get_own_cost_schedule(),
-                ),
+                self.get_own_subnet_cycles_config(),
             )
     }
 
