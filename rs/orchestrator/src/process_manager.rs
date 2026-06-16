@@ -8,17 +8,17 @@ use std::{
     ffi::OsString,
     fmt::Debug,
     io::Result,
-    path::Path,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
 type PIDCell = Arc<Mutex<Option<Pid>>>;
 
-/// Captures a process that should be run by the [`ProcessManager`]
+/// Captures a process that should be run by a [`ProcessRunner`]
 pub(crate) trait Process {
     /// Name of the type of process
     ///
-    /// Used only for logging purposes
+    /// Used for logging and metrics
     const NAME: &'static str;
 
     /// Version type of the process
@@ -32,18 +32,17 @@ pub(crate) trait Process {
     fn get_version(&self) -> &Self::Version;
 
     /// Return the path to the binary of the [`Process`]
-    fn get_binary(&self) -> &Path;
+    fn get_binary(&self) -> PathBuf;
 
     /// Return the arguments passed to the [`Process`]
-    fn get_args(&self) -> &[OsString];
+    fn get_args(&self) -> Vec<OsString>;
 
     /// Return the env vars passed to the [`Process`]
     fn get_env(&self) -> HashMap<OsString, OsString>;
 }
 
-/// Trait for managing a single versioned [`Process`]
-pub(crate) trait ProcessManager<P: Process>: Send {
-    /// Start the given process.
+/// Trait for running a single versioned [`Process`]
+pub(crate) trait ProcessRunner<P: Process>: Send {
     fn start(&mut self, process: P) -> Result<()>;
 
     /// Stop the currently running process.
@@ -57,15 +56,15 @@ pub(crate) trait ProcessManager<P: Process>: Send {
     fn get_pid(&self) -> Option<Pid>;
 }
 
-/// A [`ProcessManagerImpl`] manages running a single versioned [`Process`]
-pub(crate) struct ProcessManagerImpl<P: Process> {
+/// Runs a single versioned [`Process`], implementing [`ProcessRunner<P>`].
+pub(crate) struct SingleProcessRunner<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
     log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl<P: Process> ProcessManagerImpl<P> {
+impl<P: Process> SingleProcessRunner<P> {
     pub(crate) fn new(logger: ReplicaLogger) -> Self {
         Self {
             process: None,
@@ -125,7 +124,7 @@ impl<P: Process> ProcessManagerImpl<P> {
     }
 }
 
-impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
+impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
     fn start(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
         if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())

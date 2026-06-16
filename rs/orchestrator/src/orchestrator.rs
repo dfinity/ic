@@ -7,7 +7,8 @@ use crate::{
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    process_manager::ProcessManagerImpl,
+    process_manager::SingleProcessRunner,
+    processes::ProcessManager,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
@@ -35,7 +36,7 @@ use std::{
     convert::TryFrom,
     future::Future,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex, RwLock},
     thread,
     time::Duration,
@@ -240,15 +241,16 @@ impl Orchestrator {
             Arc::clone(&crypto) as _,
         );
 
-        let replica_process = Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone())));
-        let ic_binary_directory = args
-            .ic_binary_directory
-            .as_ref()
-            .unwrap_or(&PathBuf::from("/tmp"))
-            .clone();
+        let process_manager = Arc::new(Mutex::new(ProcessManager::new(
+            Box::new(SingleProcessRunner::new(logger.clone())),
+            Box::new(SingleProcessRunner::new(logger.clone())),
+        )));
+        let ic_binary_directory = args.ic_binary_directory;
         let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
             ic_binary_directory.join("manageboot.sh"),
         ));
+
+        let ic_boundary_env = args.ic_boundary_env_file;
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
         // They read from the same file, so they'll see the same persisted CUP
@@ -281,7 +283,7 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&replica_process) as _,
+                Arc::clone(&process_manager),
                 manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
@@ -289,11 +291,13 @@ impl Orchestrator {
                 args.replica_config_file.clone(),
                 node_id,
                 ic_binary_directory.clone(),
+                ic_boundary_env.clone(),
                 Arc::clone(&registry_replicator) as _,
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
                 disk_encryption_key_exchange_agent,
+                config.crypto.clone(),
             )
             .await,
         );
@@ -330,6 +334,7 @@ impl Orchestrator {
             replica_version.clone(),
             node_id,
             ic_binary_directory.clone(),
+            ic_boundary_env,
             config.crypto.clone(),
             logger.clone(),
         );
@@ -339,6 +344,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            config.cloud_engine_firewall.clone(),
             config.boundary_node_firewall.clone(),
             local_cup_reader.clone(),
             logger.clone(),
@@ -365,7 +371,7 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
-            replica_process,
+            process_manager,
             Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),
@@ -483,10 +489,11 @@ impl Orchestrator {
             }
 
             info!(log, "Shut down the upgrade loop");
-            if let Err(e) = upgrade.stop_replica() {
-                warn!(log, "Failed to stop the replica process: {e}");
+            if let Err(e) = upgrade.stop_children() {
+                warn!(log, "Failed to stop child processes: {e}");
+            } else {
+                info!(log, "Shut down the child processes");
             }
-            info!(log, "Shut down the replica process");
         }
 
         async fn hostos_upgrade_checks(

@@ -1,7 +1,10 @@
 use crate::{
-    catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
-    process_manager::ProcessManager, registry_helper::RegistryHelper,
-    ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
+    catch_up_package_provider::LocalCUPReader,
+    orchestrator::SubnetAssignment,
+    process_manager::ProcessRunner,
+    processes::{ProcessManager, ReplicaProcess},
+    registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessParameters,
 };
 pub use ic_dashboard::Dashboard;
 use ic_logger::{ReplicaLogger, info, warn};
@@ -24,7 +27,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     last_poll_certified_time: Arc<RwLock<Time>>,
-    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    process_manager: Arc<Mutex<ProcessManager>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
@@ -90,7 +93,7 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         last_poll_certified_time: Arc<RwLock<Time>>,
-        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        process_manager: Arc<Mutex<ProcessManager>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
@@ -104,7 +107,7 @@ impl OrchestratorDashboard {
             last_applied_firewall_version,
             last_applied_ipv4_config_version,
             last_poll_certified_time,
-            replica_process,
+            process_manager,
             subnet_assignment,
             replica_version,
             hostos_version,
@@ -135,7 +138,8 @@ impl OrchestratorDashboard {
     }
 
     fn get_pid(&self) -> String {
-        match self.replica_process.lock().unwrap().get_pid() {
+        let process_manager = self.process_manager.lock().unwrap();
+        match <ProcessManager as ProcessRunner<ReplicaProcess>>::get_pid(&process_manager) {
             Some(pid) => pid.to_string(),
             None => "None".to_string(),
         }
