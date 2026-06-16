@@ -203,6 +203,11 @@ async fn main() {
     // read mode: populate canisters with large state, then read-heavy updates on
     // all-but-one and read-heavy queries on the last; plus a read-limit probe.
     let read_mode = std::env::var("HAMMER_MODE").map(|m| m == "read").unwrap_or(false);
+    // heap mode: the heap-memory (Wasm) analogue of the stable-memory tests
+    // (compute/dirty-limit/read). Heap has no per-execution dirty/accessed cap
+    // (the 32 MiB limits are stable-only), so a single message can touch
+    // arbitrarily large heap.
+    let heap_mode = std::env::var("HAMMER_MODE").map(|m| m == "heap").unwrap_or(false);
 
     let agent = Arc::new(Agent::new(
         Url::parse(&url).expect("bad url"),
@@ -293,6 +298,70 @@ async fn main() {
             "  query  read 48 MiB: {}",
             if rq.is_ok() { "OK (no limit!)".to_string() } else { format!("TRAP {}", rq.as_ref().err().unwrap().chars().take(220).collect::<String>()) }
         );
+
+        println!("\n== done ==");
+        return;
+    }
+
+    if heap_mode {
+        // ---- Heap per-message write probe ----
+        // Stable memory traps a single message that dirties/accesses > 32 MiB;
+        // heap (Wasm) memory has no such per-message cap. push_equal_bytes(b, n)
+        // pushes n bytes onto the data stack, dirtying n bytes of heap.
+        println!("\n[heap] per-message heap-write probe (stable's per-msg limit is 32 MiB; heap has none)");
+        for sz in [24u32, 48, 96] {
+            let r = update(&agent, &canisters[0], wasm().push_equal_bytes(0x61, sz * MIB).reply().build()).await;
+            println!(
+                "  push {sz} MiB onto heap in ONE message: {}",
+                if r.is_ok() { "OK".to_string() } else { format!("TRAP {}", r.as_ref().err().unwrap().chars().take(200).collect::<String>()) }
+            );
+        }
+
+        // ---- Heap-write storm (analogue of the COMPUTE storm) ----
+        let upd_cans = Arc::new(canisters[..canisters.len() - 1].to_vec());
+        println!("\n[heap] heap-write storm ({secs}s): 8 MiB heap write/call on {} canisters", upd_cans.len());
+        let t = Instant::now();
+        let ws = storm(
+            agent.clone(),
+            upd_cans.clone(),
+            concurrency,
+            Duration::from_secs(secs),
+            Arc::new(|| wasm().push_equal_bytes(0x61, 8 * MIB).reply().build()),
+            false,
+        )
+        .await;
+        ws.report("HEAP-WRITE (8 MiB/call)", t.elapsed());
+
+        // ---- Populate a persistent heap global, then read it ----
+        const BIG_MIB: u32 = 40; // > 32 MiB so reads exceed the stable per-msg limit
+        println!("\n[heap] populating {} canisters with a {BIG_MIB} MiB heap global...", canisters.len());
+        for (i, c) in canisters.iter().enumerate() {
+            let r = update(
+                &agent,
+                c,
+                wasm().push_equal_bytes(0x41 + i as u32, BIG_MIB * MIB).set_global_data_from_stack().reply().build(),
+            )
+            .await;
+            println!("  canister {i} = {c}: {}", if r.is_ok() { "populated".to_string() } else { format!("ERR {}", r.as_ref().err().unwrap().chars().take(160).collect::<String>()) });
+        }
+        println!("[heap] waiting ~25s for a checkpoint...");
+        tokio::time::sleep(Duration::from_secs(25)).await;
+
+        // ---- Heap-read storm (analogue of the stable READ test) ----
+        // get_global_data reads the whole 40 MiB global in one execution — more
+        // than the 32 MiB stable per-message accessed limit would ever allow.
+        let qry_cans = Arc::new(vec![canisters[canisters.len() - 1]]);
+        println!(
+            "\n[heap] heap-read storm ({secs}s): read {BIG_MIB} MiB heap global/call — UPDATES on {} canisters, QUERIES on 1",
+            upd_cans.len()
+        );
+        let t = Instant::now();
+        let (us, qs) = tokio::join!(
+            storm(agent.clone(), upd_cans.clone(), concurrency, Duration::from_secs(secs), Arc::new(|| wasm().get_global_data().reply().build()), false),
+            storm(agent.clone(), qry_cans.clone(), concurrency, Duration::from_secs(secs), Arc::new(|| wasm().get_global_data().reply().build()), true),
+        );
+        us.report("HEAP-READ-UPDATE (40 MiB heap read)", t.elapsed());
+        qs.report("HEAP-READ-QUERY (40 MiB heap read)", t.elapsed());
 
         println!("\n== done ==");
         return;
