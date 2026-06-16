@@ -1299,7 +1299,7 @@ impl ExecutionTest {
             self.time,
             &mut round_limits,
             self.resource_limits,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
+            state.get_own_subnet_cycles_config(),
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
@@ -1450,7 +1450,7 @@ impl ExecutionTest {
             network_topology,
             &mut round_limits,
             self.resource_limits,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
+            state.get_own_subnet_cycles_config(),
         );
         let (canister, response, instructions_used, heap_delta) = match result {
             ExecuteMessageResult::Finished {
@@ -1834,7 +1834,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.resource_limits,
-                    CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
+                    state.get_own_subnet_cycles_config(),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -1978,7 +1978,7 @@ impl ExecutionTest {
                     self.time,
                     &mut round_limits,
                     self.resource_limits,
-                    CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
+                    state.get_own_subnet_cycles_config(),
                 );
                 state.metadata.heap_delta_estimate += result.heap_delta;
                 self.subnet_available_memory = round_limits.subnet_available_memory;
@@ -2031,7 +2031,7 @@ impl ExecutionTest {
 
         let instruction_cost = mgr.execution_cost(
             executed,
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size(), cost_schedule),
+            self.get_own_subnet_cycles_config(),
             is_wasm64_execution,
         );
         *self

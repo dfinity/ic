@@ -3,7 +3,6 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
@@ -36,7 +35,7 @@ use ic_types::{
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::{assert_gt, assert_lt};
@@ -1804,13 +1803,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     // Take a snapshot of the canister will decrease the balance.
     let expected_charge = test
         .cycles_account_manager()
-        .management_canister_cost(
-            instructions,
-            CyclesAccountManagerSubnetConfig::new(
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
-        )
+        .management_canister_cost(instructions, test.get_own_subnet_cycles_config())
         .real();
 
     // Take a snapshot for the canister.
@@ -1886,13 +1879,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     // Load a snapshot of the canister will decrease the balance.
     let expected_charge = test
         .cycles_account_manager()
-        .management_canister_cost(
-            instructions,
-            CyclesAccountManagerSubnetConfig::new(
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
-        )
+        .management_canister_cost(instructions, test.get_own_subnet_cycles_config())
         .real();
 
     // Load an existing snapshot will decrease the balance.

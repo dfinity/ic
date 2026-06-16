@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::CanisterStatusType;
@@ -164,12 +163,11 @@ fn execute_response_refunds_cycles() {
         // the execution cost refund and the refunded transmission fee.
         // Compute the response transmission refund.
         let mgr = test.cycles_account_manager();
-        let prepayment_for_response_transmission = mgr.prepayment_for_response_transmission(
-            CyclesAccountManagerSubnetConfig::new(test.subnet_size(), cost_schedule),
-        );
+        let prepayment_for_response_transmission =
+            mgr.prepayment_for_response_transmission(test.get_own_subnet_cycles_config());
         let actual_response_transmission_fee = mgr.xnet_call_bytes_transmitted_fee(
             NumBytes::from(b_callback.len() as u64),
-            CyclesAccountManagerSubnetConfig::new(test.subnet_size(), cost_schedule),
+            test.get_own_subnet_cycles_config(),
         );
         let response_transmission_refund =
             prepayment_for_response_transmission - actual_response_transmission_fee;
@@ -1409,10 +1407,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            CyclesAccountManagerSubnetConfig::new(
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -1536,10 +1531,7 @@ fn dts_response_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            CyclesAccountManagerSubnetConfig::new(
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -1686,10 +1678,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            CyclesAccountManagerSubnetConfig::new(
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
-            ),
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -2830,10 +2819,7 @@ fn test_cycles_burn() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        CyclesAccountManagerSubnetConfig::new(
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
@@ -2854,10 +2840,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        CyclesAccountManagerSubnetConfig::new(
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
@@ -2872,10 +2855,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        CyclesAccountManagerSubnetConfig::new(
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 

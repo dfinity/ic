@@ -5,7 +5,7 @@ use ic_config::{
     embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST, flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
-use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
     wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
@@ -49,7 +49,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -3540,36 +3540,24 @@ fn ic0_call_cycles_add_deducts_cycles() {
     assert_eq!(1, test.xnet_messages().len());
     let mgr = test.cycles_account_manager();
     let messaging_fee = mgr
-        .xnet_call_performed_fee(CyclesAccountManagerSubnetConfig::new(
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        ))
+        .xnet_call_performed_fee(test.get_own_subnet_cycles_config())
         .real()
         + mgr
             .xnet_call_bytes_transmitted_fee(
                 test.xnet_messages()[0].payload_size_bytes(),
-                CyclesAccountManagerSubnetConfig::new(
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                test.get_own_subnet_cycles_config(),
             )
             .real()
         + mgr
             .xnet_call_bytes_transmitted_fee(
                 MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                CyclesAccountManagerSubnetConfig::new(
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                test.get_own_subnet_cycles_config(),
             )
             .real()
         + mgr
             .execution_cost(
                 MAX_NUM_INSTRUCTIONS,
-                CyclesAccountManagerSubnetConfig::new(
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                test.get_own_subnet_cycles_config(),
                 test.canister_wasm_execution_mode(canister_id),
             )
             .real();
@@ -6846,10 +6834,7 @@ fn dts_abort_works_in_update_call() {
                 .cycles_account_manager()
                 .execution_cost(
                     NumInstructions::from(100_000_000),
-                    CyclesAccountManagerSubnetConfig::new(
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
-                    ),
+                    test.get_own_subnet_cycles_config(),
                     test.canister_wasm_execution_mode(canister_id)
                 )
                 .real(),
@@ -6885,10 +6870,7 @@ fn dts_abort_works_in_update_call() {
                 .cycles_account_manager()
                 .execution_cost(
                     NumInstructions::from(100_000_000),
-                    CyclesAccountManagerSubnetConfig::new(
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
-                    ),
+                    test.get_own_subnet_cycles_config(),
                     test.canister_wasm_execution_mode(canister_id)
                 )
                 .real(),
@@ -8395,10 +8377,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         NumBytes::new(memory_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
-        CyclesAccountManagerSubnetConfig::new(
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
@@ -8487,10 +8466,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
             .storage_reservation_cycles(
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-                CyclesAccountManagerSubnetConfig::new(
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                test.get_own_subnet_cycles_config(),
             )
             .real()
     );
@@ -9339,10 +9315,7 @@ fn invoke_cost_call() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
-        CyclesAccountManagerSubnetConfig::new(
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
-        ),
+        test.get_own_subnet_cycles_config(),
         WasmExecutionMode::Wasm32,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
@@ -9355,7 +9328,6 @@ fn invoke_cost_call() {
 #[test]
 fn invoke_cost_create_canister() {
     let mut test = ExecutionTestBuilder::new().build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_create_canister()
@@ -9363,12 +9335,9 @@ fn invoke_cost_create_canister() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost =
-        test.cycles_account_manager()
-            .canister_creation_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                CanisterCyclesCostSchedule::Normal,
-            ));
+    let expected_cost = test
+        .cycles_account_manager()
+        .canister_creation_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9379,7 +9348,6 @@ fn invoke_cost_create_canister() {
 #[test]
 fn invoke_cost_http_request() {
     let mut test = ExecutionTestBuilder::new().build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let request_size = 1000;
     let max_res_bytes = 1_800_000;
@@ -9392,7 +9360,7 @@ fn invoke_cost_http_request() {
     let expected_cost = test.cycles_account_manager().http_request_fee(
         request_size.into(),
         Some(max_res_bytes.into()),
-        CyclesAccountManagerSubnetConfig::new(subnet_size, CanisterCyclesCostSchedule::Normal),
+        test.get_own_subnet_cycles_config(),
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
@@ -9412,7 +9380,6 @@ fn invoke_cost_http_request_v2() {
         transform_instructions: u64,
     }
     let mut test = ExecutionTestBuilder::new().build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let request_bytes = 1000;
     let http_roundtrip_time_ms = 2_000;
@@ -9440,7 +9407,7 @@ fn invoke_cost_http_request_v2() {
         raw_response_bytes.into(),
         transform_instructions.into(),
         transformed_response_bytes.into(),
-        CyclesAccountManagerSubnetConfig::new(subnet_size, CanisterCyclesCostSchedule::Normal),
+        test.get_own_subnet_cycles_config(),
     );
     let bytes = get_reply(res);
     let actual_cost = Cycles::from(&bytes);
@@ -9498,7 +9465,6 @@ fn invoke_cost_sign_with_ecdsa() {
             name: key_name.clone(),
         }))
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_sign_with_ecdsa(key_name.as_bytes(), curve_variant)
@@ -9506,12 +9472,9 @@ fn invoke_cost_sign_with_ecdsa() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost =
-        test.cycles_account_manager()
-            .ecdsa_signature_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                CanisterCyclesCostSchedule::Normal,
-            ));
+    let expected_cost = test
+        .cycles_account_manager()
+        .ecdsa_signature_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9581,7 +9544,6 @@ fn invoke_cost_sign_with_schnorr() {
             name: key_name.clone(),
         }))
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant)
@@ -9589,12 +9551,9 @@ fn invoke_cost_sign_with_schnorr() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost =
-        test.cycles_account_manager()
-            .schnorr_signature_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                CanisterCyclesCostSchedule::Normal,
-            ));
+    let expected_cost = test
+        .cycles_account_manager()
+        .schnorr_signature_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9664,7 +9623,6 @@ fn invoke_cost_vetkd_derive_key() {
             name: key_name.clone(),
         }))
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_vetkd_derive_key(key_name.as_bytes(), curve_variant)
@@ -9672,12 +9630,9 @@ fn invoke_cost_vetkd_derive_key() {
         .reply()
         .build();
     let res = test.ingress(canister_id, "update", payload);
-    let expected_cost =
-        test.cycles_account_manager()
-            .vetkd_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                CanisterCyclesCostSchedule::Normal,
-            ));
+    let expected_cost = test
+        .cycles_account_manager()
+        .vetkd_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
