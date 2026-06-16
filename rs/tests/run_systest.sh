@@ -93,9 +93,12 @@ fi
 # at a local clone) we use that directly and skip the checkout.
 if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
     dashboards_repo="$TEST_TMPDIR/k8s_dashboards"
-    rm -rf "$dashboards_repo"
+    rm -rf "$dashboards_repo" || true
     echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
-    if git clone --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
+    # Don't let a missing SSH key / unknown host key block the run by prompting
+    # interactively; fail fast instead (the sync is best-effort, see below).
+    if GIT_SSH_COMMAND="ssh -oBatchMode=yes" \
+        git clone --depth 1 --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
         git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
         && git -C "$dashboards_repo" config core.sparseCheckout true \
         && echo "bases/apps/ic-dashboards" >>"$dashboards_repo/.git/info/sparse-checkout" \

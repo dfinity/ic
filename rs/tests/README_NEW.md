@@ -91,7 +91,7 @@ If you already have a local clone of the dashboards, point `IC_DASHBOARDS_DIR` a
 ```
 devenv-container$ IC_DASHBOARDS_DIR=~/k8s/bases/apps/ic-dashboards bazel run //rs/tests/testnets:small
 ```
-When creating a testnet via `ict testnet create`, the dashboards are synced automatically; use `--k8s-branch` to override the branch.
+When creating a testnet via `ict testnet create`, a dashboard sync is attempted automatically (use `--k8s-branch` to override the branch). The sync is best-effort: if it fails (e.g. because SSH access to the k8s repository is unavailable) a warning is logged and the testnet is deployed without the dashboards.
 # Where do I get test logs and logs of the IC nodes?
 During/after test execution one may naturally be interested in looking at the test logs and logs produced by the IC nodes.
 ## For manual test executions
