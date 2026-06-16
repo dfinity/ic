@@ -7258,6 +7258,7 @@ dependencies = [
  "ic-secp256k1",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-universal-canister",
  "ic-validator",
  "itertools 0.12.1",
  "prost 0.13.5",

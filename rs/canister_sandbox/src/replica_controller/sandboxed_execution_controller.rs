@@ -72,16 +72,26 @@ const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 /// distributed across 4 execution cores.
 const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
 
-/// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
-const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
+/// The RSS to evict in one go in order to amortize for the eviction cost.
+/// Nano-replica profile: small batches (64 MiB) since the whole sandbox RSS
+/// budget is only ~128 MiB.
+const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(64 * 1024 * 1024);
 
 /// By default, assume each sandbox process consumes 5 MiB of RSS.
 /// The actual memory usage is updated asynchronously.
 /// See `monitor_and_evict_sandbox_processes`
 const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(5 * 1024 * 1024);
 
-/// The maximum sandbox RSS is computed as `subnet_heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO`.
+/// The maximum sandbox RSS is computed as `subnet_heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO`,
+/// but never below `MIN_SANDBOXES_RSS`.
 const MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO: u64 = 3;
+
+/// Floor on the maximum total sandbox RSS, independent of the heap delta
+/// capacity. On the nano-replica profile the heap delta capacity is tiny
+/// (tens of MiB), and `heap_delta_capacity / 3` would otherwise starve the
+/// sandboxes and cause constant respawning. Keeping a small set of canisters
+/// warm matters more than a large heap delta buffer when checkpoints are cheap.
+const MIN_SANDBOXES_RSS: NumBytes = NumBytes::new(128 * 1024 * 1024);
 
 /// To speedup synchronous operations, the sandbox RSS-based eviction
 /// is triggered only when the system's available memory falls below
@@ -1509,7 +1519,7 @@ impl SandboxedExecutionController {
             .maximum_state_delta
             .and_then(|d| if d.get() != 0 { Some(d) } else { None })
             .unwrap_or(self.default_subnet_heap_delta_capacity);
-        heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO
+        (heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO).max(MIN_SANDBOXES_RSS)
     }
 
     fn trigger_sandbox_eviction<F>(
