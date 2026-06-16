@@ -561,6 +561,8 @@ pub struct CanisterHttpResponseMetadata {
     pub content_size: u32,
     #[prost(bool, tag = "7")]
     pub is_reject: bool,
+    #[prost(uint32, tag = "8")]
+    pub subnet_size: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -609,6 +611,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub content_size: u32,
     #[prost(bool, tag = "10")]
     pub is_reject: bool,
+    #[prost(uint32, tag = "11")]
+    pub subnet_size: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {

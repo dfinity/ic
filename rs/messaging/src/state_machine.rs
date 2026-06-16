@@ -1,4 +1,6 @@
-use crate::canister_http_refunds::deliver_canister_http_refunds;
+use crate::canister_http_refunds::{
+    deliver_canister_http_refunds, refund_timed_out_canister_http_contexts,
+};
 use crate::message_routing::{
     ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
 };
@@ -178,20 +180,6 @@ impl StateMachine for StateMachineImpl {
             );
         }
 
-        // Accumulate HTTP outcall refund shares into the corresponding request
-        // contexts. This is done before execution, so that the response handler
-        // can include the accumulated refund when it delivers the response.
-        deliver_canister_http_refunds(&refunds, &mut state, &self.log);
-
-        // Remove already-responded `CanisterHttpRequestContext`s that have timed
-        // out. This is done after delivering the refunds above, so that refunds
-        // for a just-responded context can still be applied within the timeout.
-        let batch_time = state.time();
-        state
-            .metadata
-            .subnet_call_context_manager
-            .time_out_delivered_canister_http_request_contexts(batch_time);
-
         // Time out expired messages.
         //
         // Preservation of cycles is validated (in debug builds) here for timing out and
@@ -257,7 +245,7 @@ impl StateMachine for StateMachineImpl {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
             current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
         });
-        let state_after_execution = self.scheduler.execute_round(
+        let mut state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
             chain_key_data,
@@ -275,6 +263,14 @@ impl StateMachine for StateMachineImpl {
             )
         }
         execution_timer.observe_duration();
+
+        // Apply HTTP outcall refunds and time out delivered request contexts.
+        // This runs after execution, so that contexts that were just responded
+        // to during the round have already been moved into the delivered
+        // collection and can therefore receive their refunds.
+        deliver_canister_http_refunds(&refunds, &mut state_after_execution, &self.log);
+        let batch_time = state_after_execution.time();
+        refund_timed_out_canister_http_contexts(&mut state_after_execution, batch_time, &self.log);
 
         // Postprocess the state: route messages into streams.
         let message_routing_timer = self.metrics.start_phase_timer(PHASE_MESSAGE_ROUTING);

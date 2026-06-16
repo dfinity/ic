@@ -475,6 +475,7 @@ fn response_and_metadata(
         is_reject: response.content.is_reject(),
         registry_version: REGISTRY_VERSION,
         replica_version: ReplicaVersion::default(),
+        subnet_size: 4,
     };
     (response, metadata)
 }

@@ -364,17 +364,30 @@ impl SubnetCallContextManager {
     }
 
     /// Removes all delivered `CanisterHttpRequestContext`s that have been around
-    /// for longer than [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`].
+    /// for longer than [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`] and
+    /// returns them, so that the caller can refund the per-replica allowance of
+    /// the replicas that never responded.
     ///
     /// The timeout is measured against the `time` recorded in the original
     /// `CanisterHttpRequestContext` and the provided `current_time` (the batch
     /// time).
-    pub fn time_out_delivered_canister_http_request_contexts(&mut self, current_time: Time) {
+    pub fn time_out_delivered_canister_http_request_contexts(
+        &mut self,
+        current_time: Time,
+    ) -> Vec<CanisterHttpRequestContext> {
+        let mut timed_out = Vec::new();
         self.delivered_canister_http_request_contexts
             .retain(|_callback_id, context| {
-                current_time.saturating_duration_since(context.time)
+                if current_time.saturating_duration_since(context.time)
                     < DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+                {
+                    true
+                } else {
+                    timed_out.push(context.clone());
+                    false
+                }
             });
+        timed_out
     }
 
     pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {

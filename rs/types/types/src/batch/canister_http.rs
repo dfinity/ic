@@ -227,6 +227,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 .collect(),
             content_size: metadata.content_size,
             is_reject: metadata.is_reject,
+            subnet_size: metadata.subnet_size,
         }
     }
 }
@@ -288,6 +289,7 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                     registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
+                    subnet_size: payload.subnet_size,
                 },
                 signatures,
             },
@@ -374,6 +376,7 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
                 replica_version: metadata.replica_version.into(),
                 content_size: metadata.content_size,
                 is_reject: metadata.is_reject,
+                subnet_size: metadata.subnet_size,
             }),
             signature: Some(pb::CanisterHttpResponseSignature {
                 signer: share.signature.signer.get().into_vec(),
@@ -411,6 +414,7 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                     is_reject: metadata.is_reject,
                     registry_version,
                     replica_version,
+                    subnet_size: metadata.subnet_size,
                 },
                 payment_receipt,
             },
@@ -644,6 +648,7 @@ mod tests {
                     is_reject: false,
                     registry_version: RegistryVersion::new(2),
                     replica_version: ReplicaVersion::default(),
+                    subnet_size: 13,
                 },
                 payment_receipt: CanisterHttpPaymentReceipt {
                     refund: Cycles::new(42),

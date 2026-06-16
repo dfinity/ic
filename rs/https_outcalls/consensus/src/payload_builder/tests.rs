@@ -804,8 +804,7 @@ fn divergence_error_message() {
         shares: response_shares,
     };
 
-    let (divergence_reject, _refunds) =
-        divergence_response_into_reject(divergence_response).unwrap();
+    let divergence_reject = divergence_response_into_reject(divergence_response).unwrap();
 
     assert_eq!(
         divergence_reject.payload,
@@ -1545,6 +1544,7 @@ fn test_response_and_metadata_with_content(
         is_reject: response.content.is_reject(),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        subnet_size: 4,
     };
     (response, metadata)
 }
@@ -4868,6 +4868,7 @@ fn metadata_share_with_content_size(
         is_reject: false,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        subnet_size: 4,
     };
     metadata_to_share(signer_node, &metadata)
 }
@@ -4880,6 +4881,7 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         is_reject: true,
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        subnet_size: 4,
     };
     metadata_to_share(signer_node, &metadata)
 }

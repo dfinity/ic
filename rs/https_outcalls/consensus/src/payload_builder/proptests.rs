@@ -372,6 +372,7 @@ fn make_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadat
         is_reject: response.content.is_reject(),
         registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
+        subnet_size: 4,
     }
 }
 
@@ -519,6 +520,7 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
             is_reject,
             registry_version: RegistryVersion::new(1),
             replica_version: ReplicaVersion::default(),
+            subnet_size: 4,
         }
     })
 }

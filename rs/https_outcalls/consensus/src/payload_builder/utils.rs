@@ -75,6 +75,23 @@ pub(crate) fn check_response_consistency(
     Ok(())
 }
 
+/// Enforces that the `subnet_size` signed into the response metadata matches
+/// the subnet size recorded in the request context. Since the metadata is
+/// signed over by every replica, an inconsistent value indicates a malicious
+/// or buggy signer and must be rejected.
+pub(crate) fn check_subnet_size(
+    metadata: &CanisterHttpResponseMetadata,
+    context_subnet_size: u32,
+) -> Result<(), InvalidCanisterHttpPayloadReason> {
+    if metadata.subnet_size != context_subnet_size {
+        return Err(InvalidCanisterHttpPayloadReason::SubnetSizeMismatch {
+            metadata_subnet_size: metadata.subnet_size,
+            context_subnet_size,
+        });
+    }
+    Ok(())
+}
+
 /// Enforces the per-replica refund allowance from the request context: the
 /// `refund` claimed in the payment receipt must never exceed the
 /// `per_replica_allowance` derived from the request's context.
@@ -151,6 +168,7 @@ pub(crate) fn validate_flexible_response_with_proof(
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
     per_replica_allowance: Cycles,
+    context_subnet_size: u32,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
         return Err(
@@ -168,6 +186,7 @@ pub(crate) fn validate_flexible_response_with_proof(
         seen_signers,
         consensus_registry_version,
         per_replica_allowance,
+        context_subnet_size,
     )?;
 
     let calculated_hash = crypto_hash(&response_with_proof.response);
@@ -212,8 +231,10 @@ pub(crate) fn validate_response_share(
     seen_signers: &mut HashSet<NodeId>,
     consensus_registry_version: RegistryVersion,
     per_replica_allowance: Cycles,
+    context_subnet_size: u32,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     check_refund_allowance(&share.content.payment_receipt, per_replica_allowance)?;
+    check_subnet_size(&share.content.metadata, context_subnet_size)?;
 
     if share.content.id() != callback_id {
         return Err(
