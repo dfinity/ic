@@ -103,7 +103,11 @@ const SYSTEM_SUBNET_FACTOR: u64 = 10;
 // so a round may take 1 to 4 seconds. To avoid regressing the throughput of
 // slow subnets while maintaining the speed of fast subnets, we use the middle
 // value of 200MB.
-const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
+// Nano-replica profile: keep a single round's heap-delta production below the
+// SUBNET_HEAP_DELTA_CAPACITY (96 MiB) so one round cannot overshoot the cap and
+// spike unreclaimable (anonymous) resident memory. This bounds the per-round
+// dirty working set so writes stay safe on a 512 MiB - 1 GiB VM.
+const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(64 * M);
 
 /// The reserve represents the freely available portion of the
 /// `subnet_heap_delta_capacity` that can be used as a heap delta burst
