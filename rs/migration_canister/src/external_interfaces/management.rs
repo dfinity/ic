@@ -264,39 +264,26 @@ pub async fn rename_canister(
 
 pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(), ValidationError> {
     match list_canister_snapshots(&ListCanisterSnapshotsArgs { canister_id }).await {
-        Ok(snapshots) => {
-            if snapshots.is_empty() {
-                ProcessingResult::Success(())
-            } else {
-                ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(
-                    Reserved,
-                ))
-            }
+        Ok(snapshots) if snapshots.is_empty() => ProcessingResult::Success(()),
+        Ok(_) => {
+            ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(Reserved))
         }
-        Err(e) => match e {
-            CallError::CallRejected(e) => {
-                if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
-                    println!(
-                        "Call `list_canister_snapshots` for {} returned DestinationInvalid, treating as success",
-                        canister_id
-                    );
-                    ProcessingResult::Success(())
-                } else {
-                    println!(
-                        "Call `list_canister_snapshots` for {} failed: {:?}",
-                        canister_id, e
-                    );
-                    ProcessingResult::NoProgress
-                }
-            }
-            _ => {
-                println!(
-                    "Call `list_canister_snapshots` for {} failed: {:?}",
-                    canister_id, e
-                );
-                ProcessingResult::NoProgress
-            }
-        },
+        Err(CallError::CallRejected(e))
+            if e.reject_code() == Ok(RejectCode::DestinationInvalid) =>
+        {
+            println!(
+                "Call `list_canister_snapshots` for {} returned DestinationInvalid, treating as success",
+                canister_id
+            );
+            ProcessingResult::Success(())
+        }
+        Err(e) => {
+            println!(
+                "Call `list_canister_snapshots` for {} failed: {:?}",
+                canister_id, e
+            );
+            ProcessingResult::NoProgress
+        }
     }
 }
 
@@ -335,30 +322,22 @@ pub async fn get_registry_version(
                 ProcessingResult::NoProgress
             }
         },
-        Err(e) => match e {
-            CallFailed::CallRejected(e) => {
-                if e.reject_code() == Ok(RejectCode::DestinationInvalid) {
-                    println!(
-                        "Call `subnet_info` for subnet: {} returned DestinationInvalid, treating as success",
-                        subnet_id
-                    );
-                    ProcessingResult::Success(None)
-                } else {
-                    println!(
-                        "Call `subnet_info` for subnet: {} failed: {:?}",
-                        subnet_id, e
-                    );
-                    ProcessingResult::NoProgress
-                }
-            }
-            _ => {
-                println!(
-                    "Call `subnet_info` for subnet: {} failed: {:?}",
-                    subnet_id, e
-                );
-                ProcessingResult::NoProgress
-            }
-        },
+        Err(CallFailed::CallRejected(e))
+            if e.reject_code() == Ok(RejectCode::DestinationInvalid) =>
+        {
+            println!(
+                "Call `subnet_info` for subnet: {} returned DestinationInvalid, treating as success",
+                subnet_id
+            );
+            ProcessingResult::Success(None)
+        }
+        Err(e) => {
+            println!(
+                "Call `subnet_info` for subnet: {} failed: {:?}",
+                subnet_id, e
+            );
+            ProcessingResult::NoProgress
+        }
     }
 }
 
