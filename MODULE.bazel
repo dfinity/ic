@@ -1290,13 +1290,13 @@ motoko.toolchain(version = "0.16.3")
 http_file(
     name = "farm_universal_vm_img",
     downloaded_file_path = "universal-vm.img.zst",
-    sha256 = "585f4cb5866a576a1ba85ffb2c4fbd1836c7e39a7e9a02b5be44bfb4820a1443",
-    url = "https://download.dfinity.systems/farm/universal-vm/585f4cb5866a576a1ba85ffb2c4fbd1836c7e39a7e9a02b5be44bfb4820a1443/x86_64-linux/universal-vm.img.zst",
+    sha256 = "ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25",
+    url = "https://download.dfinity.systems/farm/universal-vm/ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25/x86_64-linux/universal-vm.img.zst",
 )
 
 http_file(
     name = "farm_prometheus_vm_img",
     downloaded_file_path = "prometheus-vm.img.zst",
-    sha256 = "49ecc84e46e5cc5b970fc9cf94aa3decd03161642c91f4d1153955110e0ee13f",
-    url = "https://download.dfinity.systems/farm/prometheus-vm/49ecc84e46e5cc5b970fc9cf94aa3decd03161642c91f4d1153955110e0ee13f/x86_64-linux/prometheus-vm.img.zst",
+    sha256 = "3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a",
+    url = "https://download.dfinity.systems/farm/prometheus-vm/3568d6e7e8176636bcbd29f5469dec6b036345e61d2b57c276a0941df0b31c4a/x86_64-linux/prometheus-vm.img.zst",
 )
