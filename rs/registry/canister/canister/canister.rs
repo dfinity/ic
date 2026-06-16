@@ -45,7 +45,7 @@ use registry_canister::{
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
-        do_create_subnet::{CreateSubnetPayload, NewSubnet},
+        do_create_subnet::{CreateSubnetArg, CreateSubnetPayload, NewSubnet},
         do_delete_subnet::DeleteSubnetPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
         do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
@@ -72,7 +72,7 @@ use registry_canister::{
             DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
         },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
-        do_update_subnet::UpdateSubnetPayload,
+        do_update_subnet::{UpdateSubnetArg, UpdateSubnetPayload},
         do_update_subnet_admins::UpdateSubnetAdminsPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
         firewall::{
@@ -637,7 +637,7 @@ fn add_node_operator_(payload: AddNodeOperatorPayload) {
 #[unsafe(export_name = "canister_update create_subnet")]
 fn create_subnet() {
     check_caller_is_governance_or_engine_controller_and_log("create_subnet");
-    over_async(candid_one, |payload: CreateSubnetPayload| async move {
+    over_async(candid_one, |payload: CreateSubnetArg| async move {
         create_subnet_(payload).await
     });
 }
@@ -647,8 +647,10 @@ fn create_subnet() {
 /// panics instead of returning Err (ensuring any partial changes do not get
 /// committed).
 #[candid_method(update, rename = "create_subnet")]
-async fn create_subnet_(payload: CreateSubnetPayload) -> Result<NewSubnet, String> {
-    let new_subnet = registry_mut().do_create_subnet(payload).await;
+async fn create_subnet_(payload: CreateSubnetArg) -> Result<NewSubnet, String> {
+    let new_subnet = registry_mut()
+        .do_create_subnet(CreateSubnetPayload::from(payload))
+        .await;
     recertify_registry();
     Ok(new_subnet)
 }
@@ -871,15 +873,15 @@ fn remove_node_operators_(payload: RemoveNodeOperatorsPayload) {
 #[unsafe(export_name = "canister_update update_subnet")]
 fn update_subnet() {
     check_caller_is_governance_or_engine_controller_and_log("update_subnet");
-    over(candid_one, |payload: UpdateSubnetPayload| {
+    over(candid_one, |payload: UpdateSubnetArg| {
         update_subnet_(payload)
     });
 }
 
 #[candid_method(update, rename = "update_subnet")]
-fn update_subnet_(payload: UpdateSubnetPayload) {
+fn update_subnet_(payload: UpdateSubnetArg) {
     let caller = dfn_core::api::caller();
-    registry_mut().do_update_subnet(caller, payload);
+    registry_mut().do_update_subnet(caller, UpdateSubnetPayload::from(payload));
     recertify_registry();
 }
 

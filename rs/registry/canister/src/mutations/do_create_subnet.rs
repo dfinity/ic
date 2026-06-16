@@ -24,7 +24,9 @@ use ic_registry_keys::{
     make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_resource_limits::ResourceLimits;
-use ic_registry_subnet_features::{KeyConfig as KeyConfigInternal, SubnetFeatures};
+use ic_registry_subnet_features::{
+    KeyConfig as KeyConfigInternal, SubnetFeatures, SubnetFeaturesInput,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 use on_wire::bytes;
@@ -323,6 +325,96 @@ pub struct CreateSubnetPayload {
     pub gossip_pfn_evaluation_period_ms: u32,
     pub gossip_registry_poll_period_ms: u32,
     pub gossip_retransmission_request_ms: u32,
+}
+
+/// Input type for `create_subnet` canister method.
+/// Same as `CreateSubnetPayload` but with `SubnetFeaturesInput` (all `Option<bool>`) for `features`.
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct CreateSubnetArg {
+    pub node_ids: Vec<NodeId>,
+
+    pub subnet_id_override: Option<PrincipalId>,
+    pub initial_dkg_subnet_id: Option<SubnetId>,
+
+    pub max_ingress_bytes_per_message: u64,
+    pub max_ingress_bytes_per_block: Option<u64>,
+    pub max_ingress_messages_per_block: u64,
+    pub max_block_payload_size: u64,
+    pub unit_delay_millis: u64,
+    pub initial_notary_delay_millis: u64,
+    pub replica_version_id: std::string::String,
+    pub dkg_interval_length: u64,
+    pub dkg_dealings_per_block: u64,
+
+    pub start_as_nns: bool,
+
+    pub subnet_type: SubnetType,
+
+    pub is_halted: bool,
+
+    pub features: SubnetFeaturesInput,
+
+    pub max_number_of_canisters: u64,
+    pub ssh_readonly_access: Vec<String>,
+    pub ssh_backup_access: Vec<String>,
+
+    pub chain_key_config: Option<InitialChainKeyConfig>,
+
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
+
+    pub subnet_admins: Option<Vec<PrincipalId>>,
+
+    pub resource_limits: Option<ResourceLimits>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub ingress_bytes_per_block_soft_cap: u64,
+    pub gossip_max_artifact_streams_per_peer: u32,
+    pub gossip_max_chunk_wait_ms: u32,
+    pub gossip_max_duplicity: u32,
+    pub gossip_max_chunk_size: u32,
+    pub gossip_receive_check_cache_size: u32,
+    pub gossip_pfn_evaluation_period_ms: u32,
+    pub gossip_registry_poll_period_ms: u32,
+    pub gossip_retransmission_request_ms: u32,
+}
+
+impl From<CreateSubnetArg> for CreateSubnetPayload {
+    fn from(arg: CreateSubnetArg) -> Self {
+        Self {
+            node_ids: arg.node_ids,
+            subnet_id_override: arg.subnet_id_override,
+            initial_dkg_subnet_id: arg.initial_dkg_subnet_id,
+            max_ingress_bytes_per_message: arg.max_ingress_bytes_per_message,
+            max_ingress_bytes_per_block: arg.max_ingress_bytes_per_block,
+            max_ingress_messages_per_block: arg.max_ingress_messages_per_block,
+            max_block_payload_size: arg.max_block_payload_size,
+            unit_delay_millis: arg.unit_delay_millis,
+            initial_notary_delay_millis: arg.initial_notary_delay_millis,
+            replica_version_id: arg.replica_version_id,
+            dkg_interval_length: arg.dkg_interval_length,
+            dkg_dealings_per_block: arg.dkg_dealings_per_block,
+            start_as_nns: arg.start_as_nns,
+            subnet_type: arg.subnet_type,
+            is_halted: arg.is_halted,
+            features: SubnetFeatures::from(arg.features).into(),
+            max_number_of_canisters: arg.max_number_of_canisters,
+            ssh_readonly_access: arg.ssh_readonly_access,
+            ssh_backup_access: arg.ssh_backup_access,
+            chain_key_config: arg.chain_key_config,
+            canister_cycles_cost_schedule: arg.canister_cycles_cost_schedule,
+            subnet_admins: arg.subnet_admins,
+            resource_limits: arg.resource_limits,
+            ingress_bytes_per_block_soft_cap: arg.ingress_bytes_per_block_soft_cap,
+            gossip_max_artifact_streams_per_peer: arg.gossip_max_artifact_streams_per_peer,
+            gossip_max_chunk_wait_ms: arg.gossip_max_chunk_wait_ms,
+            gossip_max_duplicity: arg.gossip_max_duplicity,
+            gossip_max_chunk_size: arg.gossip_max_chunk_size,
+            gossip_receive_check_cache_size: arg.gossip_receive_check_cache_size,
+            gossip_pfn_evaluation_period_ms: arg.gossip_pfn_evaluation_period_ms,
+            gossip_registry_poll_period_ms: arg.gossip_registry_poll_period_ms,
+            gossip_retransmission_request_ms: arg.gossip_retransmission_request_ms,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]

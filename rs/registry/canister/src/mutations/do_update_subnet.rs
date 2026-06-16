@@ -14,6 +14,7 @@ use ic_protobuf::{
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, KeyConfig as KeyConfigInternal, SubnetFeatures,
+    SubnetFeaturesInput,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
@@ -400,6 +401,92 @@ pub struct UpdateSubnetPayload {
     pub registry_poll_period_ms: Option<u32>,
     pub retransmission_request_ms: Option<u32>,
     pub set_gossip_config_to_default: bool,
+}
+
+/// Input type for `update_subnet` canister method.
+/// Same as `UpdateSubnetPayload` but with `SubnetFeaturesInput` (all `Option<bool>`) for `features`.
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+pub struct UpdateSubnetArg {
+    pub subnet_id: SubnetId,
+
+    pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_ingress_bytes_per_block: Option<u64>,
+    pub max_ingress_messages_per_block: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
+    pub unit_delay_millis: Option<u64>,
+    pub initial_notary_delay_millis: Option<u64>,
+    pub dkg_interval_length: Option<u64>,
+    pub dkg_dealings_per_block: Option<u64>,
+
+    pub start_as_nns: Option<bool>,
+
+    pub subnet_type: Option<SubnetType>,
+
+    pub is_halted: Option<bool>,
+    pub halt_at_cup_height: Option<bool>,
+
+    pub features: Option<SubnetFeaturesInput>,
+    pub resource_limits: Option<ResourceLimitsPb>,
+
+    pub chain_key_config: Option<ChainKeyConfig>,
+    pub chain_key_signing_enable: Option<Vec<MasterPublicKeyId>>,
+    pub chain_key_signing_disable: Option<Vec<MasterPublicKeyId>>,
+
+    pub max_number_of_canisters: Option<u64>,
+
+    pub ssh_readonly_access: Option<Vec<String>>,
+    pub ssh_backup_access: Option<Vec<String>>,
+
+    pub subnet_admins: Option<Vec<PrincipalId>>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub max_artifact_streams_per_peer: Option<u32>,
+    pub max_chunk_wait_ms: Option<u32>,
+    pub max_duplicity: Option<u32>,
+    pub max_chunk_size: Option<u32>,
+    pub receive_check_cache_size: Option<u32>,
+    pub pfn_evaluation_period_ms: Option<u32>,
+    pub registry_poll_period_ms: Option<u32>,
+    pub retransmission_request_ms: Option<u32>,
+    pub set_gossip_config_to_default: bool,
+}
+
+impl From<UpdateSubnetArg> for UpdateSubnetPayload {
+    fn from(arg: UpdateSubnetArg) -> Self {
+        Self {
+            subnet_id: arg.subnet_id,
+            max_ingress_bytes_per_message: arg.max_ingress_bytes_per_message,
+            max_ingress_bytes_per_block: arg.max_ingress_bytes_per_block,
+            max_ingress_messages_per_block: arg.max_ingress_messages_per_block,
+            max_block_payload_size: arg.max_block_payload_size,
+            unit_delay_millis: arg.unit_delay_millis,
+            initial_notary_delay_millis: arg.initial_notary_delay_millis,
+            dkg_interval_length: arg.dkg_interval_length,
+            dkg_dealings_per_block: arg.dkg_dealings_per_block,
+            start_as_nns: arg.start_as_nns,
+            subnet_type: arg.subnet_type,
+            is_halted: arg.is_halted,
+            halt_at_cup_height: arg.halt_at_cup_height,
+            features: arg.features.map(|f| SubnetFeatures::from(f).into()),
+            resource_limits: arg.resource_limits,
+            chain_key_config: arg.chain_key_config,
+            chain_key_signing_enable: arg.chain_key_signing_enable,
+            chain_key_signing_disable: arg.chain_key_signing_disable,
+            max_number_of_canisters: arg.max_number_of_canisters,
+            ssh_readonly_access: arg.ssh_readonly_access,
+            ssh_backup_access: arg.ssh_backup_access,
+            subnet_admins: arg.subnet_admins,
+            max_artifact_streams_per_peer: arg.max_artifact_streams_per_peer,
+            max_chunk_wait_ms: arg.max_chunk_wait_ms,
+            max_duplicity: arg.max_duplicity,
+            max_chunk_size: arg.max_chunk_size,
+            receive_check_cache_size: arg.receive_check_cache_size,
+            pfn_evaluation_period_ms: arg.pfn_evaluation_period_ms,
+            registry_poll_period_ms: arg.registry_poll_period_ms,
+            retransmission_request_ms: arg.retransmission_request_ms,
+            set_gossip_config_to_default: arg.set_gossip_config_to_default,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
