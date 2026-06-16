@@ -208,6 +208,11 @@ async fn main() {
     // (the 32 MiB limits are stable-only), so a single message can touch
     // arbitrarily large heap.
     let heap_mode = std::env::var("HAMMER_MODE").map(|m| m == "heap").unwrap_or(false);
+    // heapread mode: large heap-memory reads pulling lots of distinct state into
+    // RAM. Each canister holds a 96 MiB heap global (built via append, small
+    // transient); reads use queries (heap reads via update would OOM because
+    // get_global_data copies the global to the stack, permanently growing heap).
+    let heapread_mode = std::env::var("HAMMER_MODE").map(|m| m == "heapread").unwrap_or(false);
 
     let agent = Arc::new(Agent::new(
         Url::parse(&url).expect("bad url"),
@@ -242,18 +247,22 @@ async fn main() {
     if read_mode {
         // Populate each canister with ~120 MiB of real stable data (written in
         // <=24 MiB chunks to respect the 32 MiB per-message dirty limit).
-        const BIG_MIB: u32 = 120;
+        const BIG_MIB: u32 = 128;
         let chunk: u32 = 24 * MIB;
         let pages: u32 = (BIG_MIB * MIB) / 65536; // 64 KiB Wasm pages
         println!("\n[read] populating {} canisters to ~{BIG_MIB} MiB stable each...", canisters.len());
         for (i, c) in canisters.iter().enumerate() {
-            let _ = update(&agent, c, wasm().stable_grow(pages).reply().build()).await;
-            let mut off = 0u32;
+            if let Err(e) = update(&agent, c, wasm().stable_grow(pages).reply().build()).await {
+                println!("  canister {i}: GROW FAILED: {}", e.chars().take(160).collect::<String>());
+            }
+            let (mut off, mut werr) = (0u32, 0u32);
             while off + chunk <= BIG_MIB * MIB {
-                let _ = update(&agent, c, wasm().stable_fill(off, 0x40 + i as u32, chunk).reply().build()).await;
+                if update(&agent, c, wasm().stable_fill(off, 0x40 + i as u32, chunk).reply().build()).await.is_err() {
+                    werr += 1;
+                }
                 off += chunk;
             }
-            println!("  canister {i} = {c} populated");
+            println!("  canister {i} = {c} populated ({werr} write errors)");
         }
         println!("[read] waiting ~25s for a checkpoint to flush state to disk...");
         tokio::time::sleep(Duration::from_secs(25)).await;
@@ -263,9 +272,10 @@ async fn main() {
         let off_ctr = Arc::new(AtomicU64::new(0));
         let mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
             let off_ctr = off_ctr.clone();
+            let windows = ((BIG_MIB * MIB) / chunk) as u64; // cycle across the FULL state
             Arc::new(move || {
                 let n = off_ctr.fetch_add(1, Ordering::Relaxed);
-                let off = ((n % 4) as u32) * chunk;
+                let off = ((n % windows) as u32) * chunk;
                 wasm().stable_read(off, chunk).reply().build()
             })
         };
@@ -303,6 +313,48 @@ async fn main() {
         return;
     }
 
+    if heapread_mode {
+        // Build a large heap global per canister via append (24 MiB chunks, so
+        // the transient heap stays small and all 3 globals fit under the cap).
+        const BIG_MIB: u32 = 96;
+        let chunk: u32 = 24 * MIB;
+        let appends = (BIG_MIB * MIB) / chunk;
+        println!("\n[heapread] populating {} canisters with a {BIG_MIB} MiB heap global...", canisters.len());
+        for (i, c) in canisters.iter().enumerate() {
+            let mut ok = true;
+            for _ in 0..appends {
+                if update(&agent, c, wasm().push_equal_bytes(0x41 + i as u32, chunk).append_to_global_data().reply().build()).await.is_err() {
+                    ok = false;
+                }
+            }
+            println!("  canister {i} = {c}: {}", if ok { "populated" } else { "PARTIAL/FAILED" });
+        }
+        println!("[heapread] waiting ~25s for a checkpoint to flush state to disk...");
+        tokio::time::sleep(Duration::from_secs(25)).await;
+
+        // Read the full 96 MiB global per call via queries on ALL canisters.
+        // (Heap reads via update OOM: the get_global_data stack copy permanently
+        // grows the heap. Queries discard it.) This pulls ~3x96 MiB of distinct
+        // heap state into the page cache.
+        println!(
+            "\n[heapread] heap-read QUERY storm ({secs}s): get_global_data ({BIG_MIB} MiB) on all {} canisters, {concurrency} concurrent",
+            canisters.len()
+        );
+        let t = Instant::now();
+        let qs = storm(
+            agent.clone(),
+            canisters.clone(),
+            concurrency,
+            Duration::from_secs(secs),
+            Arc::new(|| wasm().get_global_data().reply().build()),
+            true,
+        )
+        .await;
+        qs.report("HEAP-READ-QUERY (96 MiB/read)", t.elapsed());
+        println!("\n== done ==");
+        return;
+    }
+
     if heap_mode {
         // ---- Heap per-message write probe ----
         // Stable memory traps a single message that dirties/accesses > 32 MiB;
@@ -333,7 +385,10 @@ async fn main() {
         ws.report("HEAP-WRITE (8 MiB/call)", t.elapsed());
 
         // ---- Populate a persistent heap global, then read it ----
-        const BIG_MIB: u32 = 40; // > 32 MiB so reads exceed the stable per-msg limit
+        // 96 MiB so each get_global_data read pulls ~96 MiB of distinct state
+        // into memory (no per-execution accessed cap on heap, unlike stable's
+        // 32 MiB). 3 canisters x 96 MiB = ~288 MiB distinct read working set.
+        const BIG_MIB: u32 = 96;
         println!("\n[heap] populating {} canisters with a {BIG_MIB} MiB heap global...", canisters.len());
         for (i, c) in canisters.iter().enumerate() {
             let r = update(
