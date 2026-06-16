@@ -5,6 +5,7 @@
     - [Via native Bazel commands](#via-native-bazel-commands)
     - [Via `ict` command line tool](#via-ict-command-line-tool)
   - [Running a cargo-based (legacy) flavour of a system test](#running-a-cargo-based-legacy-flavour-of-a-system-test)
+- [How do I get Grafana dashboards on a testnet?](#how-do-i-get-grafana-dashboards-on-a-testnet)
 - [Where do I get test logs and logs of the IC nodes?](#where-do-i-get-test-logs-and-logs-of-the-ic-nodes)
   - [For manual test executions](#for-manual-test-executions)
   - [For CI/CD test executions](#for-cicd-test-executions)
@@ -79,6 +80,18 @@ Finally, execute `basic_health_test` (which resides in the `hourly` suite) via p
 If you omit *--include-pattern*, the whole `hourly` test suite will be executed.
 
 **Important**: GuestOs image specified by the IC_VERSION_ID should be available in http://download.proxy-global.dfinity.network:8080/ic/IC_VERSION_ID/guest-os/disk-img-dev/disk-img.tar.zst. Otherwise, Farm will fail to setup the IC nodes and the test will fail in the setup phase.
+# How do I get Grafana dashboards on a testnet?
+System tests and testnets declared with `enable_metrics = True` spawn a Prometheus VM that also runs Grafana. To additionally provision the IC's Grafana dashboards (maintained in the [dfinity-ops/k8s](https://github.com/dfinity-ops/k8s) repository under `bases/apps/ic-dashboards`), set the `IC_DASHBOARDS_BRANCH` environment variable to the k8s branch you want to sync the dashboards from:
+```
+devenv-container$ IC_DASHBOARDS_BRANCH=main bazel run //rs/tests/testnets:small -- --keepalive
+```
+The dashboards are checked out by [run_systest.sh](https://github.com/dfinity/ic/blob/master/rs/tests/run_systest.sh) (which requires SSH access to the k8s repository) and exposed to the test driver via the `IC_DASHBOARDS_DIR` environment variable. For colocated tests the checked out directory is forwarded to the colocated test-driver VM automatically.
+
+If you already have a local clone of the dashboards, point `IC_DASHBOARDS_DIR` at it directly to skip the checkout:
+```
+devenv-container$ IC_DASHBOARDS_DIR=~/k8s/bases/apps/ic-dashboards bazel run //rs/tests/testnets:small
+```
+When creating a testnet via `ict testnet create`, the dashboards are synced automatically; use `--k8s-branch` to override the branch.
 # Where do I get test logs and logs of the IC nodes?
 During/after test execution one may naturally be interested in looking at the test logs and logs produced by the IC nodes.
 ## For manual test executions

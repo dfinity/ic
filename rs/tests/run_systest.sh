@@ -85,6 +85,28 @@ if [ -n "$DC" ]; then
     export DC
 fi
 
+# Optionally sync Grafana dashboards from the dfinity-ops/k8s repo so they can be
+# provisioned on the Prometheus VM (see prometheus_vm.rs). This is enabled by setting
+# IC_DASHBOARDS_BRANCH to the desired branch of the k8s repo. The resulting directory is
+# exported as IC_DASHBOARDS_DIR which is read by the test driver (and forwarded to the
+# colocated UVM by colocate_test.rs). If IC_DASHBOARDS_DIR is already set (e.g. pointing
+# at a local clone) we use that directly and skip the checkout.
+if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
+    dashboards_repo="$TEST_TMPDIR/k8s_dashboards"
+    rm -rf "$dashboards_repo"
+    echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
+    if git clone --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
+            git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
+        && git -C "$dashboards_repo" config core.sparseCheckout true \
+        && echo "bases/apps/ic-dashboards" >>"$dashboards_repo/.git/info/sparse-checkout" \
+        && git -C "$dashboards_repo" checkout HEAD; then
+        export IC_DASHBOARDS_DIR="$dashboards_repo/bases/apps/ic-dashboards"
+        echo "Synced Grafana dashboards to $IC_DASHBOARDS_DIR" >&2
+    else
+        echo "WARNING: failed to sync Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH'; continuing without them" >&2
+    fi
+fi
+
 exec \
     env -C "$TEST_TMPDIR" \
     "$(realpath $RUN_SCRIPT_TEST_EXECUTABLE)" \

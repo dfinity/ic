@@ -174,16 +174,10 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		command = append(command, "--")
 
 		env := os.Environ()
-		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
-		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
-		if err != nil {
-			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
-		} else {
-			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
-			icDashboardsDir = filepath.Join(icDashboardsDir, "bases", "apps", "ic-dashboards")
-			cmd.Println(GREEN + "Will use " + icDashboardsDir + " as a root for dashboards")
-			env = append(env, "IC_DASHBOARDS_DIR="+icDashboardsDir)
-		}
+		// run_systest.sh syncs the Grafana dashboards from this k8s branch and exposes
+		// them to the test driver via the IC_DASHBOARDS_DIR environment variable.
+		cmd.Println(GREEN + "Dashboards will be synced from k8s branch: " + cfg.k8sBranch + NC)
+		env = append(env, "IC_DASHBOARDS_BRANCH="+cfg.k8sBranch)
 		if len(cfg.farmBaseUrl) > 0 {
 			command = append(command, "--farm-base-url="+cfg.farmBaseUrl)
 		}
