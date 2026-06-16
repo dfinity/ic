@@ -2,6 +2,7 @@ use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_PAIRED_PRE_SIGNATURES;
 use ic_management_canister_types_private::{
@@ -829,13 +830,19 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .gib_storage_per_second_fee(CyclesAccountManagerSubnetConfig::new(
+                    test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
+                ))
                 .real()
                 .get())
             / one_gib
             + test
                 .cycles_account_manager()
-                .base_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .base_per_second_fee(CyclesAccountManagerSubnetConfig::new(
+                    test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
+                ))
                 .real()
                 .get()
                 * seconds_per_day

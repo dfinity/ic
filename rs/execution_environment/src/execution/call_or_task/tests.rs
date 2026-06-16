@@ -1,6 +1,7 @@
 use crate::units::GIB;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::SystemStateTesting;
@@ -186,8 +187,10 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -279,8 +282,10 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -376,8 +381,10 @@ fn dts_update_concurrent_cycles_change_fails() {
             canister.memory_usage() + NumBytes::from(bytes_to_grow as u64),
             canister.message_memory_usage(),
             canister.compute_allocation(),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             Cycles::zero(),
         );
 
@@ -385,8 +392,10 @@ fn dts_update_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -485,8 +494,10 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                test.subnet_size(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();

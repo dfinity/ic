@@ -6,7 +6,8 @@ use super::{
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
-    CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
+    CyclesAccountManager, CyclesAccountManagerError, CyclesAccountManagerSubnetConfig,
+    ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, MessageMemoryUsage};
@@ -916,8 +917,7 @@ impl SandboxSafeSystemState {
             current_memory_usage,
             current_message_memory_usage,
             self.compute_allocation,
-            self.subnet_size,
-            self.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
             self.reserved_balance(),
         );
         // Here we rely on the saturating subtraction for Cycles.
@@ -1000,8 +1000,7 @@ impl SandboxSafeSystemState {
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             self.compute_allocation,
-            self.subnet_size,
-            self.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
             self.reserved_balance(),
         );
         self.update_balance_change_consuming(
@@ -1064,8 +1063,7 @@ impl SandboxSafeSystemState {
     pub fn prepayment_for_response_execution(&self) -> CompoundCycles<Instructions> {
         self.cycles_account_manager
             .prepayment_for_response_execution(
-                self.subnet_size,
-                self.cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
                 WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
             )
     }
@@ -1074,7 +1072,10 @@ impl SandboxSafeSystemState {
         &self,
     ) -> CompoundCycles<RequestAndResponseTransmission> {
         self.cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
+            .prepayment_for_response_transmission(CyclesAccountManagerSubnetConfig::new(
+                self.subnet_size,
+                self.cost_schedule,
+            ))
     }
 
     pub fn xnet_total_transmission_fee(
@@ -1083,8 +1084,7 @@ impl SandboxSafeSystemState {
     ) -> CompoundCycles<RequestAndResponseTransmission> {
         self.cycles_account_manager.xnet_total_transmission_fee(
             payload_size,
-            self.subnet_size,
-            self.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
         )
     }
 
@@ -1107,8 +1107,7 @@ impl SandboxSafeSystemState {
                 self.compute_allocation,
                 &mut new_balance,
                 amount,
-                self.subnet_size,
-                self.cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
                 self.reserved_balance(),
                 reveal_top_up,
             )
@@ -1142,8 +1141,7 @@ impl SandboxSafeSystemState {
                 self.compute_allocation,
                 msg.prepayment_for_response_execution,
                 msg.prepayment_for_call_transmission,
-                self.subnet_size,
-                self.cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
                 self.reserved_balance(),
                 // if the canister is frozen, the controller should call canister_status
                 // to learn the top up balance instead of getting it from an error
@@ -1235,8 +1233,7 @@ impl SandboxSafeSystemState {
             new_memory_usage,
             current_message_memory_usage,
             self.compute_allocation,
-            self.subnet_size,
-            self.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
             self.reserved_balance(),
         );
         if self.cycles_balance() >= threshold {
@@ -1279,8 +1276,7 @@ impl SandboxSafeSystemState {
             current_memory_usage,
             new_message_memory_usage,
             self.compute_allocation,
-            self.subnet_size,
-            self.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
             self.reserved_balance(),
         );
         if self.cycles_balance() >= threshold {
@@ -1350,8 +1346,7 @@ impl SandboxSafeSystemState {
             .storage_reservation_cycles(
                 allocated_bytes,
                 subnet_memory_saturation,
-                self.subnet_size,
-                self.cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(self.subnet_size, self.cost_schedule),
             )
             .real();
 

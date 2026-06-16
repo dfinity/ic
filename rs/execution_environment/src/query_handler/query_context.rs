@@ -13,7 +13,9 @@ use crate::{
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, ExecutionParameters, InstructionLimits,
 };
@@ -409,8 +411,7 @@ impl<'a> QueryContext<'a> {
                 canister.memory_usage(),
                 canister.message_memory_usage(),
                 canister.system_state.reserved_balance(),
-                subnet_size,
-                self.get_cost_schedule(),
+                CyclesAccountManagerSubnetConfig::new(subnet_size, self.get_cost_schedule()),
                 false,
             )
             .is_err()

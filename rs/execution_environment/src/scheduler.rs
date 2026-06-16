@@ -16,7 +16,7 @@ use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::InstructionLimits;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -392,8 +392,7 @@ impl SchedulerImpl {
                 .can_prepay_execution_cycles(
                     canister,
                     self.config.max_instructions_per_message,
-                    subnet_size,
-                    cost_schedule,
+                    CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
                 )
                 .is_err()
             {
@@ -877,8 +876,7 @@ impl SchedulerImpl {
                     &self.log,
                     canister,
                     duration_since_last_charge,
-                    subnet_size,
-                    cost_schedule,
+                    CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
                 )
                 .is_err()
             {

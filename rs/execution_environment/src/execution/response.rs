@@ -7,6 +7,7 @@ use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use more_asserts::debug_assert_le;
 
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::{
     wasm_executor::{
         CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
@@ -179,8 +180,7 @@ impl ResponseHelper {
                 round.counters.response_cycles_refund_error,
                 &response.response_payload,
                 original.callback.prepayment_for_response_transmission,
-                original.subnet_size,
-                round.cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
             );
 
         let canister = clean_canister.clone();
@@ -601,8 +601,7 @@ impl ResponseHelper {
             original.message_instruction_limit,
             original.callback.prepayment_for_response_execution,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
             wasm_execution_mode,
             round.log,
         );

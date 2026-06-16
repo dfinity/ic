@@ -1,6 +1,7 @@
 mod execution_tests {
     use crate::CompilationCostHandling;
     use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
+    use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         ExecutionState, ExportedFunctions, Memory,
@@ -268,8 +269,10 @@ mod execution_tests {
                     .cycles_account_manager()
                     .execution_cost(
                         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + reduced_compilation_instructions,
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        CyclesAccountManagerSubnetConfig::new(
+                            test.subnet_size(),
+                            CanisterCyclesCostSchedule::Normal,
+                        ),
                         WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                     )
                     .real()
@@ -309,8 +312,10 @@ mod execution_tests {
                     .cycles_account_manager()
                     .execution_cost(
                         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_instructions,
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        CyclesAccountManagerSubnetConfig::new(
+                            test.subnet_size(),
+                            CanisterCyclesCostSchedule::Normal,
+                        ),
                         WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                     )
                     .real()

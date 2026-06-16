@@ -1,6 +1,7 @@
 use super::*;
 
 use assert_matches::assert_matches;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
@@ -516,8 +517,10 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .ingress_induction_cost(
             &signed_ingress,
             None,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+            ),
         )
         .cost();
 
@@ -684,8 +687,10 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             .ingress_induction_cost(
                 &ingress,
                 effective_canister_id,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                CanisterCyclesCostSchedule::Normal,
+                CyclesAccountManagerSubnetConfig::new(
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             )
             .cost();
 

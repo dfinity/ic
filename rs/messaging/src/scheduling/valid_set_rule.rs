@@ -1,5 +1,7 @@
 use ic_base_types::NumBytes;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, IngressInductionCost,
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::{
     execution_environment::IngressHistoryWriter,
@@ -281,8 +283,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         let induction_cost = self.cycles_account_manager.ingress_induction_cost(
             &signed_ingress,
             effective_canister_id,
-            subnet_size,
-            cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
         );
 
         let ingress = Ingress::from((signed_ingress.take_content(), effective_canister_id));
@@ -311,8 +312,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                     message_memory_usage,
                     compute_allocation,
                     cost,
-                    subnet_size,
-                    cost_schedule,
+                    CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
                     reveal_top_up,
                 ) {
                     return Err(IngressInductionError::CanisterOutOfCycles(err));

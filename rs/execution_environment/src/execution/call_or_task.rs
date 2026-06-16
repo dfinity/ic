@@ -12,6 +12,7 @@ use crate::execution_environment::{
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
@@ -77,8 +78,7 @@ pub fn execute_call_or_task(
                         message_memory_usage,
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
-                        subnet_size,
-                        round.cost_schedule,
+                        CyclesAccountManagerSubnetConfig::new(subnet_size, round.cost_schedule),
                         reveal_top_up,
                         wasm_execution_mode,
                     ) {
@@ -283,8 +283,7 @@ fn finish_err(
         instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
-        original.subnet_size,
-        round.cost_schedule,
+        CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
         wasm_execution_mode,
         round.log,
     );
@@ -517,8 +516,7 @@ impl CallOrTaskHelper {
                 new_memory_usage,
                 new_message_memory_usage,
                 new_reserved_balance,
-                original.subnet_size,
-                round.cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
                 reveal_top_up,
             )
         {
@@ -660,8 +658,7 @@ impl CallOrTaskHelper {
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(original.subnet_size, round.cost_schedule),
             wasm_execution_mode,
             round.log,
         );

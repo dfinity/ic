@@ -3,7 +3,7 @@
 //! messages of Consensus payloads and to keep track of finalized Ingress
 //! Messages to ensure that no message is added to a block more than once.
 use crate::{CustomRandomState, IngressManager};
-use ic_cycles_account_manager::IngressInductionCost;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, IngressInductionCost};
 use ic_interfaces::{
     consensus::PayloadWithSizeEstimate,
     execution_environment::{IngressHistoryError, IngressHistoryReader},
@@ -552,12 +552,14 @@ impl IngressManager {
         let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
-        let subnet_size = state.get_own_subnet_size();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            state.get_own_subnet_size(),
+            state.get_own_cost_schedule(),
+        );
         match self.cycles_account_manager.ingress_induction_cost(
             signed_ingress,
             effective_canister_id,
-            subnet_size,
-            state.get_own_cost_schedule(),
+            subnet_config,
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -574,8 +576,7 @@ impl IngressManager {
                             canister.memory_usage(),
                             canister.message_memory_usage(),
                             canister.system_state.reserved_balance(),
-                            subnet_size,
-                            state.get_own_cost_schedule(),
+                            subnet_config,
                             false, // error here is not returned back to the user => no need to reveal top up balance
                         )
                     {
@@ -1612,8 +1613,10 @@ pub(crate) mod tests {
                                     .ingress_induction_cost(
                                         &m1,
                                         None,
-                                        SMALL_APP_SUBNET_MAX_SIZE,
-                                        CanisterCyclesCostSchedule::Normal,
+                                        CyclesAccountManagerSubnetConfig::new(
+                                            SMALL_APP_SUBNET_MAX_SIZE,
+                                            CanisterCyclesCostSchedule::Normal,
+                                        ),
                                     )
                                     .cost(),
                             )

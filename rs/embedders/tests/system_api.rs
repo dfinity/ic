@@ -1,6 +1,6 @@
 use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, MAX_ENV_VAR_NAME_SIZE, SystemApiImpl,
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
@@ -1437,10 +1437,10 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
     let initial_cycles = cycles_account_manager
-        .xnet_call_performed_fee(
+        .xnet_call_performed_fee(CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
-        )
+        ))
         .real()
         - Cycles::from(10_u128);
     let mut system_state = SystemStateBuilder::new()

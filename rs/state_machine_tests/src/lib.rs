@@ -23,7 +23,9 @@ use ic_crypto_tree_hash::{
     sparse_labeled_tree_from_paths,
 };
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, IngressInductionCost,
+};
 use ic_error_types::RejectCode;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
@@ -4681,8 +4683,7 @@ impl StateMachine {
         self.cycles_account_manager.ingress_induction_cost(
             &msg,
             effective_canister_id,
-            subnet_size,
-            self.cost_schedule,
+            CyclesAccountManagerSubnetConfig::new(subnet_size, self.cost_schedule),
         )
     }
 

@@ -1,3 +1,4 @@
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{CanisterUpgradeOptions, EmptyBlob, Payload};
 use ic_replicated_state::{
@@ -217,8 +218,10 @@ fn upgrade_fails_on_not_enough_cycles() {
     // Should be enough cycles to create the canister, but not enough to upgrade it
     let balance_cycles = test.cycles_account_manager().execution_cost(
         (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         WasmExecutionMode::Wasm32,
     );
 
@@ -237,8 +240,10 @@ fn upgrade_fails_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            test.subnet_size(),
+            CanisterCyclesCostSchedule::Normal,
+        ),
         Cycles::zero(),
     );
     let canister_id = test

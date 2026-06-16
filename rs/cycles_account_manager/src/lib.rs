@@ -21,5 +21,6 @@ pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
 
 mod cycles_account_manager;
 pub use cycles_account_manager::{
-    CyclesAccountManager, CyclesAccountManagerError, IngressInductionCost, ResourceSaturation,
+    CyclesAccountManager, CyclesAccountManagerError, CyclesAccountManagerSubnetConfig,
+    IngressInductionCost, ResourceSaturation,
 };

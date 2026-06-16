@@ -20,7 +20,10 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost, ResourceSaturation};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, IngressInductionCost,
+    ResourceSaturation,
+};
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -337,8 +340,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
         self,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_config: CyclesAccountManagerSubnetConfig,
         failed_charge: &IntCounter,
     ) {
         let memory_usage = canister.memory_usage();
@@ -348,8 +350,7 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
             memory_usage,
             message_memory_usage,
             self.consumed_cycles,
-            subnet_size,
-            cost_schedule,
+            subnet_config,
             true, /* we only log the error, but do not return it to the user => do reveal top up balance */
         );
         if let Err(err) = res {
@@ -650,8 +651,10 @@ impl ExecutionEnvironment {
                         consumed_cycles.apply(
                             canister,
                             round_limits,
-                            registry_settings.subnet_size,
-                            cost_schedule,
+                            CyclesAccountManagerSubnetConfig::new(
+                                registry_settings.subnet_size,
+                                cost_schedule,
+                            ),
                             &self.metrics.failed_subnet_message_charge,
                         );
                         self.process_canister_manager_result(Err(err), state, msg, current_round)
@@ -709,15 +712,19 @@ impl ExecutionEnvironment {
                             let old_price = self.cycles_account_manager.http_request_fee(
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
-                                registry_settings.subnet_size,
-                                cost_schedule,
+                                CyclesAccountManagerSubnetConfig::new(
+                                    registry_settings.subnet_size,
+                                    cost_schedule,
+                                ),
                             );
 
                             let new_price = self.cycles_account_manager.http_request_fee_beta(
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
-                                registry_settings.subnet_size,
-                                cost_schedule,
+                                CyclesAccountManagerSubnetConfig::new(
+                                    registry_settings.subnet_size,
+                                    cost_schedule,
+                                ),
                                 NumBytes::from(response.payload_size_bytes()),
                             );
 
@@ -1041,8 +1048,10 @@ impl ExecutionEnvironment {
                                     .cycles_account_manager
                                     .ingress_induction_cost_from_bytes(
                                         NumBytes::from(bytes_to_charge as u64),
-                                        registry_settings.subnet_size,
-                                        cost_schedule,
+                                        CyclesAccountManagerSubnetConfig::new(
+                                            registry_settings.subnet_size,
+                                            cost_schedule,
+                                        ),
                                     );
                                 let memory_usage = canister.memory_usage();
                                 let message_memory_usage = canister.message_memory_usage();
@@ -1053,8 +1062,10 @@ impl ExecutionEnvironment {
                                     memory_usage,
                                     message_memory_usage,
                                     induction_cost,
-                                    registry_settings.subnet_size,
-                                    cost_schedule,
+                                    CyclesAccountManagerSubnetConfig::new(
+                                        registry_settings.subnet_size,
+                                        cost_schedule,
+                                    ),
                                     false, // we ignore the error anyway => no need to reveal top up balance
                                 );
                             }
@@ -1825,7 +1836,10 @@ impl ExecutionEnvironment {
                                 },
                                 Ok(args) => {
                                     let canister_id = args.get_canister_id();
-                                    let subnet_size = registry_settings.subnet_size;
+                                    let subnet_config = CyclesAccountManagerSubnetConfig::new(
+                                        registry_settings.subnet_size,
+                                        cost_schedule,
+                                    );
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
                                         |canister, msg, _round_limits, _consumed_cycles| {
@@ -1836,8 +1850,7 @@ impl ExecutionEnvironment {
                                                 self.config.log_memory_store_feature,
                                                 msg,
                                                 &self.cycles_account_manager,
-                                                subnet_size,
-                                                cost_schedule,
+                                                subnet_config,
                                             )
                                         },
                                         &mut state,
@@ -2118,8 +2131,10 @@ impl ExecutionEnvironment {
         let http_request_fee = self.cycles_account_manager.http_request_fee(
             canister_http_request_context.variable_parts_size(),
             canister_http_request_context.max_response_bytes,
-            registry_settings.subnet_size,
-            state.get_own_cost_schedule(),
+            CyclesAccountManagerSubnetConfig::new(
+                registry_settings.subnet_size,
+                state.get_own_cost_schedule(),
+            ),
         );
         let real_http_request_fee = http_request_fee.real();
         let nominal_http_request_fee = http_request_fee.nominal();
@@ -2499,12 +2514,14 @@ impl ExecutionEnvironment {
         registry_settings: &RegistryExecutionSettings,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
         );
-        let subnet_size = registry_settings.subnet_size;
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
@@ -2515,8 +2532,7 @@ impl ExecutionEnvironment {
                     canister,
                     round_limits,
                     saturation,
-                    subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     &self.metrics,
                 )
             },
@@ -2623,14 +2639,12 @@ impl ExecutionEnvironment {
         ready_for_migration: bool,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<Vec<u8>, UserError> {
-        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister(canister_id, state)?;
         self.canister_manager
             .get_canister_status(
                 sender,
                 canister,
-                subnet_size,
-                cost_schedule,
+                CyclesAccountManagerSubnetConfig::new(subnet_size, state.get_own_cost_schedule()),
                 ready_for_migration,
                 subnet_admins,
             )
@@ -2768,7 +2782,10 @@ impl ExecutionEnvironment {
         resource_saturation: &ResourceSaturation,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let canister_id = args.get_canister_id();
         let chunk = args.chunk;
         self.execute_mgmt_operation_on_canister(
@@ -2779,8 +2796,7 @@ impl ExecutionEnvironment {
                     canister,
                     chunk,
                     round_limits,
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     resource_saturation,
                     consumed_cycles,
                 )
@@ -2804,7 +2820,10 @@ impl ExecutionEnvironment {
         resource_saturation: &ResourceSaturation,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let canister_id = args.get_canister_id();
         self.execute_mgmt_operation_on_canister(
             canister_id,
@@ -2813,8 +2832,7 @@ impl ExecutionEnvironment {
                     sender,
                     canister,
                     round_limits,
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     resource_saturation,
                 )
             },
@@ -2851,7 +2869,10 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
@@ -2863,8 +2884,7 @@ impl ExecutionEnvironment {
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
                 self.canister_manager.take_canister_snapshot(
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     origin,
                     canister,
                     replace_snapshot,
@@ -2931,7 +2951,10 @@ impl ExecutionEnvironment {
                 }
             };
 
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
@@ -2942,8 +2965,7 @@ impl ExecutionEnvironment {
             canister_id,
             |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.load_canister_snapshot(
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     sender,
                     canister,
                     snapshot_canister,
@@ -2993,7 +3015,10 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
@@ -3002,8 +3027,7 @@ impl ExecutionEnvironment {
                     canister,
                     args.get_snapshot_id(),
                     round_limits,
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     resource_saturation,
                 )
             },
@@ -3026,7 +3050,10 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, consumed_cycles| {
@@ -3035,8 +3062,7 @@ impl ExecutionEnvironment {
                     canister,
                     args.get_snapshot_id(),
                     args.kind,
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     round_limits,
                     consumed_cycles,
                 )
@@ -3120,7 +3146,10 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
@@ -3133,8 +3162,7 @@ impl ExecutionEnvironment {
                     sender,
                     canister,
                     args,
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     round_limits,
                     &resource_saturation,
                     time,
@@ -3159,7 +3187,10 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
         let canister_id = args.get_canister_id();
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_config = CyclesAccountManagerSubnetConfig::new(
+            registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
+        );
         let resource_saturation = self.subnet_memory_saturation(
             &round_limits.subnet_available_memory,
             state.resource_limits(),
@@ -3172,8 +3203,7 @@ impl ExecutionEnvironment {
                     canister,
                     &args,
                     round_limits,
-                    registry_settings.subnet_size,
-                    cost_schedule,
+                    subnet_config,
                     &resource_saturation,
                     consumed_cycles,
                 )
@@ -3318,12 +3348,14 @@ impl ExecutionEnvironment {
         // if the canister's balance is too low. A more rigorous check happens later
         // in the ingress selector.
         {
-            let subnet_size = state.get_own_subnet_size();
+            let subnet_config = CyclesAccountManagerSubnetConfig::new(
+                state.get_own_subnet_size(),
+                state.get_own_cost_schedule(),
+            );
             let induction_cost = self.cycles_account_manager.ingress_induction_cost(
                 ingress,
                 effective_canister_id,
-                subnet_size,
-                state.get_own_cost_schedule(),
+                subnet_config,
             );
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
@@ -3339,8 +3371,7 @@ impl ExecutionEnvironment {
                         paying_canister.memory_usage(),
                         paying_canister.message_memory_usage(),
                         paying_canister.system_state.reserved_balance(),
-                        subnet_size,
-                        state.get_own_cost_schedule(),
+                        subnet_config,
                         reveal_top_up,
                     )
                 {
@@ -3715,19 +3746,18 @@ impl ExecutionEnvironment {
     fn calculate_signature_fee(
         &self,
         args: &ThresholdArguments,
-        subnet_size: usize,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_config: CyclesAccountManagerSubnetConfig,
     ) -> ThresholdSignatureCycles {
         let cam = &self.cycles_account_manager;
         match args {
             ThresholdArguments::Ecdsa(_) => {
-                ThresholdSignatureCycles::Ecdsa(cam.ecdsa_signature_fee(subnet_size, cost_schedule))
+                ThresholdSignatureCycles::Ecdsa(cam.ecdsa_signature_fee(subnet_config))
             }
-            ThresholdArguments::Schnorr(_) => ThresholdSignatureCycles::Schnorr(
-                cam.schnorr_signature_fee(subnet_size, cost_schedule),
-            ),
+            ThresholdArguments::Schnorr(_) => {
+                ThresholdSignatureCycles::Schnorr(cam.schnorr_signature_fee(subnet_config))
+            }
             ThresholdArguments::VetKd(_) => {
-                ThresholdSignatureCycles::VetKd(cam.vetkd_fee(subnet_size, cost_schedule))
+                ThresholdSignatureCycles::VetKd(cam.vetkd_fee(subnet_config))
             }
         }
     }
@@ -3768,7 +3798,10 @@ impl ExecutionEnvironment {
         let nns_subnet_id = state.metadata.network_topology.nns_subnet_id;
         if source_subnet != Some(nns_subnet_id) {
             let cost_schedule = state.get_own_cost_schedule();
-            let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
+            let signature_fee = self.calculate_signature_fee(
+                &args,
+                CyclesAccountManagerSubnetConfig::new(subnet_size, cost_schedule),
+            );
             let real_signature_fee = signature_fee.real();
             if request.payment < real_signature_fee {
                 return Err(UserError::new(
@@ -4089,8 +4122,7 @@ impl ExecutionEnvironment {
             round_limits,
             compilation_cost_handling,
             round_counters,
-            subnet_size,
-            state.get_own_cost_schedule(),
+            CyclesAccountManagerSubnetConfig::new(subnet_size, state.get_own_cost_schedule()),
             self.config.dirty_page_logging,
         );
         self.process_install_code_result(state, dts_result, dts_status, since, current_round)
