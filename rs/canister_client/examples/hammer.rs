@@ -118,6 +118,32 @@ fn chain_payload(canisters: &[CanisterId], start: usize, depth: usize) -> Vec<u8
     inner
 }
 
+/// Build a payload that makes the ingress-target canister fire one parallel
+/// update call to every canister (fan-out, fire-and-forget: on_reply/on_reject
+/// are no-ops), then reply to the ingress immediately. Each in-flight ingress
+/// thus leaves N = canisters.len() outstanding inter-canister calls, each
+/// holding a guaranteed-response memory reservation (~2 MiB) and a callback
+/// slot — so C concurrent ingresses drive up to C*N simultaneous outstanding
+/// calls, stressing the 64 MiB guaranteed-response cap and the callback limits.
+fn fanout_payload(canisters: &[CanisterId], mult: usize) -> Vec<u8> {
+    let callee_runs = wasm().reply().build(); // callee just replies
+    let noop = wasm().noop().build(); // fire-and-forget: ignore the response
+    let mut p = wasm();
+    // Fire `mult` calls to each canister in ONE message: all the response-memory
+    // reservations are taken before any callee runs, so a single message issuing
+    // > ~32 calls exceeds the 64 MiB guaranteed-response cap.
+    for _ in 0..mult {
+        for c in canisters {
+            let callee = c.get().as_slice().to_vec();
+            p = p
+                .call_new(callee, "update", call_args().on_reply(noop.clone()).on_reject(noop.clone()))
+                .call_data_append(&callee_runs)
+                .call_perform();
+        }
+    }
+    p.reply().build()
+}
+
 /// Create + install a universal canister; optionally pre-grow its stable memory.
 async fn deploy_one(
     agent: &Agent,
@@ -233,6 +259,10 @@ async fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(4);
+    // fanout mode: each ingress fires N parallel calls (fire-and-forget) →
+    // N outstanding calls per in-flight ingress, to stress the guaranteed-
+    // response memory reservation and callback limits.
+    let fanout_mode = std::env::var("HAMMER_MODE").map(|m| m == "fanout").unwrap_or(false);
     // heapread mode: large heap-memory reads pulling lots of distinct state into
     // RAM. Each canister holds a 96 MiB heap global (built via append, small
     // transient); reads use queries (heap reads via update would OOM because
@@ -299,6 +329,40 @@ async fn main() {
         )
         .await;
         stats.report(&format!("INTER-CANISTER CALLS ({call_depth}-hop chains)"), t.elapsed());
+
+        println!("\n== done ==");
+        return;
+    }
+
+    if fanout_mode {
+        // ---- Inter-canister FAN-OUT thrash (stresses response-memory reservation) ----
+        let mult: usize = std::env::var("HAMMER_FANOUT_MULT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
+        let n = canisters.len() * mult;
+        let cans = canisters.clone();
+        let mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
+            let cans = cans.clone();
+            Arc::new(move || fanout_payload(&cans, mult))
+        };
+        println!(
+            "\n[fanout] inter-canister FAN-OUT storm ({secs}s): each ingress fires {n} parallel calls in ONE message (fire-and-forget), {concurrency} concurrent ingresses"
+        );
+        println!(
+            "  ({n} simultaneous reservations/ingress; the 64 MiB guaranteed-response cap allows only ~32 — expect rejections when {n} > ~32)"
+        );
+        let t = Instant::now();
+        let stats = storm(
+            agent.clone(),
+            canisters.clone(),
+            concurrency,
+            Duration::from_secs(secs),
+            mk,
+            false,
+        )
+        .await;
+        stats.report(&format!("INTER-CANISTER FAN-OUT (x{n} parallel/ingress)"), t.elapsed());
 
         println!("\n== done ==");
         return;
