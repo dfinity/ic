@@ -17,7 +17,7 @@ use ic_management_canister_types_private::{
     ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_types::{CanisterId, PrincipalId};
-use ic_universal_canister::{get_universal_canister_wasm, wasm};
+use ic_universal_canister::{call_args, get_universal_canister_wasm, wasm};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -98,6 +98,24 @@ async fn update(
     agent
         .execute_update(canister, canister, "update", payload, next_nonce())
         .await
+}
+
+/// Build a payload that, executed by the ingress-target canister, makes it call
+/// canisters[start+1], which calls canisters[start+2], ... `depth` hops deep
+/// around the canister ring; the innermost canister replies and the replies
+/// propagate back. Generates ~2*depth inter-canister messages per ingress
+/// (depth requests + depth responses), with `depth` outstanding callbacks at
+/// peak (each holding a guaranteed-response memory reservation).
+fn chain_payload(canisters: &[CanisterId], start: usize, depth: usize) -> Vec<u8> {
+    let k = canisters.len();
+    let mut inner = wasm().reply().build(); // innermost callee just replies
+    for h in (1..=depth).rev() {
+        let callee = canisters[(start + h) % k].get().as_slice().to_vec();
+        inner = wasm()
+            .call_simple(callee, "update", call_args().other_side(inner))
+            .build();
+    }
+    inner
 }
 
 /// Create + install a universal canister; optionally pre-grow its stable memory.
@@ -208,6 +226,13 @@ async fn main() {
     // (the 32 MiB limits are stable-only), so a single message can touch
     // arbitrarily large heap.
     let heap_mode = std::env::var("HAMMER_MODE").map(|m| m == "heap").unwrap_or(false);
+    // calls mode: thrash inter-canister communication — each ingress triggers a
+    // chain of canister-to-canister update calls `HAMMER_CALL_DEPTH` hops deep.
+    let calls_mode = std::env::var("HAMMER_MODE").map(|m| m == "calls").unwrap_or(false);
+    let call_depth: usize = std::env::var("HAMMER_CALL_DEPTH")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4);
     // heapread mode: large heap-memory reads pulling lots of distinct state into
     // RAM. Each canister holds a 96 MiB heap global (built via append, small
     // transient); reads use queries (heap reads via update would OOM because
@@ -243,6 +268,41 @@ async fn main() {
     }
     println!("  deployed {} canisters in {:.1}s", canisters.len(), t0.elapsed().as_secs_f64());
     let canisters = Arc::new(canisters);
+
+    if calls_mode {
+        // ---- Inter-canister call thrash ----
+        // Each ingress makes the target canister start a `call_depth`-hop chain
+        // of update calls around the canister ring. With C concurrent ingresses
+        // there are up to C*call_depth outstanding inter-canister calls at peak.
+        let cans = canisters.clone();
+        let ctr = Arc::new(AtomicU64::new(0));
+        let mk: Arc<dyn Fn() -> Vec<u8> + Send + Sync> = {
+            let cans = cans.clone();
+            Arc::new(move || {
+                let n = ctr.fetch_add(1, Ordering::Relaxed) as usize;
+                chain_payload(&cans, n % cans.len(), call_depth)
+            })
+        };
+        println!(
+            "\n[calls] inter-canister call storm ({secs}s): {call_depth}-hop chains, {concurrency} concurrent ingresses across {} canisters",
+            canisters.len()
+        );
+        println!("  (~{} inter-canister messages per ingress; up to {} outstanding calls at peak)", 2 * call_depth, concurrency * call_depth);
+        let t = Instant::now();
+        let stats = storm(
+            agent.clone(),
+            canisters.clone(),
+            concurrency,
+            Duration::from_secs(secs),
+            mk,
+            false,
+        )
+        .await;
+        stats.report(&format!("INTER-CANISTER CALLS ({call_depth}-hop chains)"), t.elapsed());
+
+        println!("\n== done ==");
+        return;
+    }
 
     if read_mode {
         // Populate each canister with ~120 MiB of real stable data (written in
