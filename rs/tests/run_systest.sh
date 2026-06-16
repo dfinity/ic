@@ -96,7 +96,7 @@ if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
     rm -rf "$dashboards_repo"
     echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
     if git clone --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
-            git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
+        git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
         && git -C "$dashboards_repo" config core.sparseCheckout true \
         && echo "bases/apps/ic-dashboards" >>"$dashboards_repo/.git/info/sparse-checkout" \
         && git -C "$dashboards_repo" checkout HEAD; then
