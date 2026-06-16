@@ -794,6 +794,7 @@ pub mod test {
             replication,
             pricing_version,
             refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
         }
     }
 
