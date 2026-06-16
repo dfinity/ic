@@ -1,7 +1,6 @@
 use super::*;
 
 use assert_matches::assert_matches;
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
@@ -29,7 +28,6 @@ use ic_types::{
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::CanisterCyclesCostSchedule;
 use mockall::predicate::{always, eq};
 
 struct NoopIngressHistoryWriter;
@@ -514,14 +512,7 @@ fn canister_on_application_subnet_charges_for_ingress() {
         .canister_id(canister_test_id(0))
         .build();
     let cost_of_ingress = cycles_account_manager
-        .ingress_induction_cost(
-            &signed_ingress,
-            None,
-            CyclesAccountManagerSubnetConfig::new(
-                SMALL_APP_SUBNET_MAX_SIZE,
-                CanisterCyclesCostSchedule::Normal,
-            ),
-        )
+        .ingress_induction_cost(&signed_ingress, None, state.get_own_subnet_cycles_config())
         .cost();
 
     let ingress_history_writer = NoopIngressHistoryWriter;
@@ -687,10 +678,7 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             .ingress_induction_cost(
                 &ingress,
                 effective_canister_id,
-                CyclesAccountManagerSubnetConfig::new(
-                    SMALL_APP_SUBNET_MAX_SIZE,
-                    CanisterCyclesCostSchedule::Normal,
-                ),
+                state.get_own_subnet_cycles_config(),
             )
             .cost();
 
