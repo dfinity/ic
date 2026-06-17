@@ -1,3 +1,0 @@
-[Unit]
-Description=All GuestOS VMs
-Wants=guestos1.service guestos2.service guestos3.service guestos4.service guestos5.service

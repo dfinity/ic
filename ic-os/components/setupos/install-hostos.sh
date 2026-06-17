@@ -100,7 +100,6 @@ function resize_partition() {
     local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
     # Configure multiple GuestOS if type4.X
-    # TODO: Configure differently for each variant
     if [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
         # Cleanup the initial GuestOS
         lvremove -f hostlvm/guestos >/dev/null 2>&1
@@ -108,13 +107,40 @@ function resize_partition() {
 
         # And set up new split volumes
         free=$(vgs --noheadings -o vg_free_count hostlvm | tr -d ' ')
-        each=$((free / 5))
-        for i in 1 2 3 4; do
-            lvcreate -i "${count}" --type striped -l $each -n guestos$i hostlvm >/dev/null 2>&1
+
+
+        if [[ $node_reward_type =~ ^type4.1$ ]]; then
+            each=$((free / 16))
+            for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+                lvcreate -i "${count}" --type striped -l $each -n guestos$i hostlvm >/dev/null 2>&1
+                log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+            done
+            lvcreate -i "${count}" --type striped -l 100%FREE -n guestos15 hostlvm >/dev/null 2>&1
             log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
-        done
-        lvcreate -i "${count}" --type striped -l 100%FREE -n guestos5 hostlvm >/dev/null 2>&1
-        log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+        elif [[ $node_reward_type =~ ^type4.2$ ]]; then
+            each=$((free / 8))
+            for i in 0 1 2 3 4 5 6; do
+                lvcreate -i "${count}" --type striped -l $each -n guestos$i hostlvm >/dev/null 2>&1
+                log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+            done
+            lvcreate -i "${count}" --type striped -l 100%FREE -n guestos7 hostlvm >/dev/null 2>&1
+            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+        elif [[ $node_reward_type =~ ^type4.3$ ]]; then
+            each=$((free / 4))
+            for i in 0 1 2; do
+                lvcreate -i "${count}" --type striped -l $each -n guestos$i hostlvm >/dev/null 2>&1
+                log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+            done
+            lvcreate -i "${count}" --type striped -l 100%FREE -n guestos3 hostlvm >/dev/null 2>&1
+            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+        elif [[ $node_reward_type =~ ^type4.4$ ]]; then
+            each=$((free / 2))
+            lvcreate -i "${count}" --type striped -l $each -n guestos0 hostlvm >/dev/null 2>&1
+            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+
+            lvcreate -i "${count}" --type striped -l 100%FREE -n guestos1 hostlvm >/dev/null 2>&1
+            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+        fi
     # "Normal" behavior
     else
         # Extend GuestOS LV to fill VG space

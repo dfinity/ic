@@ -134,7 +134,9 @@ pub fn generate_vm_config(
         "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
     let vm_memory_gib = match guest_vm_type {
-        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
+        // XXX TODO
+        // GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
+        GuestVMType::Default => total_vm_memory,
         GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GIB,
     };
 
@@ -178,8 +180,30 @@ pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
 }
 
 #[cfg(not(feature = "dev"))]
-pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
-    ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
+pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+    match &config.icos_settings.node_reward_type {
+        Some(val) if val == "type4.1" => (
+            "kvm".to_string(),
+            DEFAULT_VM_MEMORY_GIB / 16,
+            DEFAULT_VM_VCPUS / 16,
+        ),
+        Some(val) if val == "type4.2" => (
+            "kvm".to_string(),
+            DEFAULT_VM_MEMORY_GIB / 8,
+            DEFAULT_VM_VCPUS / 8,
+        ),
+        Some(val) if val == "type4.3" => (
+            "kvm".to_string(),
+            DEFAULT_VM_MEMORY_GIB / 4,
+            DEFAULT_VM_VCPUS / 4,
+        ),
+        Some(val) if val == "type4.4" => (
+            "kvm".to_string(),
+            DEFAULT_VM_MEMORY_GIB / 2,
+            DEFAULT_VM_VCPUS / 2,
+        ),
+        _ => ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS),
+    }
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: usize) -> String {
