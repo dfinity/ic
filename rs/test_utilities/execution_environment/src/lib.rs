@@ -1549,7 +1549,7 @@ impl ExecutionTest {
         let subnet_size = self.subnet_size();
         let cost_schedule = self.cost_schedule();
         let message = match message {
-            SubnetMessage::Response(_) => return NominalCycles::zero(),
+            SubnetMessage::ConsensusResponse(_) => return NominalCycles::zero(),
             SubnetMessage::Request(request) => CanisterCall::Request(request),
             SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
         };
@@ -1661,7 +1661,7 @@ impl ExecutionTest {
         let cycles_used = cycles_used_after - cycles_used_before;
         if instructions_used.get() != 0 {
             let method_name = match message {
-                SubnetMessage::Response(_) => None,
+                SubnetMessage::ConsensusResponse(_) => None,
                 SubnetMessage::Request(ref request) => Some(request.method_name.clone()),
                 SubnetMessage::Ingress(ref ingress) => Some(ingress.method_name.clone()),
             };
@@ -3241,7 +3241,7 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
 
 fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
     match message {
-        SubnetMessage::Response(_) => None,
+        SubnetMessage::ConsensusResponse(_) => None,
         SubnetMessage::Request(request) => request.extract_effective_canister_id(),
         SubnetMessage::Ingress(ingress) => {
             let signed_ingress_content = SignedIngressContent::new_for_testing(
@@ -3260,7 +3260,7 @@ fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
 
 fn check_is_install_code(message: SubnetMessage) -> bool {
     let message = match message {
-        SubnetMessage::Response(_) => return false,
+        SubnetMessage::ConsensusResponse(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };

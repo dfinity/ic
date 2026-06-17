@@ -41,13 +41,13 @@ use ic_replicated_state::{
 };
 use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
+use ic_types::messages::{Ingress, MessageId, SubnetMessage};
 use ic_types::{
     CanisterId, CanisterLog, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
     MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
     ReplicaVersion, Time,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use std::cell::RefCell;
 use std::collections::{BTreeSet, VecDeque};
@@ -1306,20 +1306,7 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let (new_state, _) = self.execute_subnet_message(
-                    // Wrap the callback ID and payload into a Response, to make it easier for
-                    // `execute_subnet_message()` to deal with. All other fields will be ignored by
-                    // `execute_subnet_message()`.
-                    SubnetMessage::Response(
-                        Response {
-                            originator: CanisterId::ic_00(),
-                            respondent: CanisterId::ic_00(),
-                            originator_reply_callback: response.callback,
-                            refund: Cycles::zero(),
-                            response_payload: response.payload,
-                            deadline: NO_DEADLINE,
-                        }
-                        .into(),
-                    ),
+                    SubnetMessage::ConsensusResponse(Arc::new(response)),
                     state,
                     &mut csprng,
                     current_round,
@@ -1855,7 +1842,7 @@ fn can_execute_subnet_msg(
     let maybe_method = match msg {
         SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
         SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
-        SubnetMessage::Response { .. } => None,
+        SubnetMessage::ConsensusResponse { .. } => None,
     };
     let Some(method) = maybe_method else {
         // If this is a response or the method name is not valid, execute the message.
@@ -1907,7 +1894,7 @@ fn get_instruction_limits_for_subnet_message(
     // for install code in which case the default limits are overriden.
     let default_limits = InstructionLimits::new(NumInstructions::new(0), NumInstructions::new(0));
     let method_name = match &msg {
-        SubnetMessage::Response { .. } => {
+        SubnetMessage::ConsensusResponse { .. } => {
             return default_limits;
         }
         SubnetMessage::Ingress(ingress) => &ingress.method_name,
