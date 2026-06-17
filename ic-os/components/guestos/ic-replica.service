@@ -20,7 +20,7 @@ User=ic-replica
 
 Environment=RUST_BACKTRACE=1
 Environment=RUST_MIN_STACK=8192000
-ExecStart=/opt/ic/bin/orchestrator --replica-binary-dir /var/lib/ic/data/images --cup-dir /var/lib/ic/data/cups --replica-config-file /run/ic-node/config/ic.json5 --ic-boundary-env-file /opt/ic/share/ic-boundary.env --enable-provisional-registration --ic-binary-directory /opt/ic/bin --orchestrator-data-directory /var/lib/ic/data/orchestrator --version-file /opt/ic/share/version.txt
+ExecStart=/opt/ic/bin/orchestrator --replica-binary-dir /var/lib/ic/data/images --cup-dir /var/lib/ic/data/cups --replica-config-file /run/ic-node/config/ic.json5 --ic-boundary-env-file /opt/ic/share/ic-boundary.env --ic-gateway-env-file /opt/ic/share/ic-gateway.env --enable-provisional-registration --ic-binary-directory /opt/ic/bin --orchestrator-data-directory /var/lib/ic/data/orchestrator --version-file /opt/ic/share/version.txt
 LimitNOFILE=16777216
 Restart=always
 RestartSec=10

@@ -7,7 +7,10 @@ use crate::{
     hostos_upgrade::HostosUpgrader,
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
-    processes::{IcBoundaryProcessConfig, MultipleProcessesManager, ReplicaProcessConfig},
+    processes::{
+        IcBoundaryProcessConfig, IcGatewayProcessConfig, MultipleProcessesManager,
+        ReplicaProcessConfig,
+    },
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
@@ -269,10 +272,15 @@ impl Orchestrator {
             ic_boundary_env_file: args.ic_boundary_env_file.clone(),
             crypto_config: config.crypto.clone(),
         };
+        let ic_gateway_process_config = IcGatewayProcessConfig {
+            ic_binary_dir: ic_binary_directory.clone(),
+            ic_gateway_env_file: args.ic_gateway_env_file.clone(),
+        };
 
         let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
             replica_process_config,
-            ic_boundary_process_config.clone(),
+            ic_boundary_process_config,
+            ic_gateway_process_config,
             Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),

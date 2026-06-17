@@ -46,6 +46,7 @@ impl Dashboard for OrchestratorDashboard {
              subnet id: {}\n\
              replica process id: {}\n\
              ic-boundary process id: {}\n\
+             ic-gateway process id: {}\n\
              replica version: {}\n\
              host os version: {}\n\
              scheduled upgrade: {}\n\
@@ -63,6 +64,7 @@ impl Dashboard for OrchestratorDashboard {
             self.get_subnet_id(),
             self.get_replica_pid(),
             self.get_ic_boundary_pid(),
+            self.get_ic_gateway_pid(),
             self.replica_version,
             self.hostos_version
                 .as_ref()
@@ -145,6 +147,13 @@ impl OrchestratorDashboard {
 
     fn get_ic_boundary_pid(&self) -> String {
         match self.processes_manager.read().unwrap().get_ic_boundary_pid() {
+            Some(pid) => pid.to_string(),
+            None => "None".to_string(),
+        }
+    }
+
+    fn get_ic_gateway_pid(&self) -> String {
+        match self.processes_manager.read().unwrap().get_ic_gateway_pid() {
             Some(pid) => pid.to_string(),
             None => "None".to_string(),
         }

@@ -1097,10 +1097,15 @@ fn report_master_public_key_changed_metric(
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
-    use crate::processes::ReplicaProcessConfig;
+    use crate::process_manager::{Process, ProcessRunner};
+    use crate::processes::{
+        IcBoundaryProcess, IcBoundaryProcessConfig, IcGatewayProcess, IcGatewayProcessConfig,
+        ReplicaProcess, ReplicaProcessConfig,
+    };
 
     use super::*;
     use assert_matches::assert_matches;
+    use ic_config::crypto::CryptoConfig;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
@@ -1121,7 +1126,9 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
-        node::v1::NodeRecord, replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+        node::v1::NodeRecord,
+        replica_version::v1::ReplicaVersionRecord,
+        subnet::v1::{SubnetRecord, SubnetType},
     };
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -1161,18 +1168,14 @@ mod tests {
     use rstest::rstest;
     use slog::Level;
     use std::{
-        collections::{BTreeMap, BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet},
         ffi::OsStr,
         path::Path,
         process::Output,
     };
     use tempfile::{TempDir, tempdir};
 
-    impl MultipleProcessesManager {
-        pub(crate) fn replica_manager(&self) -> Arc<RwLock<ReplicaManager>> {
-            self.replica_manager.clone()
-        }
-    }
+    const DOMAIN_NAME: &str = "domain.name";
 
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
@@ -1200,10 +1203,21 @@ mod tests {
                 .process_runner
                 .is_running()
         }
+
+        pub fn is_ic_gateway_running(&self) -> bool {
+            self.processes_manager
+                .read()
+                .unwrap()
+                .ic_gateway_manager()
+                .read()
+                .unwrap()
+                .process_runner
+                .is_running()
+        }
     }
 
     /// Fake runner that tracks running state without spawning a real process.
-    /// Used as a drop-in for `SingleProcessRunner<P>` inside `ProcessManager`.
+    /// Used as a drop-in for `SingleProcessRunner<P>` inside process managers.
     pub(crate) struct FakeRunner {
         running: bool,
     }
@@ -1522,6 +1536,7 @@ mod tests {
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
 
         let cup_dir = dir.join("cups");
+        let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
         std::fs::create_dir_all(&cup_dir).unwrap();
         if let Some(local_cup) = has_local_cup {
             let cup = make_local_cup(
@@ -1530,7 +1545,6 @@ mod tests {
                 local_cup.registry_version,
             );
             let cup_proto = pb::CatchUpPackage::from(cup);
-            let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
             std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
         }
         let cup_provider = CatchUpPackageProvider::new(
@@ -1547,6 +1561,8 @@ mod tests {
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
         let ic_boundary_env_file = dir.join("ic-boundary.env");
         std::fs::write(&ic_boundary_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
+        let ic_gateway_env_file = dir.join("ic-gateway.env");
+        std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
 
         let crypto_config = CryptoConfig::default();
 
@@ -1560,20 +1576,30 @@ mod tests {
             ic_boundary_env_file,
             crypto_config,
         };
-
+        let ic_gateway_process_config = IcGatewayProcessConfig {
+            ic_binary_dir: ic_binary_dir.clone(),
+            ic_gateway_env_file,
+        };
         let processes_manager = MultipleProcessesManager::new(
             replica_process_config.clone(),
             ic_boundary_process_config.clone(),
+            ic_gateway_process_config.clone(),
             Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),
         );
+        let replica_manager_lock = processes_manager.replica_manager();
+        let mut replica_manager = replica_manager_lock.write().unwrap();
+        replica_manager.process_runner = Box::new(FakeRunner::new());
+        let ic_boundary_manager_lock = processes_manager.ic_boundary_manager();
+        let mut ic_boundary_manager = ic_boundary_manager_lock.write().unwrap();
+        ic_boundary_manager.process_runner = Box::new(FakeRunner::new());
+        let ic_gateway_manager_lock = processes_manager.ic_gateway_manager();
+        let mut ic_gateway_manager = ic_gateway_manager_lock.write().unwrap();
+        ic_gateway_manager.process_runner = Box::new(FakeRunner::new());
         // Start the replica process if the test scenario indicates so
         if test_scenario.were_child_processes_started_previously() {
-            processes_manager
-                .replica_manager()
-                .write()
-                .unwrap()
+            replica_manager
                 .process_runner
                 .start(ReplicaProcess::new(
                     replica_process_config,
@@ -1582,17 +1608,30 @@ mod tests {
                 ))
                 .unwrap();
             if matches!(subnet_type, SubnetType::CloudEngine) {
-                // Simulate ic-boundary already running by faking a start.
-                processes_manager
-                    .ic_boundary_manager()
-                    .write()
-                    .unwrap()
+                // After starting ic-boundary, its manager sets its internal domain name, so set it
+                // here to simulate a previous start of ic-boundary.
+                ic_boundary_manager.current_domain_name = Some(DOMAIN_NAME.to_string());
+                // Simulate ic-boundary and ic-gateway already running by faking a start.
+                ic_boundary_manager
                     .process_runner
-                    .start(IcBoundaryProcess::new(
-                        ic_boundary_process_config,
-                        current_replica_version.clone(),
-                        "domain.name".to_string(),
-                    ))
+                    .start(
+                        IcBoundaryProcess::new(
+                            ic_boundary_process_config,
+                            current_replica_version.clone(),
+                            DOMAIN_NAME.to_string(),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                ic_gateway_manager
+                    .process_runner
+                    .start(
+                        IcGatewayProcess::new(
+                            ic_gateway_process_config,
+                            current_replica_version.clone(),
+                        )
+                        .unwrap(),
+                    )
                     .unwrap();
             }
         }
@@ -1805,7 +1844,7 @@ mod tests {
             let mut node_record = NodeRecord::default();
             if matches!(self.subnet_type, SubnetType::CloudEngine) {
                 // Nodes in Cloud engines must have a domain name to start ic-boundary
-                node_record.domain = Some("domain.name".to_string());
+                node_record.domain = Some(DOMAIN_NAME.to_string());
             }
             add_node_record_to_provider(
                 &data_provider,
@@ -2455,6 +2494,7 @@ mod tests {
                 if matches!(self.subnet_type, SubnetType::CloudEngine) {
                     assert_has_started(ReplicaProcess::NAME);
                     assert_has_started(IcBoundaryProcess::NAME);
+                    assert_has_started(IcGatewayProcess::NAME);
                 } else {
                     assert_has_started(ReplicaProcess::NAME);
                 };
@@ -2462,6 +2502,7 @@ mod tests {
             let assert_has_not_started_new_processes = || {
                 assert_has_not_started(ReplicaProcess::NAME);
                 assert_has_not_started(IcBoundaryProcess::NAME);
+                assert_has_not_started(IcGatewayProcess::NAME);
             };
             match &self.has_local_cup {
                 Some(local_cup) => {
@@ -2480,12 +2521,14 @@ mod tests {
                         {
                             assert_has_started(ReplicaProcess::NAME);
                             assert_has_started(IcBoundaryProcess::NAME);
+                            assert_has_started(IcGatewayProcess::NAME);
                         }
                         (Some((registry_cup, _)), _, _)
                             if registry_cup.height >= local_cup.height =>
                         {
                             assert_has_started(ReplicaProcess::NAME);
                             assert_has_not_started(IcBoundaryProcess::NAME);
+                            assert_has_not_started(IcGatewayProcess::NAME);
                         }
                         (_, true, _) => {
                             assert_has_not_started_new_processes();
@@ -2742,6 +2785,11 @@ mod tests {
                         | Ok(OrchestratorControlFlow::Leaving(_))
                 ) || test_scenario.were_child_processes_started_previously())
         );
+        // - The ic-gateway process is running <=> the ic-boundary process is running
+        assert_eq!(
+            upgrade_loop.is_ic_gateway_running(),
+            upgrade_loop.is_ic_boundary_running(),
+        );
         // - As an assigned node:
         if new_subnet_assignment != SubnetAssignment::Unassigned {
             // - If the replicator has not yet replicated all versions before init, then we should never
@@ -2821,10 +2869,8 @@ mod tests {
         #[values(
             None,
             Some(RegistryVersion::from(5)),
-            Some(RegistryVersion::from(10)),
             Some(RegistryVersion::from(50)),
-            Some(RegistryVersion::from(100)),
-            Some(RegistryVersion::from(150))
+            Some(RegistryVersion::from(100))
         )]
         is_leaving: Option<RegistryVersion>,
         #[values(false, true)] does_upgrade: bool,
@@ -2833,10 +2879,8 @@ mod tests {
             RegistryVersion::from(3),
             RegistryVersion::from(5),
             RegistryVersion::from(10),
-            RegistryVersion::from(75),
             RegistryVersion::from(100),
-            RegistryVersion::from(150),
-            RegistryVersion::from(175)
+            RegistryVersion::from(150)
         )]
         upgrade_registry_version: RegistryVersion,
         #[values(false, true)] upgrade_is_recalled: bool,

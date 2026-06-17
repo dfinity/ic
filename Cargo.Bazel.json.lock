@@ -1,5 +1,5 @@
 {
-  "checksum": "7f96e5c133c203870fc997d52e080f72044bd53f1530c5332ba2230232e22d68",
+  "checksum": "ff7f44505ebc5f13c6c3d5c53d2dffc80669e43460f22816aff45ab32ec31178",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -37756,6 +37756,18 @@
           "Library": {
             "crate_name": "ic_gateway",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "ic-gateway",
+            "crate_root": "src/main.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -100978,6 +100990,7 @@
   },
   "binary_crates": [
     "canbench 0.4.1",
+    "ic-gateway 0.2.0",
     "ic-wasm 0.9.11",
     "metrics-proxy 0.1.0"
   ],

@@ -21,7 +21,7 @@ Every cloud engine node reports a healthy status on port 80.
 
 end::catalog[] */
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -35,6 +35,7 @@ use ic_system_test_driver::{retry_with_msg_async, systest};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use slog::{Logger, info};
 use std::time::Duration;
+use url::Url;
 
 /// Port on which `ic-gateway` exposes the public API of a cloud engine node.
 ///
@@ -43,6 +44,9 @@ use std::time::Duration;
 /// that process terminates the public API on port 80 (the port opened to the
 /// network by the cloud-engine firewall rules).
 const IC_GATEWAY_PORT: u16 = 80;
+
+/// Domain name that all `ic-gateway`s are configured to serve.
+const IC_GATEWAY_DOMAIN: &str = "gateway.icp";
 
 /// Number of nodes in the cloud engine subnet under test.
 const CLOUD_ENGINE_NODES: usize = 4;
@@ -118,14 +122,8 @@ fn test(env: TestEnv) {
 /// This mirrors the driver's standard health check (`status_is_healthy`), but
 /// retargets it from port 8080 to port 80.
 async fn await_healthy_on_ic_gateway(node: &IcNodeSnapshot, logger: &Logger) -> Result<()> {
-    // `get_public_url` yields the replica's URL on port 8080; rewrite the port to
-    // reach the co-located `ic-gateway` instead.
-    let mut url = node.get_public_url();
-    url.set_port(Some(IC_GATEWAY_PORT))
-        .map_err(|_| anyhow::anyhow!("failed to set port {IC_GATEWAY_PORT} on {url}"))?;
-    let status_url = url
-        .join("api/v2/status")
-        .expect("failed to join status path");
+    let status_url = Url::parse(&format!("http://{IC_GATEWAY_DOMAIN}/api/v2/status"))
+        .expect("failed to parse status URL");
 
     retry_with_msg_async!(
         format!(
@@ -138,6 +136,10 @@ async fn await_healthy_on_ic_gateway(node: &IcNodeSnapshot, logger: &Logger) -> 
         || async {
             let response = reqwest::Client::builder()
                 .timeout(STATUS_REQUEST_TIMEOUT)
+                .resolve(
+                    IC_GATEWAY_DOMAIN,
+                    (node.get_ip_addr(), IC_GATEWAY_PORT).into(),
+                )
                 .build()
                 .expect("cannot build a reqwest client")
                 .get(status_url.clone())
