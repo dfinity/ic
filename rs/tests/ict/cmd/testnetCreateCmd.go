@@ -178,12 +178,14 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		// driver via the IC_DASHBOARDS_DIR environment variable. If IC_DASHBOARDS_DIR is
 		// already set to a non-empty value (e.g. a local clone) run_systest.sh uses it
 		// directly and skips the checkout, so we only request a sync from the k8s branch
-		// otherwise. We treat an empty value as unset to match run_systest.sh.
+		// otherwise. We treat empty values as unset to match run_systest.sh.
 		if dashboardsDir := os.Getenv("IC_DASHBOARDS_DIR"); dashboardsDir != "" {
 			cmd.Println(GREEN + "Using Grafana dashboards from IC_DASHBOARDS_DIR: " + dashboardsDir + NC)
-		} else {
+		} else if cfg.k8sBranch != "" {
 			cmd.Println(GREEN + "Dashboards will be synced from k8s branch: " + cfg.k8sBranch + NC)
 			env = append(env, "IC_DASHBOARDS_BRANCH="+cfg.k8sBranch)
+		} else {
+			cmd.PrintErrln(YELLOW + "Both IC_DASHBOARDS_DIR and --k8s-branch are empty; Grafana dashboards will not be synced." + NC)
 		}
 		if len(cfg.farmBaseUrl) > 0 {
 			command = append(command, "--farm-base-url="+cfg.farmBaseUrl)

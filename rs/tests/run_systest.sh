@@ -91,7 +91,13 @@ fi
 # exported as IC_DASHBOARDS_DIR which is read by the test driver (and forwarded to the
 # colocated UVM by colocate_test.rs). If IC_DASHBOARDS_DIR is already set (e.g. pointing
 # at a local clone) we use that directly and skip the checkout.
-if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
+if [ -n "${IC_DASHBOARDS_DIR:-}" ]; then
+    # A dashboards directory was provided directly. The driver is later executed with
+    # `env -C "$TEST_TMPDIR"`, so normalize a relative path to an absolute one now;
+    # otherwise it would be resolved against $TEST_TMPDIR and the dashboards wouldn't
+    # be found. Keep the original value if realpath fails (best-effort, non-fatal).
+    export IC_DASHBOARDS_DIR="$(realpath "$IC_DASHBOARDS_DIR" 2>/dev/null || echo "$IC_DASHBOARDS_DIR")"
+elif [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
     dashboards_repo="$TEST_TMPDIR/k8s_dashboards"
     rm -rf "$dashboards_repo" || true
     echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
