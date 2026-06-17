@@ -205,8 +205,8 @@ impl Process for IcGatewayProcess {
 // ProcessManager<P>
 //
 // This struct offers common boilerplate functionality logic to ensure a process
-// is running (logging, metrics) and to stop it, converting errors to [`OrchestratorError`]
-// in both cases.
+// is running and to stop it, converting errors to [`OrchestratorError`], logging
+// them, and updating metrics.
 // ---------------------------------------------------------------------------
 
 pub(crate) struct ProcessManager<P: Process> {
@@ -251,6 +251,7 @@ impl<P: Process + Send + Sync + 'static> ProcessManager<P> {
         if self.process_runner.is_running() {
             return Ok(());
         }
+
         let process = P::build(&self.process_config, args)?;
         info!(self.logger, "Starting new {} process", P::NAME);
         self.metrics
@@ -266,6 +267,15 @@ impl<P: Process + Send + Sync + 'static> ProcessManager<P> {
     }
 
     pub(crate) fn stop(&mut self) -> OrchestratorResult<()> {
+        if !self.process_runner.is_running() {
+            return Ok(());
+        }
+
+        info!(self.logger, "Stopping {} process", P::NAME);
+        self.metrics
+            .processes_stop_attempts
+            .with_label_values(&[P::NAME])
+            .inc();
         self.process_runner.stop().map_err(|e| {
             OrchestratorError::IoError(
                 format!("Error when attempting to stop the {} process", P::NAME),
