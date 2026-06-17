@@ -3,11 +3,11 @@ use crate::{
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{NodeId, ReplicaVersion};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub(crate) struct BoundaryNodeManager {
     registry: Arc<RegistryHelper>,
-    process_manager: Arc<RwLock<IcBoundaryManager>>,
+    process_manager: IcBoundaryManager,
     version: ReplicaVersion,
     node_id: NodeId,
     logger: ReplicaLogger,
@@ -16,7 +16,7 @@ pub(crate) struct BoundaryNodeManager {
 impl BoundaryNodeManager {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        process_manager: Arc<RwLock<IcBoundaryManager>>,
+        process_manager: IcBoundaryManager,
         version: ReplicaVersion,
         node_id: NodeId,
         logger: ReplicaLogger,
@@ -48,8 +48,6 @@ impl BoundaryNodeManager {
                     // serving requests while the orchestrator is downloading the new image in most cases.
                 } else {
                     self.process_manager
-                        .write()
-                        .unwrap()
                         .ensure_ic_boundary_running_and_restarted_on_domain_change(
                             &self.version,
                             registry_version,
@@ -58,7 +56,7 @@ impl BoundaryNodeManager {
             }
             // BN should not be active
             Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => {
-                if let Err(err) = self.process_manager.write().unwrap().stop_ic_boundary() {
+                if let Err(err) = self.process_manager.stop_ic_boundary() {
                     warn!(self.logger, "Failed to stop Boundary Node: {}", err);
                 }
             }

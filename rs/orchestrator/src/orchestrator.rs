@@ -8,8 +8,8 @@ use crate::{
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
     processes::{
-        IcBoundaryProcessConfig, IcGatewayProcessConfig, MultipleProcessesManager,
-        ReplicaProcessConfig,
+        IcBoundaryManager, IcBoundaryProcessConfig, IcGatewayProcessConfig,
+        MultipleProcessesManager, ReplicaProcessConfig,
     },
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
@@ -267,11 +267,6 @@ impl Orchestrator {
             cup_path: local_cup_reader.get_cup_path(),
             replica_config_file: args.replica_config_file.clone(),
         };
-        let ic_boundary_process_config = IcBoundaryProcessConfig {
-            ic_binary_dir: ic_binary_directory.clone(),
-            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
-            crypto_config: config.crypto.clone(),
-        };
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: ic_binary_directory.clone(),
             ic_gateway_env_file: args.ic_gateway_env_file.clone(),
@@ -279,7 +274,6 @@ impl Orchestrator {
 
         let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
             replica_process_config,
-            ic_boundary_process_config,
             ic_gateway_process_config,
             Arc::clone(&registry),
             Arc::clone(&metrics),
@@ -345,9 +339,20 @@ impl Orchestrator {
             ),
         };
 
+        let ic_boundary_process_config = IcBoundaryProcessConfig {
+            ic_binary_dir: ic_binary_directory.clone(),
+            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
+            crypto_config: config.crypto.clone(),
+        };
+        let ic_boundary_manager = IcBoundaryManager::new(
+            ic_boundary_process_config,
+            Arc::clone(&registry),
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
-            processes_manager.read().unwrap().ic_boundary_manager(),
+            ic_boundary_manager,
             replica_version.clone(),
             node_id,
             logger.clone(),

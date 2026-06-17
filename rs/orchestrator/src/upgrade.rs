@@ -1099,13 +1099,12 @@ mod tests {
     use crate::catch_up_package_provider::tests::mock_tls_config;
     use crate::process_manager::{Process, ProcessRunner};
     use crate::processes::{
-        IcBoundaryProcess, IcBoundaryProcessConfig, IcGatewayProcess, IcGatewayProcessConfig,
-        ReplicaProcess, ReplicaProcessConfig,
+        IcGatewayManager, IcGatewayProcess, IcGatewayProcessConfig, ReplicaManager, ReplicaProcess,
+        ReplicaProcessConfig,
     };
 
     use super::*;
     use assert_matches::assert_matches;
-    use ic_config::crypto::CryptoConfig;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
@@ -1126,15 +1125,14 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
-        node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
         subnet::v1::{SubnetRecord, SubnetType},
     };
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_node_record_key,
-        make_replica_version_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
+        ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_replica_version_key,
+        make_subnet_record_key, make_unassigned_nodes_config_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
@@ -1175,44 +1173,20 @@ mod tests {
     };
     use tempfile::{TempDir, tempdir};
 
-    const DOMAIN_NAME: &str = "domain.name";
-
     impl Upgrade {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
         }
 
         pub fn is_replica_running(&self) -> bool {
-            self.processes_manager
-                .read()
-                .unwrap()
-                .replica_manager()
-                .read()
-                .unwrap()
-                .process_runner
-                .is_running()
-        }
-
-        pub fn is_ic_boundary_running(&self) -> bool {
-            self.processes_manager
-                .read()
-                .unwrap()
-                .ic_boundary_manager()
-                .read()
-                .unwrap()
-                .process_runner
-                .is_running()
+            self.processes_manager.read().unwrap().is_replica_running()
         }
 
         pub fn is_ic_gateway_running(&self) -> bool {
             self.processes_manager
                 .read()
                 .unwrap()
-                .ic_gateway_manager()
-                .read()
-                .unwrap()
-                .process_runner
-                .is_running()
+                .is_ic_gateway_running()
         }
     }
 
@@ -1359,21 +1333,6 @@ mod tests {
         };
 
         make_cup_with_summary(height, summary_payload)
-    }
-
-    fn add_node_record_to_provider(
-        data_provider: &ProtoRegistryDataProvider,
-        registry_version: RegistryVersion,
-        node_id: NodeId,
-        node_record: NodeRecord,
-    ) {
-        data_provider
-            .add(
-                &make_node_record_key(node_id),
-                registry_version,
-                Some(node_record),
-            )
-            .unwrap();
     }
 
     fn add_root_subnet_id_to_provider(
@@ -1559,43 +1518,29 @@ mod tests {
         let replica_config_file = dir.join("ic.json5");
         let ic_binary_dir = dir.join("ic_binary");
         std::fs::create_dir_all(&ic_binary_dir).unwrap();
-        let ic_boundary_env_file = dir.join("ic-boundary.env");
-        std::fs::write(&ic_boundary_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
         let ic_gateway_env_file = dir.join("ic-gateway.env");
         std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
-
-        let crypto_config = CryptoConfig::default();
 
         let replica_process_config = ReplicaProcessConfig {
             ic_binary_dir: ic_binary_dir.clone(),
             cup_path: cup_file,
             replica_config_file: replica_config_file.clone(),
         };
-        let ic_boundary_process_config = IcBoundaryProcessConfig {
-            ic_binary_dir: ic_binary_dir.clone(),
-            ic_boundary_env_file,
-            crypto_config,
-        };
+        let mut replica_manager = ReplicaManager::new(
+            replica_process_config.clone(),
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
+        replica_manager.process_runner = Box::new(FakeRunner::new());
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir: ic_binary_dir.clone(),
             ic_gateway_env_file,
         };
-        let processes_manager = MultipleProcessesManager::new(
-            replica_process_config.clone(),
-            ic_boundary_process_config.clone(),
+        let mut ic_gateway_manager = IcGatewayManager::new(
             ic_gateway_process_config.clone(),
-            Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),
         );
-        let replica_manager_lock = processes_manager.replica_manager();
-        let mut replica_manager = replica_manager_lock.write().unwrap();
-        replica_manager.process_runner = Box::new(FakeRunner::new());
-        let ic_boundary_manager_lock = processes_manager.ic_boundary_manager();
-        let mut ic_boundary_manager = ic_boundary_manager_lock.write().unwrap();
-        ic_boundary_manager.process_runner = Box::new(FakeRunner::new());
-        let ic_gateway_manager_lock = processes_manager.ic_gateway_manager();
-        let mut ic_gateway_manager = ic_gateway_manager_lock.write().unwrap();
         ic_gateway_manager.process_runner = Box::new(FakeRunner::new());
         // Start the replica process if the test scenario indicates so
         if test_scenario.were_child_processes_started_previously() {
@@ -1608,21 +1553,7 @@ mod tests {
                 ))
                 .unwrap();
             if matches!(subnet_type, SubnetType::CloudEngine) {
-                // After starting ic-boundary, its manager sets its internal domain name, so set it
-                // here to simulate a previous start of ic-boundary.
-                ic_boundary_manager.current_domain_name = Some(DOMAIN_NAME.to_string());
-                // Simulate ic-boundary and ic-gateway already running by faking a start.
-                ic_boundary_manager
-                    .process_runner
-                    .start(
-                        IcBoundaryProcess::new(
-                            ic_boundary_process_config,
-                            current_replica_version.clone(),
-                            DOMAIN_NAME.to_string(),
-                        )
-                        .unwrap(),
-                    )
-                    .unwrap();
+                // Simulate ic-gateway already running by faking a start.
                 ic_gateway_manager
                     .process_runner
                     .start(
@@ -1635,7 +1566,11 @@ mod tests {
                     .unwrap();
             }
         }
-        let processes_manager = Arc::new(RwLock::new(processes_manager));
+        let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new_for_test(
+            replica_manager,
+            ic_gateway_manager,
+            Arc::clone(&registry),
+        )));
 
         let manageboot_runner = Box::new(FakeManagebootRunner);
 
@@ -1840,18 +1775,6 @@ mod tests {
         // Sets up the registry according to the test scenario
         fn setup_registry(&self) -> Arc<ProtoRegistryDataProvider> {
             let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-            let mut node_record = NodeRecord::default();
-            if matches!(self.subnet_type, SubnetType::CloudEngine) {
-                // Nodes in Cloud engines must have a domain name to start ic-boundary
-                node_record.domain = Some(DOMAIN_NAME.to_string());
-            }
-            add_node_record_to_provider(
-                &data_provider,
-                RegistryVersion::from(1),
-                self.node_id,
-                node_record,
-            );
 
             // NNS subnet
             let nns_subnet_id = SUBNET_42;
@@ -2493,7 +2416,6 @@ mod tests {
             let assert_has_started_new_processes = || {
                 if matches!(self.subnet_type, SubnetType::CloudEngine) {
                     assert_has_started(ReplicaProcess::NAME);
-                    assert_has_started(IcBoundaryProcess::NAME);
                     assert_has_started(IcGatewayProcess::NAME);
                 } else {
                     assert_has_started(ReplicaProcess::NAME);
@@ -2501,7 +2423,6 @@ mod tests {
             };
             let assert_has_not_started_new_processes = || {
                 assert_has_not_started(ReplicaProcess::NAME);
-                assert_has_not_started(IcBoundaryProcess::NAME);
                 assert_has_not_started(IcGatewayProcess::NAME);
             };
             match &self.has_local_cup {
@@ -2520,14 +2441,12 @@ mod tests {
                             if registry_cup.height >= local_cup.height =>
                         {
                             assert_has_started(ReplicaProcess::NAME);
-                            assert_has_started(IcBoundaryProcess::NAME);
                             assert_has_started(IcGatewayProcess::NAME);
                         }
                         (Some((registry_cup, _)), _, _)
                             if registry_cup.height >= local_cup.height =>
                         {
                             assert_has_started(ReplicaProcess::NAME);
-                            assert_has_not_started(IcBoundaryProcess::NAME);
                             assert_has_not_started(IcGatewayProcess::NAME);
                         }
                         (_, true, _) => {
@@ -2773,10 +2692,10 @@ mod tests {
                         | Ok(OrchestratorControlFlow::Leaving(_))
                 ) || test_scenario.were_child_processes_started_previously())
         );
-        // - The ic-boundary process is running <=> same as the replica process, but only for Cloud
+        // - The ic-gateway process is running <=> same as the replica process, but only for Cloud
         // Engine subnets
         assert_eq!(
-            upgrade_loop.is_ic_boundary_running(),
+            upgrade_loop.is_ic_gateway_running(),
             matches!(test_scenario.subnet_type, SubnetType::CloudEngine)
                 && matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
                 && (matches!(
@@ -2784,11 +2703,6 @@ mod tests {
                     Ok(OrchestratorControlFlow::Assigned(_))
                         | Ok(OrchestratorControlFlow::Leaving(_))
                 ) || test_scenario.were_child_processes_started_previously())
-        );
-        // - The ic-gateway process is running <=> the ic-boundary process is running
-        assert_eq!(
-            upgrade_loop.is_ic_gateway_running(),
-            upgrade_loop.is_ic_boundary_running(),
         );
         // - As an assigned node:
         if new_subnet_assignment != SubnetAssignment::Unassigned {

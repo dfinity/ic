@@ -13,7 +13,7 @@ use std::{
     collections::HashMap,
     ffi::OsString,
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 // ---------------------------------------------------------------------------
@@ -395,41 +395,38 @@ impl IcGatewayManager {
 // ---------------------------------------------------------------------------
 
 pub(crate) struct MultipleProcessesManager {
-    replica_manager: Arc<RwLock<ReplicaManager>>,
-    ic_boundary_manager: Arc<RwLock<IcBoundaryManager>>,
-    ic_gateway_manager: Arc<RwLock<IcGatewayManager>>,
+    replica_manager: ReplicaManager,
+    ic_gateway_manager: IcGatewayManager,
     registry: Arc<RegistryHelper>,
 }
 
 impl MultipleProcessesManager {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        replica_manager: ReplicaManager,
+        ic_gateway_manager: IcGatewayManager,
+        registry: Arc<RegistryHelper>,
+    ) -> Self {
+        Self {
+            replica_manager,
+            ic_gateway_manager,
+            registry,
+        }
+    }
+
     pub(crate) fn new(
         replica_process_config: ReplicaProcessConfig,
-        ic_boundary_process_config: IcBoundaryProcessConfig,
         ic_gateway_process_config: IcGatewayProcessConfig,
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
-        let replica_manager = Arc::new(RwLock::new(ReplicaManager::new(
-            replica_process_config,
-            metrics.clone(),
-            logger.clone(),
-        )));
-        let ic_boundary_manager = Arc::new(RwLock::new(IcBoundaryManager::new(
-            ic_boundary_process_config,
-            registry.clone(),
-            metrics.clone(),
-            logger.clone(),
-        )));
-        let ic_gateway_manager = Arc::new(RwLock::new(IcGatewayManager::new(
-            ic_gateway_process_config,
-            metrics,
-            logger,
-        )));
+        let replica_manager =
+            ReplicaManager::new(replica_process_config, metrics.clone(), logger.clone());
+        let ic_gateway_manager = IcGatewayManager::new(ic_gateway_process_config, metrics, logger);
 
         Self {
             replica_manager,
-            ic_boundary_manager,
             ic_gateway_manager,
             registry,
         }
@@ -437,79 +434,49 @@ impl MultipleProcessesManager {
 
     // Used in tests to assert the state of the managed processes.
     #[cfg(test)]
-    pub(crate) fn replica_manager(&self) -> Arc<RwLock<ReplicaManager>> {
-        self.replica_manager.clone()
-    }
-
-    // Used in tests to assert the state of the managed processes, but also in production code to
-    // share the `ic-boundary` process with `BoundaryNodeManager`.
-    pub(crate) fn ic_boundary_manager(&self) -> Arc<RwLock<IcBoundaryManager>> {
-        self.ic_boundary_manager.clone()
+    pub(crate) fn is_replica_running(&self) -> bool {
+        self.replica_manager.process_runner.is_running()
     }
 
     // Used in tests to assert the state of the managed processes.
     #[cfg(test)]
-    pub(crate) fn ic_gateway_manager(&self) -> Arc<RwLock<IcGatewayManager>> {
-        self.ic_gateway_manager.clone()
+    pub(crate) fn is_ic_gateway_running(&self) -> bool {
+        self.ic_gateway_manager.process_runner.is_running()
     }
 
     pub(crate) fn get_replica_pid(&self) -> Option<Pid> {
-        self.replica_manager
-            .read()
-            .unwrap()
-            .process_runner
-            .get_pid()
-    }
-
-    pub(crate) fn get_ic_boundary_pid(&self) -> Option<Pid> {
-        self.ic_boundary_manager
-            .read()
-            .unwrap()
-            .process_runner
-            .get_pid()
+        self.replica_manager.process_runner.get_pid()
     }
 
     pub(crate) fn get_ic_gateway_pid(&self) -> Option<Pid> {
-        self.ic_gateway_manager
-            .read()
-            .unwrap()
-            .process_runner
-            .get_pid()
+        self.ic_gateway_manager.process_runner.get_pid()
     }
 
     /// Start all processes appropriate for this node.
     ///
     /// Always starts the replica.  For cloud-engine subnet nodes it also
-    /// starts ic-boundary, restarting it if the domain name has changed,
-    /// and ic-gateway.
+    /// starts ic-gateway.
     pub(crate) fn start_all(
         &mut self,
         replica_version: &ReplicaVersion,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        let mut replica_manager = self.replica_manager.write().unwrap();
-        let mut ic_boundary_manager = self.ic_boundary_manager.write().unwrap();
-        let mut ic_gateway_manager = self.ic_gateway_manager.write().unwrap();
+        self.replica_manager
+            .ensure_replica_running(replica_version, subnet_id)?;
 
-        replica_manager.ensure_replica_running(replica_version, subnet_id)?;
-
-        // Cloud-engine nodes run ic-boundary as a sidecar.
+        // Cloud-engine nodes run ic-gateway as a sidecar.
         match self.registry.get_subnet_type(subnet_id, registry_version)? {
             None
             | Some(SubnetType::Unspecified)
             | Some(SubnetType::Application)
             | Some(SubnetType::System)
             | Some(SubnetType::VerifiedApplication) => {
-                ic_boundary_manager.stop_ic_boundary()?;
-                ic_gateway_manager.stop_ic_gateway()?;
+                self.ic_gateway_manager.stop_ic_gateway()?;
             }
             Some(SubnetType::CloudEngine) => {
-                ic_boundary_manager.ensure_ic_boundary_running_and_restarted_on_domain_change(
-                    replica_version,
-                    registry_version,
-                );
-                ic_gateway_manager.ensure_ic_gateway_running(replica_version)?;
+                self.ic_gateway_manager
+                    .ensure_ic_gateway_running(replica_version)?;
             }
         }
 
@@ -518,18 +485,13 @@ impl MultipleProcessesManager {
 
     /// Stop the replica process.
     pub(crate) fn stop_replica(&mut self) -> OrchestratorResult<()> {
-        self.replica_manager.write().unwrap().stop_replica()
+        self.replica_manager.stop_replica()
     }
 
     /// Stop every managed process.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
-        let mut replica_manager = self.replica_manager.write().unwrap();
-        let mut ic_boundary_manager = self.ic_boundary_manager.write().unwrap();
-        let mut ic_gateway_manager = self.ic_gateway_manager.write().unwrap();
-
-        replica_manager.stop_replica()?;
-        ic_boundary_manager.stop_ic_boundary()?;
-        ic_gateway_manager.stop_ic_gateway()?;
+        self.replica_manager.stop_replica()?;
+        self.ic_gateway_manager.stop_ic_gateway()?;
 
         Ok(())
     }
