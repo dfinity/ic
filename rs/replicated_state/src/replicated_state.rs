@@ -36,7 +36,8 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesAccountManagerSubnetConfig,
+    CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -767,6 +768,14 @@ impl ReplicatedState {
     /// network topology is not populated.
     pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
         self.metadata.own_cost_schedule().unwrap_or_default()
+    }
+
+    /// Returns the cycles account manager subnet config for this subnet.
+    pub fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        CyclesAccountManagerSubnetConfig::new(
+            self.get_own_subnet_size(),
+            self.get_own_cost_schedule(),
+        )
     }
 
     /// Returns the list of subnet admins of this subnet.
