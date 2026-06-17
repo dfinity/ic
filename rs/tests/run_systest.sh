@@ -100,10 +100,12 @@ if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
     # - StrictHostKeyChecking=accept-new auto-accepts the host key on first contact
     #   (but still rejects a changed key) instead of prompting to confirm it.
     # - An isolated UserKnownHostsFile under $TEST_TMPDIR avoids touching or locking
-    #   the user's ~/.ssh/known_hosts.
+    #   the user's ~/.ssh/known_hosts. Its value is single-quoted because git runs
+    #   GIT_SSH_COMMAND through a shell, so a $TEST_TMPDIR containing spaces would
+    #   otherwise be split into multiple arguments.
     # - ConnectTimeout + a single ConnectionAttempt bound how long we wait on
     #   network/DNS issues so this best-effort sync fails fast instead of stalling.
-    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile=$TEST_TMPDIR/k8s_known_hosts -oConnectTimeout=15 -oConnectionAttempts=1" \
+    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile='$TEST_TMPDIR/k8s_known_hosts' -oConnectTimeout=15 -oConnectionAttempts=1" \
         git clone --depth 1 --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
         git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
         && git -C "$dashboards_repo" config core.sparseCheckout true \
