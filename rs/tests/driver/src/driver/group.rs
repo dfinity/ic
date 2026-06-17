@@ -726,11 +726,18 @@ fn download_prometheus_data_teardowns() -> Vec<Box<dyn PotSetupFn>> {
             );
             std::thread::sleep(Duration::from_secs(cooldown_secs));
         }
-        env.download_prometheus_data_dir_if_exists();
-        env.emit_report(String::from(
-            "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
-            directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
-        ));
+        if env.download_prometheus_data_dir_if_exists() {
+            env.emit_report(String::from(
+                "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
+                directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
+            ));
+        } else {
+            env.emit_report(String::from(
+                "Not downloading the prometheus data because no PrometheusVm was deployed. \
+                Enable metrics for the test (e.g. `enable_metrics = True` on the Bazel target) \
+                if you want the prometheus data to be downloaded.",
+            ));
+        }
     };
     vec![Box::new(teardown)]
 }
