@@ -2,7 +2,7 @@
 //!
 //! When building a [`HashTree`] from a [`LazyTree`], every subtree that carries
 //! a [`LazyFork::subtree_source`] (here a per-canister fork, mirroring `CanisterFork`
-//! in production) is collapsed to a digest-only [`NodeKind::Subtree`] stub node.
+//! in production) is collapsed to a digest-only [`NodeKind::Stub`].
 //! Such a tree:
 //!
 //!   * has the exact same root hash as a fully materialized build,
@@ -243,9 +243,9 @@ fn every_canister_is_a_subtree() {
     let tree = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
 
     assert_eq!(
-        tree.subtree_count(),
+        tree.stub_count(),
         NUM_CANISTERS,
-        "every canister should be stored as a reusable subtree node"
+        "every canister should be stored as a stub"
     );
 }
 
@@ -380,7 +380,7 @@ fn baseline_build_with_partial_change_matches_from_scratch() {
     let with_baseline = hash_lazy_tree_with_baseline(&state_tree(&next, TIME), &baseline).unwrap();
     let from_scratch = hash_lazy_tree(&state_tree(&next, TIME)).unwrap();
 
-    assert_eq!(with_baseline.subtree_count(), NUM_CANISTERS);
+    assert_eq!(with_baseline.stub_count(), NUM_CANISTERS);
     assert_eq!(with_baseline.root_hash(), from_scratch.root_hash());
 }
 

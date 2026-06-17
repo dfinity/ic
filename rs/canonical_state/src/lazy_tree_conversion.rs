@@ -863,7 +863,7 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
     }
 }
 
-/// Rebuilds a canister's stubbed [subtree](`NodeKind::Subtree`) for witness
+/// Rebuilds a canister's stubbed [subtree](`NodeKind::Stub`) for witness
 /// generation, by recovering the `Arc<CanisterState>` from the stub's
 /// [`SubtreeSource`] and traversing its [`CanisterFork`].
 ///

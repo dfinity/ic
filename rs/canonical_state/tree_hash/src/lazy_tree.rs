@@ -162,8 +162,8 @@ pub struct SubtreeSource {
 /// Rebuilds a stubbed subtree's [`HashTree`](crate::hash_tree::HashTree) from
 /// its type-erased [`SubtreeSource`], by [downcasting](SubtreeSource::downcast)
 /// the held `Arc` back to its concrete source and re-materializing it. Used to
-/// expand a [`NodeKind::Subtree`](crate::hash_tree::HashTree) stub on demand
-/// during witness generation.
+/// expand a [`NodeKind::Stub`](crate::hash_tree::HashTree) on demand during
+/// witness generation.
 ///
 /// It is a plain (non-capturing) function pointer, so the producer of the stub
 /// must bake the certification version into it. The pointer alone fully
