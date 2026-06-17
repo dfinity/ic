@@ -62,7 +62,9 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(test))
         // The replica binary is "broken" and restarted by the orchestrator multiple times
-        .remove_metrics_to_check(r#"orchestrator_processes_start_attempts_total{process_name="replica"}"#)
+        .remove_metrics_to_check(
+            r#"orchestrator_processes_start_attempts_total{process_name="replica"}"#,
+        )
         .execute_from_args()?;
     Ok(())
 }

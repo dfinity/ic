@@ -1,5 +1,8 @@
 use crate::{
-    error::OrchestratorError, process_manager::Process, processes::{IcBoundaryManager, IcBoundaryProcess}, registry_helper::RegistryHelper
+    error::OrchestratorError,
+    process_manager::Process,
+    processes::{IcBoundaryManager, IcBoundaryProcess},
+    registry_helper::RegistryHelper,
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{NodeId, ReplicaVersion};
