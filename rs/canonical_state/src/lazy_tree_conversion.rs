@@ -9,9 +9,9 @@ use crate::{
 };
 use LazyTree::Blob;
 use ic_canonical_state_tree_hash::{
-    hash_tree::HashTree,
+    hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
     lazy_tree::{
-        Lazy, LazyFork, LazyTree, SubtreeId, blob, fork,
+        Lazy, LazyFork, LazyTree, SubtreeExpander, SubtreeSource, blob, fork,
         materialize::materialize_partial, num, string,
     },
 };
@@ -849,16 +849,51 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
         }
     }
 
-    /// A canister's certified subtree is stored as a self-contained, reusable
-    /// subtree node identified by the backing `Arc<CanisterState>`. Since
-    /// canisters are copy-on-write `Arcs`, an unchanged canister retains its
-    /// identity across rounds and its already-built subtree from the earlier
-    /// `HashTree` can be reused. Any mutation yields a fresh `Arc` (and a rebuild).
-    ///
-    /// NOTE: reuse is only sound across certified state trees built under the same
-    /// [`CertificationVersion`], since the canonical encoding depends on it.
-    fn subtree_id(&self) -> Option<SubtreeId> {
-        Some(SubtreeId::new(self.canister))
+    /// A canister's certified subtree is stored as a reusable stub identified by
+    /// the backing `Arc<CanisterState>` and the version-specific expander. An
+    /// unchanged canister keeps the same `Arc` (copy-on-write) and the same
+    /// expander, so its precomputed digest is reused from the baseline; any
+    /// mutation or version change yields a mismatched [`SubtreeSource`] and a
+    /// rebuild.
+    fn subtree_source(&self) -> Option<SubtreeSource> {
+        Some(SubtreeSource::new(
+            self.canister,
+            canister_expander(self.version),
+        ))
+    }
+}
+
+/// Rebuilds a canister's stubbed [subtree](`NodeKind::Subtree`) for witness
+/// generation, by recovering the `Arc<CanisterState>` from the stub's
+/// [`SubtreeSource`] and traversing its [`CanisterFork`].
+///
+/// The certification version (which the canonical encoding depends on) is baked
+/// in as the const parameter `V`, so the stored function pointer alone fully
+/// determines the expansion — see [`canister_expander`].
+fn expand_canister<const V: u32>(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let canister = source.downcast::<CanisterState>();
+    let version = CertificationVersion::try_from(V)
+        .expect("const version parameter is a valid certification version");
+    // `canister` (and thus the borrow below) outlives `hash_lazy_tree`, which
+    // returns an owned `HashTree`; no borrow escapes.
+    hash_lazy_tree(&fork(CanisterFork {
+        canister: &canister,
+        version,
+    }))
+}
+
+/// Selects the [`expand_canister`] monomorphization for `version`, so the
+/// resulting [`SubtreeExpander`] function pointer carries the version with it
+/// (rather than replicating it in every stub).
+fn canister_expander(version: CertificationVersion) -> SubtreeExpander {
+    match version {
+        CertificationVersion::V19 => expand_canister::<{ CertificationVersion::V19 as u32 }>,
+        CertificationVersion::V20 => expand_canister::<{ CertificationVersion::V20 as u32 }>,
+        CertificationVersion::V21 => expand_canister::<{ CertificationVersion::V21 as u32 }>,
+        CertificationVersion::V22 => expand_canister::<{ CertificationVersion::V22 as u32 }>,
+        CertificationVersion::V23 => expand_canister::<{ CertificationVersion::V23 as u32 }>,
+        CertificationVersion::V24 => expand_canister::<{ CertificationVersion::V24 as u32 }>,
+        CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
     }
 }
 

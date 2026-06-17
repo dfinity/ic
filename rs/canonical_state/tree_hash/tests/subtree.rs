@@ -1,20 +1,20 @@
 //! Tests for reusable subtree (stub) nodes.
 //!
 //! When building a [`HashTree`] from a [`LazyTree`], every subtree that carries
-//! a [`LazyFork::subtree_id`] (here a per-canister fork, mirroring `CanisterFork`
+//! a [`LazyFork::subtree_source`] (here a per-canister fork, mirroring `CanisterFork`
 //! in production) is collapsed to a digest-only [`NodeKind::Subtree`] stub node.
 //! Such a tree:
 //!
 //!   * has the exact same root hash as a fully materialized build,
-//!   * serves witnesses by expanding the stub on demand from the source
-//!     [`LazyTree`] (via `witness_with_source`), and
+//!   * serves witnesses by expanding the stub on demand from the source `Arc`
+//!     it holds (via its [`SubtreeExpander`]), with no external source, and
 //!   * when built with a baseline ([`hash_lazy_tree_with_baseline`]), reuses the
-//!     stored digest of every unchanged subtree (matched by `SubtreeId`).
+//!     stored digest of every unchanged subtree (matched by `SubtreeSource`).
 
 use ic_canonical_state_tree_hash::hash_tree::{
-    HashTree, hash_lazy_tree, hash_lazy_tree_with_baseline,
+    HashTree, HashTreeError, hash_lazy_tree, hash_lazy_tree_with_baseline,
 };
-use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeId, fork};
+use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeSource, fork};
 use ic_canonical_state_tree_hash_test_utils::as_lazy;
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, Witness, flatmap};
 use std::collections::BTreeMap;
@@ -69,8 +69,8 @@ fn canisters() -> Canisters {
 
 /// A `LazyFork` over the certified subtree of a single canister.
 ///
-/// `subtree_id` mirrors `CanisterFork::subtree_id` in production: it returns the
-/// identity of the backing `Arc`, so each canister is stored as a self-contained,
+/// `subtree_source` mirrors `CanisterFork::subtree_source` in production: it
+/// returns the backing `Arc`, so each canister is stored as a self-contained,
 /// reusable subtree node.
 struct CanisterArcFork<'a> {
     canister: &'a Arc<LabeledTree<Vec<u8>>>,
@@ -106,9 +106,16 @@ impl<'a> LazyFork<'a> for CanisterArcFork<'a> {
         self.children_map().len()
     }
 
-    fn subtree_id(&self) -> Option<SubtreeId> {
-        Some(SubtreeId::new(self.canister))
+    fn subtree_source(&self) -> Option<SubtreeSource> {
+        Some(SubtreeSource::new(self.canister, expand_test_canister))
     }
+}
+
+/// Rebuilds a test canister's stubbed subtree from its `SubtreeSource` (mirrors
+/// `expand_canister` in production, minus the certification version).
+fn expand_test_canister(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let canister = source.downcast::<LabeledTree<Vec<u8>>>();
+    hash_lazy_tree(&canister_fork(&canister))
 }
 
 /// A `LazyFork` over the `/canister` subtree.
@@ -187,19 +194,13 @@ fn state_tree<'a>(canisters: &'a Canisters, time: &'a [u8]) -> LazyTree<'a> {
 
 /// Asserts that `tree` produces exactly the same witness (both as
 /// `MixedHashTree` and `Witness`) as the `reference` full build. Stubbed
-/// subtrees are expanded from `source` (the same lazy tree both were built
-/// from).
-fn assert_same_witness(
-    reference: &HashTree,
-    tree: &HashTree,
-    partial: &LabeledTree<Vec<u8>>,
-    source: &LazyTree,
-) {
+/// subtrees expand themselves from the source `Arc` they hold.
+fn assert_same_witness(reference: &HashTree, tree: &HashTree, partial: &LabeledTree<Vec<u8>>) {
     let reference_mixed = reference
-        .witness_with_source::<MixedHashTree>(partial, Some(source))
+        .witness::<MixedHashTree>(partial)
         .expect("reference MixedHashTree");
     let tree_mixed = tree
-        .witness_with_source::<MixedHashTree>(partial, Some(source))
+        .witness::<MixedHashTree>(partial)
         .expect("MixedHashTree");
     assert_eq!(
         reference_mixed, tree_mixed,
@@ -212,11 +213,9 @@ fn assert_same_witness(
     );
 
     let reference_witness = reference
-        .witness_with_source::<Witness>(partial, Some(source))
+        .witness::<Witness>(partial)
         .expect("reference Witness");
-    let tree_witness = tree
-        .witness_with_source::<Witness>(partial, Some(source))
-        .expect("Witness");
+    let tree_witness = tree.witness::<Witness>(partial).expect("Witness");
     assert_eq!(
         reference_witness, tree_witness,
         "Witness mismatch for partial {partial:?}"
@@ -260,7 +259,7 @@ fn witnesses_into_canisters_expand_from_source() {
     for i in [0usize, 1, 99, 100, 101, NUM_CANISTERS - 1] {
         let partial = canister_partial(i);
         let mixed = tree
-            .witness_with_source::<MixedHashTree>(&partial, Some(&source))
+            .witness::<MixedHashTree>(&partial)
             .expect("witness expanded from source");
         assert_eq!(&mixed.digest(), tree.root_hash());
         // The requested leaves must be present (not pruned).
@@ -283,9 +282,7 @@ fn witnesses_into_canisters_expand_from_source() {
             Label::from("module_hash") => LabeledTree::Leaf(module_hash(77)),
         }),
     );
-    let mixed = tree
-        .witness_with_source::<MixedHashTree>(&partial, Some(&source))
-        .unwrap();
+    let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
     assert_eq!(&mixed.digest(), tree.root_hash());
 }
 
@@ -301,9 +298,7 @@ fn absence_witnesses_expand_from_source() {
             Label::from("zzzz") => LabeledTree::Leaf(vec![]),
         }),
     });
-    let mixed = tree
-        .witness_with_source::<MixedHashTree>(&partial, Some(&source))
-        .unwrap();
+    let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
     assert_eq!(&mixed.digest(), tree.root_hash());
     assert!(
         mixed.lookup(&[CANISTER_LABEL, b"zzzz"]).is_absent(),
@@ -318,9 +313,7 @@ fn absence_witnesses_expand_from_source() {
                 Label::from("nonexistent") => LabeledTree::Leaf(vec![]),
             }),
         );
-        let mixed = tree
-            .witness_with_source::<MixedHashTree>(&partial, Some(&source))
-            .unwrap();
+        let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
         assert_eq!(&mixed.digest(), tree.root_hash());
         assert!(
             mixed
@@ -358,8 +351,7 @@ fn baseline_build_matches_from_scratch() {
 
     // Witnesses must match between the two builds for the changed canister
     // (whose contents are now those of `canister_subtree(9999)`), an unchanged
-    // canister, and the changed `time` leaf. Stubs are expanded from `source`.
-    let source = state_tree(&next, new_time);
+    // canister, and the changed `time` leaf. Stubs expand themselves.
     for partial in [
         canister_query(50, canister_subtree(9999)),
         canister_partial(7),
@@ -367,7 +359,7 @@ fn baseline_build_matches_from_scratch() {
             Label::from(TIME_LABEL) => LabeledTree::Leaf(new_time.to_vec()),
         }),
     ] {
-        assert_same_witness(&from_scratch, &with_baseline, &partial, &source);
+        assert_same_witness(&from_scratch, &with_baseline, &partial);
     }
 }
 
