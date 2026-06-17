@@ -1542,7 +1542,7 @@ mod tests {
             logger.clone(),
         );
         ic_gateway_manager.process_runner = Box::new(FakeRunner::new());
-        // Start the replica process if the test scenario indicates so
+        // Start the child processes if the test scenario indicates so
         if test_scenario.were_child_processes_started_previously() {
             replica_manager
                 .process_runner
@@ -1553,7 +1553,6 @@ mod tests {
                 ))
                 .unwrap();
             if matches!(subnet_type, SubnetType::CloudEngine) {
-                // Simulate ic-gateway already running by faking a start.
                 ic_gateway_manager
                     .process_runner
                     .start(
@@ -2396,9 +2395,9 @@ mod tests {
             assert_has_removed_state();
         }
 
-        // Returns whether the child processes should be running after the upgrade loop.
+        // Returns whether the replica process should be running after the upgrade loop.
         // Additionally asserts whether the orchestrator has started *new* child processes
-        fn should_child_processes_be_running(&self, logs: Vec<LogEntry>) -> bool {
+        fn should_replica_process_be_running(&self, logs: Vec<LogEntry>) -> bool {
             let logs_assert = LogEntriesAssert::assert_that(logs);
             let assert_has_started = |process_name: &str| {
                 logs_assert.has_only_one_message_containing(
@@ -2414,12 +2413,10 @@ mod tests {
                 );
             };
             let assert_has_started_new_processes = || {
+                assert_has_started(ReplicaProcess::NAME);
                 if matches!(self.subnet_type, SubnetType::CloudEngine) {
-                    assert_has_started(ReplicaProcess::NAME);
                     assert_has_started(IcGatewayProcess::NAME);
-                } else {
-                    assert_has_started(ReplicaProcess::NAME);
-                };
+                }
             };
             let assert_has_not_started_new_processes = || {
                 assert_has_not_started(ReplicaProcess::NAME);
@@ -2647,8 +2644,18 @@ mod tests {
         // Check whether the replica process is running or not
         assert_eq!(
             upgrade_loop.is_replica_running(),
-            test_scenario.should_child_processes_be_running(logs),
+            test_scenario.should_replica_process_be_running(logs),
         );
+        if matches!(test_scenario.subnet_type, SubnetType::CloudEngine) {
+            // For Cloud Engine subnets, ic-gateway should always be running when the replica is
+            assert_eq!(
+                upgrade_loop.is_ic_gateway_running(),
+                upgrade_loop.is_replica_running()
+            );
+        } else {
+            // For other subnets, ic-gateway should never be running
+            assert!(!upgrade_loop.is_ic_gateway_running());
+        }
 
         // Asserting further invariants:
         // - Consistent flow/subnet assignment:
@@ -2686,18 +2693,6 @@ mod tests {
         assert_eq!(
             upgrade_loop.is_replica_running(),
             matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
-                && (matches!(
-                    flow_result,
-                    Ok(OrchestratorControlFlow::Assigned(_))
-                        | Ok(OrchestratorControlFlow::Leaving(_))
-                ) || test_scenario.were_child_processes_started_previously())
-        );
-        // - The ic-gateway process is running <=> same as the replica process, but only for Cloud
-        // Engine subnets
-        assert_eq!(
-            upgrade_loop.is_ic_gateway_running(),
-            matches!(test_scenario.subnet_type, SubnetType::CloudEngine)
-                && matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
                 && (matches!(
                     flow_result,
                     Ok(OrchestratorControlFlow::Assigned(_))

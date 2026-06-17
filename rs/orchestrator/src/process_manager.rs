@@ -61,7 +61,7 @@ pub(crate) trait ProcessRunner<P: Process>: Send {
     fn get_pid(&self) -> Option<Pid>;
 }
 
-/// Runs a single versioned [`Process`], implementing [`ProcessRunner<P>`].
+/// Runs a single versioned [`Process`] by implementing [`ProcessRunner<P>`].
 pub(crate) struct SingleProcessRunner<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
