@@ -663,14 +663,7 @@ fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
         ("orchestrator_cup_deserialization_failed_total", 0),
         ("orchestrator_state_removal_failed_total", 0),
         ("orchestrator_tasks_failed_total", 0),
-        (
-            r#"orchestrator_processes_start_attempts_total{process_name="replica"}"#,
-            1,
-        ),
-        (
-            r#"orchestrator_processes_start_attempts_total{process_name="ic-gateway"}"#,
-            1,
-        ),
+        ("orchestrator_processes_start_attempts_total", 1),
     ])
 }
 
