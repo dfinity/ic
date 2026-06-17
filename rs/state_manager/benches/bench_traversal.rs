@@ -309,7 +309,7 @@ fn main() {
 
     let mut c = Criterion::default()
         // .with_measurement(ProcessTime::UserTime)
-        // .sample_size(20)
+        .sample_size(20)
         .configure_from_args();
     bench_traversal(&mut c);
 

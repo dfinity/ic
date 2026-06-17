@@ -316,19 +316,31 @@ pub struct HashTree {
     /// index_range.0 <= index_range.1 <= node_labels[bucket].len()
     node_children_labels_ranges: Vec<Vec<NodeIndexRange>>,
 
-    /// (i,j)-th element of this array contains the root digest of the stub with ID
-    /// `NodeId::stub(i,j)`. The subtree's contents are not materialized; when
-    /// needed for building a witness they are rebuilt on demand from the parallel
-    /// [`stub_sources`](Self::stub_sources) entry (see [`HashTree::witness`]).
-    stub_digests: Vec<Vec<Digest>>,
-    /// (i,j)-th element of this array contains the [`SubtreeSource`] that the stub
-    /// with ID `NodeId::stub(i,j)` was built from.
-    ///
-    /// Used both to detect that an unchanged subtree can be reused from a baseline
-    /// (by source identity and certification version) and to rebuild it for
-    /// witnesses. Holds an `Arc` into the source, keeping it alive so the identity
-    /// cannot be recycled (no ABA) and the source stays available for expansion.
-    stub_sources: Vec<Vec<SubtreeSource>>,
+    /// (i,j)-th element of this array contains the stub with ID `NodeId::stub(i,j)`:
+    /// the subtree's root digest plus the [`SubtreeSource`] it was built from. The
+    /// subtree's contents are not materialized; when needed for building a witness
+    /// they are rebuilt on demand from the `SubtreeSource` (see
+    /// [`HashTree::witness`]).
+    stubs: Vec<Vec<StubNode>>,
+}
+
+/// A reusable subtree collapsed to a single digest ("stub"), stored in a
+/// [`NodeKind::Stub`] node.
+///
+/// Holds one `Arc` (inside the [`SubtreeSource`]) plus a cheap [`Digest`], so it
+/// can be stored inline, avoiding extra allocation and/or indirection.
+#[derive(Clone, Debug)]
+struct StubNode {
+    /// The subtree's root digest. Its contents are not materialized; they are
+    /// rebuilt on demand via [`SubtreeSource::expand`] during witness generation.
+    digest: Digest,
+
+    /// The source that this stub was built from (paired with its expander), used
+    /// both to detect that an unchanged subtree can be reused from a baseline (by
+    /// source identity and certification version) and to rebuild it for witnesses.
+    /// Holds an `Arc` into the source, keeping it alive so the identity cannot be
+    /// recycled (no ABA) and the source stays available for expansion.
+    source: SubtreeSource,
 }
 
 impl HashTree {
@@ -351,8 +363,7 @@ impl HashTree {
             node_labels: vec![Default::default()],
             node_children: vec![Default::default()],
             node_children_labels_ranges: vec![Default::default()],
-            stub_digests: vec![Default::default()],
-            stub_sources: vec![Default::default()],
+            stubs: vec![Default::default()],
         }
     }
 
@@ -361,7 +372,7 @@ impl HashTree {
         let leaf_size: usize = self.leaf_digests.iter().map(|bucket| bucket.len()).sum();
         let fork_size: usize = self.fork_digests.iter().map(|bucket| bucket.len()).sum();
         let node_size: usize = self.node_digests.iter().map(|bucket| bucket.len()).sum();
-        let stub_size: usize = self.stub_digests.iter().map(|bucket| bucket.len()).sum();
+        let stub_size: usize = self.stubs.iter().map(|bucket| bucket.len()).sum();
 
         // Since this is for metrics only we don't care about potential overflows.
         // Note: each stub is counted as a single node; the nodes of its
@@ -391,7 +402,7 @@ impl HashTree {
             .max()
             .unwrap_or(0);
         let stub_size = self
-            .stub_digests
+            .stubs
             .iter()
             .map(|bucket| bucket.len())
             .max()
@@ -405,7 +416,7 @@ impl HashTree {
     /// Diagnostics/test only.
     #[doc(hidden)]
     pub fn stub_count(&self) -> usize {
-        self.stub_digests.iter().map(|bucket| bucket.len()).sum()
+        self.stubs.iter().map(|bucket| bucket.len()).sum()
     }
 
     /// Note that new forks are always added to fork_digests[0], but in order
@@ -436,9 +447,8 @@ impl HashTree {
 
     /// Constructs a new stub (either freshly hashed or reused from a baseline).
     fn new_stub(&mut self, digest: Digest, source: SubtreeSource) -> Result<NodeId, HashTreeError> {
-        let idx = self.stub_digests[0].len();
-        self.stub_digests[0].push(digest);
-        self.stub_sources[0].push(source);
+        let idx = self.stubs[0].len();
+        self.stubs[0].push(StubNode { digest, source });
         NodeId::stub(self.bucket_offset, idx)
     }
 
@@ -503,7 +513,7 @@ impl HashTree {
                 &self.leaf_digests[node_id.bucket() - self.bucket_offset][node_id.index()]
             }
             NodeKind::Stub => {
-                &self.stub_digests[node_id.bucket() - self.bucket_offset][node_id.index()]
+                &self.stubs[node_id.bucket() - self.bucket_offset][node_id.index()].digest
             }
             NodeKind::Empty => &EMPTY_HASH,
         }
@@ -527,8 +537,6 @@ impl HashTree {
             check_same_dimensions(&self.node_digests, &self.node_labels);
             check_same_dimensions(&self.node_digests, &self.node_children);
             check_same_dimensions(&self.node_digests, &self.node_children_labels_ranges);
-
-            check_same_dimensions(&self.stub_digests, &self.stub_sources);
             debug_assert!(
                 self.node_children_labels_ranges
                     .iter()
@@ -554,7 +562,7 @@ impl HashTree {
                 self.node_children[bucket][idx],
             ),
             NodeKind::Leaf => HashTreeView::Leaf(&self.leaf_digests[bucket][idx]),
-            NodeKind::Stub => HashTreeView::Stub(&self.stub_digests[bucket][idx]),
+            NodeKind::Stub => HashTreeView::Stub(&self.stubs[bucket][idx].digest),
             NodeKind::Empty => HashTreeView::Empty,
         }
     }
@@ -761,7 +769,8 @@ impl HashTree {
                     // Requested partial tree descends into the subtree: rebuild it from source and
                     // continue witness generation there.
                     LabeledTree::SubTree(children) if !children.is_empty() => {
-                        let expanded = ht.stub_sources[pos.bucket()][pos.index()]
+                        let expanded = ht.stubs[pos.bucket()][pos.index()]
+                            .source
                             .expand()
                             .expect("expanding a stub should not fail");
                         go::<B>(&expanded, NodeId::empty(), expanded.root, t)
@@ -822,8 +831,7 @@ impl HashTree {
             .extend(subtree.node_children_labels_ranges);
 
         // Reusable stubs
-        self.stub_digests.extend(subtree.stub_digests);
-        self.stub_sources.extend(subtree.stub_sources);
+        self.stubs.extend(subtree.stubs);
     }
 }
 
@@ -926,20 +934,14 @@ impl<'a> Baseline<'a> {
     }
 
     /// If the baseline stored this position as a reusable [`NodeKind::Stub`],
-    /// returns its root digest and the [`SubtreeSource`] that it was built from.
-    //
-    // FIXME: Replace with something like `digest(&self, &SubtreeSource) -> Option<&'a Digest>`
-    fn reusable(&self) -> Option<(&'a Digest, &'a SubtreeSource)> {
+    /// returns the stub node (whose `source` identifies what it was built from).
+    fn reusable(&self) -> Option<&'a StubNode> {
         let content = self.content();
         if content.kind() == NodeKind::Stub {
             // Sanity check: a complete `HashTree` has no bucket offset.
             debug_assert_eq!(self.tree.bucket_offset, 0);
 
-            let (bucket, idx) = (content.bucket(), content.index());
-            Some((
-                &self.tree.stub_digests[bucket][idx],
-                &self.tree.stub_sources[bucket][idx],
-            ))
+            Some(&self.tree.stubs[content.bucket()][content.index()])
         } else {
             None
         }
@@ -1053,9 +1055,7 @@ fn hash_lazy_tree_impl(
                 // Unchanged: the baseline carries an equal `SubtreeSource` — same source
                 // allocation *and* same expander (hence same certification version) — so its
                 // digest is reusable (cheap).
-                Some((base_digest, base_source)) if *base_source == source => {
-                    (base_digest.clone(), false)
-                }
+                Some(base) if base.source == source => (base.digest.clone(), false),
 
                 // New, changed, or built under a different version: build the subtree only to
                 // capture its root digest; if later needed for a witness, it will be rebuilt on
