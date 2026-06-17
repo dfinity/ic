@@ -95,9 +95,13 @@ if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
     dashboards_repo="$TEST_TMPDIR/k8s_dashboards"
     rm -rf "$dashboards_repo" || true
     echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
-    # Don't let a missing SSH key / unknown host key block the run by prompting
-    # interactively; fail fast instead (the sync is best-effort, see below).
-    if GIT_SSH_COMMAND="ssh -oBatchMode=yes" \
+    # Keep the clone fully non-interactive so it can't hang a Bazel run:
+    # - BatchMode disables password/passphrase prompts.
+    # - StrictHostKeyChecking=accept-new auto-accepts the host key on first contact
+    #   (but still rejects a changed key) instead of prompting to confirm it.
+    # - An isolated UserKnownHostsFile under $TEST_TMPDIR avoids touching or locking
+    #   the user's ~/.ssh/known_hosts.
+    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile=$TEST_TMPDIR/k8s_known_hosts" \
         git clone --depth 1 --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
         git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
         && git -C "$dashboards_repo" config core.sparseCheckout true \
