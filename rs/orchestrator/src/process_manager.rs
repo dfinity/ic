@@ -12,10 +12,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{
-    error::{OrchestratorError, OrchestratorResult},
-    metrics::OrchestratorMetrics,
-};
+use crate::error::OrchestratorResult;
 
 type PIDCell = Arc<Mutex<Option<Pid>>>;
 
@@ -32,6 +29,18 @@ pub(crate) trait Process {
     /// We only impose that we can check that versions are equal and have
     /// a debug representation
     type Version: Eq + Debug;
+    /// Static configuration of the process, such as the path to the binary
+    /// and static arguments.
+    type Config;
+    /// Dynamic arguments of the process, such as the subnet ID for the replica
+    /// (which could change across the orchestrator's lifetime).
+    type Args;
+
+    /// Build a new instance of the process with the given configuration and
+    /// arguments.
+    fn build(config: &Self::Config, args: Self::Args) -> OrchestratorResult<Self>
+    where
+        Self: Sized;
 
     /// Return the version of the [`Process`]
     fn get_version(&self) -> &Self::Version;
@@ -215,31 +224,4 @@ fn wait_on_exit(
         }
         let _pid = pid_cell.lock().unwrap().take();
     }
-}
-
-// start_orchestrator_process — common "check-running / log / metric / start"
-// logic
-//
-// Any new process type automatically benefits from this without duplicating
-// the boilerplate.
-pub(crate) fn start_orchestrator_process<P: Process + Send>(
-    runner: &mut dyn ProcessRunner<P>,
-    process: P,
-    metrics: &OrchestratorMetrics,
-    logger: &ReplicaLogger,
-) -> OrchestratorResult<()> {
-    if runner.is_running() {
-        return Ok(());
-    }
-    info!(logger, "Starting new {} process", P::NAME);
-    metrics
-        .processes_start_attempts
-        .with_label_values(&[P::NAME])
-        .inc();
-    runner.start(process).map_err(|e| {
-        OrchestratorError::IoError(
-            format!("Error when attempting to start {} process", P::NAME),
-            e,
-        )
-    })
 }

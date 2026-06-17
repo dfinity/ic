@@ -372,7 +372,7 @@ impl Upgrade {
 
         // This will start new child processes if any of them is not running
         self.ensure_children_are_running(
-            &self.replica_version,
+            self.replica_version.clone(),
             subnet_id,
             latest_registry_version,
         )?;
@@ -609,7 +609,7 @@ impl Upgrade {
     /// Start all child processes appropriate for this node.
     fn ensure_children_are_running(
         &self,
-        replica_version: &ReplicaVersion,
+        replica_version: ReplicaVersion,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
@@ -1099,7 +1099,7 @@ mod tests {
     use crate::catch_up_package_provider::tests::mock_tls_config;
     use crate::process_manager::{Process, ProcessRunner};
     use crate::processes::{
-        IcGatewayManager, IcGatewayProcess, IcGatewayProcessConfig, ReplicaManager, ReplicaProcess,
+        IcGatewayProcess, IcGatewayProcessConfig, ProcessManager, ReplicaProcess,
         ReplicaProcessConfig,
     };
 
@@ -1495,7 +1495,7 @@ mod tests {
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
 
         let cup_dir = dir.join("cups");
-        let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
+        let cup_path = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
         std::fs::create_dir_all(&cup_dir).unwrap();
         if let Some(local_cup) = has_local_cup {
             let cup = make_local_cup(
@@ -1504,7 +1504,7 @@ mod tests {
                 local_cup.registry_version,
             );
             let cup_proto = pb::CatchUpPackage::from(cup);
-            std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
+            std::fs::write(&cup_path, cup_proto.encode_to_vec()).unwrap();
         }
         let cup_provider = CatchUpPackageProvider::new(
             registry.clone(),
@@ -1521,43 +1521,33 @@ mod tests {
         let ic_gateway_env_file = dir.join("ic-gateway.env");
         std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
 
+        let mut replica_runner = Box::new(FakeRunner::new());
         let replica_process_config = ReplicaProcessConfig {
             ic_binary_dir: ic_binary_dir.clone(),
-            cup_path: cup_file,
+            cup_path,
             replica_config_file: replica_config_file.clone(),
         };
-        let mut replica_manager = ReplicaManager::new(
-            replica_process_config.clone(),
-            Arc::clone(&metrics),
-            logger.clone(),
-        );
-        replica_manager.process_runner = Box::new(FakeRunner::new());
+        let mut ic_gateway_runner = Box::new(FakeRunner::new());
         let ic_gateway_process_config = IcGatewayProcessConfig {
-            ic_binary_dir: ic_binary_dir.clone(),
+            ic_binary_dir,
             ic_gateway_env_file,
         };
-        let mut ic_gateway_manager = IcGatewayManager::new(
-            ic_gateway_process_config.clone(),
-            Arc::clone(&metrics),
-            logger.clone(),
-        );
-        ic_gateway_manager.process_runner = Box::new(FakeRunner::new());
         // Start the child processes if the test scenario indicates so
         if test_scenario.were_child_processes_started_previously() {
-            replica_manager
-                .process_runner
-                .start(ReplicaProcess::new(
-                    replica_process_config,
-                    current_replica_version.clone(),
-                    SUBNET_1,
-                ))
+            replica_runner
+                .start(
+                    ReplicaProcess::build(
+                        &replica_process_config,
+                        (current_replica_version.clone(), SUBNET_1),
+                    )
+                    .unwrap(),
+                )
                 .unwrap();
             if matches!(subnet_type, SubnetType::CloudEngine) {
-                ic_gateway_manager
-                    .process_runner
+                ic_gateway_runner
                     .start(
-                        IcGatewayProcess::new(
-                            ic_gateway_process_config,
+                        IcGatewayProcess::build(
+                            &ic_gateway_process_config,
                             current_replica_version.clone(),
                         )
                         .unwrap(),
@@ -1566,8 +1556,18 @@ mod tests {
             }
         }
         let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new_for_test(
-            replica_manager,
-            ic_gateway_manager,
+            ProcessManager::new_for_test(
+                replica_runner,
+                replica_process_config,
+                Arc::clone(&metrics),
+                logger.clone(),
+            ),
+            ProcessManager::new_for_test(
+                ic_gateway_runner,
+                ic_gateway_process_config,
+                Arc::clone(&metrics),
+                logger.clone(),
+            ),
             Arc::clone(&registry),
         )));
 
@@ -1606,7 +1606,7 @@ mod tests {
             manageboot_runner,
             cup_provider,
             subnet_assignment,
-            current_replica_version.clone(),
+            current_replica_version,
             replica_config_file,
             node_id,
             Arc::new(registry_replicator),
@@ -2625,8 +2625,8 @@ mod tests {
         // Check presence/absence of local CUP, including its height, which
         // tests the recovery case where the recovery CUP would overwrite the
         // local CUP
-        let cup_file = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
-        let local_cup_height = std::fs::read(cup_file)
+        let cup_path = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
+        let local_cup_height = std::fs::read(cup_path)
             .map(|bytes| {
                 CatchUpPackage::try_from(&pb::CatchUpPackage::decode(&bytes[..]).unwrap())
                     .unwrap()

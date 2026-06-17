@@ -1,20 +1,15 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessRunner, SingleProcessRunner, start_orchestrator_process},
+    process_manager::{Process, ProcessRunner, SingleProcessRunner},
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
-use ic_logger::{ReplicaLogger, warn};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_types::{RegistryVersion, ReplicaVersion, SubnetId};
 use nix::unistd::Pid;
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, ffi::OsString, path::PathBuf, sync::Arc};
 
 // ---------------------------------------------------------------------------
 // ReplicaProcess
@@ -35,25 +30,24 @@ pub(crate) struct ReplicaProcess {
     subnet_id: SubnetId,
 }
 
-impl ReplicaProcess {
-    pub(crate) fn new(
-        config: ReplicaProcessConfig,
-        replica_version: ReplicaVersion,
-        subnet_id: SubnetId,
-    ) -> Self {
-        Self {
-            ic_binary_dir: config.ic_binary_dir,
-            replica_version,
-            cup_path: config.cup_path,
-            replica_config_file: config.replica_config_file,
-            subnet_id,
-        }
-    }
-}
-
 impl Process for ReplicaProcess {
     const NAME: &'static str = "replica";
     type Version = ReplicaVersion;
+    type Config = ReplicaProcessConfig;
+    type Args = (ReplicaVersion, SubnetId);
+
+    fn build(
+        config: &Self::Config,
+        (replica_version, subnet_id): Self::Args,
+    ) -> OrchestratorResult<Self> {
+        Ok(Self {
+            ic_binary_dir: config.ic_binary_dir.clone(),
+            replica_version,
+            cup_path: config.cup_path.clone(),
+            replica_config_file: config.replica_config_file.clone(),
+            subnet_id,
+        })
+    }
 
     fn get_version(&self) -> &Self::Version {
         &self.replica_version
@@ -78,52 +72,6 @@ impl Process for ReplicaProcess {
     }
 }
 
-pub(crate) struct ReplicaManager {
-    pub process_runner: Box<dyn ProcessRunner<ReplicaProcess> + Sync>,
-    process_config: ReplicaProcessConfig,
-    metrics: Arc<OrchestratorMetrics>,
-    logger: ReplicaLogger,
-}
-
-impl ReplicaManager {
-    pub(crate) fn new(
-        process_config: ReplicaProcessConfig,
-        metrics: Arc<OrchestratorMetrics>,
-        logger: ReplicaLogger,
-    ) -> Self {
-        let process_runner = Box::new(SingleProcessRunner::new(logger.clone()));
-        Self {
-            process_runner,
-            process_config,
-            metrics,
-            logger,
-        }
-    }
-
-    fn ensure_replica_running(
-        &mut self,
-        replica_version: &ReplicaVersion,
-        subnet_id: SubnetId,
-    ) -> OrchestratorResult<()> {
-        start_orchestrator_process(
-            &mut *self.process_runner,
-            ReplicaProcess::new(
-                self.process_config.clone(),
-                replica_version.clone(),
-                subnet_id,
-            ),
-            &self.metrics,
-            &self.logger,
-        )
-    }
-
-    fn stop_replica(&mut self) -> OrchestratorResult<()> {
-        self.process_runner.stop().map_err(|e| {
-            OrchestratorError::IoError("Error when attempting to stop replica".to_string(), e)
-        })
-    }
-}
-
 // ---------------------------------------------------------------------------
 // IcBoundaryProcess
 // ---------------------------------------------------------------------------
@@ -143,13 +91,17 @@ pub(crate) struct IcBoundaryProcess {
     env: HashMap<OsString, OsString>,
 }
 
-impl IcBoundaryProcess {
-    pub(crate) fn new(
-        process_config: IcBoundaryProcessConfig,
-        replica_version: ReplicaVersion,
-        domain_name: String,
+impl Process for IcBoundaryProcess {
+    const NAME: &'static str = "ic-boundary";
+    type Version = ReplicaVersion;
+    type Config = IcBoundaryProcessConfig;
+    type Args = (ReplicaVersion, String);
+
+    fn build(
+        config: &Self::Config,
+        (replica_version, domain_name): Self::Args,
     ) -> OrchestratorResult<Self> {
-        let env = match env_file_reader::read_file(&process_config.ic_boundary_env_file) {
+        let env = match env_file_reader::read_file(&config.ic_boundary_env_file) {
             Ok(env) => env
                 .into_iter()
                 .map(|(k, v)| (OsString::from(k), OsString::from(v)))
@@ -161,22 +113,17 @@ impl IcBoundaryProcess {
                 ));
             }
         };
-        let crypto_config = serde_json::to_string(&process_config.crypto_config)
+        let crypto_config = serde_json::to_string(&config.crypto_config)
             .map_err(OrchestratorError::SerializeCryptoConfigError)?;
 
         Ok(Self {
-            ic_binary_dir: process_config.ic_binary_dir,
+            ic_binary_dir: config.ic_binary_dir.clone(),
             replica_version,
             domain_name,
             crypto_config,
             env,
         })
     }
-}
-
-impl Process for IcBoundaryProcess {
-    const NAME: &'static str = "ic-boundary";
-    type Version = ReplicaVersion;
 
     fn get_version(&self) -> &Self::Version {
         &self.replica_version
@@ -197,94 +144,6 @@ impl Process for IcBoundaryProcess {
     }
 }
 
-pub(crate) struct IcBoundaryManager {
-    pub process_runner: Box<dyn ProcessRunner<IcBoundaryProcess> + Sync>,
-    process_config: IcBoundaryProcessConfig,
-    registry: Arc<RegistryHelper>,
-    pub current_domain_name: Option<String>,
-    metrics: Arc<OrchestratorMetrics>,
-    logger: ReplicaLogger,
-}
-
-impl IcBoundaryManager {
-    pub(crate) fn new(
-        process_config: IcBoundaryProcessConfig,
-        registry: Arc<RegistryHelper>,
-        metrics: Arc<OrchestratorMetrics>,
-        logger: ReplicaLogger,
-    ) -> Self {
-        let process_runner = Box::new(SingleProcessRunner::new(logger.clone()));
-        Self {
-            process_runner,
-            process_config,
-            registry,
-            current_domain_name: None,
-            metrics,
-            logger,
-        }
-    }
-
-    pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
-        &mut self,
-        replica_version: &ReplicaVersion,
-        registry_version: RegistryVersion,
-    ) {
-        match self.registry.get_node_domain_name(registry_version) {
-            Ok(Some(domain_name)) => {
-                // stop ic-boundary when the domain name changes and start it again.
-                if Some(&domain_name) != self.current_domain_name.as_ref()
-                    && let Err(err) = self.stop_ic_boundary()
-                {
-                    warn!(self.logger, "Failed to stop ic-boundary: {}", err);
-                }
-
-                // make sure the ic-boundary is running
-                if let Err(err) = self.ensure_ic_boundary_running(replica_version, &domain_name) {
-                    warn!(self.logger, "Failed to start ic-boundary: {}", err);
-                }
-
-                self.current_domain_name = Some(domain_name);
-            }
-            // ic-boundary should not start when the node doesn't have a domain name
-            Ok(None) => {
-                warn!(
-                    self.logger,
-                    "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting ic-boundary down."
-                );
-                if let Err(err) = self.stop_ic_boundary() {
-                    warn!(self.logger, "Failed to stop Boundary Node: {}", err);
-                }
-                self.current_domain_name = None;
-            }
-            // Failing to read the registry
-            Err(err) => warn!(self.logger, "Failed to fetch domain name: {}", err),
-        }
-    }
-
-    fn ensure_ic_boundary_running(
-        &mut self,
-        replica_version: &ReplicaVersion,
-        domain_name: &str,
-    ) -> OrchestratorResult<()> {
-        start_orchestrator_process(
-            &mut *self.process_runner,
-            IcBoundaryProcess::new(
-                self.process_config.clone(),
-                replica_version.clone(),
-                domain_name.to_string(),
-            )?,
-            &self.metrics,
-            &self.logger,
-        )
-    }
-
-    pub(crate) fn stop_ic_boundary(&mut self) -> OrchestratorResult<()> {
-        self.process_runner.stop().map_err(|e| {
-            OrchestratorError::IoError("Error when attempting to stop ic-boundary".to_string(), e)
-        })
-    }
-}
-
 // ---------------------------------------------------------------------------
 // IcGatewayProcess
 // ---------------------------------------------------------------------------
@@ -301,12 +160,14 @@ pub(crate) struct IcGatewayProcess {
     env: HashMap<OsString, OsString>,
 }
 
-impl IcGatewayProcess {
-    pub(crate) fn new(
-        process_config: IcGatewayProcessConfig,
-        replica_version: ReplicaVersion,
-    ) -> OrchestratorResult<Self> {
-        let env = match env_file_reader::read_file(&process_config.ic_gateway_env_file) {
+impl Process for IcGatewayProcess {
+    const NAME: &'static str = "ic-gateway";
+    type Version = ReplicaVersion;
+    type Config = IcGatewayProcessConfig;
+    type Args = ReplicaVersion;
+
+    fn build(config: &Self::Config, replica_version: Self::Args) -> OrchestratorResult<Self> {
+        let env = match env_file_reader::read_file(&config.ic_gateway_env_file) {
             Ok(env) => env
                 .into_iter()
                 .map(|(k, v)| (OsString::from(k), OsString::from(v)))
@@ -320,16 +181,11 @@ impl IcGatewayProcess {
         };
 
         Ok(Self {
-            ic_binary_dir: process_config.ic_binary_dir,
+            ic_binary_dir: config.ic_binary_dir.clone(),
             replica_version,
             env,
         })
     }
-}
-
-impl Process for IcGatewayProcess {
-    const NAME: &'static str = "ic-gateway";
-    type Version = ReplicaVersion;
 
     fn get_version(&self) -> &Self::Version {
         &self.replica_version
@@ -345,20 +201,30 @@ impl Process for IcGatewayProcess {
     }
 }
 
-pub(crate) struct IcGatewayManager {
-    pub process_runner: Box<dyn ProcessRunner<IcGatewayProcess> + Sync>,
-    process_config: IcGatewayProcessConfig,
+// ---------------------------------------------------------------------------
+// ProcessManager<P>
+//
+// This struct offers common boilerplate functionality logic to ensure a process
+// is running (logging, metrics) and to stop it, converting errors to [`OrchestratorError`]
+// in both cases.
+// ---------------------------------------------------------------------------
+
+pub(crate) struct ProcessManager<P: Process> {
+    process_runner: Box<dyn ProcessRunner<P> + Sync>,
+    process_config: P::Config,
     metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
 }
 
-impl IcGatewayManager {
-    pub(crate) fn new(
-        process_config: IcGatewayProcessConfig,
+impl<P: Process + Send + Sync + 'static> ProcessManager<P> {
+    /// Used in tests to inject a mock ProcessRunner.
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        process_runner: Box<dyn ProcessRunner<P> + Sync>,
+        process_config: P::Config,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
-        let process_runner = Box::new(SingleProcessRunner::new(logger.clone()));
         Self {
             process_runner,
             process_config,
@@ -367,44 +233,159 @@ impl IcGatewayManager {
         }
     }
 
-    fn ensure_ic_gateway_running(
-        &mut self,
-        replica_version: &ReplicaVersion,
-    ) -> OrchestratorResult<()> {
-        start_orchestrator_process(
-            &mut *self.process_runner,
-            IcGatewayProcess::new(self.process_config.clone(), replica_version.clone())?,
-            &self.metrics,
-            &self.logger,
-        )
+    pub(crate) fn new(
+        process_config: P::Config,
+        metrics: Arc<OrchestratorMetrics>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        let process_runner = Box::new(SingleProcessRunner::new(logger.clone()));
+        Self {
+            process_config,
+            process_runner,
+            metrics,
+            logger,
+        }
     }
 
-    fn stop_ic_gateway(&mut self) -> OrchestratorResult<()> {
-        self.process_runner.stop().map_err(|e| {
-            OrchestratorError::IoError("Error when attempting to stop ic-gateway".to_string(), e)
+    pub(crate) fn ensure_running(&mut self, args: P::Args) -> OrchestratorResult<()> {
+        if self.process_runner.is_running() {
+            return Ok(());
+        }
+        let process = P::build(&self.process_config, args)?;
+        info!(self.logger, "Starting new {} process", P::NAME);
+        self.metrics
+            .processes_start_attempts
+            .with_label_values(&[P::NAME])
+            .inc();
+        self.process_runner.start(process).map_err(|e| {
+            OrchestratorError::IoError(
+                format!("Error when attempting to start {} process", P::NAME),
+                e,
+            )
         })
+    }
+
+    pub(crate) fn stop(&mut self) -> OrchestratorResult<()> {
+        self.process_runner.stop().map_err(|e| {
+            OrchestratorError::IoError(
+                format!("Error when attempting to stop the {} process", P::NAME),
+                e,
+            )
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// IcBoundaryManager
+//
+// Wrapper around ProcessManager<IcBoundaryProcess> which contains additional
+// logic to stop and restart the process when the node's domain name changes
+// in the registry.
+// ---------------------------------------------------------------------------
+
+pub(crate) struct IcBoundaryManager {
+    inner: ProcessManager<IcBoundaryProcess>,
+    registry: Arc<RegistryHelper>,
+    current_domain_name: Option<String>,
+    logger: ReplicaLogger,
+}
+
+impl IcBoundaryManager {
+    pub(crate) fn new(
+        config: <IcBoundaryProcess as Process>::Config,
+        registry: Arc<RegistryHelper>,
+        metrics: Arc<OrchestratorMetrics>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        let inner = ProcessManager::new(config, metrics, logger.clone());
+        Self {
+            inner,
+            registry,
+            current_domain_name: None,
+            logger,
+        }
+    }
+
+    pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
+        &mut self,
+        replica_version: ReplicaVersion,
+        registry_version: RegistryVersion,
+    ) {
+        match self.registry.get_node_domain_name(registry_version) {
+            Ok(Some(domain_name)) => {
+                // stop ic-boundary when the domain name changes and start it again.
+                if Some(&domain_name) != self.current_domain_name.as_ref()
+                    && let Err(err) = self.inner.stop()
+                {
+                    warn!(
+                        self.logger,
+                        "Failed to stop {}: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
+                }
+
+                // make sure ic-boundary is running
+                if let Err(err) = self
+                    .inner
+                    .ensure_running((replica_version, domain_name.clone()))
+                {
+                    warn!(
+                        self.logger,
+                        "Failed to start {}: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
+                }
+
+                self.current_domain_name = Some(domain_name);
+            }
+            // ic-boundary should not start when the node doesn't have a domain name
+            Ok(None) => {
+                warn!(
+                    self.logger,
+                    "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting {} down.",
+                    IcBoundaryProcess::NAME
+                );
+                if let Err(err) = self.inner.stop() {
+                    warn!(
+                        self.logger,
+                        "Failed to stop {}: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
+                }
+                self.current_domain_name = None;
+            }
+            // Failing to read the registry
+            Err(err) => warn!(self.logger, "Failed to fetch domain name: {}", err),
+        }
+    }
+
+    pub(crate) fn stop(&mut self) -> OrchestratorResult<()> {
+        self.inner.stop()
     }
 }
 
 // ---------------------------------------------------------------------------
 // MultipleProcessManager
 //
-// This struct manages all processes that the orchestrator is responsible for,
+// This struct manages all processes that the upgrade loop is responsible for,
 // providing a single entry point for starting and stopping them according to
 // the node's configuration in the registry.
 // ---------------------------------------------------------------------------
 
 pub(crate) struct MultipleProcessesManager {
-    replica_manager: ReplicaManager,
-    ic_gateway_manager: IcGatewayManager,
+    replica_manager: ProcessManager<ReplicaProcess>,
+    ic_gateway_manager: ProcessManager<IcGatewayProcess>,
     registry: Arc<RegistryHelper>,
 }
 
 impl MultipleProcessesManager {
     #[cfg(test)]
     pub(crate) fn new_for_test(
-        replica_manager: ReplicaManager,
-        ic_gateway_manager: IcGatewayManager,
+        replica_manager: ProcessManager<ReplicaProcess>,
+        ic_gateway_manager: ProcessManager<IcGatewayProcess>,
         registry: Arc<RegistryHelper>,
     ) -> Self {
         Self {
@@ -422,8 +403,8 @@ impl MultipleProcessesManager {
         logger: ReplicaLogger,
     ) -> Self {
         let replica_manager =
-            ReplicaManager::new(replica_process_config, metrics.clone(), logger.clone());
-        let ic_gateway_manager = IcGatewayManager::new(ic_gateway_process_config, metrics, logger);
+            ProcessManager::new(replica_process_config, metrics.clone(), logger.clone());
+        let ic_gateway_manager = ProcessManager::new(ic_gateway_process_config, metrics, logger);
 
         Self {
             replica_manager,
@@ -458,12 +439,12 @@ impl MultipleProcessesManager {
     /// starts ic-gateway.
     pub(crate) fn start_all(
         &mut self,
-        replica_version: &ReplicaVersion,
+        replica_version: ReplicaVersion,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
         self.replica_manager
-            .ensure_replica_running(replica_version, subnet_id)?;
+            .ensure_running((replica_version.clone(), subnet_id))?;
 
         // Cloud-engine nodes run ic-gateway as a sidecar.
         match self.registry.get_subnet_type(subnet_id, registry_version)? {
@@ -472,11 +453,10 @@ impl MultipleProcessesManager {
             | Some(SubnetType::Application)
             | Some(SubnetType::System)
             | Some(SubnetType::VerifiedApplication) => {
-                self.ic_gateway_manager.stop_ic_gateway()?;
+                self.ic_gateway_manager.stop()?;
             }
             Some(SubnetType::CloudEngine) => {
-                self.ic_gateway_manager
-                    .ensure_ic_gateway_running(replica_version)?;
+                self.ic_gateway_manager.ensure_running(replica_version)?;
             }
         }
 
@@ -485,13 +465,13 @@ impl MultipleProcessesManager {
 
     /// Stop the replica process.
     pub(crate) fn stop_replica(&mut self) -> OrchestratorResult<()> {
-        self.replica_manager.stop_replica()
+        self.replica_manager.stop()
     }
 
     /// Stop every managed process.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
-        self.replica_manager.stop_replica()?;
-        self.ic_gateway_manager.stop_ic_gateway()?;
+        self.replica_manager.stop()?;
+        self.ic_gateway_manager.stop()?;
 
         Ok(())
     }

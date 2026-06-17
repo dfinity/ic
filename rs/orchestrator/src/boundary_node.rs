@@ -1,5 +1,5 @@
 use crate::{
-    error::OrchestratorError, processes::IcBoundaryManager, registry_helper::RegistryHelper,
+    error::OrchestratorError, process_manager::Process, processes::{IcBoundaryManager, IcBoundaryProcess}, registry_helper::RegistryHelper
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{NodeId, ReplicaVersion};
@@ -49,21 +49,26 @@ impl BoundaryNodeManager {
                 } else {
                     self.process_manager
                         .ensure_ic_boundary_running_and_restarted_on_domain_change(
-                            &self.version,
+                            self.version.clone(),
                             registry_version,
                         );
                 }
             }
             // BN should not be active
             Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => {
-                if let Err(err) = self.process_manager.stop_ic_boundary() {
-                    warn!(self.logger, "Failed to stop Boundary Node: {}", err);
+                if let Err(err) = self.process_manager.stop() {
+                    warn!(
+                        self.logger,
+                        "Failed to stop {}: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
                 }
             }
             // Failing to read the registry
             Err(err) => warn!(
                 self.logger,
-                "Failed to fetch Boundary Node version: {}", err
+                "Failed to fetch API Boundary Node version: {}", err
             ),
         }
     }
