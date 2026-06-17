@@ -18,7 +18,7 @@ fn main() -> Result<()> {
         // non-zero.
         .remove_metrics_to_check("orchestrator_cup_deserialization_failed_total")
         // The replica binary is "broken" and restarted by the orchestrator multiple times
-        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
+        .remove_metrics_to_check(r#"orchestrator_processes_start_attempts_total{process_name="replica"}"#)
         .execute_from_args()?;
     Ok(())
 }

@@ -449,7 +449,7 @@ fn main() -> Result<()> {
         .add_test(systest!(subnet_splitting_test))
         // The replica is restarted when the orchestrator observes the recovery CUP in the registry
         .update_orchestrator_metrics_to_check(
-            "orchestrator_replica_process_start_attempts_total",
+            r#"orchestrator_processes_start_attempts_total{process_name="replica"}"#,
             2,
         )
         .execute_from_args()

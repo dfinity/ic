@@ -177,7 +177,7 @@ fn main() -> Result<()> {
         // it crashes again briefly during the catch-up process after the divergence. Consider reducing
         // this number if the underlying issue has been resolved.
         .update_orchestrator_metrics_to_check(
-            "orchestrator_replica_process_start_attempts_total",
+            r#"orchestrator_processes_start_attempts_total{process_name="replica"}"#,
             3,
         )
         // One of the nodes has a corrupted state which could cause a panic in the replica like:
