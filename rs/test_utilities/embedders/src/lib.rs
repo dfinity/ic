@@ -4,7 +4,7 @@ use std::{convert::TryFrom, rc::Rc};
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig};
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -180,6 +180,7 @@ impl WasmtimeInstanceBuilder {
             CyclesAccountManagerSubnetConfig::new(
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
         );
 

@@ -2,7 +2,7 @@ use crate::units::MIB;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
@@ -1778,7 +1778,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
     let caller_canister = canister_test_id(1);
 
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
@@ -1839,7 +1839,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
     let caller_canister = canister_test_id(1);
 
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
 
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)

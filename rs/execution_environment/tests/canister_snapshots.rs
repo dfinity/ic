@@ -2,7 +2,7 @@ use candid::{Decode, Reserved};
 use canister_test::WasmResult;
 use ic_base_types::SnapshotId;
 use ic_config::execution_environment::Config as ExecutionConfig;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterIdRecord, CanisterSettingsArgsBuilder,
@@ -812,7 +812,7 @@ const COUNTER_GROW_CANISTER_WAT: &str = r#"
 fn take_frozen_canister_snapshot_fails() {
     // Create application subnet `StateMachine`.
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let execution_config = ExecutionConfig::default();
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
@@ -887,7 +887,7 @@ fn take_frozen_canister_snapshot_fails() {
 #[test]
 fn load_canister_snapshot_works_on_another_canister() {
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let execution_config = ExecutionConfig::default();
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
