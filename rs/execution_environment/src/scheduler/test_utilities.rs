@@ -1507,31 +1507,22 @@ impl TestWasmExecutorCore {
         let call_message_id = self.next_message_id();
         let response_message_id = self.next_message_id();
         let closure = WasmClosure::new(0, response_message_id.into());
+        let subnet_cycles_config =
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, system_state.cost_schedule());
         let prepayment_for_response_execution = self
             .cycles_account_manager
             .prepayment_for_response_execution(
-                CyclesAccountManagerSubnetConfig::new(
-                    self.subnet_size,
-                    system_state.cost_schedule(),
-                ),
+                subnet_cycles_config,
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(CyclesAccountManagerSubnetConfig::new(
-                self.subnet_size,
-                system_state.cost_schedule(),
-            ));
+            .prepayment_for_response_transmission(subnet_cycles_config);
         // Scheduler uses `TestCall` requests which have zero payload.
         let payload_size = NumBytes::from(0);
-        let prepayment_for_call_transmission =
-            self.cycles_account_manager.xnet_total_transmission_fee(
-                payload_size,
-                CyclesAccountManagerSubnetConfig::new(
-                    self.subnet_size,
-                    system_state.cost_schedule(),
-                ),
-            );
+        let prepayment_for_call_transmission = self
+            .cycles_account_manager
+            .xnet_total_transmission_fee(payload_size, subnet_cycles_config);
         let deadline = NO_DEADLINE;
         let request = OutputRequest {
             receiver,
