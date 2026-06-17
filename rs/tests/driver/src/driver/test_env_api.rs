@@ -1138,9 +1138,12 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
+                // Assume the metrics to check are prefix-free. This allows to specify a metric name
+                // prefix to check all metrics with that prefix.
                 let max_value = metrics_to_check
-                    .get(name.split('(').next().unwrap())
-                    .copied()
+                    .iter()
+                    .find(|(metric_name, _)| name.starts_with(**metric_name))
+                    .map(|(_, max_value)| *max_value)
                     .unwrap_or_default();
                 assert!(
                     value[0] <= max_value,
