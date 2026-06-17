@@ -24,6 +24,11 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Temporarily bypass the `max_rewardable_nodes` quota check in `add_node` for
+  node reward types `type4.1` through `type4.4`, allowing node providers to
+  register an arbitrary number of such nodes. `type4.5` is explicitly excluded
+  and still subject to the quota. This is a temporary measure until rewards of
+  `type4.5` are no longer treated as `type1.1` (see CLO-15).
 * One-time post-upgrade migration converting the reward type of 100 currently
   unassigned nodes from `type1.1` to `type4.5`. The migration only mutates nodes
   whose reward type is still `type1.1`, so it is idempotent across upgrades.
