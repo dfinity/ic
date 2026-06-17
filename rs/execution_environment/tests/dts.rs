@@ -550,7 +550,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles_and_freezing_thr
 fn dts_pending_upgrade_with_heartbeat() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(30_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -635,7 +635,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 fn dts_scheduling_of_install_code() {
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -785,7 +785,7 @@ fn dts_scheduling_of_install_code() {
 fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() {
     let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -909,7 +909,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
 fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1165,7 +1165,7 @@ fn dts_paused_execution_blocks_deposit_cycles() {
 fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1439,7 +1439,7 @@ fn dts_long_running_calls() {
 fn dts_unrelated_subnet_messages_make_progress() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1636,7 +1636,7 @@ fn dts_ingress_status_of_install_is_correct() {
 fn dts_ingress_status_of_upgrade_is_correct() {
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(250_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -1705,10 +1705,11 @@ fn dts_ingress_status_of_upgrade_is_correct() {
 
 #[test]
 fn dts_ingress_status_of_update_with_call_is_correct() {
-    let env = dts_env(
-        NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
-    );
+    // start with a large slice limit so installations just work.
+    let env = ic_state_machine_tests::StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_checkpoints_enabled(true)
+        .build();
 
     let binary = UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec();
 
@@ -1722,18 +1723,26 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
+    // reduce slice limit to provoke test conditions
+    let env = env.restart_node_with_config(dts_state_machine_config(dts_subnet_config(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(250_000),
+    )));
+
     let b = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .stable64_grow(1) // cost: 1 wasm page = 16 os pages -> 5k * 16 = 80k instructions
+        .stable64_fill(0, 0, 24_000) // 24_000 cost: 6 stable pages dirtied (6*5k) + 6 heap pages (6*5k) (because vec is allocated there) + 24k for the bytes = 84k instructions
+        .stable64_fill(0, 0, 24_000) // 84k * 3 = 252k -> this message needs at least two slices.
+        .stable64_fill(0, 0, 24_000)
         .message_payload()
         .append_and_reply()
         .build();
 
     let a = wasm()
         .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .stable64_fill(0, 0, 24_000)
+        .stable64_fill(0, 0, 24_000)
+        .stable64_fill(0, 0, 24_000)
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
@@ -1925,7 +1934,7 @@ fn dts_serialized_and_runtime_states_are_equal() {
     fn run(restart_node: bool) -> CryptoHashOfState {
         let subnet_config = dts_subnet_config(
             NumInstructions::from(1_000_000_000),
-            NumInstructions::from(10_000),
+            NumInstructions::from(250_000),
         );
         let num_canisters = subnet_config.scheduler_config.scheduler_cores * 2;
         let state_machine_config = dts_state_machine_config(subnet_config);
@@ -2766,8 +2775,9 @@ fn yield_for_dirty_pages_copy_works() {
     );
 
     env.tick();
+    env.tick();
 
-    // Only the first message must be completed after two rounds.
+    // Only the first message must be completed after three rounds.
     assert_matches!(
         ingress_state(env.ingress_status(&message_ids[0])),
         Some(IngressState::Completed(_))
@@ -2817,6 +2827,7 @@ fn yield_for_dirty_pages_copy_works_for_many_canisters() {
     // Neither of messages should be completed after the first round.
     assert_eq!(num_completed(), 0);
 
+    env.tick();
     env.tick();
 
     // Only the first message per scheduler core must be completed after two rounds.
@@ -2931,8 +2942,9 @@ fn yield_for_dirty_pages_copy_works_for_install_code() {
     );
 
     env.tick();
+    env.tick();
 
-    // Only the first message must be completed after two rounds.
+    // Only the first message must be completed after three rounds.
     assert_matches!(
         ingress_state(env.ingress_status(&message_ids[0])),
         Some(IngressState::Completed(_))
@@ -2993,10 +3005,6 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
     assert_eq!(num_completed(), 0);
 
     env.tick();
-
-    // Only the first message must be completed after two rounds.
-    assert_eq!(num_completed(), 1);
-
     env.tick();
 
     // Only the first message must be completed after three rounds.
@@ -3004,6 +3012,12 @@ fn yield_for_dirty_pages_copy_works_for_install_code_and_many_canisters() {
 
     env.tick();
 
-    // Two heavy install code messages must be completed in four rounds.
+    // Only the first message must be completed after four rounds.
+    assert_eq!(num_completed(), 1);
+
+    env.tick();
+    env.tick();
+
+    // Two heavy install code messages must be completed in five rounds.
     assert_eq!(num_completed(), 2);
 }
