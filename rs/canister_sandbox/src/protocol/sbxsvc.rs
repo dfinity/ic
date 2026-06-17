@@ -319,7 +319,9 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
-    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+    use ic_cycles_account_manager::{
+        CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+    };
     use ic_embedders::wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, InstructionLimits,
         sandbox_safe_system_state::SandboxSafeSystemState,
@@ -327,6 +329,7 @@ mod tests {
     use ic_interfaces::execution_environment::{
         ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
     };
+    use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
@@ -499,7 +502,10 @@ mod tests {
                     Some(canister_test_id(1).get()),
                     Some(CallContextId::new(123)),
                     IS_WASM64_EXECUTION,
-                    CanisterCyclesCostSchedule::Normal,
+                    CyclesAccountManagerSubnetConfig::new(
+                        SMALL_APP_SUBNET_MAX_SIZE,
+                        CanisterCyclesCostSchedule::Normal,
+                    ),
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },
