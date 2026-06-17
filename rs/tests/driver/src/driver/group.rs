@@ -28,6 +28,7 @@ use crate::driver::{
 use crate::driver::{
     log_events,
     pot_dsl::{PotSetupFn, SysTestFn},
+    prometheus_vm::HasPrometheus,
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
@@ -689,6 +690,51 @@ pub fn assert_no_critical_errors(env: &TestEnv) {
     );
 }
 
+/// Environment variable that, when set to `true` or `1`, makes every
+/// `SystemTestGroup` automatically download the Prometheus data directory of the
+/// `PrometheusVm` (if one was deployed) to the local test directory on teardown.
+const DOWNLOAD_P8S_DATA_ENV: &str = "DOWNLOAD_P8S_DATA";
+
+/// Environment variable specifying how many seconds to wait before downloading the
+/// Prometheus data directory, giving Prometheus time to scrape the final metrics of
+/// the test. Defaults to `0` (no wait) when unset or unparseable. Only consulted
+/// when `DOWNLOAD_P8S_DATA` is enabled.
+const DOWNLOAD_P8S_DATA_COOLDOWN_SECS_ENV: &str = "DOWNLOAD_P8S_DATA_COOLDOWN_SECS";
+
+/// Returns the teardowns that download the Prometheus data directory to the local
+/// test directory when the `DOWNLOAD_P8S_DATA` environment variable is set to `true`
+/// or `1`, and an empty vector otherwise.
+///
+/// Before downloading, the teardown waits for `DOWNLOAD_P8S_DATA_COOLDOWN_SECS`
+/// seconds (default `0`) such that Prometheus has time to scrape the final metrics.
+fn download_prometheus_data_teardowns() -> Vec<Box<dyn PotSetupFn>> {
+    let should_download =
+        std::env::var(DOWNLOAD_P8S_DATA_ENV).is_ok_and(|v| v == "true" || v == "1");
+    if !should_download {
+        return Vec::new();
+    }
+    let teardown = |env: TestEnv| {
+        let cooldown_secs = std::env::var(DOWNLOAD_P8S_DATA_COOLDOWN_SECS_ENV)
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        if cooldown_secs > 0 {
+            info!(
+                env.logger(),
+                "Waiting {cooldown_secs} seconds before downloading the prometheus data \
+                such that prometheus has time to scrape the final metrics ..."
+            );
+            std::thread::sleep(Duration::from_secs(cooldown_secs));
+        }
+        env.download_prometheus_data_dir_if_exists();
+        env.emit_report(String::from(
+            "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
+            directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
+        ));
+    };
+    vec![Box::new(teardown)]
+}
+
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     teardowns: Vec<Box<dyn PotSetupFn>>,
@@ -735,7 +781,7 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
-            teardowns: Default::default(),
+            teardowns: download_prometheus_data_teardowns(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
