@@ -204,13 +204,13 @@ impl RegistryHelper {
         Ok(ids.unwrap_or_default())
     }
 
-    pub(crate) fn get_subnet_id_from_node_id(
+    pub(crate) fn get_subnet_id_and_type_from_node_id(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<SubnetId>> {
+    ) -> OrchestratorResult<Option<(SubnetId, SubnetType)>> {
         self.registry_client
-            .get_subnet_id_from_node_id(node_id, version)
+            .get_subnet_id_and_type_from_node_id(node_id, version)
             .map_err(OrchestratorError::RegistryClientError)
     }
 
