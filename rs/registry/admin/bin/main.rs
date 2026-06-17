@@ -3351,7 +3351,7 @@ impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRule
 /// Sub-command to get all firewall rules for a given scope.
 #[derive(Parser)]
 struct GetFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "api_boundary_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
 }
 
