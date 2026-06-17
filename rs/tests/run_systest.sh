@@ -101,7 +101,9 @@ if [ -z "${IC_DASHBOARDS_DIR:-}" ] && [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
     #   (but still rejects a changed key) instead of prompting to confirm it.
     # - An isolated UserKnownHostsFile under $TEST_TMPDIR avoids touching or locking
     #   the user's ~/.ssh/known_hosts.
-    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile=$TEST_TMPDIR/k8s_known_hosts" \
+    # - ConnectTimeout + a single ConnectionAttempt bound how long we wait on
+    #   network/DNS issues so this best-effort sync fails fast instead of stalling.
+    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile=$TEST_TMPDIR/k8s_known_hosts -oConnectTimeout=15 -oConnectionAttempts=1" \
         git clone --depth 1 --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
         git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
         && git -C "$dashboards_repo" config core.sparseCheckout true \
