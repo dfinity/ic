@@ -1,7 +1,7 @@
 use candid::{CandidType, DecoderConfig, decode_one_with_config};
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
 use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
-use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionMode,
@@ -4422,18 +4422,14 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some(subnet_cycles_config) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .ecdsa_signature_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                cost_schedule,
-            ));
+            .ecdsa_signature_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4465,18 +4461,14 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some(subnet_cycles_config) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .schnorr_signature_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                cost_schedule,
-            ));
+            .schnorr_signature_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4508,18 +4500,14 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some(subnet_cycles_config) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .vetkd_fee(CyclesAccountManagerSubnetConfig::new(
-                subnet_size,
-                cost_schedule,
-            ));
+            .vetkd_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)

@@ -1408,12 +1408,12 @@ impl SandboxSafeSystemState {
     }
 
     /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
-    /// for that key and return the replication factor, cost_schedule and subnet_id of the biggest one.
+    /// for that key and return the subnet cycles config of the biggest one.
     /// These data are all returned together because their existence is contingent on the key.
     pub fn get_key_subnet_details(
         &self,
         key: MasterPublicKeyId,
-    ) -> Option<(usize, CanisterCyclesCostSchedule, SubnetId)> {
+    ) -> Option<CyclesAccountManagerSubnetConfig> {
         let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
         subnets_with_key
             .iter()
@@ -1424,9 +1424,10 @@ impl SandboxSafeSystemState {
                     .subnets()
                     .get(subnet_id)?
                     .cost_schedule;
-                Some((size, cost_schedule, *subnet_id))
+                Some((size, cost_schedule))
             })
             .max()
+            .map(|(size, cost_schedule)| CyclesAccountManagerSubnetConfig::new(size, cost_schedule))
     }
 }
 
