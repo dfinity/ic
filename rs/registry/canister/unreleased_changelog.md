@@ -24,6 +24,11 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The `features` field in `create_subnet` and `update_subnet` now has each
+  sub-field (`canister_sandboxing`, `http_requests`, `sev_enabled`) typed as
+  `opt bool` instead of `bool`. Omitting a sub-field (i.e., passing `null`)
+  leaves the corresponding feature at its default value. This is a
+  backward-compatible Candid interface change.
 * One-time post-upgrade migration converting the reward type of 100 currently
   unassigned nodes from `type1.1` to `type4.5`. The migration only mutates nodes
   whose reward type is still `type1.1`, so it is idempotent across upgrades.
