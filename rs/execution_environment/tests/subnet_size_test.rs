@@ -1488,8 +1488,8 @@ fn test_sev_reference_subnet_size_reflected_in_execution_costs() {
         / SEV_REFERENCE_SUBNET_SIZE as u128;
     assert!(
         cost_sev.get().abs_diff(expected) <= 1,
-        "SEV cost ({}) should be ~DEFAULT_REFERENCE_SUBNET_SIZE/SEV_REFERENCE_SUBNET_SIZE times \
-         non-SEV cost ({expected}), but differ by more than 1 (integer rounding)",
+        "SEV cost ({}) should be ~DEFAULT_REFERENCE_SUBNET_SIZE/SEV_REFERENCE_SUBNET_SIZE times non-SEV cost ({}), i.e. expected ~{expected}, but differs by more than 1 (integer rounding)",
         cost_sev.get(),
+        cost_non_sev.get(),
     );
 }
