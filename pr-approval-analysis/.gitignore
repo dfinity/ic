@@ -1,0 +1,9 @@
+# Generated data / artifacts from the fetch + analysis scripts
+prs.jsonl
+teams.json
+*.log
+cursor.txt
+old_commit.txt
+codeowners_old.txt
+codeowners_new.txt
+__pycache__/
