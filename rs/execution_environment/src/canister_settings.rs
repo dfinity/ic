@@ -196,13 +196,14 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
-        let minimum_incoming_canister_call_cycles =
-            match input.minimum_incoming_canister_call_cycles {
-                Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
-                    UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided: min },
-                )?)),
-                None => None,
-            };
+        let minimum_incoming_canister_call_cycles = match input
+            .minimum_incoming_canister_call_cycles
+        {
+            Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
+                UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided: min },
+            )?)),
+            None => None,
+        };
 
         Ok(CanisterSettings::new(
             input
