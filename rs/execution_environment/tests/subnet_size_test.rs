@@ -1423,8 +1423,7 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
 /// given `SubnetFeatures` and measures the execution cost.
 ///
 /// The `features` parameter sets `sev_enabled` in the registry subnet record;
-/// `execute_round` will then call `set_reference_subnet_size` from the registry
-/// value at the start of each round.
+/// the reference subnet size is then derived via `NetworkTopology`.
 fn simulate_execute_message_cost_with_registry_features(
     subnet_size: usize,
     features: SubnetFeatures,
@@ -1451,8 +1450,8 @@ fn simulate_execute_message_cost_with_registry_features(
     Cycles::from(balance_before - balance_after)
 }
 
-/// Tests that the reference subnet size read from the registry at the start of
-/// each `execute_round` is correctly reflected in the execution cycle costs.
+/// Tests that the reference subnet size derived from the registry via `NetworkTopology`
+/// is correctly reflected in the execution cycle costs.
 ///
 /// For an Application subnet with `DEFAULT_REFERENCE_SUBNET_SIZE` nodes (13):
 /// * without SEV: cost = base × 13 / 13 = base
@@ -1460,7 +1459,7 @@ fn simulate_execute_message_cost_with_registry_features(
 ///   making costs higher for the same actual subnet)
 ///
 /// Only the registry-driven `sev_enabled` flag differentiates the two cases,
-/// confirming the runtime update path through `set_reference_subnet_size`.
+/// confirming the runtime update path through `NetworkTopology`.
 #[test]
 fn test_sev_reference_subnet_size_reflected_in_execution_costs() {
     let subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
@@ -1474,8 +1473,7 @@ fn test_sev_reference_subnet_size_reflected_in_execution_costs() {
         },
     );
 
-    // SEV: registry sets reference_subnet_size = SEV = 7 via set_reference_subnet_size.
-    // cost = base * 13 / 7 > cost_non_sev.
+    // SEV: reference_subnet_size = SEV = 7, cost = base * 13 / 7 > cost_non_sev.
     let cost_sev = simulate_execute_message_cost_with_registry_features(
         subnet_size,
         SubnetFeatures {
