@@ -316,6 +316,7 @@ impl IcBoundaryManager {
         }
     }
 
+    // TODO: consider returning an error when thing fail instead of logging
     pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
         &mut self,
         replica_version: ReplicaVersion,
