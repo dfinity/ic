@@ -636,6 +636,7 @@ impl WasmtimeEmbedder {
             &mut *store,
             self.log.clone(),
             self.config.feature_flags.deterministic_memory_tracker,
+            self.config.dirty_page_overhead,
             subtract_instruction_counter,
         );
 
@@ -798,6 +799,7 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
     deterministic_memory_tracker: FlagStatus,
+    page_overhead: NumInstructions,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>> {
     let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
@@ -843,6 +845,7 @@ fn sigsegv_memory_tracker<S>(
                     page_map,
                     maybe_missing_page_handler_kind,
                     memory_limits,
+                    page_overhead.get(),
                     subtract_instruction_counter.clone(),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
