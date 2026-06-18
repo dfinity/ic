@@ -726,6 +726,7 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000_u128),
+                0_u128,
                 LogVisibilityV2::default(),
                 SnapshotVisibility::default(),
                 TEST_DEFAULT_LOG_MEMORY_LIMIT,
@@ -738,7 +739,6 @@ fn can_get_canister_information() {
                 Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                 0_u64,
                 Default::default(),
-                0_u128,
             )
         );
 
@@ -798,6 +798,7 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
+                    0_u128,
                     LogVisibilityV2::default(),
                     SnapshotVisibility::default(),
                     TEST_DEFAULT_LOG_MEMORY_LIMIT,
@@ -810,7 +811,6 @@ fn can_get_canister_information() {
                     Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                     0_u64,
                     Default::default(),
-                    0_u128,
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,

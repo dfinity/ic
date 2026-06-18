@@ -488,6 +488,8 @@ message CanisterStateBits {
   state.queues.v1.Cycles reserved_balance = 38;
   // The user-specified upper limit on `reserved_balance`.
   state.queues.v1.Cycles reserved_balance_limit = 39;
+  // The minimum number of cycles required for an incoming canister-to-canister message.
+  state.queues.v1.Cycles minimum_incoming_canister_call_cycles = 68;
   // Maps tracking chunks in the Wasm chunk store.
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.
@@ -520,6 +522,4 @@ message CanisterStateBits {
   map<string, string> environment_variables = 55;
   // Snapshot visibility for the canister.
   SnapshotVisibility snapshot_visibility = 64;
-  // The minimum number of cycles required for an incoming canister-to-canister message.
-  state.queues.v1.Cycles minimum_incoming_canister_call_cycles = 68;
 }

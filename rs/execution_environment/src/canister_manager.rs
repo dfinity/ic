@@ -1132,6 +1132,7 @@ impl CanisterManager {
             Some(memory_allocation.pre_allocated_bytes().get()),
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
+            minimum_incoming_canister_call_cycles.get(),
             log_visibility,
             snapshot_visibility,
             log_memory_limit,
@@ -1152,7 +1153,6 @@ impl CanisterManager {
             wasm_memory_limit.map(|x| x.get()),
             wasm_memory_threshold.get(),
             canister.system_state.environment_variables.clone(),
-            minimum_incoming_canister_call_cycles.get(),
         ))
     }
 

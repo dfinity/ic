@@ -1416,13 +1416,13 @@ impl DefiniteCanisterSettingsArgs {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         log_memory_limit: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
-        minimum_incoming_canister_call_cycles: u128,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
@@ -1602,6 +1602,7 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         log_memory_limit: u64,
@@ -1614,7 +1615,6 @@ impl CanisterStatusResultV2 {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
-        minimum_incoming_canister_call_cycles: u128,
     ) -> Self {
         Self {
             status,
@@ -1645,13 +1645,13 @@ impl CanisterStatusResultV2 {
                 memory_allocation,
                 freezing_threshold,
                 reserved_cycles_limit,
+                minimum_incoming_canister_call_cycles,
                 log_visibility,
                 snapshot_visibility,
                 log_memory_limit,
                 wasm_memory_limit,
                 wasm_memory_threshold,
                 environment_variables,
-                minimum_incoming_canister_call_cycles,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),

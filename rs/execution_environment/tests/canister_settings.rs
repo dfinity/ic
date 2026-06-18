@@ -569,7 +569,7 @@ fn attached_cycles_consumed_in_update_and_reply_below_minimum_incoming_canister_
 }
 
 // Inter-canister calls with fewer than minimum_incoming_canister_call_cycles cycles must be
-// rejected with CanisterError.
+// rejected with CanisterError (the callee is not charged for this rejection).
 #[test]
 fn inter_canister_call_rejected_when_cycles_insufficient() {
     let min_cycles: u128 = 1_000_000;
