@@ -60,11 +60,13 @@ def _mainnet_icos_images_impl(repository_ctx):
     # write the measurements
     repository_ctx.file("launch-measurements-guest.json", content = json_measurements)
 
-    exported_files = '["disk-img.tar.zst", "launch-measurements-guest.json"' + (', "guest-update-img.tar.zst"' if is_guestos else "") + "]"
+    exported_files = ["disk-img.tar.zst", "launch-measurements-guest.json"]
+    if is_guestos:
+        exported_files.append("guest-update-img.tar.zst")
 
     BUILD = """\
 package(default_visibility = ["//visibility:public"])
-exports_files(EXPORTED_FILES)
+exports_files({EXPORTED_FILES})
 
 genrule(
     name = "guest-img",
@@ -77,8 +79,8 @@ genrule(
     target_compatible_with = ["@platforms//os:linux"],
     tools = ["@@//rs/ic_os/build_tools/partition_tools:extract-guestos"],
 )
-    """
-    repository_ctx.file("BUILD.bazel", content = BUILD.replace("EXPORTED_FILES", exported_files))
+    """.format(EXPORTED_FILES = str(exported_files))
+    repository_ctx.file("BUILD.bazel", content = BUILD)
 
 mainnet_icos_images = repository_rule(
     implementation = _mainnet_icos_images_impl,
