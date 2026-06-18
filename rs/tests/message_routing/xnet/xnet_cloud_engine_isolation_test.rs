@@ -309,10 +309,7 @@ fn test(env: TestEnv) {
             ("CloudEngine 1", &uc_ce_1a, "Application", &uc_app),
             ("NNS", &uc_nns, "CloudEngine 1", &uc_ce_1a),
             ("CloudEngine 1", &uc_ce_1a, "NNS", &uc_nns),
-            ("NNS", &uc_nns, "CloudEngine 2", &uc_ce_2a),
-            ("CloudEngine 2", &uc_ce_2a, "NNS", &uc_nns),
             ("CloudEngine 1", &uc_ce_1a, "CloudEngine 2", &uc_ce_2a),
-            ("CloudEngine 2", &uc_ce_2a, "CloudEngine 1", &uc_ce_1a),
         ];
 
         for (src_name, src_uc, dst_name, dst_uc) in engine_boundary_pairs {

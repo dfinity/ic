@@ -1,5 +1,6 @@
 use crate::message_routing::{
-    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
+    CRITICAL_ERROR_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
+    MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
 use ic_logger::{ReplicaLogger, error, warn};
@@ -50,6 +51,10 @@ struct StreamBuilderMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error for messages that should never have reached an engine
+    /// boundary (e.g. a refund or a guaranteed-response/cycle-bearing response),
+    /// indicating that an earlier engine-boundary check failed.
+    pub critical_error_engine_message: IntCounter,
 }
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
@@ -133,6 +138,9 @@ impl StreamBuilderMetrics {
         let critical_error_induct_response_failed = message_routing_metrics
             .critical_error_induct_response_failed
             .clone();
+        let critical_error_engine_message = message_routing_metrics
+            .critical_error_engine_message
+            .clone();
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -168,6 +176,7 @@ impl StreamBuilderMetrics {
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
             critical_error_induct_response_failed,
+            critical_error_engine_message,
         }
     }
 }
@@ -503,7 +512,7 @@ impl StreamBuilderImpl {
                     // cause streams to permanently stall.
                     match msg {
                         // Request at an engine boundary: reject if unbounded-wait or carries cycles.
-                        RequestOrResponse::Request(ref req)
+                        RequestOrResponse::Request(req)
                             if (is_engine_dst || is_engine_src)
                                 && (req.deadline == NO_DEADLINE
                                     || req.payment > Cycles::zero()) =>
@@ -512,24 +521,31 @@ impl StreamBuilderImpl {
                                 LABEL_VALUE_TYPE_REQUEST,
                                 LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
                             );
-                            let req = match msg {
-                                RequestOrResponse::Request(req) => req,
-                                _ => unreachable!(),
-                            };
                             engine_requests_to_reject.push(req);
                         }
 
-                        // Response that should not exist at an engine boundary: a
-                        // guaranteed-response response, or one carrying cycles. Neither
-                        // guaranteed-response calls nor cycles are allowed across the
-                        // boundary, so such a response can only come from a buggy local
-                        // canister. Drop it; any cycles are lost. Kept above the
-                        // oversized-response arm, which truncates and routes; matching
-                        // here first ensures such a response is dropped, not routed.
+                        // A response that should not exist at an engine boundary: a
+                        // guaranteed-response response, or one carrying cycles. A canister
+                        // can only produce such a response in reply to a guaranteed-response
+                        // or cycle-bearing request it received from across the boundary -- but
+                        // that request would itself have been rejected at the boundary. So
+                        // reaching here means an earlier engine-boundary check failed: a bug,
+                        // not something a canister can trigger on its own. Drop the response
+                        // (any cycles are lost) and raise a critical error. Kept above the
+                        // oversized-response arm, which truncates and routes; matching here
+                        // first ensures such a response is dropped, not routed.
                         RequestOrResponse::Response(ref rep)
                             if (is_engine_dst || is_engine_src)
                                 && (rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero()) =>
                         {
+                            error!(
+                                self.log,
+                                "{}: Dropping engine-boundary response (to {}): {:?}",
+                                CRITICAL_ERROR_ENGINE_MESSAGE,
+                                dst_subnet_id,
+                                rep,
+                            );
+                            self.metrics.critical_error_engine_message.inc();
                             engine_response_dropped_cycles += rep.refund;
                             self.observe_message_type_status(
                                 LABEL_VALUE_TYPE_RESPONSE,
@@ -762,7 +778,20 @@ impl StreamBuilderImpl {
                             .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
                     let is_engine_src = !is_loopback_stream && own_is_engine;
                     if is_engine_dst || is_engine_src {
-                        // Refund destined to cross the engine boundary: drop, cycles lost.
+                        // A refund destined to cross the engine boundary should not exist: a
+                        // refund is only produced for a dropped cycle-bearing message, but a
+                        // cycle-bearing message would itself have been rejected at the
+                        // boundary. So reaching here means an earlier engine-boundary check
+                        // failed: a bug, not something a canister can trigger on its own. Drop
+                        // the refund (cycles lost) and raise a critical error.
+                        error!(
+                            self.log,
+                            "{}: Dropping engine-boundary refund (to {}): {:?}",
+                            CRITICAL_ERROR_ENGINE_MESSAGE,
+                            dst_subnet_id,
+                            refund,
+                        );
+                        self.metrics.critical_error_engine_message.inc();
                         cycles_lost += refund.amount();
                         self.observe_message_type_status(
                             LABEL_VALUE_TYPE_REFUND,

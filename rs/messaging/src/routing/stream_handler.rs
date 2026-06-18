@@ -79,6 +79,7 @@ const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
 const LABEL_VALUE_DROPPED: &str = "dropped";
+const LABEL_VALUE_ENGINE_NOT_ALLOWED: &str = "EngineNotAllowed";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING: &str = "SenderSubnetMismatchMigrating";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
@@ -151,6 +152,7 @@ impl StreamHandlerMetrics {
             for status in &[
                 LABEL_VALUE_SUCCESS,
                 LABEL_VALUE_DROPPED,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
                 LABEL_VALUE_CANISTER_NOT_FOUND,
                 LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
                 LABEL_VALUE_CANISTER_STOPPED,
@@ -753,28 +755,27 @@ impl StreamHandlerImpl {
     ) {
         let own_cost_schedule = state.get_own_cost_schedule();
 
-        // True if the remote subnet is a CloudEngine subnet (and this is not the loopback stream).
-        // Messages at the engine boundary require special handling:
-        //   * Guaranteed-response requests are rejected with `EngineNotAllowed`.
-        //   * Best-effort requests carrying cycles are dropped; their cycles are accounted as lost.
+        // Messages crossing an engine boundary require special handling:
+        //   * Requests that are guaranteed-response or carry cycles are rejected with
+        //     `EngineNotAllowed`; the reject signal refunds any cycles to the sender.
         //   * Best-effort requests without cycles are inducted normally.
         //   * Best-effort responses without cycles are inducted normally.
         //   * Responses that should not exist (guaranteed-response, or carrying cycles) are
         //     dropped and a critical error is raised; any cycles are accounted as lost.
-        //   * `Refund` messages are dropped; their cycles are accounted as lost.
-        // Loopback messages are excluded: the engine subnet is itself CloudEngine, but its
-        // own-subnet loopback messages should always be inducted normally.
-        let is_engine_subnet = remote_subnet_id != self.subnet_id
-            && state
-                .metadata
-                .network_topology
-                .subnets()
-                .get(&remote_subnet_id)
-                .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+        //   * `Refund` messages are dropped and a critical error is raised; their cycles
+        //     are accounted as lost.
+        // Loopback (own-subnet) messages are excluded: an engine's own messages are always
+        // inducted normally.
+        let remote_is_engine = state
+            .metadata
+            .network_topology
+            .subnets()
+            .get(&remote_subnet_id)
+            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
         let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
-        // True when this message is at the engine boundary and is not a loopback message.
+        // At an engine boundary iff this is a cross-subnet message and either side is an engine.
         let is_at_engine_boundary =
-            is_engine_subnet || (own_is_engine && remote_subnet_id != self.subnet_id);
+            remote_subnet_id != self.subnet_id && (own_is_engine || remote_is_engine);
 
         let (msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
@@ -796,7 +797,7 @@ impl StreamHandlerImpl {
                     self.metrics.critical_error_engine_message.inc();
                     self.observe_inducted_message_status(
                         LABEL_VALUE_TYPE_REFUND,
-                        LABEL_VALUE_DROPPED,
+                        LABEL_VALUE_ENGINE_NOT_ALLOWED,
                     );
                     state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                         refund.amount(),
@@ -820,52 +821,38 @@ impl StreamHandlerImpl {
                 // Apply the engine filter before inducting. See `is_at_engine_boundary`.
                 if is_at_engine_boundary {
                     match &msg {
-                        // Guaranteed-response requests are never allowed at the engine boundary.
-                        RequestOrResponse::Request(req) if req.deadline == NO_DEADLINE => {
+                        // Requests are not allowed across the engine boundary if they are
+                        // guaranteed-response (unbounded-wait) or carry cycles. Reject them
+                        // with `EngineNotAllowed`; the reject signal refunds any cycles to the
+                        // sender, so they are not lost.
+                        RequestOrResponse::Request(req)
+                            if req.deadline == NO_DEADLINE || req.payment > Cycles::zero() =>
+                        {
                             error!(
                                 self.log,
-                                "{}: Rejecting guaranteed-response request at engine boundary (from {}): {:?}",
+                                "{}: Rejecting disallowed request at engine boundary (from {}): {:?}",
                                 CRITICAL_ERROR_ENGINE_MESSAGE,
                                 remote_subnet_id,
                                 req,
                             );
                             self.metrics.critical_error_engine_message.inc();
-                            self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
+                            self.observe_inducted_message_status(
+                                msg_type,
+                                LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                            );
                             stream.push_reject_signal(RejectReason::EngineNotAllowed);
                             return;
                         }
-                        // Best-effort requests with cycles: drop.
-                        RequestOrResponse::Request(req) if req.payment > Cycles::zero() => {
-                            error!(
-                                self.log,
-                                "{}: Dropping best-effort request with cycles at engine boundary (from {}): {:?}",
-                                CRITICAL_ERROR_ENGINE_MESSAGE,
-                                remote_subnet_id,
-                                req,
-                            );
-                            self.metrics.critical_error_engine_message.inc();
-                            self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
-                            state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                                req.payment,
-                                own_cost_schedule,
-                            ));
-                            stream.push_accept_signal();
-                            return;
-                        }
-                        // BE request with no cycles, or a BE response with no cycles:
-                        // fall through and induct normally. A response that should not
-                        // exist (GR or carrying cycles) is dropped just below.
-                        _ => {}
-                    }
-                    // A response that should not exist at the engine boundary: a
-                    // guaranteed-response response, or one carrying cycles. Neither is
-                    // allowed across the boundary, so this can only come from a buggy or
-                    // malicious peer. Drop it (any cycles are lost) and raise a critical
-                    // error.
-                    if let RequestOrResponse::Response(ref rep) = msg {
-                        let is_gr = rep.deadline == NO_DEADLINE;
-                        let has_cycles = rep.refund > Cycles::zero();
-                        if is_gr || has_cycles {
+                        // A response that should not exist at the engine boundary: a
+                        // guaranteed-response response, or one carrying cycles. Neither is
+                        // allowed across the boundary, so this can only come from a buggy or
+                        // malicious peer. As with the disallowed requests above, drop it and
+                        // raise a critical error (any cycles are lost); the only difference is
+                        // that a response is dropped with an accept signal rather than rejected,
+                        // since there is no caller left to reject to.
+                        RequestOrResponse::Response(rep)
+                            if rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero() =>
+                        {
                             error!(
                                 self.log,
                                 "{}: Dropping engine-boundary response (from {}): {:?}",
@@ -874,8 +861,11 @@ impl StreamHandlerImpl {
                                 rep,
                             );
                             self.metrics.critical_error_engine_message.inc();
-                            self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
-                            if has_cycles {
+                            self.observe_inducted_message_status(
+                                msg_type,
+                                LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                            );
+                            if rep.refund > Cycles::zero() {
                                 state.observe_lost_cycles_due_to_dropped_messages(
                                     CompoundCycles::new(rep.refund, own_cost_schedule),
                                 );
@@ -883,6 +873,9 @@ impl StreamHandlerImpl {
                             stream.push_accept_signal();
                             return;
                         }
+                        // Best-effort request with no cycles, or a best-effort response with
+                        // no cycles: induct normally.
+                        _ => {}
                     }
                 }
                 match self.induct_message_impl(
@@ -1141,7 +1134,7 @@ impl StreamHandlerImpl {
                     // Recipient canister not found, cycles are lost.
                     self.observe_inducted_message_status(
                         LABEL_VALUE_TYPE_REFUND,
-                        LABEL_VALUE_DROPPED,
+                        LABEL_VALUE_CANISTER_NOT_FOUND,
                     );
                     state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                         refund.amount(),

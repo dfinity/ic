@@ -483,13 +483,11 @@ impl XNetPayloadBuilderImpl {
         state: &ReplicatedState,
         past_payloads: &[&XNetPayload],
     ) -> Result<BTreeMap<SubnetId, ExpectedIndices>, Error> {
-        let all_subnet_ids = self
+        let subnet_ids = self
             .registry
             .get_subnet_ids(validation_context.registry_version)
             .map_err(Error::RegistryGetSubnetsFailed)?
             .unwrap_or_default();
-
-        let subnet_ids: Vec<_> = all_subnet_ids.into_iter().collect();
 
         let expected_indices = subnet_ids
             .into_iter()

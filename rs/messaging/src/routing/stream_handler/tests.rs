@@ -2801,7 +2801,7 @@ fn induct_stream_slices_with_refunds() {
 
                 metrics.assert_inducted_xnet_messages_eq(&[
                     (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_SUCCESS, 1),
-                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_DROPPED, 1),
+                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
                     (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_RECEIVER_MIGRATED, 1),
                     (
                         LABEL_VALUE_TYPE_REFUND,
@@ -2868,7 +2868,7 @@ fn induct_stream_slices_drops_refund_at_engine_boundary() {
 
                 metrics.assert_inducted_xnet_messages_eq(&[(
                     LABEL_VALUE_TYPE_REFUND,
-                    LABEL_VALUE_DROPPED,
+                    LABEL_VALUE_ENGINE_NOT_ALLOWED,
                     1,
                 )]);
                 metrics.assert_eq_critical_errors(CriticalErrorCounts {
@@ -3318,7 +3318,7 @@ fn induct_stream_slices_engine_src_guaranteed_response_request_critical_error() 
                 },
             );
 
-            // Expect a stream with a reject signal (EngineNotAllowed) for the GR request.
+            // Expect a stream with a reject signal (EngineNotAllowed) for the guaranteed-response request.
             let mut expected_state = state.clone();
             let expected_stream = stream_from_config(StreamConfig {
                 signals_end: 1,
@@ -3339,7 +3339,7 @@ fn induct_stream_slices_engine_src_guaranteed_response_request_critical_error() 
 
             metrics.assert_inducted_xnet_messages_eq(&[(
                 LABEL_VALUE_TYPE_REQUEST,
-                LABEL_VALUE_DROPPED,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
                 1,
             )]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
@@ -3368,7 +3368,7 @@ fn induct_stream_slices_engine_src_best_effort_request_inducted() {
             );
 
             // Build a best-effort request (deadline != NO_DEADLINE, payment = 0).
-            let be_request = RequestBuilder::new()
+            let best_effort_request = RequestBuilder::new()
                 .sender(*REMOTE_CANISTER)
                 .receiver(*LOCAL_CANISTER)
                 .sender_reply_callback(CallbackId::new(1))
@@ -3376,7 +3376,7 @@ fn induct_stream_slices_engine_src_best_effort_request_inducted() {
                 .payment(Cycles::zero())
                 .build();
             let slice = stream_slice_from_config(StreamSliceConfig {
-                messages: vec![be_request.into()],
+                messages: vec![best_effort_request.into()],
                 ..StreamSliceConfig::default()
             });
 
@@ -3398,13 +3398,13 @@ fn induct_stream_slices_engine_src_best_effort_request_inducted() {
     );
 }
 
-/// Tests that a best-effort request carrying cycles from a CloudEngine subnet is dropped
-/// at the engine boundary: cycles observed as lost, accept signal pushed, and a critical
-/// error raised. Mirrors the sender-side test
-/// `build_streams_engine_src_rejects_cycles_request` on the receiving side, which is
-/// the security-critical filter against a malicious engine.
+/// Tests that a best-effort request carrying cycles from a CloudEngine subnet is rejected
+/// at the engine boundary with a reject signal (EngineNotAllowed) and a critical error;
+/// the reject signal refunds the cycles to the sender, so they are not lost. Mirrors the
+/// sender-side test `build_streams_engine_src_rejects_cycles_request` on the receiving
+/// side, which is the security-critical filter against a malicious engine.
 #[test]
-fn induct_stream_slices_engine_src_best_effort_request_with_cycles_dropped() {
+fn induct_stream_slices_engine_src_best_effort_request_with_cycles_rejected() {
     with_test_setup(
         btreemap![],
         btreemap![],
@@ -3421,7 +3421,7 @@ fn induct_stream_slices_engine_src_best_effort_request_with_cycles_dropped() {
             // Build a best-effort request carrying cycles
             // (deadline != NO_DEADLINE, payment > 0).
             let payment = Cycles::new(1_000);
-            let be_request = RequestBuilder::new()
+            let best_effort_request = RequestBuilder::new()
                 .sender(*REMOTE_CANISTER)
                 .receiver(*LOCAL_CANISTER)
                 .sender_reply_callback(CallbackId::new(1))
@@ -3429,22 +3429,20 @@ fn induct_stream_slices_engine_src_best_effort_request_with_cycles_dropped() {
                 .payment(payment)
                 .build();
             let slice = stream_slice_from_config(StreamSliceConfig {
-                messages: vec![be_request.into()],
+                messages: vec![best_effort_request.into()],
                 ..StreamSliceConfig::default()
             });
 
-            // Expected: an outgoing stream to REMOTE_SUBNET with one accept signal;
-            // the request's cycles are observed as lost.
+            // Expected: an outgoing stream to REMOTE_SUBNET with a reject signal
+            // (EngineNotAllowed) for the request; the reject signal refunds the cycles to
+            // the sender, so they are not observed as lost.
             let mut expected_state = state.clone();
             let expected_stream = stream_from_config(StreamConfig {
                 signals_end: 1,
+                reject_signals: vec![RejectSignal::new(RejectReason::EngineNotAllowed, 0.into())],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
-            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                payment,
-                CanisterCyclesCostSchedule::Normal,
-            ));
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -3458,7 +3456,7 @@ fn induct_stream_slices_engine_src_best_effort_request_with_cycles_dropped() {
 
             metrics.assert_inducted_xnet_messages_eq(&[(
                 LABEL_VALUE_TYPE_REQUEST,
-                LABEL_VALUE_DROPPED,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
                 1,
             )]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
@@ -3496,7 +3494,7 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
             );
 
             // Build a best-effort response with no cycles using the callback registered by setup.
-            let be_response = ResponseBuilder::new()
+            let best_effort_response = ResponseBuilder::new()
                 .respondent(*REMOTE_CANISTER)
                 .originator(*LOCAL_CANISTER)
                 .originator_reply_callback(CallbackId::new(1))
@@ -3504,7 +3502,7 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
                 .refund(Cycles::zero())
                 .build();
             let slice = stream_slice_from_config(StreamSliceConfig {
-                messages: vec![be_response.into()],
+                messages: vec![best_effort_response.into()],
                 ..StreamSliceConfig::default()
             });
 
@@ -3649,7 +3647,7 @@ fn induct_stream_slices_engine_boundary_drops_response_that_should_not_exist() {
 
             metrics.assert_inducted_xnet_messages_eq(&[(
                 LABEL_VALUE_TYPE_RESPONSE,
-                LABEL_VALUE_DROPPED,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
                 1,
             )]);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {

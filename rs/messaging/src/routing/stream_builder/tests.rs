@@ -805,7 +805,7 @@ fn build_streams_with_best_effort_messages() {
 /// Tests that a guaranteed-response request from a CloudEngine subnet (own subnet) to a
 /// non-engine subnet is rejected with a synthetic reject response.
 #[test]
-fn build_streams_engine_src_rejects_gr_request() {
+fn build_streams_engine_src_rejects_guaranteed_response_request() {
     let local_canister_id = canister_test_id(0);
     let remote_canister_id = canister_test_id(1);
     with_test_replica_logger(|log| {
@@ -865,7 +865,7 @@ fn build_streams_engine_src_rejects_gr_request() {
             )]),
             &metrics_registry,
         );
-        assert_eq_critical_errors(0, 0, &metrics_registry);
+        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
     });
 }
 
@@ -932,12 +932,14 @@ fn build_streams_engine_src_rejects_cycles_request() {
             )]),
             &metrics_registry,
         );
-        assert_eq_critical_errors(0, 0, &metrics_registry);
+        assert_eq_critical_errors(0, 0, 0, &metrics_registry);
     });
 }
 
-/// Tests that a response with a cycles refund from a CloudEngine subnet (own subnet) to a
-/// non-engine subnet is dropped (no synthetic reject, no stream entry).
+/// Tests that a best-effort response with a cycles refund from a CloudEngine subnet (own
+/// subnet) to a non-engine subnet is dropped (no synthetic reject, no stream entry). The
+/// response is best-effort so that it's clear it's dropped because of the refund, not
+/// because it's a guaranteed response.
 #[test]
 fn build_streams_engine_src_drops_cycles_response() {
     let local_canister_id = canister_test_id(0);
@@ -949,7 +951,7 @@ fn build_streams_engine_src_drops_cycles_response() {
             originator_reply_callback: CallbackId::from(1),
             refund: Cycles::new(100),
             response_payload: Payload::Data(vec![]),
-            deadline: NO_DEADLINE,
+            deadline: SOME_DEADLINE,
         });
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
@@ -999,7 +1001,8 @@ fn build_streams_engine_src_drops_cycles_response() {
             )]),
             &metrics_registry,
         );
-        assert_eq_critical_errors(0, 0, &metrics_registry);
+        // A response that should never have reached the boundary raises a critical error.
+        assert_eq_critical_errors(0, 0, 1, &metrics_registry);
     });
 }
 
@@ -1050,6 +1053,14 @@ fn build_streams_drops_refunds_at_engine_boundary() {
             assert_eq!(
                 0, routed_refunds,
                 "Refund leaked across engine boundary (own_subnet_type={own_subnet_type:?}, \
+                 remote_subnet_type={remote_subnet_type:?})",
+            );
+
+            // The refund must also have been dropped from the refund pool, rather
+            // than held back for a future round.
+            assert!(
+                result_state.refunds().is_empty(),
+                "Refund retained in pool instead of being dropped (own_subnet_type={own_subnet_type:?}, \
                  remote_subnet_type={remote_subnet_type:?})",
             );
         });
@@ -1298,7 +1309,7 @@ fn build_streams_with_refunds(
         );
 
         // Critical error recorded for the refund that could not be routed.
-        assert_eq_critical_errors(0, 1, &metrics_registry);
+        assert_eq_critical_errors(0, 1, 0, &metrics_registry);
         Ok(())
     })?;
 }
@@ -1512,7 +1523,7 @@ fn build_streams_with_oversized_payloads() {
             )]),
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
-        assert_eq_critical_errors(2, 0, &metrics_registry);
+        assert_eq_critical_errors(2, 0, 0, &metrics_registry);
     });
 }
 
@@ -1961,6 +1972,7 @@ fn fetch_routed_payload_count(metrics_registry: &MetricsRegistry) -> u64 {
 fn assert_eq_critical_errors(
     payload_too_large: u64,
     response_destination_not_found: u64,
+    engine_message: u64,
     metrics_registry: &MetricsRegistry,
 ) {
     assert_eq!(
@@ -1973,7 +1985,8 @@ fn assert_eq_critical_errors(
             (
                 &[("error", &CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND)],
                 response_destination_not_found
-            )
+            ),
+            (&[("error", &CRITICAL_ERROR_ENGINE_MESSAGE)], engine_message)
         ])),
         nonzero_values(fetch_int_counter_vec(metrics_registry, "critical_errors"))
     );
