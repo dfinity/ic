@@ -1381,13 +1381,13 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
 ///   memory_allocation : nat;
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
+///   minimum_incoming_canister_call_cycles : nat;
 ///   log_visibility : log_visibility;
 ///   snapshot_visibility : snapshot_visibility;
 ///   log_memory_limit : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
 ///   environment_variables : vec environment_variable;
-///   minimum_incoming_canister_call_cycles : nat;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -1398,13 +1398,13 @@ pub struct DefiniteCanisterSettingsArgs {
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
+    minimum_incoming_canister_call_cycles: candid::Nat,
     log_visibility: LogVisibilityV2,
     snapshot_visibility: SnapshotVisibility,
     log_memory_limit: candid::Nat,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
     environment_variables: Vec<EnvironmentVariable>,
-    minimum_incoming_canister_call_cycles: candid::Nat,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -1443,13 +1443,13 @@ impl DefiniteCanisterSettingsArgs {
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles,
             log_visibility,
             snapshot_visibility,
             log_memory_limit: candid::Nat::from(log_memory_limit),
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
             environment_variables,
-            minimum_incoming_canister_call_cycles,
         }
     }
 
@@ -2375,13 +2375,13 @@ pub struct EnvironmentVariable {
 ///   memory_allocation : opt nat;
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
+///   minimum_incoming_canister_call_cycles : opt nat;
 ///   log_visibility : opt log_visibility;
 ///   snapshot_visibility : opt snapshot_visibility;
 ///   log_memory_limit : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
 ///   environment_variables : opt vec environment_variable;
-///   minimum_incoming_canister_call_cycles : opt nat;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
@@ -2391,13 +2391,13 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
+    pub minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
     pub snapshot_visibility: Option<SnapshotVisibility>,
     pub log_memory_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
-    pub minimum_incoming_canister_call_cycles: Option<candid::Nat>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -2412,13 +2412,13 @@ impl CanisterSettingsArgs {
             memory_allocation: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
+            minimum_incoming_canister_call_cycles: None,
             log_visibility: None,
             snapshot_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
             environment_variables: None,
-            minimum_incoming_canister_call_cycles: None,
         }
     }
 }
@@ -2430,13 +2430,13 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
+    minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
     snapshot_visibility: Option<SnapshotVisibility>,
     log_memory_limit: Option<candid::Nat>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
     environment_variables: Option<Vec<EnvironmentVariable>>,
-    minimum_incoming_canister_call_cycles: Option<candid::Nat>,
 }
 
 #[allow(dead_code)]
@@ -2452,13 +2452,13 @@ impl CanisterSettingsArgsBuilder {
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
             log_visibility: self.log_visibility,
             snapshot_visibility: self.snapshot_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
             environment_variables: self.environment_variables,
-            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
         }
     }
 

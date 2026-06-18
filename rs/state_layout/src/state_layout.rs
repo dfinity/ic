@@ -176,6 +176,7 @@ pub struct CanisterStateBits {
     pub cycles_debit: Cycles,
     pub reserved_balance: Cycles,
     pub reserved_balance_limit: Option<Cycles>,
+    pub minimum_incoming_canister_call_cycles: Cycles,
     pub status: CanisterStatus,
     pub rounds_scheduled: u64,
     pub scheduled_as_first: u64,
@@ -211,7 +212,6 @@ pub struct CanisterStateBits {
     pub next_snapshot_id: u64,
     pub task_queue: TaskQueue,
     pub environment_variables: BTreeMap<String, String>,
-    pub minimum_incoming_canister_call_cycles: Cycles,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already

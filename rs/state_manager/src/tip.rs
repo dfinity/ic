@@ -1223,6 +1223,9 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             cycles_debit: canister_state.system_state.ingress_induction_cycles_debit(),
             reserved_balance: canister_state.system_state.reserved_balance(),
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
+            minimum_incoming_canister_call_cycles: canister_state
+                .system_state
+                .minimum_incoming_canister_call_cycles,
             execution_state_bits,
             status: canister_state.system_state.get_status().clone(),
             rounds_scheduled: canister_state
@@ -1294,9 +1297,6 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .environment_variables
                 .clone()
                 .into(),
-            minimum_incoming_canister_call_cycles: canister_state
-                .system_state
-                .minimum_incoming_canister_call_cycles,
             instructions_executed: canister_state
                 .system_state
                 .canister_metrics()

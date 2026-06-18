@@ -126,6 +126,14 @@ pub struct CanisterSettings {
     ///
     /// Default value: `5_000_000_000_000` (5 trillion cycles).
     pub reserved_cycles_limit: Option<Nat>,
+    /// Indicates the minimum number of cycles required for an incoming message
+    /// from another canister. Messages with fewer cycles are rejected with a
+    /// `CanisterError`. Ingress messages are not affected.
+    ///
+    /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
+    ///
+    /// Default value: `0` (i.e., no minimum enforced).
+    pub minimum_incoming_canister_call_cycles: Option<Nat>,
     /// Defines who is allowed to read the canister's logs.
     ///
     /// Default value: [`LogVisibility::Controllers`].
@@ -161,14 +169,6 @@ pub struct CanisterSettings {
     ///
     /// Default value: `null` (i.e., no environment variables provided).
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
-    /// Indicates the minimum number of cycles required for an incoming message
-    /// from another canister. Messages with fewer cycles are rejected with a
-    /// `CanisterError`. Ingress messages are not affected.
-    ///
-    /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
-    ///
-    /// Default value: `0` (i.e., no minimum enforced).
-    pub minimum_incoming_canister_call_cycles: Option<Nat>,
 }
 
 /// # Definite Canister Settings
@@ -190,6 +190,8 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Upper limit on [`CanisterStatusResult::reserved_cycles`] of the canister.
     pub reserved_cycles_limit: Nat,
+    /// Minimum number of cycles required for an incoming canister-to-canister message.
+    pub minimum_incoming_canister_call_cycles: Nat,
     /// Visibility of canister logs.
     pub log_visibility: LogVisibility,
     /// Upper limit on the memory used for canister logs (bytes).
@@ -202,8 +204,6 @@ pub struct DefiniteCanisterSettings {
     pub wasm_memory_threshold: Nat,
     /// A list of environment variables.
     pub environment_variables: Vec<EnvironmentVariable>,
-    /// Minimum number of cycles required for an incoming canister-to-canister message.
-    pub minimum_incoming_canister_call_cycles: Nat,
 }
 
 /// # Create Canister Args

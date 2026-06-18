@@ -24,6 +24,9 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             cycles_debit: Some(item.cycles_debit.into()),
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
+            minimum_incoming_canister_call_cycles: Some(
+                item.minimum_incoming_canister_call_cycles.into(),
+            ),
             canister_status: Some((&item.status).into()),
             rounds_scheduled: item.rounds_scheduled,
             scheduled_as_first: item.scheduled_as_first,
@@ -80,9 +83,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_snapshot_id: item.next_snapshot_id,
             tasks: Some((&item.task_queue).into()),
             environment_variables: item.environment_variables.into_iter().collect(),
-            minimum_incoming_canister_call_cycles: Some(
-                item.minimum_incoming_canister_call_cycles.into(),
-            ),
             instructions_executed: item.instructions_executed.get(),
             ingress_messages_executed: item.ingress_messages_executed,
             remote_subnet_messages_executed: item.remote_subnet_messages_executed,
@@ -174,6 +174,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
+            minimum_incoming_canister_call_cycles: value
+                .minimum_incoming_canister_call_cycles
+                .map(|v| v.into())
+                .unwrap_or_default(),
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
@@ -237,10 +241,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             next_snapshot_id: value.next_snapshot_id,
             task_queue,
             environment_variables: value.environment_variables.into_iter().collect(),
-            minimum_incoming_canister_call_cycles: value
-                .minimum_incoming_canister_call_cycles
-                .map(|v| v.into())
-                .unwrap_or_default(),
             instructions_executed: NumInstructions::from(value.instructions_executed),
             ingress_messages_executed: value.ingress_messages_executed,
             remote_subnet_messages_executed: value.remote_subnet_messages_executed,
