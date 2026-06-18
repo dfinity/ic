@@ -778,10 +778,8 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
                 .iter()
                 .next()
                 .ok_or("No nodes in current transcript committee found")?;
-            match registry
-                .get_subnet_id_and_type_from_node_id(*node_id, dkg_summary.registry_version)
-            {
-                Ok(Some((subnet_id, _subnet_type))) => Ok(subnet_id),
+            match registry.get_subnet_id_from_node_id(*node_id, dkg_summary.registry_version) {
+                Ok(Some(subnet_id)) => Ok(subnet_id),
                 other => Err(format!(
                     "Couldn't get the subnet id from the registry for node {:?} at registry version {}: {:?}",
                     node_id, dkg_summary.registry_version, other
