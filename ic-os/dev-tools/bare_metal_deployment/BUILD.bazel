@@ -14,3 +14,18 @@ whl_filegroup(
     tags = ["manual"],
     whl = "@python_deps//idracredfishsupport:whl",
 )
+
+REDFISH_RUNTIME_SCRIPTS = [
+    "GetSetPowerStateREDFISH.py",
+    "InsertEjectVirtualMediaREDFISH.py",
+    "SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py",
+]
+
+genrule(
+    name = "redfish_runtime_scripts",
+    srcs = [":redfish_scripts"],
+    outs = REDFISH_RUNTIME_SCRIPTS,
+    cmd = "src=$(location :redfish_scripts)/IdracRedfishSupport-0.0.8.data/scripts; " +
+          "for out in $(OUTS); do cp \"$$src/$$(basename $$out)\" \"$$out\"; done",
+    tags = ["manual"],
+)
