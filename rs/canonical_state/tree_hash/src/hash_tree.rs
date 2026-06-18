@@ -22,6 +22,13 @@ const EMPTY_HASH: Digest = Digest([
     0xcf, 0xfb, 0x6c, 0x47, 0xdb, 0xab, 0x21, 0x6e, 0x79, 0x30, 0xe8, 0x2f, 0x81, 0x90, 0xd1, 0x20,
 ]);
 
+/// Hash of an empty leaf, i.e. the digest of the domain separator
+/// "ic-hashtree-leaf" with no body bytes.
+const EMPTY_LEAF_HASH: Digest = Digest([
+    0xd0, 0x01, 0xf3, 0xe7, 0xb8, 0x21, 0x66, 0xc6, 0xd3, 0x43, 0xa1, 0xef, 0xe7, 0x76, 0xe9, 0x6a,
+    0xc0, 0x2a, 0x23, 0xa5, 0x1e, 0x08, 0x98, 0xbc, 0x2c, 0x4e, 0x32, 0x3f, 0xce, 0x0e, 0x62, 0x2c,
+]);
+
 /// 30 LSBs are used to store the index
 const INDEX_MASK: u32 = 0x3fff_ffff;
 /// 2 MSBs are used to store the node kind
@@ -820,6 +827,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         }
 
         match t {
+            LazyTree::Blob(b, None) if b.is_empty() => ht.new_leaf(EMPTY_LEAF_HASH),
             LazyTree::Blob(b, None) => {
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(b);
@@ -836,12 +844,20 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
             }
             LazyTree::LazyBlob(f) => {
                 let b = f();
+                if b.is_empty() {
+                    return ht.new_leaf(EMPTY_LEAF_HASH);
+                }
+
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(&b);
                 ht.new_leaf(h.finalize())
             }
             LazyTree::LazyFork(f) => {
                 let num_children = f.len();
+                if num_children == 0 {
+                    return Ok(NodeId::empty());
+                }
+
                 let NodeIndexRange {
                     bucket,
                     index_range: range,
@@ -884,9 +900,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
                     }
                 }
 
-                if nodes.is_empty() {
-                    return Ok(NodeId::empty());
-                } else if nodes.len() == 1 {
+                if nodes.len() == 1 {
                     return Ok(nodes[0]);
                 }
 
@@ -1010,4 +1024,15 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
     ht.check_invariants();
 
     Ok(ht)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_leaf_hash_matches_hasher() {
+        let h = Hasher::for_domain("ic-hashtree-leaf");
+        assert_eq!(h.finalize(), EMPTY_LEAF_HASH);
+    }
 }
