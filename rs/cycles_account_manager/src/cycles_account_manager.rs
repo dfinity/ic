@@ -1270,7 +1270,7 @@ impl CyclesAccountManager {
                     + FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min
             }
             Replication::NonReplicated(_) => {
-                // Non-replicated is the same as flexible replication with min requests of 1.
+                // Non-replicated is equivalent to flexible replication with min_responses = 1.
                 BASE_FEE
                     + PER_REQUEST_BYTE_FEE * request_bytes
                     + FLEXIBLE_PER_NODE_FEE * n
