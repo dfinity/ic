@@ -1,5 +1,6 @@
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
+use ic_certification_version::CertificationVersion;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
     OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
@@ -869,6 +870,20 @@ pub fn insert_dummy_canister(
     state.put_canister_state(canister_state);
 }
 
+/// Reject reasons encodable at `certification_version`. `EngineNotAllowed` is only encodable
+/// from V26.
+pub fn reject_reasons_encodable_at(
+    certification_version: CertificationVersion,
+) -> Vec<RejectReason> {
+    RejectReason::all()
+        .into_iter()
+        .filter(|reason| {
+            *reason != RejectReason::EngineNotAllowed
+                || certification_version >= CertificationVersion::V26
+        })
+        .collect()
+}
+
 prop_compose! {
     /// Produces a strategy that generates arbitrary stream signals.
     ///
@@ -945,13 +960,19 @@ prop_compose! {
     /// Produces a strategy that generates a stream with between
     /// `[min_size, max_size]` messages and between
     /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
+    pub fn arb_stream(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
+        certification_version: CertificationVersion,
+    )(
         stream in arb_stream_with_config(
             0..=10000,
             min_size..=max_size,
             0..=10000,
             min_signal_count..=max_signal_count,
-            RejectReason::all(),
+            reject_reasons_encodable_at(certification_version),
         )
     ) -> Stream {
         stream
@@ -961,8 +982,14 @@ prop_compose! {
 prop_compose! {
     /// Produces a strategy consisting of an arbitrary stream and valid slice begin and message
     /// count values for extracting a slice from the stream.
-    pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
+    pub fn arb_stream_slice(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
+        certification_version: CertificationVersion,
+    )(
+        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count, certification_version),
         from_percent in -20..120_i64,
         percent_above_min_size in 0..120_i64,
     ) ->  (Stream, StreamIndex, usize) {
@@ -1011,9 +1038,10 @@ prop_compose! {
     pub fn arb_invalid_stream_header(
         min_signal_count: usize,
         max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
     )(
-        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count, RejectReason::all()),
-        reason in proptest::sample::select(RejectReason::all()),
+        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count, with_reject_reasons.clone()),
+        reason in proptest::sample::select(with_reject_reasons),
     ) -> StreamHeader {
         let begin = valid_stream_header.begin();
         let end = valid_stream_header.end();

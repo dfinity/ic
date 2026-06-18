@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::NumBytes;
+use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
@@ -22,7 +23,9 @@ use ic_test_utilities_metrics::{
     fetch_int_counter_vec, metric_vec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_state::{arb_stream, arb_stream_slice, arb_stream_with_config};
+use ic_test_utilities_state::{
+    arb_stream, arb_stream_slice, arb_stream_with_config, reject_reasons_encodable_at,
+};
 use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,
@@ -30,9 +33,7 @@ use ic_test_utilities_types::ids::{
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
-use ic_types::xnet::{
-    CertifiedStreamSlice, RejectReason, StreamIndex, StreamIndexedQueue, StreamSlice,
-};
+use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
 use ic_xnet_payload_builder::testing::*;
@@ -312,7 +313,7 @@ fn get_xnet_payload_respects_signal_limit(
         30..=40, // size_range
         10..=20, // signal_start_range
         (MAX_SIGNALS - 10)..=MAX_SIGNALS, // signal_count_range
-        RejectReason::all(),
+        reject_reasons_encodable_at(CURRENT_CERTIFICATION_VERSION),
     ))]
     out_stream: Stream,
 
@@ -322,7 +323,7 @@ fn get_xnet_payload_respects_signal_limit(
         (MAX_SIGNALS + 20)..=(MAX_SIGNALS + 30), // size_range
         10..=20, // signal_start_range
         0..=10, // signal_count_range
-        RejectReason::all(),
+        reject_reasons_encodable_at(CURRENT_CERTIFICATION_VERSION),
     ))]
     in_stream: Stream,
 ) {
@@ -382,6 +383,7 @@ fn get_xnet_payload_slice_alignment(
         5, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -519,6 +521,7 @@ fn get_xnet_payload_just_under_byte_limit(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice1: (Stream, StreamIndex, usize),
     #[strategy(arb_stream_slice(
@@ -526,6 +529,7 @@ fn get_xnet_payload_just_under_byte_limit(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice2: (Stream, StreamIndex, usize),
 ) {
@@ -577,6 +581,7 @@ fn get_xnet_payload_byte_limit_exceeded(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice1: (Stream, StreamIndex, usize),
     #[strategy(arb_stream_slice(
@@ -584,6 +589,7 @@ fn get_xnet_payload_byte_limit_exceeded(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice2: (Stream, StreamIndex, usize),
     #[strategy(0..100_usize)] message_bytes_percentage: usize,
@@ -642,6 +648,7 @@ fn get_xnet_payload_byte_limit_too_small(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -689,6 +696,7 @@ fn get_xnet_payload_empty_slice(
         1, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     out_stream: Stream,
 ) {
@@ -768,6 +776,7 @@ fn system_subnet_stream_throttling(
         SYSTEM_SUBNET_STREAM_MSG_LIMIT + 10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     out_stream: Stream,
     #[strategy(arb_stream_slice(
@@ -775,6 +784,7 @@ fn system_subnet_stream_throttling(
         SYSTEM_SUBNET_STREAM_MSG_LIMIT, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -862,6 +872,7 @@ fn validate_xnet_payload(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice1: (Stream, StreamIndex, usize),
     #[strategy(arb_stream_slice(
@@ -869,6 +880,7 @@ fn validate_xnet_payload(
         3, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice2: (Stream, StreamIndex, usize),
     #[strategy(0..110_u64)] size_limit_percentage: u64,
@@ -965,6 +977,7 @@ fn refill_pool_empty(
         5, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1066,6 +1079,7 @@ fn refill_pool_append(
         5, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1195,6 +1209,7 @@ fn refill_pool_put_invalid_slice(
         5, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1295,6 +1310,7 @@ fn refill_pool_append_invalid_slice(
         5, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {

@@ -213,6 +213,11 @@ pub fn prepare_registry_with_nodes_from_template(
 /// subnets). The returned request is meant to be pushed as an additional init
 /// mutate request on top of the invariant-compliant base; it also returns the id
 /// of the new CloudEngine subnet.
+///
+/// NOTE: A unit-test-local copy of this helper with the same name and
+/// signature lives at `src/common/test_helpers.rs` because the latter is
+/// `#[cfg(test)]` and not accessible from integration tests. Keep them in
+/// sync.
 pub fn prepare_registry_with_cloud_engine_subnet(
     node_count: u64,
     starting_mutation_id: u8,
