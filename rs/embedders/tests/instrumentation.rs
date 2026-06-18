@@ -298,9 +298,13 @@ fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u
         .deterministic_memory_tracker
         == FlagStatus::Enabled
     {
+        let cost = ic_config::subnet_config::SchedulerConfig::application_subnet()
+            .dirty_page_overhead
+            .get();
         let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
-        n_heap_wasm_pages * 2 * os_pages_per_wasm_page
-            + n_stable_wasm_pages * os_pages_per_wasm_page
+        (n_heap_wasm_pages * 2 * os_pages_per_wasm_page
+            + n_stable_wasm_pages * os_pages_per_wasm_page)
+            * cost
     } else {
         0
     }
