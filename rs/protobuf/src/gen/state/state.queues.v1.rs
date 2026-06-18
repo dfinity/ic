@@ -300,6 +300,7 @@ pub enum RejectReason {
     QueueFull = 5,
     OutOfMemory = 6,
     Unknown = 7,
+    EngineNotAllowed = 8,
 }
 impl RejectReason {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -316,6 +317,7 @@ impl RejectReason {
             Self::QueueFull => "REJECT_REASON_QUEUE_FULL",
             Self::OutOfMemory => "REJECT_REASON_OUT_OF_MEMORY",
             Self::Unknown => "REJECT_REASON_UNKNOWN",
+            Self::EngineNotAllowed => "REJECT_REASON_ENGINE_NOT_ALLOWED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -329,6 +331,7 @@ impl RejectReason {
             "REJECT_REASON_QUEUE_FULL" => Some(Self::QueueFull),
             "REJECT_REASON_OUT_OF_MEMORY" => Some(Self::OutOfMemory),
             "REJECT_REASON_UNKNOWN" => Some(Self::Unknown),
+            "REJECT_REASON_ENGINE_NOT_ALLOWED" => Some(Self::EngineNotAllowed),
             _ => None,
         }
     }

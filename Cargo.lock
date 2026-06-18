@@ -2137,7 +2137,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter",
+ "wasmprinter 0.251.0",
  "wat",
 ]
 
@@ -2734,6 +2734,7 @@ dependencies = [
  "sev_guest",
  "strum 0.26.3",
  "tempfile",
+ "tracing",
  "url",
  "utils",
 ]
@@ -9863,13 +9864,37 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "wasm-encoder 0.248.0",
- "wasmparser 0.248.0",
- "wasmprinter",
+ "wasm-encoder 0.251.0",
+ "wasmparser 0.251.0",
+ "wasmprinter 0.251.0",
  "wasmtime",
  "wast",
  "wat",
  "wirm",
+]
+
+[[package]]
+name = "ic-engine-controller"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "candid_parser",
+ "canister-test",
+ "ic-base-types",
+ "ic-cdk",
+ "ic-management-canister-types 0.5.0",
+ "ic-nns-constants",
+ "ic-nns-test-utils",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-subnet-type",
+ "ic-registry-transport",
+ "ic-types",
+ "pocket-ic",
+ "prost 0.13.5",
+ "registry-canister",
+ "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -9989,7 +10014,7 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing",
- "wasmparser 0.248.0",
+ "wasmparser 0.251.0",
  "wat",
  "wirm",
 ]
@@ -10426,10 +10451,13 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "criterion",
  "hex",
  "ic-artifact-pool",
+ "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
+ "ic-crypto-temp-crypto",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
@@ -10445,12 +10473,14 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-consensus",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-utils 0.9.0",
  "mockall 0.13.1",
  "prometheus",
@@ -14868,6 +14898,7 @@ dependencies = [
  "ic-messaging",
  "ic-metrics",
  "ic-protobuf",
+ "ic-query-stats",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -15292,7 +15323,7 @@ dependencies = [
  "serde_cbor",
  "socket2 0.5.10",
  "tempfile",
- "wasmprinter",
+ "wasmprinter 0.251.0",
  "wat",
 ]
 
@@ -15336,6 +15367,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
@@ -15473,6 +15505,7 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-btc-replica-types",
+ "ic-certification-version",
  "ic-interfaces",
  "ic-management-canister-types-private",
  "ic-registry-routing-table",
@@ -17900,7 +17933,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter",
+ "wasmprinter 0.251.0",
 ]
 
 [[package]]
@@ -18747,6 +18780,7 @@ dependencies = [
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-cycles-account-manager",
  "ic-http-endpoints-public",
  "ic-http-endpoints-test-agent",
  "ic-limits",
@@ -20308,6 +20342,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-sns-wasm",
  "ic-transport-types",
@@ -26282,6 +26317,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.251.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a879a421bd17c528b74721b2abf4c62e8f1d1889c2ba8c3c50d02deaf2ce395"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.251.0",
+]
+
+[[package]]
 name = "wasm-metadata"
 version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26330,6 +26375,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
@@ -26346,10 +26392,10 @@ dependencies = [
  "libfuzzer-sys",
  "num-traits",
  "tokio",
- "wasm-encoder 0.248.0",
+ "wasm-encoder 0.251.0",
  "wasm-smith",
- "wasmparser 0.248.0",
- "wasmprinter",
+ "wasmparser 0.251.0",
+ "wasmprinter 0.251.0",
  "wasmtime",
 ]
 
@@ -26443,6 +26489,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmparser"
+version = "0.251.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "437970b35b1a85cfde9c74b2398352d8d653f3bd8e3a3db0c063ea8f5b4b36ff"
+dependencies = [
+ "bitflags 2.11.0",
+ "hashbrown 0.17.0",
+ "indexmap 2.14.0",
+ "semver",
+ "serde",
+]
+
+[[package]]
 name = "wasmprinter"
 version = "0.248.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26451,6 +26510,17 @@ dependencies = [
  "anyhow",
  "termcolor",
  "wasmparser 0.248.0",
+]
+
+[[package]]
+name = "wasmprinter"
+version = "0.251.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8798c1a699bd25648b6708eefe94d97c6f9891febb94b42cca1f7a4b086ea64e"
+dependencies = [
+ "anyhow",
+ "termcolor",
+ "wasmparser 0.251.0",
 ]
 
 [[package]]
@@ -26517,7 +26587,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.248.0",
  "wasmparser 0.248.0",
- "wasmprinter",
+ "wasmprinter 0.248.0",
  "wasmtime-internal-core",
 ]
 
@@ -26639,22 +26709,22 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "248.0.0"
+version = "251.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acc54622ed5a5cddafcdf152043f9d4aed54d4a653d686b7dfe874809fca99d7"
+checksum = "5cc7467dda0a96142eb2c980329dfb62480b1e1d3622fdeb1a44e2bca6ceed74"
 dependencies = [
  "bumpalo",
  "leb128fmt",
  "memchr",
  "unicode-width 0.2.0",
- "wasm-encoder 0.248.0",
+ "wasm-encoder 0.251.0",
 ]
 
 [[package]]
 name = "wat"
-version = "1.248.0"
+version = "1.251.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d75cd9e510603909748e6ebab89f27cd04472c1d9d85a3c88a7a6fc51a1a7934"
+checksum = "81b1086c9e85b95bd6a229a928bc6c6d0662e42af0250c88d067b418831ea4d4"
 dependencies = [
  "wast",
 ]

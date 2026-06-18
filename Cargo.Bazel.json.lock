@@ -1,5 +1,5 @@
 {
-  "checksum": "9eebc95dc66c4aec9401d7e31164e6cc85f76b8c862d0bd635c9c60f2ac14d59",
+  "checksum": "1fdc9fcc1235b42a941a88d97f04946e1171bc698fb85d77a66dbe2ff5a5d6dd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4791,14 +4791,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "async-web-client 0.6.2": {
+    "async-web-client 0.6.3": {
       "name": "async-web-client",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "package_url": "https://github.com/FlorianUekermann/async-web-client",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/async-web-client/0.6.2/download",
-          "sha256": "37381fb4fad3cd9b579628c21a58f528ef029d1f072d10f16cb9431aa2236d29"
+          "url": "https://static.crates.io/crates/async-web-client/0.6.3/download",
+          "sha256": "8caf502b44d6d4be6154ac33af012cbb5fef11e6066edcfb42834217fbaf501b"
         }
       },
       "targets": [
@@ -4858,8 +4858,12 @@
               "target": "log"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
             },
             {
               "id": "thiserror 1.0.68",
@@ -4873,7 +4877,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.2"
+        "version": "0.6.3"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -6407,7 +6411,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -11845,7 +11849,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.20.1",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
             },
             {
@@ -13050,7 +13054,7 @@
                 "target": "serde_wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ],
@@ -13582,11 +13586,11 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ],
@@ -14628,7 +14632,7 @@
               "target": "http"
             },
             {
-              "id": "reqwest 0.12.28",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -15580,7 +15584,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "wasm_bindgen"
             }
           ],
@@ -17409,14 +17413,14 @@
       ],
       "license_file": "LICENSES"
     },
-    "crc32fast 1.5.0": {
+    "crc32fast 1.3.2": {
       "name": "crc32fast",
-      "version": "1.5.0",
+      "version": "1.3.2",
       "package_url": "https://github.com/srijs/rust-crc32fast",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/crc32fast/1.5.0/download",
-          "sha256": "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+          "url": "https://static.crates.io/crates/crc32fast/1.3.2/download",
+          "sha256": "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
         }
       },
       "targets": [
@@ -17464,14 +17468,14 @@
               "target": "cfg_if"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "1.5.0"
+        "edition": "2015",
+        "version": "1.3.2"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -22667,7 +22671,7 @@
               "target": "convert_case"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -22931,15 +22935,15 @@
               "target": "ic_certified_map"
             },
             {
-              "id": "ic-custom-domains-backend 0.2.0",
+              "id": "ic-custom-domains-backend 0.2.1",
               "target": "ic_custom_domains_backend"
             },
             {
-              "id": "ic-custom-domains-base 0.2.0",
+              "id": "ic-custom-domains-base 0.2.1",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-client 0.2.0",
+              "id": "ic-custom-domains-canister-client 0.2.1",
               "target": "ic_custom_domains_canister_client"
             },
             {
@@ -23833,19 +23837,19 @@
               "target": "warp"
             },
             {
-              "id": "wasm-encoder 0.248.0",
+              "id": "wasm-encoder 0.251.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasm-smith 0.248.0",
+              "id": "wasm-smith 0.251.0",
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.248.0",
+              "id": "wasmparser 0.251.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.248.0",
+              "id": "wasmprinter 0.251.0",
               "target": "wasmprinter"
             },
             {
@@ -23853,11 +23857,11 @@
               "target": "wasmtime"
             },
             {
-              "id": "wast 248.0.0",
+              "id": "wast 251.0.0",
               "target": "wast"
             },
             {
-              "id": "wat 1.248.0",
+              "id": "wat 1.251.0",
               "target": "wat"
             },
             {
@@ -28678,7 +28682,7 @@
         "deps": {
           "common": [
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -30205,7 +30209,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -30869,11 +30873,11 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ]
@@ -31015,7 +31019,7 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ]
@@ -33723,7 +33727,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -33982,7 +33986,7 @@
               "target": "rand"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -35744,7 +35748,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -36104,11 +36108,11 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ],
@@ -36668,7 +36672,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-acme 0.15.2",
+              "id": "rustls-acme 0.15.3",
               "target": "rustls_acme"
             },
             {
@@ -37418,14 +37422,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.20.1": {
+    "ic-cdk 0.20.2": {
       "name": "ic-cdk",
-      "version": "0.20.1",
+      "version": "0.20.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.20.1/download",
-          "sha256": "a64dfa64757e7bfdd3bd6048c35e1edd74b69325deeed6bcaafedbc864c645fc"
+          "url": "https://static.crates.io/crates/ic-cdk/0.20.2/download",
+          "sha256": "6a7971f4983db147afbbc4e7f87f60b09fcd60ac707af37ff3d2468dcddbf551"
         }
       },
       "targets": [
@@ -37484,13 +37488,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.20.1",
+              "id": "ic-cdk-macros 0.20.2",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.20.1"
+        "version": "0.20.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37644,14 +37648,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.20.1": {
+    "ic-cdk-macros 0.20.2": {
       "name": "ic-cdk-macros",
-      "version": "0.20.1",
+      "version": "0.20.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.20.1/download",
-          "sha256": "fd0794365edf9997b1114b4ea10358c6af1317e39fc6611b4fc67053a44ec8f1"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.20.2/download",
+          "sha256": "a7c20c002200c720958f321bb78b4d4987fc2c380bf9ef69ed4404730810f45f"
         }
       },
       "targets": [
@@ -37699,7 +37703,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.20.1"
+        "version": "0.20.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37743,7 +37747,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.20.1",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
             },
             {
@@ -38074,14 +38078,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-custom-domains-backend 0.2.0": {
+    "ic-custom-domains-backend 0.2.1": {
       "name": "ic-custom-domains-backend",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-backend/0.2.0/download",
-          "sha256": "970d5702f22fce9f3f5dc3b8ffd989e4f12529c991d46bd07d90c4244b7775c4"
+          "url": "https://static.crates.io/crates/ic-custom-domains-backend/0.2.1/download",
+          "sha256": "e6655ea076ea14144139cc38e0a75907016bd68b9af4a795ac2e3da712bf6084"
         }
       },
       "targets": [
@@ -38150,11 +38154,11 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-base 0.2.0",
+              "id": "ic-custom-domains-base 0.2.1",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-client 0.2.0",
+              "id": "ic-custom-domains-canister-client 0.2.1",
               "target": "ic_custom_domains_canister_client"
             },
             {
@@ -38210,7 +38214,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38218,14 +38222,14 @@
       ],
       "license_file": null
     },
-    "ic-custom-domains-base 0.2.0": {
+    "ic-custom-domains-base 0.2.1": {
       "name": "ic-custom-domains-base",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-base/0.2.0/download",
-          "sha256": "6927820a8979ae5d4bbf5c2b48e254d1455a99e5ac7a8b49d2f78837ddf40f4b"
+          "url": "https://static.crates.io/crates/ic-custom-domains-base/0.2.1/download",
+          "sha256": "78a38ca829cb19a17ba4041a30299db3473c3d43fb1079bf5115047d33032f80"
         }
       },
       "targets": [
@@ -38290,7 +38294,7 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-canister-api 0.2.0",
+              "id": "ic-custom-domains-canister-api 0.2.1",
               "target": "ic_custom_domains_canister_api"
             },
             {
@@ -38350,7 +38354,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38358,14 +38362,14 @@
       ],
       "license_file": null
     },
-    "ic-custom-domains-canister-api 0.2.0": {
+    "ic-custom-domains-canister-api 0.2.1": {
       "name": "ic-custom-domains-canister-api",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.2.0/download",
-          "sha256": "fd62cd6225d8751c4150387e0c78ff819ea0fe559989a4ebef8b90fa15236cb5"
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.2.1/download",
+          "sha256": "9bf7c8f8bcf2b8661db6ec0e4c4d834343c54d3245c9677be8da1e333a509eac"
         }
       },
       "targets": [
@@ -38418,7 +38422,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38426,14 +38430,14 @@
       ],
       "license_file": null
     },
-    "ic-custom-domains-canister-client 0.2.0": {
+    "ic-custom-domains-canister-client 0.2.1": {
       "name": "ic-custom-domains-canister-client",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-client/0.2.0/download",
-          "sha256": "2eba2c92f418999fbc7d6bed7f589afa64766fe6a2c037da99deaeb7ee7ccdb8"
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-client/0.2.1/download",
+          "sha256": "d025de4e47c44c0462057c9b71f1b1a8110536f0ef479d413376ff022ebcdf77"
         }
       },
       "targets": [
@@ -38482,11 +38486,11 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-base 0.2.0",
+              "id": "ic-custom-domains-base 0.2.1",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-api 0.2.0",
+              "id": "ic-custom-domains-canister-api 0.2.1",
               "target": "ic_custom_domains_canister_api"
             },
             {
@@ -38518,7 +38522,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38841,11 +38845,11 @@
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-backend 0.2.0",
+              "id": "ic-custom-domains-backend 0.2.1",
               "target": "ic_custom_domains_backend"
             },
             {
-              "id": "ic-custom-domains-base 0.2.0",
+              "id": "ic-custom-domains-base 0.2.1",
               "target": "ic_custom_domains_base"
             },
             {
@@ -40119,7 +40123,7 @@
               "target": "hkdf"
             },
             {
-              "id": "ic-cdk 0.20.1",
+              "id": "ic-cdk 0.20.2",
               "target": "ic_cdk"
             },
             {
@@ -40541,7 +40545,7 @@
               "target": "arbitrary"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -42826,7 +42830,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types"
             },
             {
@@ -44331,14 +44335,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "js-sys 0.3.99": {
+    "js-sys 0.3.102": {
       "name": "js-sys",
-      "version": "0.3.99",
+      "version": "0.3.102",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/js-sys/0.3.99/download",
-          "sha256": "142bc4740e452c1e57ade0cbc129f139c9093e354346f0872ef985f4f5cf5f11"
+          "url": "https://static.crates.io/crates/js-sys/0.3.102/download",
+          "sha256": "03d04c30968dffe80775bd4d7fb676131cd04a1fb46d2686dbffbaec2d9dfd31"
         }
       },
       "targets": [
@@ -44379,18 +44383,14 @@
               "target": "futures_util"
             },
             {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.99"
+        "version": "0.3.102"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -46651,7 +46651,7 @@
               "target": "core2"
             },
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -55149,7 +55149,7 @@
         "deps": {
           "common": [
             {
-              "id": "crc32fast 1.5.0",
+              "id": "crc32fast 1.3.2",
               "target": "crc32fast"
             },
             {
@@ -56205,7 +56205,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               }
             ]
@@ -56285,7 +56285,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               }
             ]
@@ -56662,7 +56662,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               }
             ]
@@ -60405,11 +60405,11 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "web-sys 0.3.99",
+                "id": "web-sys 0.3.102",
                 "target": "web_sys"
               }
             ]
@@ -64903,7 +64903,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [
               {
-                "id": "web-sys 0.3.99",
+                "id": "web-sys 0.3.102",
                 "target": "web_sys"
               }
             ],
@@ -65378,7 +65378,7 @@
                 "target": "ring"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -67524,7 +67524,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -67601,7 +67601,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -69045,7 +69045,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
@@ -69053,15 +69053,15 @@
                 "target": "serde_json"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.72",
+                "id": "wasm-bindgen-futures 0.4.75",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.99",
+                "id": "web-sys 0.3.102",
                 "target": "web_sys"
               }
             ],
@@ -69133,14 +69133,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.28": {
+    "reqwest 0.12.24": {
       "name": "reqwest",
-      "version": "0.12.28",
+      "version": "0.12.24",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.28/download",
-          "sha256": "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
+          "url": "https://static.crates.io/crates/reqwest/0.12.24/download",
+          "sha256": "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"
         }
       },
       "targets": [
@@ -69233,7 +69233,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -69255,7 +69255,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -69315,19 +69315,19 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.72",
+                "id": "wasm-bindgen-futures 0.4.75",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.99",
+                "id": "web-sys 0.3.102",
                 "target": "web_sys"
               }
             ],
@@ -69341,7 +69341,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -69363,7 +69363,7 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -69378,7 +69378,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.28"
+        "version": "0.12.24"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69502,11 +69502,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69544,11 +69544,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69562,19 +69562,19 @@
             ],
             "cfg(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\")))": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.72",
+                "id": "wasm-bindgen-futures 0.4.75",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.99",
+                "id": "web-sys 0.3.102",
                 "target": "web_sys"
               }
             ],
@@ -69656,11 +69656,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69698,11 +69698,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pki-types 1.14.1",
+                "id": "rustls-pki-types 1.12.0",
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.7.0",
+                "id": "rustls-platform-verifier 0.6.2",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -70126,7 +70126,7 @@
             ],
             "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
               {
-                "id": "web-sys 0.3.99",
+                "id": "web-sys 0.3.102",
                 "target": "web_sys"
               }
             ],
@@ -72394,7 +72394,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -72537,7 +72537,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -72637,14 +72637,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls-acme 0.15.2": {
+    "rustls-acme 0.15.3": {
       "name": "rustls-acme",
-      "version": "0.15.2",
+      "version": "0.15.3",
       "package_url": "https://github.com/FlorianUekermann/rustls-acme",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-acme/0.15.2/download",
-          "sha256": "8e44af6e70877950d8c30b7c0c86fca352d61d21d8b93174a0d4f84918e6065b"
+          "url": "https://static.crates.io/crates/rustls-acme/0.15.3/download",
+          "sha256": "b9c70a17ecb067d5067565a16a2e0f26a4a2ea0924f49739d558c45186facc75"
         }
       },
       "targets": [
@@ -72681,7 +72681,7 @@
               "target": "async_io"
             },
             {
-              "id": "async-web-client 0.6.2",
+              "id": "async-web-client 0.6.3",
               "target": "async_web_client"
             },
             {
@@ -72757,7 +72757,7 @@
           ],
           "selects": {}
         },
-        "version": "0.15.2"
+        "version": "0.15.3"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -72870,7 +72870,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -72995,7 +72995,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -73013,14 +73013,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-pki-types 1.14.1": {
+    "rustls-pki-types 1.12.0": {
       "name": "rustls-pki-types",
-      "version": "1.14.1",
+      "version": "1.12.0",
       "package_url": "https://github.com/rustls/pki-types",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pki-types/1.14.1/download",
-          "sha256": "30a7197ae7eb376e574fe940d068c30fe0462554a3ddbe4eca7838e049c937a9"
+          "url": "https://static.crates.io/crates/rustls-pki-types/1.12.0/download",
+          "sha256": "229a4a4c221013e7e1f1a043678c5cc39fe5171437c88fb47151a21e6f5b5c79"
         }
       },
       "targets": [
@@ -73072,7 +73072,7 @@
           }
         },
         "edition": "2021",
-        "version": "1.14.1"
+        "version": "1.12.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73453,7 +73453,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -73530,7 +73530,7 @@
               "target": "aws_lc_rs"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -75839,7 +75839,7 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.99",
+              "id": "js-sys 0.3.102",
               "target": "js_sys"
             },
             {
@@ -75847,7 +75847,7 @@
               "target": "serde"
             },
             {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "wasm_bindgen"
             }
           ],
@@ -85261,7 +85261,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ]
@@ -86183,7 +86183,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -86263,7 +86263,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -89019,7 +89019,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
@@ -93029,14 +93029,14 @@
       ],
       "license_file": null
     },
-    "wasm-bindgen 0.2.122": {
+    "wasm-bindgen 0.2.125": {
       "name": "wasm-bindgen",
-      "version": "0.2.122",
+      "version": "0.2.125",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.122/download",
-          "sha256": "3ed04576f974d2b2fba0f38c51dbc5518011e38c36bf1143164be765528fd409"
+          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.125/download",
+          "sha256": "8ddb3f79143bced6de84270411622a2699cee572fc0875aeaf1e7867cf9fca1a"
         }
       },
       "targets": [
@@ -93088,11 +93088,11 @@
               "target": "once_cell"
             },
             {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "build_script_build"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.122",
+              "id": "wasm-bindgen-shared 0.2.125",
               "target": "wasm_bindgen_shared"
             }
           ],
@@ -93102,13 +93102,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-macro 0.2.122",
+              "id": "wasm-bindgen-macro 0.2.125",
               "target": "wasm_bindgen_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.2.122"
+        "version": "0.2.125"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -93123,7 +93123,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-shared 0.2.122",
+              "id": "wasm-bindgen-shared 0.2.125",
               "target": "wasm_bindgen_shared"
             }
           ],
@@ -93147,14 +93147,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-futures 0.4.72": {
+    "wasm-bindgen-futures 0.4.75": {
       "name": "wasm-bindgen-futures",
-      "version": "0.4.72",
+      "version": "0.4.75",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/futures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-futures/0.4.72/download",
-          "sha256": "9473dbd2991ae90b6291c3c32c30c6187ac49aa32f9905d1cce280ec1e110b0f"
+          "url": "https://static.crates.io/crates/wasm-bindgen-futures/0.4.75/download",
+          "sha256": "503b14d284f2c8dac03b819967e155ea753f573586193b2b2c95990cb5d69280"
         }
       },
       "targets": [
@@ -93186,18 +93186,18 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.99",
+              "id": "js-sys 0.3.102",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.72"
+        "version": "0.4.75"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -93206,14 +93206,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro 0.2.122": {
+    "wasm-bindgen-macro 0.2.125": {
       "name": "wasm-bindgen-macro",
-      "version": "0.2.122",
+      "version": "0.2.125",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.122/download",
-          "sha256": "916151b09da36bd82f6615cbf3a419e2f0ba23a03c6160e8e92eb6bd4aa1dec6"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.125/download",
+          "sha256": "4e21a184b13fb19e157296e2c46056aec9092264fab83e4ba59e68c61b323c3d"
         }
       },
       "targets": [
@@ -93242,14 +93242,14 @@
               "target": "quote"
             },
             {
-              "id": "wasm-bindgen-macro-support 0.2.122",
+              "id": "wasm-bindgen-macro-support 0.2.125",
               "target": "wasm_bindgen_macro_support"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.122"
+        "version": "0.2.125"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -93258,14 +93258,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro-support 0.2.122": {
+    "wasm-bindgen-macro-support 0.2.125": {
       "name": "wasm-bindgen-macro-support",
-      "version": "0.2.122",
+      "version": "0.2.125",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.122/download",
-          "sha256": "299047362ccbfce148b67ab7e73349f77748e00c8296f9542adfad2ad82c5c5e"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.125/download",
+          "sha256": "fecefd9c35bd935a20fc3fc344b5f29138961e4f47fb03297d88f2587afb5ebd"
         }
       },
       "targets": [
@@ -93306,14 +93306,14 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.122",
+              "id": "wasm-bindgen-shared 0.2.125",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.122"
+        "version": "0.2.125"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -93322,14 +93322,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-shared 0.2.122": {
+    "wasm-bindgen-shared 0.2.125": {
       "name": "wasm-bindgen-shared",
-      "version": "0.2.122",
+      "version": "0.2.125",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.122/download",
-          "sha256": "9a929b2c61f11ba3e9bc35b50c1f25cb38e0e892c0c231ae2b8cf78d5dad4437"
+          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.125/download",
+          "sha256": "23939e44bb9a5d7576fa2b563dc2e136628f1224e88a8deed09e04858b77871f"
         }
       },
       "targets": [
@@ -93370,14 +93370,14 @@
               "target": "unicode_ident"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.122",
+              "id": "wasm-bindgen-shared 0.2.125",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.122"
+        "version": "0.2.125"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -93646,6 +93646,62 @@
           "common": [
             "component-model",
             "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "leb128fmt 0.1.0",
+              "target": "leb128fmt"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.248.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasm-encoder 0.251.0": {
+      "name": "wasm-encoder",
+      "version": "0.251.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-encoder/0.251.0/download",
+          "sha256": "5a879a421bd17c528b74721b2abf4c62e8f1d1889c2ba8c3c50d02deaf2ce395"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
             "std",
             "wasmparser"
           ],
@@ -93658,14 +93714,14 @@
               "target": "leb128fmt"
             },
             {
-              "id": "wasmparser 0.248.0",
+              "id": "wasmparser 0.251.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.248.0"
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -93734,14 +93790,14 @@
       ],
       "license_file": null
     },
-    "wasm-smith 0.248.0": {
+    "wasm-smith 0.251.0": {
       "name": "wasm-smith",
-      "version": "0.248.0",
+      "version": "0.251.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-smith",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-smith/0.248.0/download",
-          "sha256": "050b559c1cec6dd6b9a558ae984d91d61e5e7b4c3e47081305a13efe6869eea0"
+          "url": "https://static.crates.io/crates/wasm-smith/0.251.0/download",
+          "sha256": "1a688bc58124e6547e83d2fdc255463543f8ee4829112d5ac30479d4e7b76b11"
         }
       },
       "targets": [
@@ -93784,18 +93840,18 @@
               "target": "flagset"
             },
             {
-              "id": "wasm-encoder 0.248.0",
+              "id": "wasm-encoder 0.251.0",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.248.0",
+              "id": "wasmparser 0.251.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.248.0"
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -93840,19 +93896,19 @@
               "target": "futures_util"
             },
             {
-              "id": "js-sys 0.3.99",
+              "id": "js-sys 0.3.102",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-bindgen-futures 0.4.72",
+              "id": "wasm-bindgen-futures 0.4.75",
               "target": "wasm_bindgen_futures"
             },
             {
-              "id": "web-sys 0.3.99",
+              "id": "web-sys 0.3.102",
               "target": "web_sys"
             }
           ],
@@ -94304,6 +94360,73 @@
         "crate_features": {
           "common": [
             "component-model",
+            "features",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "semver 1.0.27",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.248.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasmparser 0.251.0": {
+      "name": "wasmparser",
+      "version": "0.251.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.251.0/download",
+          "sha256": "437970b35b1a85cfde9c74b2398352d8d653f3bd8e3a3db0c063ea8f5b4b36ff"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
             "default",
             "features",
             "hash-collections",
@@ -94340,7 +94463,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.248.0"
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -94405,6 +94528,70 @@
         },
         "edition": "2024",
         "version": "0.248.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "wasmprinter 0.251.0": {
+      "name": "wasmprinter",
+      "version": "0.251.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmprinter/0.251.0/download",
+          "sha256": "8798c1a699bd25648b6708eefe94d97c6f9891febb94b42cca1f7a4b086ea64e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmprinter",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmprinter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.100",
+              "target": "anyhow"
+            },
+            {
+              "id": "termcolor 1.4.1",
+              "target": "termcolor"
+            },
+            {
+              "id": "wasmparser 0.251.0",
+              "target": "wasmparser"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -95584,14 +95771,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wast 248.0.0": {
+    "wast 251.0.0": {
       "name": "wast",
-      "version": "248.0.0",
+      "version": "251.0.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wast",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wast/248.0.0/download",
-          "sha256": "acc54622ed5a5cddafcdf152043f9d4aed54d4a653d686b7dfe874809fca99d7"
+          "url": "https://static.crates.io/crates/wast/251.0.0/download",
+          "sha256": "5cc7467dda0a96142eb2c980329dfb62480b1e1d3622fdeb1a44e2bca6ceed74"
         }
       },
       "targets": [
@@ -95640,14 +95827,14 @@
               "target": "unicode_width"
             },
             {
-              "id": "wasm-encoder 0.248.0",
+              "id": "wasm-encoder 0.251.0",
               "target": "wasm_encoder"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "248.0.0"
+        "version": "251.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -95656,14 +95843,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wat 1.248.0": {
+    "wat 1.251.0": {
       "name": "wat",
-      "version": "1.248.0",
+      "version": "1.251.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wat",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wat/1.248.0/download",
-          "sha256": "d75cd9e510603909748e6ebab89f27cd04472c1d9d85a3c88a7a6fc51a1a7934"
+          "url": "https://static.crates.io/crates/wat/1.251.0/download",
+          "sha256": "81b1086c9e85b95bd6a229a928bc6c6d0662e42af0250c88d067b418831ea4d4"
         }
       },
       "targets": [
@@ -95695,14 +95882,14 @@
         "deps": {
           "common": [
             {
-              "id": "wast 248.0.0",
+              "id": "wast 251.0.0",
               "target": "wast"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "1.248.0"
+        "version": "1.251.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -95711,14 +95898,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "web-sys 0.3.99": {
+    "web-sys 0.3.102": {
       "name": "web-sys",
-      "version": "0.3.99",
+      "version": "0.3.102",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/web-sys/0.3.99/download",
-          "sha256": "6d621441cfc37b84979402712047321980c178f299193a3589d05b99e8763436"
+          "url": "https://static.crates.io/crates/web-sys/0.3.102/download",
+          "sha256": "a6430a72df5eb332242960fe84b3002a241163998241eb596d4f739b9757061d"
         }
       },
       "targets": [
@@ -95798,18 +95985,18 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.99",
+              "id": "js-sys 0.3.102",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.122",
+              "id": "wasm-bindgen 0.2.125",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.99"
+        "version": "0.3.102"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -95852,11 +96039,11 @@
           "selects": {
             "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
               {
-                "id": "js-sys 0.3.99",
+                "id": "js-sys 0.3.102",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.122",
+                "id": "wasm-bindgen 0.2.125",
                 "target": "wasm_bindgen"
               }
             ]
@@ -95904,7 +96091,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -95990,7 +96177,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -96038,7 +96225,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.14.1",
+              "id": "rustls-pki-types 1.12.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -103339,7 +103526,7 @@
     "comparable 0.5.4",
     "console 0.11.3",
     "convert_case 0.6.0",
-    "crc32fast 1.5.0",
+    "crc32fast 1.3.2",
     "criterion 0.5.1",
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.15",
@@ -103408,9 +103595,9 @@
     "ic-certificate-verification 3.1.0",
     "ic-certification 3.1.0",
     "ic-certified-map 0.3.4",
-    "ic-custom-domains-backend 0.2.0",
-    "ic-custom-domains-base 0.2.0",
-    "ic-custom-domains-canister-client 0.2.0",
+    "ic-custom-domains-backend 0.2.1",
+    "ic-custom-domains-base 0.2.1",
+    "ic-custom-domains-canister-client 0.2.1",
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
@@ -103641,13 +103828,13 @@
     "walkdir 2.5.0",
     "walrus 0.23.3",
     "warp 0.3.7",
-    "wasm-encoder 0.248.0",
-    "wasm-smith 0.248.0",
-    "wasmparser 0.248.0",
-    "wasmprinter 0.248.0",
+    "wasm-encoder 0.251.0",
+    "wasm-smith 0.251.0",
+    "wasmparser 0.251.0",
+    "wasmprinter 0.251.0",
     "wasmtime 45.0.0",
-    "wast 248.0.0",
-    "wat 1.248.0",
+    "wast 251.0.0",
+    "wat 1.251.0",
     "webpki-roots 1.0.6",
     "which 4.4.0",
     "wirm 4.0.4",

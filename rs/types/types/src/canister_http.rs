@@ -44,7 +44,7 @@
 use crate::{
     CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
+    crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -67,7 +67,7 @@ use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     mem::size_of,
     time::Duration,
@@ -137,6 +137,8 @@ pub struct CanisterHttpRequestContext {
     pub replication: Replication,
     pub pricing_version: PricingVersion,
     pub refund_status: RefundStatus,
+    /// The registry version at which this request is being processed.
+    pub registry_version: RegistryVersion,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -281,6 +283,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             replication: Some(replication_message),
             pricing_version: Some(pricing_message),
             refund_status: Some(refund_status),
+            registry_version: context.registry_version.get(),
         }
     }
 }
@@ -405,6 +408,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             replication,
             pricing_version,
             refund_status,
+            registry_version: RegistryVersion::from(context.registry_version),
         })
     }
 }
@@ -534,17 +538,19 @@ impl CanisterHttpRequestContext {
             None => Ok(None),
         }?;
 
-        // Allow PUT and DELETE only in non-replicated mode to avoid confusing
-        // race conditions that may occur.
+        // Allow PUT, DELETE, and PATCH only in non-replicated mode to avoid
+        // confusing race conditions that may occur.
         // For example, if first a DELETE outcall for resource R is made,
-        // directly followed by a PUT or POST outcall for R, in replicated
-        // mode it may happen that R is actually deleted after the PUT/POST
-        // outcall has finished, because the IC does not necessarily wait for
-        // all outcalls to complete before a result is delivered back to the
-        // canister: The IC only waits for sufficient calls to complete to
-        // reach consensus on the result.
-        if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
-            && args.is_replicated != Some(false)
+        // directly followed by a PUT, PATCH, or POST outcall for R, in
+        // replicated mode it may happen that R is actually deleted after the
+        // PUT/PATCH/POST outcall has finished, because the IC does not
+        // necessarily wait for all outcalls to complete before a result is
+        // delivered back to the canister: The IC only waits for sufficient
+        // calls to complete to reach consensus on the result.
+        if matches!(
+            args.method,
+            HttpMethod::PUT | HttpMethod::DELETE | HttpMethod::PATCH
+        ) && args.is_replicated != Some(false)
         {
             return Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired);
         }
@@ -586,6 +592,8 @@ impl CanisterHttpRequestContext {
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
+            // TODO: populate with the actual registry version this request is processed at.
+            registry_version: RegistryVersion::from(0),
         })
     }
 
@@ -645,19 +653,21 @@ impl CanisterHttpRequestContext {
         debug_assert!(min_responses <= max_responses && max_responses <= total_requests);
         debug_assert!(1 <= total_requests && total_requests <= n);
 
-        // Allow PUT and DELETE only if the response behavior is deterministic,
-        // to avoid confusing race conditions that may occur.
+        // Allow PUT, DELETE, and PATCH only if the response behavior is
+        // deterministic, to avoid confusing race conditions that may occur.
         // For flexible outcalls this means all delegated requests must complete,
         // i.e. min_responses == max_responses == total_requests.
         // Otherwise, if first a DELETE outcall for resource R is made,
-        // directly followed by a PUT or POST outcall for R, in a mode where
-        // min_responses < total_requests, it may happen that R is actually
-        // deleted after the PUT/POST outcall has finished, because the IC does
-        // not necessarily wait for all outcalls to complete before a result is
-        // delivered back to the canister: The IC only waits for sufficient calls
-        // to complete to reach consensus on the result.
-        if matches!(args.method, HttpMethod::PUT | HttpMethod::DELETE)
-            && !(min_responses == max_responses && max_responses == total_requests)
+        // directly followed by a PUT, PATCH, or POST outcall for R, in a mode
+        // where min_responses < total_requests, it may happen that R is actually
+        // deleted after the PUT/PATCH/POST outcall has finished, because the IC
+        // does not necessarily wait for all outcalls to complete before a result
+        // is delivered back to the canister: The IC only waits for sufficient
+        // calls to complete to reach consensus on the result.
+        if matches!(
+            args.method,
+            HttpMethod::PUT | HttpMethod::DELETE | HttpMethod::PATCH
+        ) && !(min_responses == max_responses && max_responses == total_requests)
         {
             return Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired);
         }
@@ -691,6 +701,8 @@ impl CanisterHttpRequestContext {
                 refunded_cycles: Cycles::new(0),
                 refunding_nodes: BTreeSet::new(),
             },
+            // TODO: populate with the actual registry version this request is processed at.
+            registry_version: RegistryVersion::from(0),
         })
     }
 }
@@ -919,6 +931,7 @@ pub enum CanisterHttpMethod {
     HEAD = 3,
     PUT = 4,
     DELETE = 5,
+    PATCH = 6,
 }
 
 impl CanisterHttpMethod {
@@ -929,6 +942,7 @@ impl CanisterHttpMethod {
             CanisterHttpMethod::HEAD => "HEAD",
             CanisterHttpMethod::PUT => "PUT",
             CanisterHttpMethod::DELETE => "DELETE",
+            CanisterHttpMethod::PATCH => "PATCH",
         }
     }
 }
@@ -941,6 +955,7 @@ impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
             CanisterHttpMethod::HEAD => pb_metadata::HttpMethod::Head,
             CanisterHttpMethod::PUT => pb_metadata::HttpMethod::Put,
             CanisterHttpMethod::DELETE => pb_metadata::HttpMethod::Delete,
+            CanisterHttpMethod::PATCH => pb_metadata::HttpMethod::Patch,
         }
     }
 }
@@ -955,6 +970,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
             pb_metadata::HttpMethod::Head => Ok(CanisterHttpMethod::HEAD),
             pb_metadata::HttpMethod::Put => Ok(CanisterHttpMethod::PUT),
             pb_metadata::HttpMethod::Delete => Ok(CanisterHttpMethod::DELETE),
+            pb_metadata::HttpMethod::Patch => Ok(CanisterHttpMethod::PATCH),
             pb_metadata::HttpMethod::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                 err: "Unspecified HttpMethod".to_string(),
@@ -971,6 +987,7 @@ impl From<HttpMethod> for CanisterHttpMethod {
             HttpMethod::HEAD => CanisterHttpMethod::HEAD,
             HttpMethod::PUT => CanisterHttpMethod::PUT,
             HttpMethod::DELETE => CanisterHttpMethod::DELETE,
+            HttpMethod::PATCH => CanisterHttpMethod::PATCH,
         }
     }
 }
@@ -1055,15 +1072,117 @@ impl CountBytes for CanisterHttpResponseMetadata {
     }
 }
 
-impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {
+/// The content a single replica signs over: the shared
+/// [`CanisterHttpResponseMetadata`] together with that replica's own
+/// [`CanisterHttpPaymentReceipt`].
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseReceipt {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub payment_receipt: CanisterHttpPaymentReceipt,
+}
+
+impl CountBytes for CanisterHttpResponseReceipt {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            metadata,
+            payment_receipt,
+        } = self;
+        metadata.count_bytes() + payment_receipt.count_bytes()
+    }
+}
+
+impl CanisterHttpResponseReceipt {
+    pub fn id(&self) -> CallbackId {
+        self.metadata.id
+    }
+
+    pub fn content_hash(&self) -> &CryptoHashOf<CanisterHttpResponse> {
+        &self.metadata.content_hash
+    }
+
+    pub fn content_size(&self) -> u32 {
+        self.metadata.content_size
+    }
+
+    pub fn is_reject(&self) -> bool {
+        self.metadata.is_reject
+    }
+
+    pub fn registry_version(&self) -> RegistryVersion {
+        self.metadata.registry_version
+    }
+
+    pub fn replica_version(&self) -> &ReplicaVersion {
+        &self.metadata.replica_version
+    }
+
+    pub fn refund(&self) -> Cycles {
+        self.payment_receipt.refund
+    }
+}
+
+impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseReceipt {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
-/// A signature share of of [`CanisterHttpResponseMetadata`].
-pub type CanisterHttpResponseShare =
-    Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
+/// A single signer's contribution to an aggregated proof: the
+/// [`CanisterHttpPaymentReceipt`] that signer signed over, together with
+/// their basic signature on the corresponding
+/// [`CanisterHttpResponseReceipt`].
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseSignature {
+    pub payment_receipt: CanisterHttpPaymentReceipt,
+    pub signature: BasicSigOf<CanisterHttpResponseReceipt>,
+}
+
+impl CountBytes for CanisterHttpResponseSignature {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            payment_receipt,
+            signature,
+        } = self;
+        payment_receipt.count_bytes() + signature.get_ref().count_bytes()
+    }
+}
+
+/// An aggregated proof for a canister HTTP response with consensus.
+///
+/// Holds the shared [`CanisterHttpResponseMetadata`] together with, for
+/// each contributing signer, the [`CanisterHttpPaymentReceipt`] they
+/// signed over and their basic signature (see [`CanisterHttpResponseSignature`]).
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpResponseProof {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub signatures: BTreeMap<NodeId, CanisterHttpResponseSignature>,
+}
+
+impl CountBytes for CanisterHttpResponseProof {
+    fn count_bytes(&self) -> usize {
+        let Self {
+            metadata,
+            signatures,
+        } = self;
+        metadata.count_bytes()
+            + signatures
+                .values()
+                .map(|s| std::mem::size_of::<NodeId>() + s.count_bytes())
+                .sum::<usize>()
+    }
+}
+
+impl CanisterHttpResponseProof {
+    pub fn registry_version(&self) -> RegistryVersion {
+        self.metadata.registry_version
+    }
+}
+
+/// A signature share of [`CanisterHttpResponseReceipt`].
+pub type CanisterHttpResponseShare = BasicSigned<CanisterHttpResponseReceipt>;
 
 /// Contains a share and optionally the full response.
 ///
@@ -1089,10 +1208,6 @@ impl PbArtifact for CanisterHttpResponseArtifact {
     type PbMessage = ic_protobuf::types::v1::CanisterHttpArtifact;
     type PbMessageError = ProxyDecodeError;
 }
-
-/// A signature of of [`CanisterHttpResponseMetadata`].
-pub type CanisterHttpResponseProof =
-    Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
 
 #[cfg(test)]
 mod tests {
@@ -1140,6 +1255,7 @@ mod tests {
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
         };
 
         let expected_size = context.url.len()
@@ -1185,6 +1301,7 @@ mod tests {
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
         };
 
         let expected_size = context.url.len()
@@ -1215,7 +1332,7 @@ mod tests {
             CanisterHttpMethod::iter()
                 .map(|x| x as i32)
                 .collect::<Vec<i32>>(),
-            [1, 2, 3, 4, 5]
+            [1, 2, 3, 4, 5, 6]
         );
     }
 
@@ -1264,6 +1381,7 @@ mod tests {
                     refunded_cycles: Cycles::new(123),
                     refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
                 },
+                registry_version: RegistryVersion::from(7),
             };
 
             let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
@@ -1297,6 +1415,7 @@ mod tests {
     #[rstest]
     #[case(HttpMethod::PUT)]
     #[case(HttpMethod::DELETE)]
+    #[case(HttpMethod::PATCH)]
     fn put_delete_requires_non_replicated(#[case] method: HttpMethod) {
         let rng = &mut ReproducibleRng::new();
         let node_ids = BTreeSet::from([node_test_id(1)]);
@@ -1734,10 +1853,13 @@ mod tests {
     #[rstest]
     #[case(HttpMethod::PUT, 3, 2, 3, false)]
     #[case(HttpMethod::DELETE, 3, 2, 3, false)]
+    #[case(HttpMethod::PATCH, 3, 2, 3, false)]
     #[case(HttpMethod::PUT, 3, 3, 3, true)]
     #[case(HttpMethod::DELETE, 3, 3, 3, true)]
+    #[case(HttpMethod::PATCH, 3, 3, 3, true)]
     #[case(HttpMethod::PUT, 3, 2, 2, false)]
     #[case(HttpMethod::DELETE, 3, 2, 2, false)]
+    #[case(HttpMethod::PATCH, 3, 2, 2, false)]
     fn flexible_methods_require_deterministic_response_counts(
         #[case] method: HttpMethod,
         #[case] total_requests: u32,

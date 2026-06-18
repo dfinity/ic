@@ -1428,12 +1428,7 @@ pub fn get_build_setupos_config_image_tool() -> PathBuf {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(
-        &self,
-        group_base_name: String,
-        allocate_testnet_to_local_dc: bool,
-        no_group_ttl: bool,
-    );
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
 
 /// Name of the environment variable that controls the VM allocation mode used
@@ -1455,13 +1450,29 @@ fn vm_allocation_mode_from_env() -> Option<VmAllocationMode> {
     Some(mode)
 }
 
+/// Name of the environment variable that controls whether the Farm group is
+/// created with a required host feature restricting allocation to the local
+/// DC, i.e. the DC of the machine running the test as specified by the `DC`
+/// environment variable. Accepted values are `1`/`true` and `0`/`false`.
+const ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR: &str = "ALLOCATE_TESTNET_TO_LOCAL_DC";
+
+fn allocate_testnet_to_local_dc_from_env() -> bool {
+    let raw = match std::env::var(ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR) {
+        Ok(v) if !v.is_empty() => v,
+        _ => return false,
+    };
+    match raw.as_str() {
+        "1" | "true" => true,
+        "0" | "false" => false,
+        _ => panic!(
+            "Invalid value {raw:?} for environment variable {ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR}: \
+             accepted values are \"1\", \"true\", \"0\" and \"false\""
+        ),
+    }
+}
+
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(
-        &self,
-        group_base_name: String,
-        allocate_testnet_to_local_dc: bool,
-        no_group_ttl: bool,
-    ) {
+    fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
         let vm_allocation_mode = vm_allocation_mode_from_env();
         if GroupSetup::attribute_exists(self) {
@@ -1477,7 +1488,7 @@ impl HasGroupSetup for TestEnv {
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
-                    let required_host_features = allocate_testnet_to_local_dc
+                    let required_host_features = allocate_testnet_to_local_dc_from_env()
                         .then(|| std::env::var("DC").ok())
                         .flatten()
                         .map(|dc| vec![HostFeature::DC(dc)])
@@ -2041,6 +2052,10 @@ pub struct NnsCustomizations {
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
     pub registry_canister_init_payload: RegistryCanisterInitPayload,
+    /// Optional init args for the engine controller canister. When `Some`,
+    /// installed in place of the canister's hard-coded defaults.
+    pub engine_controller_init_args:
+        Option<ic_nns_test_utils::itest_helpers::EngineControllerInitArgs>,
 }
 
 impl NnsCustomizations {
@@ -2095,6 +2110,14 @@ impl NnsInstallationBuilder {
         self
     }
 
+    pub fn with_engine_controller_init_args(
+        mut self,
+        args: ic_nns_test_utils::itest_helpers::EngineControllerInitArgs,
+    ) -> Self {
+        self.customizations.engine_controller_init_args = Some(args);
+        self
+    }
+
     /// WARNING: Due to technical limitations, this does not actually cause
     /// Exchange Rate canister (XRC) to be created. Rather, this just makes the
     /// Cycles Minting canister aware of the XRC. Creating XRC is done outside
@@ -2118,10 +2141,13 @@ impl NnsInstallationBuilder {
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
+        let nns_subnet_id = node
+            .subnet_id()
+            .expect("NNS installation node must belong to a subnet");
         info!(log, "Wait for node reporting healthy status");
         node.await_status_is_healthy().unwrap();
 
-        let install_future = install_nns_canisters(&log, url, &prep_dir, self);
+        let install_future = install_nns_canisters(&log, url, &prep_dir, self, nns_subnet_id);
         block_on(async {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
@@ -2594,6 +2620,7 @@ pub async fn install_nns_canisters(
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
     nns_installation_builder: &NnsInstallationBuilder,
+    nns_subnet_id: SubnetId,
 ) {
     info!(
         logger,
@@ -2605,9 +2632,25 @@ pub async fn install_nns_canisters(
         ledger_balances,
         neurons,
         mut registry_canister_init_payload,
+        engine_controller_init_args,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
+
+    // If the caller did not supply explicit engine-controller init args, fall
+    // back to authorizing `TEST_NEURON_1_OWNER_PRINCIPAL` and pinning the
+    // initial DKG subnet to the NNS subnet we're installing on. This matches
+    // what the typical testnet setup wants and avoids every testnet repeating
+    // the same wiring.
+    let engine_controller_init_args = engine_controller_init_args.unwrap_or_else(|| {
+        ic_nns_test_utils::itest_helpers::EngineControllerInitArgs {
+            authorized_caller: Some(
+                ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL.0,
+            ),
+            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
+        }
+    });
+    init_payloads.with_engine_controller_init_args(engine_controller_init_args);
 
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();

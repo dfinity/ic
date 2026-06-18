@@ -334,6 +334,7 @@ async fn execute_http_request(
             CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
             CanisterHttpMethod::PUT => HttpMethod::Put.into(),
             CanisterHttpMethod::DELETE => HttpMethod::Delete.into(),
+            CanisterHttpMethod::PATCH => HttpMethod::Patch.into(),
         },
         max_response_size_bytes: max_response_size.get(),
         headers: headers
@@ -559,8 +560,11 @@ mod tests {
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::{
-        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+    use ic_types::{
+        RegistryVersion,
+        canister_http::{
+            MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+        },
     };
     use ic_types::{
         canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
@@ -653,6 +657,7 @@ mod tests {
                 replication: Replication::FullyReplicated,
                 pricing_version: PricingVersion::Legacy,
                 refund_status: RefundStatus::default(),
+                registry_version: RegistryVersion::from(1),
             },
             socks_proxy_addrs: vec![],
         }

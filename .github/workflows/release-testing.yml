@@ -31,10 +31,11 @@ jobs:
   # as a separate job.
   release-system-tests:
     name: Release System Tests
-    runs-on: &dind-large-setup
+    runs-on:
+      group: dm1
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:55273ed5dc904e737bec678c8e7705aba76cc4b8b039574d5485f1d95d0193d3
+      image: ghcr.io/dfinity/ic-build@sha256:b16b998b189477b54507597f57c5acc146483b0e1ce72b62beae5edd15ff094d
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
@@ -67,7 +68,8 @@ jobs:
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline
-    runs-on: *dind-large-setup
+    runs-on: &dind-large-setup
+      labels: dind-large
     container: *container-setup
     timeout-minutes: 180
     outputs:

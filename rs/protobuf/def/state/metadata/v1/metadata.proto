@@ -140,6 +140,7 @@ enum HttpMethod {
   HTTP_METHOD_HEAD = 3;
   HTTP_METHOD_PUT = 4;
   HTTP_METHOD_DELETE = 5;
+  HTTP_METHOD_PATCH = 6;
 }
 
 message HttpHeader {
@@ -160,6 +161,7 @@ message CanisterHttpRequestContext {
   optional Replication replication = 11;
   optional PricingVersion pricing_version = 12;
   optional RefundStatus refund_status = 13;
+  uint64 registry_version = 14;
   reserved 5;
 }
 
@@ -305,6 +307,7 @@ message SubnetCallContextManager {
   repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
   repeated PreSignatureStashTree pre_signature_stashes = 19;
+  repeated CanisterHttpRequestContextTree delivered_canister_http_request_contexts = 20;
 }
 
 message SubnetMetrics {

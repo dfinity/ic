@@ -182,8 +182,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 20,
-                destination: 19,
+                source: 19,
+                destination: 20,
             }
         );
         assert_eq!(

@@ -27,6 +27,7 @@ use ic_agent::{
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
     HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
@@ -128,6 +129,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
                 .add_test(systest!(test_delete_without_non_replicated_rejected))
+                .add_test(systest!(test_patch_call))
+                .add_test(systest!(test_patch_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1940,6 +1943,72 @@ fn test_delete_without_non_replicated_rejected(env: TestEnv) {
     });
 }
 
+fn test_patch_call(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{webserver_ipv6}]/anything");
+    let body = Some("patch_request_body".as_bytes().to_vec());
+    let headers = vec![HttpHeader {
+        name: "name1".to_string(),
+        value: "value1".to_string(),
+    }];
+
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers,
+        method: HttpMethod::PATCH,
+        body,
+        transform: None,
+        max_response_bytes: None,
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: request.clone(),
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Ok(response) => {
+        assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+        assert_distinct_headers(&response);
+        assert_http_json_response(&request, &response);
+    });
+}
+
+fn test_patch_without_non_replicated_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{}]/{}", webserver_ipv6, "anything");
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::PATCH,
+        body: Some(vec![]),
+        transform: None,
+        max_response_bytes: Some(1024),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
+    });
+}
+
 fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
@@ -2516,6 +2585,7 @@ fn assert_http_json_response(
         HttpMethod::HEAD => "HEAD",
         HttpMethod::PUT => "PUT",
         HttpMethod::DELETE => "DELETE",
+        HttpMethod::PATCH => "PATCH",
     };
 
     assert_eq!(
@@ -2655,8 +2725,7 @@ fn expected_cycle_cost(
     let cycle_fee = cm.http_request_fee(
         req_size,
         Some(NumBytes::from(response_size)),
-        subnet_size,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(subnet_size, CanisterCyclesCostSchedule::Normal),
     );
     cycle_fee.real().get().try_into().unwrap()
 }
