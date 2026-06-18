@@ -559,7 +559,8 @@ pub struct SystemState {
 
     /// Minimum number of cycles required for an incoming canister-to-canister message.
     /// Messages with fewer cycles are rejected with a CanisterError.
-    /// Ingress messages are not affected.
+    /// Ingress messages are not affected
+    /// (`canister_inspect_message` hook can be used to filter them, albeit only via non-replicated execution).
     /// A value of 0 means no minimum is enforced.
     pub minimum_incoming_canister_call_cycles: Cycles,
 

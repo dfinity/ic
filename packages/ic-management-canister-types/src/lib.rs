@@ -128,7 +128,8 @@ pub struct CanisterSettings {
     pub reserved_cycles_limit: Option<Nat>,
     /// Indicates the minimum number of cycles required for an incoming message
     /// from another canister. Messages with fewer cycles are rejected with a
-    /// `CanisterError`. Ingress messages are not affected.
+    /// `CanisterError`. Ingress messages are not affected
+    /// (`canister_inspect_message` hook can be used to filter them, albeit only via non-replicated execution).
     ///
     /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
     ///
