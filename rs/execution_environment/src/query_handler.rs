@@ -119,7 +119,7 @@ pub struct InternalHttpQueryHandler {
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    local_query_execution_stats: QueryStatsCollector,
+    local_query_execution_stats: Arc<QueryStatsCollector>,
     query_cache: query_cache::QueryCache,
 }
 
@@ -133,7 +133,7 @@ impl InternalHttpQueryHandler {
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        local_query_execution_stats: QueryStatsCollector,
+        local_query_execution_stats: Arc<QueryStatsCollector>,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
         let query_max_expiry_time = config.query_cache_max_expiry_time;
@@ -280,8 +280,7 @@ impl InternalHttpQueryHandler {
                     let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
-                        state.get_ref().get_own_subnet_size(),
-                        state.get_ref().get_own_cost_schedule(),
+                        state.get_ref().get_own_subnet_cycles_config(),
                         ready_for_migration,
                         state.get_ref().get_own_subnet_admins(),
                     )?;
@@ -344,7 +343,7 @@ impl InternalHttpQueryHandler {
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
             && enable_query_stats_tracking
         {
-            Some(&self.local_query_execution_stats)
+            Some(self.local_query_execution_stats.as_ref())
         } else {
             None
         };

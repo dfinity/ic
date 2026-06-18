@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::common;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundLimits,
@@ -75,8 +76,10 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                 network_topology,
                 &mut round_limits,
                 Default::default(),
-                SMALL_APP_SUBNET_MAX_SIZE,
-                CanisterCyclesCostSchedule::Normal,
+                CyclesAccountManagerSubnetConfig::new(
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    CanisterCyclesCostSchedule::Normal,
+                ),
             );
             // We do not validate the number of executed instructions.
             let _executed_instructions =

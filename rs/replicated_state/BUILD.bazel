@@ -158,6 +158,7 @@ rust_test_suite(
         ":replicated_state",
         "//packages/ic-error-types",
         "//rs/bitcoin/replica_types",
+        "//rs/canonical_state/certification_version",
         "//rs/protobuf",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",

@@ -553,13 +553,14 @@ fn revise_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload
 
 #[unsafe(export_name = "canister_update deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes() {
-    check_caller_is_governance_and_log("deploy_guestos_to_all_subnet_nodes");
+    check_caller_is_governance_or_engine_controller_and_log("deploy_guestos_to_all_subnet_nodes");
     over(candid_one, deploy_guestos_to_all_subnet_nodes_);
 }
 
 #[candid_method(update, rename = "deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
-    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
+    let caller = dfn_core::api::caller();
+    registry_mut().do_deploy_guestos_to_all_subnet_nodes(caller, payload);
     recertify_registry();
 }
 
@@ -869,7 +870,7 @@ fn remove_node_operators_(payload: RemoveNodeOperatorsPayload) {
 
 #[unsafe(export_name = "canister_update update_subnet")]
 fn update_subnet() {
-    check_caller_is_governance_and_log("update_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("update_subnet");
     over(candid_one, |payload: UpdateSubnetPayload| {
         update_subnet_(payload)
     });
@@ -877,7 +878,8 @@ fn update_subnet() {
 
 #[candid_method(update, rename = "update_subnet")]
 fn update_subnet_(payload: UpdateSubnetPayload) {
-    registry_mut().do_update_subnet(payload);
+    let caller = dfn_core::api::caller();
+    registry_mut().do_update_subnet(caller, payload);
     recertify_registry();
 }
 
