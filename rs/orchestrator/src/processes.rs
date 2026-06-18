@@ -386,10 +386,22 @@ impl IcBoundaryManager {
 // the node's configuration in the registry.
 // ---------------------------------------------------------------------------
 
+/// Whether the orchestrator is currently allowed to actually launch
+/// `ic-gateway`. CloudEngine nodes *should* run `ic-gateway` (see
+/// [`should_run_ic_gateway`]), but the launch is gated off for now while the
+/// rollout is being prepared. To trigger it later, flip this to `true` (and
+/// re-enable the `cloud_engine_ic_gateway_test` system test by removing its
+/// `manual` tag in `rs/tests/consensus/orchestrator/BUILD.bazel`).
+const IC_GATEWAY_LAUNCH_ENABLED: bool = false;
+
 pub(crate) struct MultipleProcessesManager {
     replica_manager: ProcessManager<ReplicaProcess>,
     ic_gateway_manager: ProcessManager<IcGatewayProcess>,
     registry: Arc<RegistryHelper>,
+    /// Whether this manager is allowed to actually launch `ic-gateway`.
+    /// Sourced from [`IC_GATEWAY_LAUNCH_ENABLED`] in production; injected by
+    /// tests so they can exercise both gate states.
+    ic_gateway_launch_enabled: bool,
 }
 
 impl MultipleProcessesManager {
@@ -398,11 +410,13 @@ impl MultipleProcessesManager {
         replica_manager: ProcessManager<ReplicaProcess>,
         ic_gateway_manager: ProcessManager<IcGatewayProcess>,
         registry: Arc<RegistryHelper>,
+        ic_gateway_launch_enabled: bool,
     ) -> Self {
         Self {
             replica_manager,
             ic_gateway_manager,
             registry,
+            ic_gateway_launch_enabled,
         }
     }
 
@@ -421,6 +435,7 @@ impl MultipleProcessesManager {
             replica_manager,
             ic_gateway_manager,
             registry,
+            ic_gateway_launch_enabled: IC_GATEWAY_LAUNCH_ENABLED,
         }
     }
 
@@ -457,17 +472,21 @@ impl MultipleProcessesManager {
         self.replica_manager
             .ensure_running((replica_version.clone(), subnet_id))?;
 
-        // Cloud-engine nodes run ic-gateway as a sidecar.
-        match self.registry.get_subnet_type(subnet_id, registry_version)? {
-            None
-            | Some(SubnetType::Unspecified)
-            | Some(SubnetType::Application)
-            | Some(SubnetType::System)
-            | Some(SubnetType::VerifiedApplication) => {
-                self.ic_gateway_manager.stop()?;
-            }
-            Some(SubnetType::CloudEngine) => {
-                self.ic_gateway_manager.ensure_running(replica_version)?;
+        // Cloud-engine nodes run ic-gateway as a sidecar, but only once the
+        // launch is enabled (see `IC_GATEWAY_LAUNCH_ENABLED`). Until then we
+        // keep it stopped.
+        if self.ic_gateway_launch_enabled {
+            match self.registry.get_subnet_type(subnet_id, registry_version)? {
+                None
+                | Some(SubnetType::Unspecified)
+                | Some(SubnetType::Application)
+                | Some(SubnetType::System)
+                | Some(SubnetType::VerifiedApplication) => {
+                    self.ic_gateway_manager.stop()?;
+                }
+                Some(SubnetType::CloudEngine) => {
+                    self.ic_gateway_manager.ensure_running(replica_version)?;
+                }
             }
         }
 

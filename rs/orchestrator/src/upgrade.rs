@@ -1567,6 +1567,10 @@ mod tests {
                 logger.clone(),
             ),
             Arc::clone(&registry),
+            // ic-gateway launching is gated off in production, but these
+            // scenarios exercise the policy (CloudEngine => ic-gateway runs),
+            // so run them with the gate enabled.
+            true,
         )));
 
         let manageboot_runner = Box::new(FakeManagebootRunner);

@@ -121,6 +121,10 @@ system_test_nns(
 
 system_test(
     name = "cloud_engine_ic_gateway_test",
+    # Excluded from automatic runs while ic-gateway launching is gated off in the
+    # orchestrator (see IC_GATEWAY_LAUNCH_ENABLED in
+    # rs/orchestrator/src/processes.rs). Remove this tag when enabling the launch.
+    tags = ["manual"],
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
