@@ -2121,7 +2121,7 @@ impl ExecutionEnvironment {
     ) -> Result<(), UserError> {
         let variable_parts_size = canister_http_request_context.variable_parts_size();
         let cycles_config = state.get_own_subnet_cycles_config();
-        let cost_schedule = state.get_own_cost_schedule();
+        let cost_schedule = cycles_config.cost_schedule;
         let legacy_fee = self.cycles_account_manager.http_request_fee(
             variable_parts_size,
             canister_http_request_context.max_response_bytes,
