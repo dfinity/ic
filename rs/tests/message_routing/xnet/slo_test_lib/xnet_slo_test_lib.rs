@@ -12,7 +12,7 @@ Runbook::
 5. Collect metrics from all canisters (via query `metrics` call).
 6. Aggregate metrics for each subnet (over its canisters).
 7. Stop/delete all canisters and assert operations' success.
-8. Assert error_ratio < 5%, no seq_errors, send_rate >= 0.3, responses_received > threshold (calculated dynamically).
+8. Assert error_ratio < 5%, seq_errors within configured threshold (0 by default), send_rate >= 0.3, responses_received > threshold (calculated dynamically).
 
 
 Success::
@@ -352,8 +352,9 @@ pub async fn tear_down(canisters: &[Vec<Canister<'_>>], logger: &slog::Logger) -
 
 /// Checks whether the metrics (by themselves and/or relative to `config`)
 /// indicate a successful run: error ratio and latency below threshold, send
-/// rate and received responses aoove threshold, no sequence errors. Logs the
-/// outcome of each check.
+/// rate and received responses aoove threshold, and sequence errors within the
+/// configured `seq_error_threshold` (0 by default, i.e. strict exactly-once and
+/// in-order delivery). Logs the outcome of each check.
 ///
 /// Returns `true` on success, `false` otherwise.
 pub fn check_success(
