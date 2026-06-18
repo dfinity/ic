@@ -146,6 +146,14 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let minimum_incoming_canister_call_cycles =
+            match input.minimum_incoming_canister_call_cycles {
+                Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
+                    UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided: min },
+                )?)),
+                None => None,
+            };
+
         let log_memory_limit = match input.log_memory_limit {
             Some(ls) => Some(NumBytes::from(
                 ls.0.to_u64()
@@ -193,15 +201,6 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
                 }
                 Some(EnvironmentVariables::new(environment_variables))
             }
-            None => None,
-        };
-
-        let minimum_incoming_canister_call_cycles = match input
-            .minimum_incoming_canister_call_cycles
-        {
-            Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
-                UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided: min },
-            )?)),
             None => None,
         };
 
@@ -328,6 +327,16 @@ impl CanisterSettingsBuilder {
         }
     }
 
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: Cycles,
+    ) -> Self {
+        Self {
+            minimum_incoming_canister_call_cycles: Some(minimum_incoming_canister_call_cycles),
+            ..self
+        }
+    }
+
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
@@ -359,16 +368,6 @@ impl CanisterSettingsBuilder {
     pub fn with_environment_variables(self, environment_variables: EnvironmentVariables) -> Self {
         Self {
             environment_variables: Some(environment_variables),
-            ..self
-        }
-    }
-
-    pub fn with_minimum_incoming_canister_call_cycles(
-        self,
-        minimum_incoming_canister_call_cycles: Cycles,
-    ) -> Self {
-        Self {
-            minimum_incoming_canister_call_cycles: Some(minimum_incoming_canister_call_cycles),
             ..self
         }
     }

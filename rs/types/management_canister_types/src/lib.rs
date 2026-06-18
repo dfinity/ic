@@ -2532,6 +2532,19 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
+    /// Sets the minimum number of cycles required for an incoming canister-to-canister message.
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: u128,
+    ) -> Self {
+        Self {
+            minimum_incoming_canister_call_cycles: Some(candid::Nat::from(
+                minimum_incoming_canister_call_cycles,
+            )),
+            ..self
+        }
+    }
+
     /// Sets the log visibility.
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
@@ -2578,19 +2591,6 @@ impl CanisterSettingsArgsBuilder {
     ) -> Self {
         Self {
             environment_variables: Some(environment_variables),
-            ..self
-        }
-    }
-
-    /// Sets the minimum number of cycles required for an incoming canister-to-canister message.
-    pub fn with_minimum_incoming_canister_call_cycles(
-        self,
-        minimum_incoming_canister_call_cycles: u128,
-    ) -> Self {
-        Self {
-            minimum_incoming_canister_call_cycles: Some(candid::Nat::from(
-                minimum_incoming_canister_call_cycles,
-            )),
             ..self
         }
     }
