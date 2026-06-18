@@ -5,8 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig,
-    CloudEngineConfig as CloudEngineFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::{
@@ -34,7 +33,6 @@ enum DataSource {
 /// The role of the node in the IC, i.e., whether it is acting as a replica or a boundary node.
 enum Role {
     AssignedReplica(SubnetId),
-    AssignedCloudEngine(SubnetId),
     UnassignedReplica,
     BoundaryNode,
 }
@@ -50,7 +48,6 @@ pub(crate) struct Firewall {
     local_cup_reader: LocalCUPReader,
     logger: ReplicaLogger,
     replica_config: ReplicaFirewallConfig,
-    cloud_engine_config: CloudEngineFirewallConfig,
     boundary_node_config: BoundaryNodeFirewallConfig,
     compiled_config: String,
     last_applied_version: Arc<RwLock<RegistryVersion>>,
@@ -65,7 +62,6 @@ impl Firewall {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         replica_config: ReplicaFirewallConfig,
-        cloud_engine_config: CloudEngineFirewallConfig,
         boundary_node_config: BoundaryNodeFirewallConfig,
         local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
@@ -75,7 +71,6 @@ impl Firewall {
             metrics,
             local_cup_reader,
             replica_config,
-            cloud_engine_config,
             boundary_node_config,
             logger,
             compiled_config: Default::default(),
@@ -112,17 +107,11 @@ impl Firewall {
         let maybe_boundary_node_record = self
             .registry
             .get_api_boundary_node_record(self.node_id, registry_version);
-        let maybe_subnet_id_and_type = self
+        let maybe_subnet_id = self
             .registry
-            .get_subnet_id_and_type_from_node_id(self.node_id, registry_version);
-        match (maybe_boundary_node_record, maybe_subnet_id_and_type) {
-            (_, Ok(Some((subnet_id, subnet_type)))) => match subnet_type {
-                SubnetType::Unspecified
-                | SubnetType::Application
-                | SubnetType::System
-                | SubnetType::VerifiedApplication => Ok(Role::AssignedReplica(subnet_id)),
-                SubnetType::CloudEngine => Ok(Role::AssignedCloudEngine(subnet_id)),
-            },
+            .get_subnet_id_from_node_id(self.node_id, registry_version);
+        match (maybe_boundary_node_record, maybe_subnet_id) {
+            (_, Ok(Some(subnet_id))) => Ok(Role::AssignedReplica(subnet_id)),
             (Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)), Ok(None)) => {
                 Ok(Role::UnassignedReplica)
             }
@@ -230,7 +219,6 @@ impl Firewall {
                 | NodeRewardType::Type3dot1
                 | NodeRewardType::Type1dot1,
             ) => true,
-            // TODO(CON-1720): consider accepting only from `Type4*`
             (
                 NodeRewardType::Type4
                 | NodeRewardType::Type4dot1
@@ -508,7 +496,7 @@ impl Firewall {
         let mut udp_rules = Vec::<FirewallRule>::new();
 
         let firewall_scopes_to_fetch = match role {
-            Role::AssignedReplica(subnet_id) | Role::AssignedCloudEngine(subnet_id) => vec![
+            Role::AssignedReplica(subnet_id) => vec![
                 FirewallRulesScope::Node(self.node_id),
                 FirewallRulesScope::Subnet(subnet_id),
                 FirewallRulesScope::ReplicaNodes,
@@ -549,9 +537,6 @@ impl Firewall {
                 Role::AssignedReplica(_) | Role::UnassignedReplica => {
                     tcp_rules.append(&mut self.replica_config.default_rules.clone());
                 }
-                Role::AssignedCloudEngine(_) => {
-                    tcp_rules.append(&mut self.cloud_engine_config.default_rules.clone());
-                }
                 Role::BoundaryNode => {
                     tcp_rules.append(&mut self.boundary_node_config.default_rules.clone());
                 }
@@ -564,19 +549,14 @@ impl Firewall {
             // Whitelisting for node IPs
             // In addition to any explicit firewall rules we might apply, we also ALWAYS whitelist
             // all nodes in the registry on the ports used by the protocol
-            Role::AssignedReplica(_) | Role::AssignedCloudEngine(_) | Role::UnassignedReplica => {
+            Role::AssignedReplica(_) | Role::UnassignedReplica => {
                 let (more_tcp_rules, more_udp_rules) =
                     self.get_node_whitelisting_rules(registry_version);
                 // Insert the whitelisting rules at the top of the list (highest priority)
                 tcp_rules = more_tcp_rules.into_iter().chain(tcp_rules).collect();
                 udp_rules = more_udp_rules.into_iter().chain(udp_rules).collect();
 
-                if matches!(role, Role::AssignedCloudEngine(_)) {
-                    self.cloud_engine_config.insert_rules(tcp_rules, udp_rules)
-                } else {
-                    // matches!(role, Role::AssignedReplica(_) | Role::UnassignedReplica)
-                    self.replica_config.insert_rules(tcp_rules, udp_rules)
-                }
+                self.replica_config.insert_rules(tcp_rules, udp_rules)
             }
             Role::BoundaryNode => {
                 let socks_proxy_whitelisting_rules =
@@ -627,7 +607,6 @@ impl Firewall {
     fn write_firewall_file(&self, content: &str, role: Role) -> OrchestratorResult<()> {
         let f = match role {
             Role::AssignedReplica(_) | Role::UnassignedReplica => &self.replica_config.config_file,
-            Role::AssignedCloudEngine(_) => &self.cloud_engine_config.config_file,
             Role::BoundaryNode => &self.boundary_node_config.config_file,
         };
         write_string_using_tmp_file(f, content)
@@ -662,76 +641,6 @@ trait FirewallConfigTemplate {
 }
 
 impl FirewallConfigTemplate for ReplicaFirewallConfig {
-    fn insert_rules(&self, tcp_rules: Vec<FirewallRule>, udp_rules: Vec<FirewallRule>) -> String {
-        self.file_template
-            .replace(
-                "<<IPv4_TCP_RULES>>",
-                &compile_rules(
-                    &self.ipv4_tcp_rule_template,
-                    &tcp_rules,
-                    vec![
-                        FirewallRuleDirection::Inbound,
-                        FirewallRuleDirection::Unspecified,
-                    ],
-                ),
-            )
-            .replace(
-                "<<IPv4_UDP_RULES>>",
-                &compile_rules(
-                    &self.ipv4_udp_rule_template,
-                    &udp_rules,
-                    vec![
-                        FirewallRuleDirection::Inbound,
-                        FirewallRuleDirection::Unspecified,
-                    ],
-                ),
-            )
-            .replace(
-                "<<IPv6_TCP_RULES>>",
-                &compile_rules(
-                    &self.ipv6_tcp_rule_template,
-                    &tcp_rules,
-                    vec![
-                        FirewallRuleDirection::Inbound,
-                        FirewallRuleDirection::Unspecified,
-                    ],
-                ),
-            )
-            .replace(
-                "<<IPv6_UDP_RULES>>",
-                &compile_rules(
-                    &self.ipv6_udp_rule_template,
-                    &udp_rules,
-                    vec![
-                        FirewallRuleDirection::Inbound,
-                        FirewallRuleDirection::Unspecified,
-                    ],
-                ),
-            )
-            .replace(
-                "<<IPv4_OUTBOUND_RULES>>",
-                &compile_rules(
-                    &self.ipv4_user_output_rule_template,
-                    &tcp_rules,
-                    vec![FirewallRuleDirection::Outbound],
-                ),
-            )
-            .replace(
-                "<<IPv6_OUTBOUND_RULES>>",
-                &compile_rules(
-                    &self.ipv6_user_output_rule_template,
-                    &tcp_rules,
-                    vec![FirewallRuleDirection::Outbound],
-                ),
-            )
-            .replace(
-                "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
-                &self.max_simultaneous_connections_per_ip_address.to_string(),
-            )
-    }
-}
-
-impl FirewallConfigTemplate for CloudEngineFirewallConfig {
     fn insert_rules(&self, tcp_rules: Vec<FirewallRule>, udp_rules: Vec<FirewallRule>) -> String {
         self.file_template
             .replace(
@@ -1136,7 +1045,7 @@ mod tests {
     #[test]
     fn nftables_golden_assigned_cloud_engine_test() {
         golden_test(
-            Role::AssignedCloudEngine(SUBNET_ID),
+            Role::AssignedReplica(SUBNET_ID),
             node_test_id(0),
             Some(NodeRewardType::Type4),
             NFTABLES_ASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
@@ -1251,17 +1160,12 @@ mod tests {
         replica_firewall_config
             .config_file
             .clone_from(&nftables_config_path);
-        let mut cloud_engine_firewall_config = config.cloud_engine_firewall.unwrap();
-        cloud_engine_firewall_config
-            .config_file
-            .clone_from(&nftables_config_path);
         let mut boundary_node_firewall_config = config.boundary_node_firewall.unwrap();
         boundary_node_firewall_config
             .config_file
             .clone_from(&nftables_config_path);
         let mut firewall = set_up_firewall_dependencies(
             replica_firewall_config,
-            cloud_engine_firewall_config,
             boundary_node_firewall_config,
             tmp_dir.path(),
             role,
@@ -1332,7 +1236,6 @@ mod tests {
     /// Sets up all the necessary dependencies of the [`Firewall`]
     fn set_up_firewall_dependencies(
         config: ReplicaFirewallConfig,
-        cloud_engine_config: CloudEngineFirewallConfig,
         boundary_node_config: BoundaryNodeFirewallConfig,
         tmp_dir: &Path,
         role: Role,
@@ -1354,7 +1257,6 @@ mod tests {
             registry_helper,
             Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new())),
             config,
-            cloud_engine_config,
             boundary_node_config,
             cup_reader,
             no_op_logger(),
@@ -1567,18 +1469,6 @@ mod tests {
         match role {
             Role::AssignedReplica(subnet_id) => {
                 let subnet_record = SubnetRecordBuilder::from(&[node]).build();
-                add_single_subnet_record(
-                    &registry_data_provider,
-                    registry_version.get(),
-                    subnet_id,
-                    subnet_record,
-                );
-                subnet_ids.push(subnet_id);
-            }
-            Role::AssignedCloudEngine(subnet_id) => {
-                let subnet_record = SubnetRecordBuilder::from(&[node])
-                    .with_subnet_type(SubnetType::CloudEngine)
-                    .build();
                 add_single_subnet_record(
                     &registry_data_provider,
                     registry_version.get(),

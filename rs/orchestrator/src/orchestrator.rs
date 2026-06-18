@@ -363,7 +363,6 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
-            config.cloud_engine_firewall.clone(),
             config.boundary_node_firewall.clone(),
             local_cup_reader.clone(),
             logger.clone(),
