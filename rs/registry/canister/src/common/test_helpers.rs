@@ -4,18 +4,20 @@ use crate::mutations::node_management::do_add_node::connection_endpoint_from_str
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{
-    create_subnet_threshold_signing_pubkey_and_cup_mutations, invariant_compliant_mutation,
-    new_node_keys_and_node_id,
+    TEST_ID, create_subnet_threshold_signing_pubkey_and_cup_mutations,
+    invariant_compliant_mutation, new_node_keys_and_node_id,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord,
+};
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
+use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation::Type,
 };
@@ -202,6 +204,76 @@ pub fn prepare_registry_raw(
         preconditions: vec![],
     };
     (mutate_request, node_ids_and_dkg_pks)
+}
+
+/// Prepares the mutations that add a CloudEngine subnet to a registry that was
+/// initialized with [`invariant_compliant_mutation`] / [`invariant_compliant_registry`].
+///
+/// This first creates `node_count` fresh type-4 nodes (CloudEngine subnets may
+/// only contain type-4 nodes) and then a CloudEngine subnet record made up of
+/// those nodes, on the `Free` cost schedule (both required for CloudEngine
+/// subnets). The returned request is meant to be pushed as an additional init
+/// mutate request on top of the invariant-compliant base; it also returns the
+/// id of the new CloudEngine subnet.
+pub fn prepare_registry_with_cloud_engine_subnet(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (RegistryAtomicMutateRequest, SubnetId) {
+    // CloudEngine subnets may only contain type-4 nodes (enforced by the
+    // `check_node_type4_iff_cloud_engine` invariant).
+    let (nodes_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_reward_type(
+        starting_mutation_id,
+        node_count,
+        NodeRewardType::Type4,
+    );
+    let mut mutations = nodes_request.mutations;
+
+    // CloudEngine subnets are not charged cycles, i.e. they use the `Free` cost
+    // schedule.
+    let subnet_record = SubnetRecord {
+        membership: node_ids_and_dkg_pks
+            .keys()
+            .map(|node_id| node_id.get().to_vec())
+            .collect(),
+        subnet_type: i32::from(SubnetType::CloudEngine),
+        canister_cycles_cost_schedule: i32::from(CanisterCyclesCostSchedule::Free),
+        replica_version_id: ReplicaVersion::default().to_string(),
+        unit_delay_millis: 600,
+        ..Default::default()
+    };
+
+    // The invariant-compliant base contains a single system subnet (`TEST_ID`);
+    // append the new CloudEngine subnet to the subnet list.
+    let cloud_engine_subnet_id = subnet_test_id(TEST_ID + 1);
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![
+            subnet_test_id(TEST_ID).get().to_vec(),
+            cloud_engine_subnet_id.get().to_vec(),
+        ],
+    };
+
+    mutations.push(upsert(
+        make_subnet_list_record_key().as_bytes(),
+        subnet_list_record.encode_to_vec(),
+    ));
+    mutations.push(upsert(
+        make_subnet_record_key(cloud_engine_subnet_id).as_bytes(),
+        subnet_record.encode_to_vec(),
+    ));
+    mutations.append(
+        &mut create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            cloud_engine_subnet_id,
+            &node_ids_and_dkg_pks,
+        ),
+    );
+
+    (
+        RegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+        },
+        cloud_engine_subnet_id,
+    )
 }
 
 pub fn registry_create_subnet_with_nodes(

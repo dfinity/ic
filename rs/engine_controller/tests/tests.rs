@@ -4,9 +4,12 @@
 //! set of nodes and an invariant-compliant base state, install the
 //! engine_controller canister at the canonical `ENGINE_CONTROLLER_CANISTER_ID`,
 //! and exercise its public API end-to-end.
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_engine_controller::{
+    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, NewSubnet,
+};
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::common::build_registry_wasm;
@@ -29,33 +32,14 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
-use serde::Deserialize;
 use std::convert::TryFrom;
 
 // Must match the principal hard-coded in `engine_controller`.
 const AUTHORIZED_CALLER: &str = "bct5z-vccu4-6q4t2-3lb6l-wm43p-ulppt-o5sqq-w6het-rthdz-qp4yn-fqe";
 
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
-struct EngineControllerInitArgs {
-    authorized_caller: Option<Principal>,
-    initial_dkg_subnet_id: Option<Principal>,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct CreateEngineArgs {
-    node_ids: Vec<Principal>,
-    subnet_admins: Vec<Principal>,
-    replica_version_id: String,
-}
-
 /// Replica version that the registry test fixtures have already blessed.
 fn test_replica_version() -> String {
     ReplicaVersion::default().to_string()
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct DeleteEngineArgs {
-    subnet_id: Principal,
 }
 
 fn authorized() -> Principal {
@@ -181,7 +165,7 @@ async fn call_create_engine(
     pic: &PocketIc,
     sender: Principal,
     args: &CreateEngineArgs,
-) -> Result<(), String> {
+) -> Result<NewSubnet, String> {
     let raw = pic
         .update_call(
             ENGINE_CONTROLLER_CANISTER_ID.get().0,
@@ -191,7 +175,7 @@ async fn call_create_engine(
         )
         .await
         .expect("ingress call should succeed");
-    Decode!(&raw, Result<(), String>).unwrap()
+    Decode!(&raw, Result<NewSubnet, String>).unwrap()
 }
 
 async fn call_delete_engine(
@@ -252,9 +236,12 @@ async fn create_engine_then_delete_engine_succeeds() {
         replica_version_id: test_replica_version(),
     };
 
-    call_create_engine(&pic, authorized(), &create_args)
+    let new_subnet = call_create_engine(&pic, authorized(), &create_args)
         .await
         .expect("create_engine should succeed");
+    let returned_subnet_id = new_subnet
+        .new_subnet_id
+        .expect("create_engine should return a new subnet id");
 
     let after_create = subnet_list(&pic).await;
     let new_subnets: Vec<_> = after_create
@@ -263,6 +250,10 @@ async fn create_engine_then_delete_engine_succeeds() {
         .collect();
     assert_eq!(new_subnets.len(), 1, "exactly one new subnet must appear");
     let new_subnet_id = SubnetId::new(PrincipalId::try_from(new_subnets[0].as_slice()).unwrap());
+    assert_eq!(
+        returned_subnet_id, new_subnet_id,
+        "returned subnet id must match the one in the registry"
+    );
 
     // Verify the new subnet was registered as a CloudEngine.
     let raw = registry_get_value(

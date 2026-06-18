@@ -3,17 +3,20 @@
 //! This canister provides a thin user-facing API on top of the registry
 //! canister's `create_subnet` / `delete_subnet` endpoints. Only a single,
 //! hard-coded authorized principal may invoke its methods.
-use candid::{CandidType, Principal};
+use candid::Principal;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
+use ic_engine_controller::{
+    CreateEngineArgs, DeleteEngineArgs, DeployGuestosToAllSubnetNodesPayload,
+    EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::do_create_subnet::{
-    CanisterCyclesCostSchedule, CreateSubnetPayload, NewSubnet,
+    CanisterCyclesCostSchedule, CreateSubnetPayload,
 };
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
-use serde::Deserialize;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -60,17 +63,6 @@ fn default_initial_dkg_subnet_id() -> SubnetId {
     SubnetId::new(PrincipalId(p))
 }
 
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
-pub struct EngineControllerInitArgs {
-    /// If `Some`, replaces the default authorized caller; if `None`, the
-    /// default is kept.
-    pub authorized_caller: Option<Principal>,
-    /// If `Some`, replaces the default `initial_dkg_subnet_id` used when
-    /// forwarding `CreateSubnetPayload` to the registry; if `None`, the
-    /// hard-coded default is kept.
-    pub initial_dkg_subnet_id: Option<Principal>,
-}
-
 fn apply_init_args(args: Option<EngineControllerInitArgs>) {
     let args = args.unwrap_or_default();
     let authorized = args
@@ -98,19 +90,6 @@ fn post_upgrade(args: Option<EngineControllerInitArgs>) {
     apply_init_args(args);
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct CreateEngineArgs {
-    pub node_ids: Vec<Principal>,
-    pub subnet_admins: Vec<Principal>,
-    /// Blessed replica version that the new engine subnet should run.
-    pub replica_version_id: String,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct DeleteEngineArgs {
-    pub subnet_id: Principal,
-}
-
 fn ensure_authorized() -> Result<Principal, String> {
     let caller = msg_caller();
     let expected = AUTHORIZED_CALLER.with(|c| *c.borrow());
@@ -123,7 +102,7 @@ fn ensure_authorized() -> Result<Principal, String> {
 }
 
 #[update]
-async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
+async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
     let caller = ensure_authorized()?;
 
     // Validate node list.
@@ -186,7 +165,7 @@ async fn create_engine(args: CreateEngineArgs) -> Result<(), String> {
             .candid()
             .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
-    response.map(|_new_subnet| ())
+    response
 }
 
 #[update]
@@ -206,6 +185,180 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
             .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
     response
+}
+
+/// Validates that the only fields set on the proxied `UpdateSubnetPayload`
+/// are the ones the engine controller is allowed to manage: `subnet_admins`
+/// and `is_halted` (subnet halting / unhalting). Every other `Option<_>`
+/// field must be `None`, and the single non-optional knob
+/// (`set_gossip_config_to_default`) must hold its default value (`false`).
+/// The required `subnet_id` is exempt because it merely identifies the target.
+///
+/// This keeps the surface of `update_subnet` deliberately tiny: only the
+/// fields the engine controller is intended to manage flow through. Adding a
+/// new allowed field is a conscious, code-level decision.
+fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), String> {
+    let UpdateSubnetPayload {
+        subnet_id: _,
+        // The fields we allow.
+        subnet_admins: _,
+        is_halted: _,
+
+        max_ingress_bytes_per_message,
+        max_ingress_bytes_per_block,
+        max_ingress_messages_per_block,
+        max_block_payload_size,
+        unit_delay_millis,
+        initial_notary_delay_millis,
+        dkg_interval_length,
+        dkg_dealings_per_block,
+        start_as_nns,
+        subnet_type,
+        halt_at_cup_height,
+        features,
+        resource_limits,
+        chain_key_config,
+        chain_key_signing_enable,
+        chain_key_signing_disable,
+        max_number_of_canisters,
+        ssh_readonly_access,
+        ssh_backup_access,
+        max_artifact_streams_per_peer,
+        max_chunk_wait_ms,
+        max_duplicity,
+        max_chunk_size,
+        receive_check_cache_size,
+        pfn_evaluation_period_ms,
+        registry_poll_period_ms,
+        retransmission_request_ms,
+        set_gossip_config_to_default,
+    } = payload;
+
+    // Build up a list of fields the caller is trying to set so the error is
+    // actionable. The check is purely structural: any `Some(_)` (or a
+    // non-default bool) is treated as "the caller tried to update this".
+    let mut disallowed: Vec<&'static str> = vec![];
+    macro_rules! check_none {
+        ($field:expr, $name:literal) => {
+            if $field.is_some() {
+                disallowed.push($name);
+            }
+        };
+    }
+    check_none!(
+        max_ingress_bytes_per_message,
+        "max_ingress_bytes_per_message"
+    );
+    check_none!(max_ingress_bytes_per_block, "max_ingress_bytes_per_block");
+    check_none!(
+        max_ingress_messages_per_block,
+        "max_ingress_messages_per_block"
+    );
+    check_none!(max_block_payload_size, "max_block_payload_size");
+    check_none!(unit_delay_millis, "unit_delay_millis");
+    check_none!(initial_notary_delay_millis, "initial_notary_delay_millis");
+    check_none!(dkg_interval_length, "dkg_interval_length");
+    check_none!(dkg_dealings_per_block, "dkg_dealings_per_block");
+    check_none!(start_as_nns, "start_as_nns");
+    check_none!(subnet_type, "subnet_type");
+    check_none!(halt_at_cup_height, "halt_at_cup_height");
+    check_none!(features, "features");
+    check_none!(resource_limits, "resource_limits");
+    check_none!(chain_key_config, "chain_key_config");
+    check_none!(chain_key_signing_enable, "chain_key_signing_enable");
+    check_none!(chain_key_signing_disable, "chain_key_signing_disable");
+    check_none!(max_number_of_canisters, "max_number_of_canisters");
+    check_none!(ssh_readonly_access, "ssh_readonly_access");
+    check_none!(ssh_backup_access, "ssh_backup_access");
+    check_none!(
+        max_artifact_streams_per_peer,
+        "max_artifact_streams_per_peer"
+    );
+    check_none!(max_chunk_wait_ms, "max_chunk_wait_ms");
+    check_none!(max_duplicity, "max_duplicity");
+    check_none!(max_chunk_size, "max_chunk_size");
+    check_none!(receive_check_cache_size, "receive_check_cache_size");
+    check_none!(pfn_evaluation_period_ms, "pfn_evaluation_period_ms");
+    check_none!(registry_poll_period_ms, "registry_poll_period_ms");
+    check_none!(retransmission_request_ms, "retransmission_request_ms");
+    if *set_gossip_config_to_default {
+        disallowed.push("set_gossip_config_to_default");
+    }
+
+    if disallowed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Updating these fields via the engine controller is not allowed: {}. \
+             Only `subnet_admins` and `is_halted` may be updated.",
+            disallowed.join(", ")
+        ))
+    }
+}
+
+/// Ensures that the configured `AUTHORIZED_CALLER` (the engine controller's
+/// "super admin") is always present in the resulting admin list, even if the
+/// caller forgot to include it.
+fn normalize_subnet_admins(admins: Vec<PrincipalId>) -> Vec<PrincipalId> {
+    let super_admin = PrincipalId(AUTHORIZED_CALLER.with(|c| *c.borrow()));
+    let mut admins = admins;
+    if !admins.contains(&super_admin) {
+        admins.push(super_admin);
+    }
+    admins
+}
+
+/// Proxies to the registry's `update_subnet` endpoint. Only `subnet_admins`
+/// and `is_halted` may be updated through this path; every other field must be
+/// left at its default value (`None` / `false`) or the call is rejected.
+///
+/// The `subnet_admins` list is always normalized to include the engine
+/// controller's authorized caller (the super admin), so callers cannot
+/// accidentally lock the controller out of the subnet.
+#[update]
+async fn update_subnet(payload: UpdateSubnetPayload) -> Result<(), String> {
+    ensure_authorized()?;
+    ensure_only_allowed_fields_set(&payload)?;
+
+    // Normalize `subnet_admins` so the super admin is always present.
+    // The caller may omit the field entirely (no change requested), but if
+    // they do supply one, we treat it as the source of truth and add the
+    // super admin if missing.
+    #[allow(unused_mut)]
+    let mut payload = payload;
+    if let Some(admins) = payload.subnet_admins {
+        payload.subnet_admins = Some(normalize_subnet_admins(admins));
+    }
+
+    Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "update_subnet")
+        .with_arg(payload)
+        .await
+        .map_err(|e| format!("registry.update_subnet call failed: {e:?}"))?
+        .candid::<()>()
+        .map_err(|e| format!("Failed to decode registry response: {e}"))?;
+
+    Ok(())
+}
+
+/// Proxies to the registry's `deploy_guestos_to_all_subnet_nodes` endpoint,
+/// which is the registry path for updating a subnet's replica version.
+#[update]
+async fn deploy_guestos_to_all_subnet_nodes(
+    payload: DeployGuestosToAllSubnetNodesPayload,
+) -> Result<(), String> {
+    ensure_authorized()?;
+
+    Call::unbounded_wait(
+        REGISTRY_CANISTER_ID.into(),
+        "deploy_guestos_to_all_subnet_nodes",
+    )
+    .with_arg(payload)
+    .await
+    .map_err(|e| format!("registry.deploy_guestos_to_all_subnet_nodes call failed: {e:?}"))?
+    .candid::<()>()
+    .map_err(|e| format!("Failed to decode registry response: {e}"))?;
+
+    Ok(())
 }
 
 fn main() {

@@ -3,7 +3,7 @@ use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::SchedulerConfig,
 };
-use ic_cycles_account_manager::ResourceSaturation;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
@@ -15,6 +15,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -164,7 +165,10 @@ pub(crate) fn get_sandbox_safe_system_state(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+        ),
     )
 }
 

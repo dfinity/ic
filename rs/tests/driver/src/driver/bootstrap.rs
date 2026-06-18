@@ -34,9 +34,9 @@ use config_tool::setupos::{
     deployment_json::{self, DeploymentSettings},
 };
 use config_types::{
-    CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
-    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, IcBoundaryTlsCert,
-    Ipv4Config, Ipv6Config, NetworkSettings, RecoveryConfig,
+    CONFIG_VERSION, DeploymentEnvironment, FixedIpv6Config, GuestOSConfig, GuestOSDevSettings,
+    GuestOSSettings, GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings,
+    IcBoundaryTlsCert, Ipv4Config, Ipv6Config, NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -56,7 +56,7 @@ use std::{
     fs::File,
     io,
     io::Write,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     process::Command,
     thread::{self, JoinHandle},
@@ -550,8 +550,27 @@ fn create_guestos_config_for_node(
     test_env: &TestEnv,
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
-    // Build NetworkSettings
-    let ipv6_config = Ipv6Config::RouterAdvertisement;
+    // Build NetworkSettings.
+    //
+    // Use a fixed (static) IPv6 address derived from the node's allocated
+    // address instead of `RouterAdvertisement`. The RA path makes the GuestOS
+    // emit `DHCP=yes` (to support cloud metadata servers), which enables DHCP
+    // for *both* IPv4 and IPv6. On Farm this causes every node to request an
+    // IPv4 lease and exhausts the IPv4 address space in our testnet DCs. A
+    // fixed config sets `IPv6AcceptRA=false` and does not enable DHCP.
+    let ipv6_addr = match node.node_config.public_api.ip() {
+        IpAddr::V6(addr) => addr,
+        IpAddr::V4(addr) => bail!("Expected an IPv6 node address, got IPv4: {addr}"),
+    };
+    // The gateway is the `<prefix>::1` address of the node's /64 subnet. This
+    // mirrors the gateway derivation used for SetupOS configs and resolves to
+    // the same physical router that router advertisements point to.
+    let s = ipv6_addr.segments();
+    let ipv6_gateway = Ipv6Addr::new(s[0], s[1], s[2], s[3], 0, 0, 0, 1);
+    let ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+        address: format!("{ipv6_addr}/64"),
+        gateway: ipv6_gateway,
+    });
 
     let ipv4_config = match ipv4_config {
         Some(config) => Some(Ipv4Config {
