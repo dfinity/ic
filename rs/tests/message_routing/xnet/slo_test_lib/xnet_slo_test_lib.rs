@@ -352,7 +352,7 @@ pub async fn tear_down(canisters: &[Vec<Canister<'_>>], logger: &slog::Logger) -
 
 /// Checks whether the metrics (by themselves and/or relative to `config`)
 /// indicate a successful run: error ratio and latency below threshold, send
-/// rate and received responses aoove threshold, and sequence errors within the
+/// rate and received responses above threshold, and sequence errors within the
 /// configured `seq_error_threshold` (0 by default, i.e. strict exactly-once and
 /// in-order delivery). Logs the outcome of each check.
 ///
