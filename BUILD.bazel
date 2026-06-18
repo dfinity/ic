@@ -248,6 +248,16 @@ alias(
     }),
 )
 
+### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
+
+alias(
+    name = "e2fsdroid",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@android_platform_tools//:e2fsdroid",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
 ### shfmt, used to format bash code
 
 alias(
