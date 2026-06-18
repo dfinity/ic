@@ -1387,7 +1387,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
 ///   environment_variables : vec environment_variable;
-///   minimum_msg_cycles_available : nat;
+///   minimum_incoming_canister_call_cycles : nat;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -1404,7 +1404,7 @@ pub struct DefiniteCanisterSettingsArgs {
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
     environment_variables: Vec<EnvironmentVariable>,
-    minimum_msg_cycles_available: candid::Nat,
+    minimum_incoming_canister_call_cycles: candid::Nat,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -1422,12 +1422,13 @@ impl DefiniteCanisterSettingsArgs {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
-        minimum_msg_cycles_available: u128,
+        minimum_incoming_canister_call_cycles: u128,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
-        let minimum_msg_cycles_available = candid::Nat::from(minimum_msg_cycles_available);
+        let minimum_incoming_canister_call_cycles =
+            candid::Nat::from(minimum_incoming_canister_call_cycles);
         let environment_variables = environment_variables
             .iter()
             .map(|(name, value)| EnvironmentVariable {
@@ -1448,7 +1449,7 @@ impl DefiniteCanisterSettingsArgs {
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
             environment_variables,
-            minimum_msg_cycles_available,
+            minimum_incoming_canister_call_cycles,
         }
     }
 
@@ -1496,8 +1497,8 @@ impl DefiniteCanisterSettingsArgs {
         &self.environment_variables
     }
 
-    pub fn minimum_msg_cycles_available(&self) -> candid::Nat {
-        self.minimum_msg_cycles_available.clone()
+    pub fn minimum_incoming_canister_call_cycles(&self) -> candid::Nat {
+        self.minimum_incoming_canister_call_cycles.clone()
     }
 }
 
@@ -1613,7 +1614,7 @@ impl CanisterStatusResultV2 {
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
-        minimum_msg_cycles_available: u128,
+        minimum_incoming_canister_call_cycles: u128,
     ) -> Self {
         Self {
             status,
@@ -1650,7 +1651,7 @@ impl CanisterStatusResultV2 {
                 wasm_memory_limit,
                 wasm_memory_threshold,
                 environment_variables,
-                minimum_msg_cycles_available,
+                minimum_incoming_canister_call_cycles,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -2380,7 +2381,7 @@ pub struct EnvironmentVariable {
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
 ///   environment_variables : opt vec environment_variable;
-///   minimum_msg_cycles_available : opt nat;
+///   minimum_incoming_canister_call_cycles : opt nat;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
@@ -2396,7 +2397,7 @@ pub struct CanisterSettingsArgs {
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
-    pub minimum_msg_cycles_available: Option<candid::Nat>,
+    pub minimum_incoming_canister_call_cycles: Option<candid::Nat>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -2417,7 +2418,7 @@ impl CanisterSettingsArgs {
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
             environment_variables: None,
-            minimum_msg_cycles_available: None,
+            minimum_incoming_canister_call_cycles: None,
         }
     }
 }
@@ -2435,7 +2436,7 @@ pub struct CanisterSettingsArgsBuilder {
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
     environment_variables: Option<Vec<EnvironmentVariable>>,
-    minimum_msg_cycles_available: Option<candid::Nat>,
+    minimum_incoming_canister_call_cycles: Option<candid::Nat>,
 }
 
 #[allow(dead_code)]
@@ -2457,7 +2458,7 @@ impl CanisterSettingsArgsBuilder {
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
             environment_variables: self.environment_variables,
-            minimum_msg_cycles_available: self.minimum_msg_cycles_available,
+            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
         }
     }
 
@@ -2582,9 +2583,14 @@ impl CanisterSettingsArgsBuilder {
     }
 
     /// Sets the minimum number of cycles required for an incoming canister-to-canister message.
-    pub fn with_minimum_msg_cycles_available(self, minimum_msg_cycles_available: u128) -> Self {
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: u128,
+    ) -> Self {
         Self {
-            minimum_msg_cycles_available: Some(candid::Nat::from(minimum_msg_cycles_available)),
+            minimum_incoming_canister_call_cycles: Some(candid::Nat::from(
+                minimum_incoming_canister_call_cycles,
+            )),
             ..self
         }
     }

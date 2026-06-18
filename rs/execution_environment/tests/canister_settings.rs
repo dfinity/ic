@@ -140,17 +140,18 @@ fn canister_settings_ranges() {
             assert_eq!(settings.freezing_threshold(), valid_freezing_threshold);
         });
 
-    let valid_minimum_msg_cycles_available = u128::MAX;
-    let valid_minimum_msg_cycles_available_settings = CanisterSettingsArgsBuilder::new()
-        .with_minimum_msg_cycles_available(valid_minimum_msg_cycles_available)
+    let valid_minimum_incoming_canister_call_cycles = u128::MAX;
+    let valid_minimum_incoming_canister_call_cycles_settings = CanisterSettingsArgsBuilder::new()
+        .with_minimum_incoming_canister_call_cycles(valid_minimum_incoming_canister_call_cycles)
         .build();
-    let test_minimum_msg_cycles_available_settings: Box<dyn Fn(DefiniteCanisterSettingsArgs)> =
-        Box::new(|settings: DefiniteCanisterSettingsArgs| {
-            assert_eq!(
-                settings.minimum_msg_cycles_available(),
-                valid_minimum_msg_cycles_available
-            );
-        });
+    let test_minimum_incoming_canister_call_cycles_settings: Box<
+        dyn Fn(DefiniteCanisterSettingsArgs),
+    > = Box::new(|settings: DefiniteCanisterSettingsArgs| {
+        assert_eq!(
+            settings.minimum_incoming_canister_call_cycles(),
+            valid_minimum_incoming_canister_call_cycles
+        );
+    });
 
     for (valid_settings, test_settings_after) in [
         (
@@ -166,8 +167,8 @@ fn canister_settings_ranges() {
             test_freezing_threshold_settings,
         ),
         (
-            valid_minimum_msg_cycles_available_settings,
-            test_minimum_msg_cycles_available_settings,
+            valid_minimum_incoming_canister_call_cycles_settings,
+            test_minimum_incoming_canister_call_cycles_settings,
         ),
     ] {
         let settings_after = via_update_settings(valid_settings.clone()).unwrap();
@@ -208,17 +209,18 @@ fn canister_settings_ranges() {
         Nat::from(invalid_freezing_threshold)
     );
 
-    let invalid_minimum_msg_cycles_available = Nat::from(u128::MAX) + Nat::from(1_u8);
-    let invalid_minimum_msg_cycles_available_settings = {
+    let invalid_minimum_incoming_canister_call_cycles = Nat::from(u128::MAX) + Nat::from(1_u8);
+    let invalid_minimum_incoming_canister_call_cycles_settings = {
         let mut s = CanisterSettingsArgsBuilder::new().build();
-        s.minimum_msg_cycles_available = Some(invalid_minimum_msg_cycles_available.clone());
+        s.minimum_incoming_canister_call_cycles =
+            Some(invalid_minimum_incoming_canister_call_cycles.clone());
         s
     };
-    let expected_invalid_minimum_msg_cycles_available_err_code =
+    let expected_invalid_minimum_incoming_canister_call_cycles_err_code =
         ErrorCode::CanisterContractViolation;
-    let expected_invalid_minimum_msg_cycles_available_err = format!(
+    let expected_invalid_minimum_incoming_canister_call_cycles_err = format!(
         "Minimum message cycles available expected to be in the range of [0..2^128-1], got {}",
-        invalid_minimum_msg_cycles_available
+        invalid_minimum_incoming_canister_call_cycles
     );
 
     for (invalid_settings, expected_err_code, expected_err) in [
@@ -238,9 +240,9 @@ fn canister_settings_ranges() {
             expected_invalid_freezing_threshold_err,
         ),
         (
-            invalid_minimum_msg_cycles_available_settings,
-            expected_invalid_minimum_msg_cycles_available_err_code,
-            expected_invalid_minimum_msg_cycles_available_err,
+            invalid_minimum_incoming_canister_call_cycles_settings,
+            expected_invalid_minimum_incoming_canister_call_cycles_err_code,
+            expected_invalid_minimum_incoming_canister_call_cycles_err,
         ),
     ] {
         let err = via_update_settings(invalid_settings.clone()).unwrap_err();
@@ -328,7 +330,7 @@ fn failed_create_canister_does_not_reuse_canister_id() {
 }
 
 #[test]
-fn minimum_msg_cycles_available_in_canister_status() {
+fn minimum_incoming_canister_call_cycles_in_canister_status() {
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
@@ -340,7 +342,7 @@ fn minimum_msg_cycles_available_in_canister_status() {
         .unwrap()
         .unwrap()
         .settings();
-    assert_eq!(settings.minimum_msg_cycles_available(), 0_u128);
+    assert_eq!(settings.minimum_incoming_canister_call_cycles(), 0_u128);
 
     // create_canister with the setting applied.
     let min_cycles: u128 = 1_000_000;
@@ -350,7 +352,7 @@ fn minimum_msg_cycles_available_in_canister_status() {
             Cycles::new(100_000_000_000_000),
             Some(
                 CanisterSettingsArgsBuilder::new()
-                    .with_minimum_msg_cycles_available(min_cycles)
+                    .with_minimum_incoming_canister_call_cycles(min_cycles)
                     .build(),
             ),
         ),
@@ -361,7 +363,7 @@ fn minimum_msg_cycles_available_in_canister_status() {
         .unwrap()
         .unwrap()
         .settings();
-    assert_eq!(settings.minimum_msg_cycles_available(), min_cycles);
+    assert_eq!(settings.minimum_incoming_canister_call_cycles(), min_cycles);
 
     // update_settings changes the value.
     let new_min_cycles: u128 = 2_000_000;
@@ -369,7 +371,7 @@ fn minimum_msg_cycles_available_in_canister_status() {
         &env,
         canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_minimum_msg_cycles_available(new_min_cycles)
+            .with_minimum_incoming_canister_call_cycles(new_min_cycles)
             .build(),
     );
     let settings = env
@@ -377,7 +379,10 @@ fn minimum_msg_cycles_available_in_canister_status() {
         .unwrap()
         .unwrap()
         .settings();
-    assert_eq!(settings.minimum_msg_cycles_available(), new_min_cycles);
+    assert_eq!(
+        settings.minimum_incoming_canister_call_cycles(),
+        new_min_cycles
+    );
 }
 
 fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterId) {
@@ -406,15 +411,15 @@ fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterI
         &env,
         callee_id,
         CanisterSettingsArgsBuilder::new()
-            .with_minimum_msg_cycles_available(min_cycles)
+            .with_minimum_incoming_canister_call_cycles(min_cycles)
             .build(),
     );
     (env, callee_id, caller_id)
 }
 
-// Ingress messages must be accepted regardless of minimum_msg_cycles_available.
+// Ingress messages must be accepted regardless of minimum_incoming_canister_call_cycles.
 #[test]
-fn minimum_msg_cycles_available_does_not_affect_ingress() {
+fn minimum_incoming_canister_call_cycles_does_not_affect_ingress() {
     let (env, callee_id, _caller_id) = setup_two_canisters(1_000_000);
 
     let res = env
@@ -423,7 +428,7 @@ fn minimum_msg_cycles_available_does_not_affect_ingress() {
     assert_matches!(res, WasmResult::Reply(_));
 }
 
-// Inter-canister calls with at least minimum_msg_cycles_available cycles must succeed.
+// Inter-canister calls with at least minimum_incoming_canister_call_cycles cycles must succeed.
 #[test]
 fn inter_canister_call_accepted_when_cycles_sufficient() {
     let min_cycles: u128 = 1_000_000;
@@ -447,11 +452,11 @@ fn inter_canister_call_accepted_when_cycles_sufficient() {
 
 // Verifies that attached cycles can be partially consumed before a downstream call
 // and the rest consumed in the reply callback, even though the remaining amount is
-// below minimum_msg_cycles_available (which only gates incoming call admission).
+// below minimum_incoming_canister_call_cycles (which only gates incoming call admission).
 // DTS is triggered after each accept_cycles (via instruction_counter_is_at_least)
-// to ensure that minimum_msg_cycles_available is not re-enforced at slice boundaries.
+// to ensure that minimum_incoming_canister_call_cycles is not re-enforced at slice boundaries.
 #[test]
-fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_available() {
+fn attached_cycles_consumed_in_update_and_reply_below_minimum_incoming_canister_call_cycles() {
     const SLICE_INSTRUCTIONS: u64 = 1_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
@@ -471,7 +476,7 @@ fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_availab
     test.update_settings(
         callee_id,
         CanisterSettingsArgsBuilder::new()
-            .with_minimum_msg_cycles_available(min_cycles)
+            .with_minimum_incoming_canister_call_cycles(min_cycles)
             .build(),
     )
     .unwrap();
@@ -479,10 +484,10 @@ fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_availab
 
     // Callee accepts half_cycles in the update handler, then makes a downstream
     // call to caller_id. In the reply callback, the callee accepts the remaining
-    // min_cycles - half_cycles, which is below minimum_msg_cycles_available —
+    // min_cycles - half_cycles, which is below minimum_incoming_canister_call_cycles —
     // reply callbacks are not subject to the minimum check.
     // instruction_counter_is_at_least after each accept_cycles forces a DTS slice
-    // boundary to verify minimum_msg_cycles_available is not re-enforced on resume.
+    // boundary to verify minimum_incoming_canister_call_cycles is not re-enforced on resume.
     let callee_args = wasm()
         .accept_cycles(half_cycles)
         .instruction_counter_is_at_least(SLICE_INSTRUCTIONS)
@@ -563,7 +568,7 @@ fn attached_cycles_consumed_in_update_and_reply_below_minimum_msg_cycles_availab
     );
 }
 
-// Inter-canister calls with fewer than minimum_msg_cycles_available cycles must be
+// Inter-canister calls with fewer than minimum_incoming_canister_call_cycles cycles must be
 // rejected with CanisterError.
 #[test]
 fn inter_canister_call_rejected_when_cycles_insufficient() {

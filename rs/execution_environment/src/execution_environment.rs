@@ -2269,7 +2269,7 @@ impl ExecutionEnvironment {
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
-                let min_cycles = canister.system_state.minimum_msg_cycles_available;
+                let min_cycles = canister.system_state.minimum_incoming_canister_call_cycles;
                 if request.payment < min_cycles {
                     let canister_id = canister.canister_id();
                     let payment = request.payment;

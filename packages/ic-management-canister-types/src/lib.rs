@@ -168,7 +168,7 @@ pub struct CanisterSettings {
     /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
     ///
     /// Default value: `0` (i.e., no minimum enforced).
-    pub minimum_msg_cycles_available: Option<Nat>,
+    pub minimum_incoming_canister_call_cycles: Option<Nat>,
 }
 
 /// # Definite Canister Settings
@@ -203,7 +203,7 @@ pub struct DefiniteCanisterSettings {
     /// A list of environment variables.
     pub environment_variables: Vec<EnvironmentVariable>,
     /// Minimum number of cycles required for an incoming canister-to-canister message.
-    pub minimum_msg_cycles_available: Nat,
+    pub minimum_incoming_canister_call_cycles: Nat,
 }
 
 /// # Create Canister Args

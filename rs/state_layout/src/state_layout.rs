@@ -211,7 +211,7 @@ pub struct CanisterStateBits {
     pub next_snapshot_id: u64,
     pub task_queue: TaskQueue,
     pub environment_variables: BTreeMap<String, String>,
-    pub minimum_msg_cycles_available: Cycles,
+    pub minimum_incoming_canister_call_cycles: Cycles,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already

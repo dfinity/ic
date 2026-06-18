@@ -778,7 +778,8 @@ pub struct CanisterStateBits {
     pub snapshot_visibility: ::core::option::Option<SnapshotVisibility>,
     /// The minimum number of cycles required for an incoming canister-to-canister message.
     #[prost(message, optional, tag = "68")]
-    pub minimum_msg_cycles_available: ::core::option::Option<super::super::queues::v1::Cycles>,
+    pub minimum_incoming_canister_call_cycles:
+        ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

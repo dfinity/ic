@@ -521,5 +521,5 @@ message CanisterStateBits {
   // Snapshot visibility for the canister.
   SnapshotVisibility snapshot_visibility = 64;
   // The minimum number of cycles required for an incoming canister-to-canister message.
-  state.queues.v1.Cycles minimum_msg_cycles_available = 68;
+  state.queues.v1.Cycles minimum_incoming_canister_call_cycles = 68;
 }

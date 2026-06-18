@@ -92,7 +92,7 @@ impl From<CanisterSettings> for management_canister::CanisterSettingsArgs {
             wasm_memory_limit,
             wasm_memory_threshold,
             environment_variables: None,
-            minimum_msg_cycles_available: None,
+            minimum_incoming_canister_call_cycles: None,
         }
     }
 }

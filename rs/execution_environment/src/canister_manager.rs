@@ -368,8 +368,11 @@ impl CanisterManager {
         }
 
         // Minimum message cycles available: apply.
-        if let Some(minimum_msg_cycles_available) = settings.minimum_msg_cycles_available() {
-            canister.system_state.minimum_msg_cycles_available = minimum_msg_cycles_available;
+        if let Some(minimum_incoming_canister_call_cycles) =
+            settings.minimum_incoming_canister_call_cycles()
+        {
+            canister.system_state.minimum_incoming_canister_call_cycles =
+                minimum_incoming_canister_call_cycles;
         }
 
         // Environment variables: validate and apply.
@@ -1101,7 +1104,8 @@ impl CanisterManager {
         let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
-        let minimum_msg_cycles_available = canister.system_state.minimum_msg_cycles_available;
+        let minimum_incoming_canister_call_cycles =
+            canister.system_state.minimum_incoming_canister_call_cycles;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1148,7 +1152,7 @@ impl CanisterManager {
             wasm_memory_limit.map(|x| x.get()),
             wasm_memory_threshold.get(),
             canister.system_state.environment_variables.clone(),
-            minimum_msg_cycles_available.get(),
+            minimum_incoming_canister_call_cycles.get(),
         ))
     }
 

@@ -30,7 +30,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
-    pub(crate) minimum_msg_cycles_available: Option<Cycles>,
+    pub(crate) minimum_incoming_canister_call_cycles: Option<Cycles>,
 }
 
 impl CanisterSettings {
@@ -46,7 +46,7 @@ impl CanisterSettings {
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
-        minimum_msg_cycles_available: Option<Cycles>,
+        minimum_incoming_canister_call_cycles: Option<Cycles>,
     ) -> Self {
         Self {
             controllers,
@@ -60,7 +60,7 @@ impl CanisterSettings {
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
-            minimum_msg_cycles_available,
+            minimum_incoming_canister_call_cycles,
         }
     }
 
@@ -108,8 +108,8 @@ impl CanisterSettings {
         self.environment_variables.as_ref()
     }
 
-    pub fn minimum_msg_cycles_available(&self) -> Option<Cycles> {
-        self.minimum_msg_cycles_available
+    pub fn minimum_incoming_canister_call_cycles(&self) -> Option<Cycles> {
+        self.minimum_incoming_canister_call_cycles
     }
 }
 
@@ -196,12 +196,13 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
-        let minimum_msg_cycles_available = match input.minimum_msg_cycles_available {
-            Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
-                UpdateSettingsError::MinimumMsgCyclesAvailableOutOfRange { provided: min },
-            )?)),
-            None => None,
-        };
+        let minimum_incoming_canister_call_cycles =
+            match input.minimum_incoming_canister_call_cycles {
+                Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
+                    UpdateSettingsError::MinimumMsgCyclesAvailableOutOfRange { provided: min },
+                )?)),
+                None => None,
+            };
 
         Ok(CanisterSettings::new(
             input
@@ -217,7 +218,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
-            minimum_msg_cycles_available,
+            minimum_incoming_canister_call_cycles,
         ))
     }
 }
@@ -245,7 +246,7 @@ pub(crate) struct CanisterSettingsBuilder {
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
-    minimum_msg_cycles_available: Option<Cycles>,
+    minimum_incoming_canister_call_cycles: Option<Cycles>,
 }
 
 #[allow(dead_code)]
@@ -263,7 +264,7 @@ impl CanisterSettingsBuilder {
             log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
-            minimum_msg_cycles_available: None,
+            minimum_incoming_canister_call_cycles: None,
         }
     }
 
@@ -280,7 +281,7 @@ impl CanisterSettingsBuilder {
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
-            minimum_msg_cycles_available: self.minimum_msg_cycles_available,
+            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
         }
     }
 
@@ -361,9 +362,12 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_minimum_msg_cycles_available(self, minimum_msg_cycles_available: Cycles) -> Self {
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: Cycles,
+    ) -> Self {
         Self {
-            minimum_msg_cycles_available: Some(minimum_msg_cycles_available),
+            minimum_incoming_canister_call_cycles: Some(minimum_incoming_canister_call_cycles),
             ..self
         }
     }

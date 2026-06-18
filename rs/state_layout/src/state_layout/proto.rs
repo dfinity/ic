@@ -80,7 +80,9 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_snapshot_id: item.next_snapshot_id,
             tasks: Some((&item.task_queue).into()),
             environment_variables: item.environment_variables.into_iter().collect(),
-            minimum_msg_cycles_available: Some(item.minimum_msg_cycles_available.into()),
+            minimum_incoming_canister_call_cycles: Some(
+                item.minimum_incoming_canister_call_cycles.into(),
+            ),
             instructions_executed: item.instructions_executed.get(),
             ingress_messages_executed: item.ingress_messages_executed,
             remote_subnet_messages_executed: item.remote_subnet_messages_executed,
@@ -235,8 +237,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             next_snapshot_id: value.next_snapshot_id,
             task_queue,
             environment_variables: value.environment_variables.into_iter().collect(),
-            minimum_msg_cycles_available: value
-                .minimum_msg_cycles_available
+            minimum_incoming_canister_call_cycles: value
+                .minimum_incoming_canister_call_cycles
                 .map(|v| v.into())
                 .unwrap_or_default(),
             instructions_executed: NumInstructions::from(value.instructions_executed),
