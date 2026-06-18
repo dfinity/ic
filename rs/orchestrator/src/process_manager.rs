@@ -8,6 +8,7 @@ use std::{
     ffi::OsString,
     fmt::Debug,
     io::Result,
+    os::unix::process::CommandExt,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -104,14 +105,19 @@ impl<P: Process> SingleProcessRunner<P> {
     /// running, a log message is printed.
     ///
     /// It is critical that we signal and terminate the whole
-    /// process group of which the [`Process`] should be the
-    /// leader. The process may spawn other
-    /// sub-processes under the same process group. For correctness
-    /// -- the processes may access state file paths and
-    /// handles -- it is important we signal the sub-processes
-    /// processes too. This is possible because we shall
-    /// restrict setgpid() in production -- by default disabled
-    /// by SELinux type enforcement.
+    /// process group of which the [`Process`] is the leader. The
+    /// process may spawn other sub-processes under the same process
+    /// group. For correctness -- the processes may access state file
+    /// paths and handles -- it is important we signal the sub-processes
+    /// too.
+    ///
+    /// We guarantee that the [`Process`] is its own process group leader
+    /// (so its PID equals its PGID, which is what the negation below
+    /// relies on) by setting its process group at spawn time via
+    /// `Command::process_group(0)` -- see `start`. We therefore do not
+    /// rely on the managed binary calling `setpgid` itself. Sub-processes
+    /// cannot escape the group because `setpgid` is restricted in
+    /// production by SELinux type enforcement.
     ///
     /// We still depend on init to handle reaping of adopted children,
     /// as the orchestrator has no way of adopting or even knowing the
@@ -179,6 +185,16 @@ impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
             let child = std::process::Command::new(process.get_binary())
                 .args(process.get_args())
                 .envs(process.get_env())
+                // Put the child into a new process group of which it is the
+                // leader (PGID == PID). Any sub-processes it spawns inherit this
+                // group, which lets `kill()` reliably signal the whole group by
+                // negating the PID. We establish the group here, in the
+                // orchestrator, rather than relying on each managed binary to
+                // call `setpgid` itself. This is equivalent to `setpgid(0, 0)`
+                // run in the forked child before `exec`, while it is still in
+                // the orchestrator's SELinux domain -- which is permitted to set
+                // its own process group.
+                .process_group(0)
                 .spawn()?;
             debug!(self.log, "Process started. Pid: {}", child.id());
             self.set_pid(Pid::from_raw(child.id() as i32));
