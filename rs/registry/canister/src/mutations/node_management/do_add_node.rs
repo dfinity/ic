@@ -37,6 +37,19 @@ use ic_registry_keys::{NODE_REWARDS_TABLE_KEY, make_replica_version_key};
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
+/// Effective per-node-operator cap on the number of `type4.1`-`type4.4` nodes
+/// that may be registered, used in lieu of the standard
+/// `max_rewardable_nodes`-based quota for those reward types.
+///
+/// TODO(CLO-15): Remove this constant and the associated special case in
+/// `do_add_node_` once the reward canister no longer treats `type4.5` rewards
+/// as `type1.1`. Until then, we cannot meaningfully size
+/// `max_rewardable_nodes` for the `type4.x` family without blocking legitimate
+/// gen4 onboarding, so we substitute a large-but-bounded sentinel here. The
+/// value is chosen to be comfortably above any realistic per-operator
+/// deployment while still preventing runaway registrations.
+const EXCESSIVE_NUMBER_OF_TYPE_4_NODES: u32 = 1_000;
+
 impl Registry {
     /// Adds a new node to the registry.
     ///
@@ -136,14 +149,10 @@ impl Registry {
                 "{LOG_PREFIX}do_add_node: Node reward type is required."
             ))?;
 
-            // TODO(CLO-15): Remove the type4.1-type4.4 special case below once
-            // we no longer treat rewards of type4.5 as type1.1. For now, node
-            // providers must be able to deploy arbitrarily many nodes of these
-            // types without being constrained by `max_rewardable_nodes`. Rather
-            // than branching around the check, we model this as an effectively
-            // unbounded quota so the same code path is exercised for every
-            // reward type. Type4.5 is explicitly excluded from this exemption.
-            const EXCESSIVE_NUMBER_OF_TYPE_4_NODES: u32 = 1_000;
+            // See `EXCESSIVE_NUMBER_OF_TYPE_4_NODES` at the top of this file for
+            // why type4.1-type4.4 are handled via a sentinel quota rather than
+            // the per-operator `max_rewardable_nodes` map. Type4.5 is
+            // explicitly excluded from this exemption.
             let is_unbounded_type4 = matches!(
                 node_reward_type,
                 NodeRewardType::Type4dot1
