@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Fetch current membership of all code-owning teams in the dfinity org.
+"""
+Fetch current membership of all code-owning teams in the dfinity org.
 
 Writes teams.json: {"login_to_teams": {login: [team,...]}, "team_to_members": {team: [login,...]}}
 Membership is the *current* membership (GitHub API has no historical team membership),
 which is a known limitation when classifying older PRs.
 """
+
 import json
 import subprocess
 

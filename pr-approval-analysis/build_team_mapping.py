@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Derive a stable fine-grained-team -> umbrella-team mapping for dfinity/ic.
+"""
+Derive a stable fine-grained-team -> umbrella-team mapping for dfinity/ic.
 
 Team ownership in .github/CODEOWNERS changed a lot over the analysis window: many
 fine-grained teams (consensus, execution, ic-message-routing-owners, crypto-team,
@@ -15,6 +16,7 @@ now. The umbrella a fine team's paths most often map to becomes its umbrella.
 
 Writes team_mapping.json: {fine_team: umbrella_team}.
 """
+
 import json
 import re
 from collections import Counter, defaultdict
@@ -43,7 +45,7 @@ def parse(path):
                 continue
             parts = line.split()
             pat = parts[0]
-            teams = [p[len("@dfinity/"):] for p in parts[1:] if p.startswith("@dfinity/")]
+            teams = [p[len("@dfinity/") :] for p in parts[1:] if p.startswith("@dfinity/")]
             if teams:
                 rules.append((pat, teams))
     return rules

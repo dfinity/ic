@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Analyze PR approval waiting times for dfinity/ic.
+"""
+Analyze PR approval waiting times for dfinity/ic.
 
 Reads prs.jsonl (from fetch_prs.py) and teams.json (from fetch_teams.py) and
 produces statistics on how long PRs wait for approval, broken down by:
@@ -9,6 +10,7 @@ for two windows: last 12 months and last 6 months.
 
 Writes report.md and prints a summary.
 """
+
 import datetime
 import json
 import math
@@ -31,6 +33,7 @@ except FileNotFoundError:
 
 def to_umbrella(team):
     return TEAM_UMBRELLA.get(team, team)
+
 
 BOT_LOGINS = {
     "github-actions",
@@ -70,10 +73,12 @@ def is_bot(actor):
 
 
 def weekday_seconds(start, end):
-    """Elapsed seconds between start and end counting only Mon-Fri (UTC).
+    """
+    Elapsed seconds between start and end counting only Mon-Fri (UTC).
 
     Approximates "business time" so that weekends do not count as approval wait.
-    Ignores public holidays and time-of-day (treats all 24h of a weekday)."""
+    Ignores public holidays and time-of-day (treats all 24h of a weekday).
+    """
     if end <= start:
         return 0.0
     total = 0.0
@@ -126,11 +131,13 @@ def load_prs(path="prs.jsonl"):
 
 
 def compute_ready_time(pr):
-    """When the PR first became reviewable.
+    """
+    When the PR first became reviewable.
 
     - created non-draft  -> createdAt
     - created as draft    -> first ReadyForReviewEvent
-    Decided by whether the earliest draft/ready transition is a ready event."""
+    Decided by whether the earliest draft/ready transition is a ready event.
+    """
     created = parse_ts(pr["createdAt"])
     events = []
     for it in pr["timelineItems"]["nodes"]:
@@ -197,13 +204,15 @@ def passes_filters(pr):
 
 
 def determine_home_teams(prs, login_to_teams):
-    """Empirically map each (human) author to a single home *umbrella* team.
+    """
+    Empirically map each (human) author to a single home *umbrella* team.
 
     Signal: among an author's 'solo' PRs (exactly one umbrella requested), the most
     frequently requested umbrella is their home. Falls back to the most frequent
     umbrella across all their PRs. Org membership (mapped to umbrellas) is a
     tie-breaker. ic-owners-owners (a meta team) is not a home candidate unless it
-    is the only signal."""
+    is the only signal.
+    """
     solo_counts = defaultdict(Counter)
     all_counts = defaultdict(Counter)
     for pr in prs:
@@ -237,10 +246,12 @@ def determine_home_teams(prs, login_to_teams):
 
 
 def classify(pr, home):
-    """Return one of: same_team, cross_team, no_team_request, unknown_home.
+    """
+    Return one of: same_team, cross_team, no_team_request, unknown_home.
 
     Same-team = the PR's requested umbrellas are only the author's home umbrella.
-    Cross-team = at least one other umbrella is also required to approve."""
+    Cross-team = at least one other umbrella is also required to approve.
+    """
     ru = pr["_req_umbrellas"]
     if not ru:
         return "no_team_request"
@@ -403,6 +414,7 @@ def render_buckets(title, b):
 
 def render_compare(res):
     """Compact same-team vs cross-team comparison for the headline metrics."""
+
     def cell(block, key, stat):
         b = block.get(key)
         if not b or b.get(stat) is None:
@@ -417,15 +429,9 @@ def render_compare(res):
     lines.append(
         f"| First approval — median | {cell(sm, 'first_wall', 'median')} | {cell(cr, 'first_wall', 'median')} |"
     )
-    lines.append(
-        f"| Full approval — median | {cell(sm, 'last_wall', 'median')} | {cell(cr, 'last_wall', 'median')} |"
-    )
-    lines.append(
-        f"| Full approval — p90 | {cell(sm, 'last_wall', 'p90')} | {cell(cr, 'last_wall', 'p90')} |"
-    )
-    lines.append(
-        f"| Full approval — p95 | {cell(sm, 'last_wall', 'p95')} | {cell(cr, 'last_wall', 'p95')} |"
-    )
+    lines.append(f"| Full approval — median | {cell(sm, 'last_wall', 'median')} | {cell(cr, 'last_wall', 'median')} |")
+    lines.append(f"| Full approval — p90 | {cell(sm, 'last_wall', 'p90')} | {cell(cr, 'last_wall', 'p90')} |")
+    lines.append(f"| Full approval — p95 | {cell(sm, 'last_wall', 'p95')} | {cell(cr, 'last_wall', 'p95')} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -610,7 +616,6 @@ def render(results, home, prs):
     out.append("")
 
     return "\n".join(out)
-
 
 
 def main():

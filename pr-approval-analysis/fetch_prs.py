@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fetch all PRs from dfinity/ic created within the last N days via the GraphQL API.
+"""
+Fetch all PRs from dfinity/ic created within the last N days via the GraphQL API.
 
 For each PR we capture creation/ready/merge/close timestamps, draft status, state,
 size, the review decisions/approvals (with timestamps + authors), and the timeline
@@ -8,6 +9,7 @@ ready-for-review / convert-to-draft transitions.
 
 Writes prs.jsonl (one JSON object per line).
 """
+
 import datetime
 import json
 import os
@@ -39,7 +41,8 @@ def get_token():
 NOW = datetime.datetime.now(datetime.timezone.utc)
 CUTOFF = NOW - datetime.timedelta(days=DAYS)
 
-QUERY = """
+QUERY = (
+    """
 query($cursor: String) {
   repository(owner: "dfinity", name: "ic") {
     pullRequests(first: %d, after: $cursor, orderBy: {field: CREATED_AT, direction: DESC}) {
@@ -81,7 +84,9 @@ query($cursor: String) {
     }
   }
 }
-""" % PAGE_SIZE
+"""
+    % PAGE_SIZE
+)
 
 
 class AuthExpired(Exception):
@@ -150,7 +155,7 @@ def main():
                     pass
     cursor = os.environ.get("RESUME_CURSOR") or None
     if cursor is None and os.path.exists("cursor.txt"):
-        cursor = (open("cursor.txt").read().strip() or None)
+        cursor = open("cursor.txt").read().strip() or None
     print(f"resume: have={len(seen)} start_cursor={cursor}", file=sys.stderr)
 
     new = 0
