@@ -1426,9 +1426,9 @@ impl DefiniteCanisterSettingsArgs {
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
-        let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
         let minimum_incoming_canister_call_cycles =
             candid::Nat::from(minimum_incoming_canister_call_cycles);
+        let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
         let environment_variables = environment_variables
             .iter()
             .map(|(name, value)| EnvironmentVariable {

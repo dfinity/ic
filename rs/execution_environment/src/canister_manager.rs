@@ -1099,13 +1099,13 @@ impl CanisterManager {
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
+        let minimum_incoming_canister_call_cycles =
+            canister.system_state.minimum_incoming_canister_call_cycles;
         let log_visibility = canister.system_state.log_visibility.clone();
         let snapshot_visibility = canister.system_state.snapshot_visibility.clone();
         let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
-        let minimum_incoming_canister_call_cycles =
-            canister.system_state.minimum_incoming_canister_call_cycles;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
