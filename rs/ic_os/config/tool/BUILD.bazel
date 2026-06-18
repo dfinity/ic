@@ -51,6 +51,7 @@ rust_library(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )
@@ -91,6 +92,7 @@ rust_library(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )
@@ -154,6 +156,7 @@ rust_binary(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )
@@ -194,6 +197,7 @@ rust_binary(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )

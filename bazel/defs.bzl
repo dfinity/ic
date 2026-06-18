@@ -86,6 +86,16 @@ def _mcopy(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
+    # //:mtools resolves to the mtools bundle (the mtools binary + an include
+    # dir); pick out the binary, which we drive as `mtools -c mcopy ...`.
+    mtools = None
+    for f in ctx.files._mtools:
+        if f.basename == "mtools":
+            mtools = f
+            break
+    if not mtools:
+        fail("could not locate mtools binary among //:mtools outputs")
+
     command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
     inputs = []
     for srcs, dest in ctx.attr.srcmap.items():
@@ -96,7 +106,8 @@ def _mcopy(ctx):
                 dest_path = dest + src_file.basename
             else:
                 dest_path = dest
-            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+            command += "&& {mtools} -c mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+                mtools = mtools.path,
                 output = out.path,
                 src_path = src_file.path,
                 dest = dest_path.removeprefix("/"),
@@ -104,7 +115,7 @@ def _mcopy(ctx):
 
     ctx.actions.run_shell(
         command = command,
-        inputs = inputs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs] + ctx.files._mtools,
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -114,6 +125,7 @@ mcopy = rule(
     attrs = {
         "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
+        "_mtools": attr.label(default = "//:mtools", cfg = "exec", allow_files = True),
     },
 )
 

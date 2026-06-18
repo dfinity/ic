@@ -1,3 +1,5 @@
+flush ruleset
+
 table filter {
   set rate_limit {
     type ipv4_addr
