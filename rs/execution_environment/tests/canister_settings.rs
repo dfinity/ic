@@ -468,7 +468,7 @@ fn inter_canister_call_rejected_when_cycles_insufficient() {
             caller_id,
             "update",
             wasm()
-                .call_with_cycles(callee_id, "update", call_args, (min_cycles - 1) as u64)
+                .call_with_cycles(callee_id, "update", call_args, min_cycles - 1)
                 .build(),
         )
         .unwrap();
