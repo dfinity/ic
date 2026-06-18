@@ -29,7 +29,7 @@ struct Fixture {
 prop_compose! {
     /// An arbitrary fixture with default `slice_begin` and `size_limit` values.
     fn arb_barebone_fixture(max_size: usize)
-                   (stream in arb_stream(0, max_size, 0, max_size)) -> Fixture {
+                   (stream in arb_stream(0, max_size, 0, max_size, MAX_SUPPORTED_CERTIFICATION_VERSION)) -> Fixture {
         let begin = stream.messages_begin().get();
         let end = stream.messages_end().get();
 

@@ -61,12 +61,12 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
         };
         let log = self.log.clone();
         Box::new(move |id: &'_ CanisterHttpResponseId| {
-            if id.content.registry_version != registry_version {
+            if id.content.registry_version() != registry_version {
                 warn!(
                     log,
                     "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}",
-                    id.content.id,
-                    id.content.registry_version,
+                    id.content.id(),
+                    id.content.registry_version(),
                     registry_version
                 );
                 return BouncerValue::Unwanted;
@@ -83,12 +83,12 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
             //    not higher that `MAX_NUMBER_OF_REQUESTS_AHEAD`.
             //    Receiving an callback Id higher is possible because the priority fn is updated periodically (every 3s) with the latest state
             //    and can therefore store stale `known_request_ids` and stale `next_callback_id`.
-            if known_request_ids.contains(&id.content.id)
-                || (id.content.id >= next_callback_id
-                    && id.content.id <= highest_accepted_request_id)
+            if known_request_ids.contains(&id.content.id())
+                || (id.content.id() >= next_callback_id
+                    && id.content.id() <= highest_accepted_request_id)
             {
                 BouncerValue::Wants
-            } else if id.content.id > highest_accepted_request_id {
+            } else if id.content.id() > highest_accepted_request_id {
                 BouncerValue::MaybeWantsLater
             } else {
                 BouncerValue::Unwanted

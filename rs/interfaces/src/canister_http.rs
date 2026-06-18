@@ -12,6 +12,7 @@ use ic_types::{
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
 };
+use ic_types_cycles::Cycles;
 
 #[derive(Debug)]
 pub enum InvalidCanisterHttpPayloadReason {
@@ -56,6 +57,12 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
+    /// A payment receipt claims a refund larger than the per-replica allowance
+    /// derived from the request's payment.
+    RefundExceedsAllowance {
+        refund: Cycles,
+        per_replica_allowance: Cycles,
+    },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
     SignersNotMembers {

@@ -39,7 +39,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{ExecutionRound, Height};
+use ic_types::{ExecutionRound, Height, RegistryVersion};
 use ic_types_cycles::{Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -868,6 +868,7 @@ fn subnet_call_contexts_deserialization() {
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -2287,7 +2288,7 @@ fn compatibility_for_reject_reason() {
         RejectReason::iter()
             .map(|reason| reason as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7]
+        [1, 2, 3, 4, 5, 6, 7, 8]
     );
 }
 

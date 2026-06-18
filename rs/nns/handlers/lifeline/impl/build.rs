@@ -148,8 +148,6 @@ fn main() {
         eprintln!(
             "The current directory is {:?}.\n\
             `moc --version` output: {:?}.\n\
-            IN_NIX_SHELL={:?}.\n\
-            NIX_BUILD_TOP={:?}.\n\
             lifeline.mo exists? {:?}.\n\
             {:?} exists? {:?}.\n\
             {:?} exists? {:?}.\n\
@@ -157,8 +155,6 @@ fn main() {
             `ls` output: {:?}.",
             env::current_dir().map(|pb| pb.as_path().display().to_string()),
             Command::new("moc").arg("--version").output(),
-            env::var("IN_NIX_SHELL"),
-            env::var("NIX_BUILD_TOP"),
             PathBuf::from_str("lifeline.mo").map(|pb| pb.as_path().is_file()),
             governance_out_did,
             governance_out_did.is_file(),

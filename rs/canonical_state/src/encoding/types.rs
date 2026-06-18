@@ -67,6 +67,8 @@ pub struct RejectSignals {
     pub out_of_memory_deltas: Vec<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unknown_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub engine_not_allowed_deltas: Vec<u64>,
 }
 
 impl RejectSignals {
@@ -78,6 +80,7 @@ impl RejectSignals {
             && self.queue_full_deltas.is_empty()
             && self.out_of_memory_deltas.is_empty()
             && self.unknown_deltas.is_empty()
+            && self.engine_not_allowed_deltas.is_empty()
     }
 }
 
@@ -297,7 +300,7 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
 
 impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for RejectSignals {
     fn from(
-        (reject_signals, signals_end, _certification_version): (
+        (reject_signals, signals_end, certification_version): (
             &VecDeque<RejectSignal>,
             StreamIndex,
             CertificationVersion,
@@ -324,6 +327,14 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
                 .unwrap_or_default()
         };
 
+        let engine_not_allowed_deltas = deltas_for(RejectReason::EngineNotAllowed);
+        assert!(
+            certification_version >= CertificationVersion::V26
+                || engine_not_allowed_deltas.is_empty(),
+            "`EngineNotAllowed` reject signals must not be encoded before certification version V26, \
+             got certification version {certification_version:?}",
+        );
+
         RejectSignals {
             canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
             canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
@@ -332,6 +343,7 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
             queue_full_deltas: deltas_for(RejectReason::QueueFull),
             out_of_memory_deltas: deltas_for(RejectReason::OutOfMemory),
             unknown_deltas: deltas_for(RejectReason::Unknown),
+            engine_not_allowed_deltas,
         }
     }
 }
@@ -351,6 +363,7 @@ pub(crate) fn try_from_deltas(
         (QueueFull, &reject_signals.queue_full_deltas),
         (OutOfMemory, &reject_signals.out_of_memory_deltas),
         (Unknown, &reject_signals.unknown_deltas),
+        (EngineNotAllowed, &reject_signals.engine_not_allowed_deltas),
     ] {
         let mut stream_index = StreamIndex::new(signals_end);
         for delta in deltas.iter().rev() {
