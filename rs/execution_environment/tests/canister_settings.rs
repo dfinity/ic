@@ -443,7 +443,7 @@ fn inter_canister_call_accepted_when_cycles_sufficient() {
             caller_id,
             "update",
             wasm()
-                .call_with_cycles(callee_id, "update", call_args, min_cycles as u64)
+                .call_with_cycles(callee_id, "update", call_args, min_cycles)
                 .build(),
         )
         .unwrap();
