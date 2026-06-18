@@ -144,7 +144,15 @@ pub async fn test_async(env: TestEnv) {
         // with error thresholds.
         75.0,
         120,
-    );
+    )
+    // The long running canisters keep exchanging a mix of guaranteed-response
+    // and best-effort messages while one app subnet is upgraded and then
+    // downgraded. Best-effort requests in flight while the subnet restarts may
+    // be reordered or duplicated, which the receiving canisters record as
+    // sequence errors. Tolerate a small number of these so the test doesn't
+    // flake on benign reordering, while still catching systematic ordering
+    // regressions (which would produce far more).
+    .with_seq_error_threshold(50);
 
     // NOTE: For these tests, it is intended they run _from_ the mainnet
     // version, _to_ the branch version, and back.

@@ -66,6 +66,10 @@ pub struct Config {
     send_rate_threshold: f64,
     error_percentage_threshold: f64,
     targeted_latency_seconds: u64,
+    /// Maximum number of tolerated sequence errors (out-of-order or duplicate
+    /// request deliveries) per subnet. `0` requires strictly in-order,
+    /// exactly-once delivery.
+    seq_error_threshold: usize,
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
@@ -117,6 +121,8 @@ impl Config {
             send_rate_threshold,
             error_percentage_threshold,
             targeted_latency_seconds,
+            // Strict by default: require in-order, exactly-once delivery.
+            seq_error_threshold: 0,
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
@@ -126,6 +132,11 @@ impl Config {
 
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
         self.vm_resource_overrides = vm_resource_overrides;
+        self
+    }
+
+    pub fn with_seq_error_threshold(mut self, seq_error_threshold: usize) -> Self {
+        self.seq_error_threshold = seq_error_threshold;
         self
     }
 
@@ -380,10 +391,10 @@ pub fn check_success(
         }
 
         expect(
-            m.seq_errors == 0,
+            m.seq_errors <= config.seq_error_threshold,
             i,
-            "Sequence errors",
-            "Sequence errors",
+            format!("Sequence errors at most {}", config.seq_error_threshold).as_str(),
+            format!("Sequence errors more than {}", config.seq_error_threshold).as_str(),
             &m.seq_errors,
         );
 
