@@ -73,16 +73,13 @@ lazy_static! {
 /// arm64-darwin).
 pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
     use ic_config::flag_status::FlagStatus;
-    let cost = ic_config::subnet_config::SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
     const WASM_PAGE_SIZE: u64 = 65536;
     if EmbeddersConfig::default()
         .feature_flags
         .deterministic_memory_tracker
         == FlagStatus::Enabled
     {
-        n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64) * cost
+        n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
     } else {
         0
     }
