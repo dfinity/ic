@@ -40,7 +40,10 @@ impl Registry {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Intentionally do not validate that the target subnet exists: the migration orchestrator
-        // may still attempt to migrate canisters to/from a subnet that has been deleted.
+        // may still attempt to migrate canisters to a subnet that has been deleted.
+        // In this case, the outcome should be as if the migration completed before the subnet
+        // got deleted, i.e., the canister should be removed from the source subnet's canister
+        // ranges and not added to the (deleted) target subnet's canister ranges.
         let target_subnet_id = SubnetId::new(target_subnet_id);
 
         Ok((canister_ids, target_subnet_id))
