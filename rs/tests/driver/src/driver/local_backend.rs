@@ -676,6 +676,11 @@ impl LocalBackend {
     /// unique) network name. Instead we hash the group name and use a short
     /// hex digest, which keeps the name both unique per group and within the
     /// length limit (`vbr-` + 10 hex chars = 14 chars).
+    ///
+    /// Note that tests are executed under bazel's linux-sandbox which introduces a networking namespace,
+    /// so the hashing is not strictly necessary to avoid collisions with other groups on the host.
+    /// However, it's done for extra safety and to make accidental `bazel run //rs/tests/<test>_local` invocations
+    /// not catastrophic for the host.
     fn bridge_name(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
