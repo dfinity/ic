@@ -199,7 +199,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         let minimum_incoming_canister_call_cycles =
             match input.minimum_incoming_canister_call_cycles {
                 Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
-                    UpdateSettingsError::MinimumMsgCyclesAvailableOutOfRange { provided: min },
+                    UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided: min },
                 )?)),
                 None => None,
             };
@@ -382,7 +382,7 @@ pub enum UpdateSettingsError {
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
     LogMemoryLimitOutOfRange { provided: candid::Nat },
-    MinimumMsgCyclesAvailableOutOfRange { provided: candid::Nat },
+    MinimumIncomingCanisterCallCyclesOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -435,11 +435,11 @@ impl From<UpdateSettingsError> for UserError {
                     "Log memory limit expected to be in the range of [0..2^64-1], got {provided}"
                 ),
             ),
-            UpdateSettingsError::MinimumMsgCyclesAvailableOutOfRange { provided } => {
+            UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided } => {
                 UserError::new(
                     ErrorCode::CanisterContractViolation,
                     format!(
-                        "Minimum message cycles available expected to be in the range of [0..2^128-1], got {provided}"
+                        "Minimum incoming canister call cycles expected to be in the range of [0..2^128-1], got {provided}"
                     ),
                 )
             }

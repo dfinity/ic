@@ -367,7 +367,7 @@ impl CanisterManager {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
 
-        // Minimum message cycles available: apply.
+        // Minimum incoming canister call cycles: apply.
         if let Some(minimum_incoming_canister_call_cycles) =
             settings.minimum_incoming_canister_call_cycles()
         {

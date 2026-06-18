@@ -219,7 +219,7 @@ fn canister_settings_ranges() {
     let expected_invalid_minimum_incoming_canister_call_cycles_err_code =
         ErrorCode::CanisterContractViolation;
     let expected_invalid_minimum_incoming_canister_call_cycles_err = format!(
-        "Minimum message cycles available expected to be in the range of [0..2^128-1], got {}",
+        "Minimum incoming canister call cycles expected to be in the range of [0..2^128-1], got {}",
         invalid_minimum_incoming_canister_call_cycles
     );
 
