@@ -440,7 +440,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -559,7 +559,36 @@ pub mod proposal {
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         #[prost(message, tag = "34")]
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Execute multiple proposal actions sequentially. Stops at first failure.
+        #[prost(message, tag = "35")]
+        Batch(super::Batch),
     }
+}
+/// Multiple actions to execute sequentially. Stop on first failure.
+///
+/// No recursion, i.e. Batch cannot contain batch.
+///
+/// # Topic
+///
+/// All constituent actions must have the same topic.
+///
+/// This has the topic of its constituents.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Batch {
+    /// The steps to take.
+    /// Proposal includes some fields that are superfluous in this context
+    /// (title, summary, etc). The only part we use here is the `action` oneof.
+    /// The others will be left blank.
+    #[prost(message, repeated, tag = "1")]
+    pub actions: ::prost::alloc::vec::Vec<Proposal>,
 }
 /// Take a canister snapshot.
 #[derive(
@@ -1542,7 +1571,7 @@ pub struct ProposalData {
 pub struct SuccessfulProposalExecutionValue {
     #[prost(
         oneof = "successful_proposal_execution_value::ProposalType",
-        tags = "1, 2"
+        tags = "1, 2, 3"
     )]
     pub proposal_type: ::core::option::Option<successful_proposal_execution_value::ProposalType>,
 }
@@ -1562,6 +1591,8 @@ pub mod successful_proposal_execution_value {
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCodeOk),
         #[prost(message, tag = "2")]
         TakeCanisterSnapshot(super::TakeCanisterSnapshotOk),
+        #[prost(message, tag = "3")]
+        Batch(super::BatchOk),
     }
 }
 #[derive(
@@ -1589,6 +1620,23 @@ pub struct CreateCanisterAndInstallCodeOk {
 pub struct TakeCanisterSnapshotOk {
     #[prost(bytes = "vec", tag = "1")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+}
+/// The result of successfully executing a Batch proposal.
+/// Each element corresponds to the same-indexed sub-action in the batch.
+/// Sub-actions that produce no value have an empty SuccessfulProposalExecutionValue
+/// (i.e. proposal_type is not set).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct BatchOk {
+    #[prost(message, repeated, tag = "1")]
+    pub sub_results: ::prost::alloc::vec::Vec<SuccessfulProposalExecutionValue>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(

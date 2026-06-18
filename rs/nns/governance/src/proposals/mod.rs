@@ -1,12 +1,14 @@
 use crate::{
+    are_batch_proposals_enabled,
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
-        ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateCanisterAndInstallCode,
+        ApproveGenesisKyc, Batch, BlessAlternativeGuestOsVersion, CreateCanisterAndInstallCode,
         CreateServiceNervousSystem, DeregisterKnownNeuron, GovernanceError, InstallCode,
         KnownNeuron, LoadCanisterSnapshot, ManageNeuron, Motion, NetworkEconomics, ProposalData,
-        RewardNodeProvider, RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister,
-        TakeCanisterSnapshot, Topic, UpdateCanisterSettings, Vote, governance_error::ErrorType,
-        proposal::Action,
+        RewardNodeProvider, RewardNodeProviders, SelfDescribingProposalAction, SelfDescribingValue,
+        SelfDescribingValueArray, StopOrStartCanister, TakeCanisterSnapshot, Topic,
+        UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
+        self_describing_value,
     },
     proposals::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
@@ -64,6 +66,7 @@ pub(crate) enum ValidProposalAction {
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCode),
+    Batch(Vec<ValidProposalAction>),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -133,6 +136,7 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::CreateCanisterAndInstallCode(create_canister_and_install_code) => Ok(
                 ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code),
             ),
+            Action::Batch(batch) => try_into_valid_batch(batch).map(ValidProposalAction::Batch),
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -149,6 +153,68 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             )),
         }
     }
+}
+
+fn try_into_valid_batch(batch: Batch) -> Result<Vec<ValidProposalAction>, GovernanceError> {
+    if !are_batch_proposals_enabled() {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Batch proposals are not enabled yet.",
+        ));
+    }
+
+    // Validate length.
+    if batch.actions.is_empty() {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Batch proposal must have at least one action",
+        ));
+    }
+    if batch.actions.len() > 100 {
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!(
+                "Batch proposal may have at most 100 actions, but has {}",
+                batch.actions.len()
+            ),
+        ));
+    }
+
+    // Inspect that each element is compliant: nonempty, and not batch
+    // (no recursion). If so, convert it.
+    let mut result = Vec::with_capacity(batch.actions.len());
+    for (i, sub_proposal) in batch.actions.into_iter().enumerate() {
+        let sub_action = sub_proposal.action.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Action at index {i} in batch proposal is missing"),
+            )
+        })?;
+
+        // Disallow recursion. I.e. batch is not allowed to contain batch.
+        if matches!(sub_action, Action::Batch(_)) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Nesting batch proposals is not allowed.",
+            ));
+        }
+
+        // (Try to) convert the current sub-action.
+        let valid = ValidProposalAction::try_from(Some(sub_action)).map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Action at index {i} in batch proposal is invalid: {}",
+                    e.error_message
+                ),
+            )
+        })?;
+
+        // Looks good; add the sub-action to the final result.
+        result.push(valid);
+    }
+
+    Ok(result)
 }
 
 impl ValidProposalAction {
@@ -186,6 +252,15 @@ impl ValidProposalAction {
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
                 create_canister_and_install_code.valid_topic()?
             }
+            ValidProposalAction::Batch(actions) => actions
+                .first()
+                .ok_or_else(|| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "Batch proposal must have at least one action",
+                    )
+                })?
+                .topic()?,
         };
         Ok(topic)
     }
@@ -288,8 +363,41 @@ impl ValidProposalAction {
             ValidProposalAction::RewardNodeProviders(reward_node_providers) => Ok(
                 SelfDescribingProposalAction::from(reward_node_providers.clone()),
             ),
+            ValidProposalAction::Batch(actions) => batch_to_self_describing(actions, env).await,
         }
     }
+}
+
+async fn batch_to_self_describing(
+    actions: &[ValidProposalAction],
+    env: Arc<dyn Environment>,
+) -> Result<SelfDescribingProposalAction, GovernanceError> {
+    let mut converted_actions = vec![];
+    for action in actions {
+        let action = Box::pin(action.to_self_describing(env.clone())).await?;
+        converted_actions.push(action.value.ok_or_else(|| {
+            // This wouldn't happen, because to_self_describing would never set it to
+            // None, but this is handled anyway.
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                "Batch sub-action produced no self-describing value",
+            )
+        })?);
+    }
+
+    Ok(SelfDescribingProposalAction {
+        type_name: "Batch".to_string(),
+        type_description: "Multiple proposal actions. Executed sequentially. \
+            Stops at the first failure."
+            .to_string(),
+        value: Some(SelfDescribingValue {
+            value: Some(self_describing_value::Value::Array(
+                SelfDescribingValueArray {
+                    values: converted_actions,
+                },
+            )),
+        }),
+    })
 }
 
 const SNS_RELATED_CANISTER_IDS: [&CanisterId; 2] =

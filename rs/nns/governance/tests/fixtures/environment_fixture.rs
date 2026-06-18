@@ -3,11 +3,7 @@ use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
 use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_governance::governance::RandomnessGenerator;
-use ic_nns_governance::{
-    governance::{Environment, HeapGrowthPotential, RngError},
-    pb::v1::GovernanceError,
-    proposals::execute_nns_function::ValidExecuteNnsFunction,
-};
+use ic_nns_governance::governance::{Environment, HeapGrowthPotential, RngError};
 use ic_sns_root::GetSnsCanistersSummaryRequest;
 use ic_sns_swap::pb::v1::GetStateRequest;
 use ic_sns_wasm::pb::v1::{DeployNewSnsRequest, ListDeployedSnsesRequest};
@@ -154,14 +150,6 @@ impl EnvironmentFixture {
 impl Environment for EnvironmentFixture {
     fn now(&self) -> u64 {
         self.environment_fixture_state.try_lock().unwrap().now
-    }
-
-    fn execute_nns_function(
-        &self,
-        _proposal_id: u64,
-        _update: &ValidExecuteNnsFunction,
-    ) -> Result<(), GovernanceError> {
-        unimplemented!()
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {

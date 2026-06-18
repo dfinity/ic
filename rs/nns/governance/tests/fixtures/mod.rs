@@ -33,7 +33,6 @@ use ic_nns_governance::{
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
         proposal,
     },
-    proposals::execute_nns_function::ValidExecuteNnsFunction,
     storage::reset_stable_memory,
 };
 use ic_nns_governance_api::{
@@ -594,18 +593,6 @@ impl Environment for NNSFixture {
         self.nns_state.try_lock().unwrap().environment.now()
     }
 
-    fn execute_nns_function(
-        &self,
-        proposal_id: u64,
-        update: &ValidExecuteNnsFunction,
-    ) -> Result<(), GovernanceError> {
-        self.nns_state
-            .try_lock()
-            .unwrap()
-            .environment
-            .execute_nns_function(proposal_id, update)
-    }
-
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         self.nns_state
             .try_lock()
@@ -1017,14 +1004,6 @@ impl RandomnessGenerator for NNS {
 impl Environment for NNS {
     fn now(&self) -> u64 {
         self.fixture.now()
-    }
-
-    fn execute_nns_function(
-        &self,
-        proposal_id: u64,
-        update: &ValidExecuteNnsFunction,
-    ) -> Result<(), GovernanceError> {
-        self.fixture.execute_nns_function(proposal_id, update)
     }
 
     fn heap_growth_potential(&self) -> HeapGrowthPotential {

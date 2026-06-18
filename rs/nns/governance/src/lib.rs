@@ -213,6 +213,9 @@ thread_local! {
     static ENABLE_CREATE_CANISTER_AND_INSTALL_CODE_PROPOSALS: Cell<bool>
         = const { Cell::new(true) };
 
+    static ENABLE_BATCH_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
         = const { Cell::new(false) };
 
@@ -283,6 +286,20 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
+}
+
+pub fn are_batch_proposals_enabled() -> bool {
+    ENABLE_BATCH_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_batch_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BATCH_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_batch_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BATCH_PROPOSALS, false)
 }
 
 pub fn are_create_canister_and_install_code_proposals_enabled() -> bool {

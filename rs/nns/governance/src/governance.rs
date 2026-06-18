@@ -31,10 +31,9 @@ use crate::{
         record_node_provider_rewards,
     },
     pb::{
-        self,
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
+            self as pb, ArchivedMonthlyNodeProviderRewards, Ballot, BatchOk,
             CreateServiceNervousSystem, Followees, GetNeuronsFundAuditInfoRequest,
             GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
             KnownNeuron, ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards,
@@ -42,7 +41,7 @@ use crate::{
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
-            RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
+            RewardNodeProvider, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, SuccessfulProposalExecutionValue, Tally, Topic,
             UpdateNodeProvider, Vote, VotingPowerEconomics, WaitForQuietState,
             archived_monthly_node_provider_rewards,
@@ -67,6 +66,7 @@ use crate::{
             settle_neurons_fund_participation_response::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
+            successful_proposal_execution_value::ProposalType as SuccessfulProposalExecutionProposalType,
             swap_background_information,
         },
     },
@@ -74,7 +74,6 @@ use crate::{
         ValidProposalAction,
         call_canister::{CallCanister, CallCanisterReply},
         execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
-        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         sum_weighted_voting_power,
     },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
@@ -541,6 +540,7 @@ impl Action {
             Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
             Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
             Action::CreateCanisterAndInstallCode(_) => "ACTION_CREATE_CANISTER_AND_INSTALL_CODE",
+            Action::Batch(_) => "ACTION_BATCH",
         }
     }
 }
@@ -1049,17 +1049,6 @@ pub trait Environment: Send + Sync {
     fn set_time_warp(&self, _new_time_warp: TimeWarp) {
         panic!("Not implemented.");
     }
-
-    /// Executes a `ValidExecuteNnsFunction`. The standard implementation is
-    /// expected to call out to another canister and eventually report the
-    /// result back
-    ///
-    /// See also call_candid_method.
-    fn execute_nns_function(
-        &self,
-        proposal_id: u64,
-        update: &ValidExecuteNnsFunction,
-    ) -> Result<(), GovernanceError>;
 
     /// Returns rough information as to how much the heap can grow.
     ///
@@ -3170,14 +3159,11 @@ impl Governance {
     /// On failure:
     ///   - `failure_reason`: set to the error (unless already executed).
     ///   - `failed_timestamp_seconds`: set to now (unless already executed).
-    pub(crate) fn set_proposal_execution_status<Reply>(
+    fn set_proposal_execution_status(
         &mut self,
         proposal_id: u64,
-        result: Result</* reply: */ Vec<u8>, GovernanceError>,
-    ) where
-        Reply: CallCanisterReply,
-        SuccessfulProposalExecutionValue: From<Reply>,
-    {
+        result: Result<Option<SuccessfulProposalExecutionValue>, GovernanceError>,
+    ) {
         let now_timestamp_seconds = self.env.now();
 
         // Fetch the ProposalData.
@@ -3210,8 +3196,7 @@ impl Governance {
             return;
         }
 
-        // Handle fail.
-        let encoded_reply: Vec<u8> = match result {
+        let success_value = match result {
             Ok(ok) => ok,
             Err(error) => {
                 println!(
@@ -3232,24 +3217,7 @@ impl Governance {
             LOG_PREFIX, proposal_id, title,
         );
         proposal_data.executed_timestamp_seconds = now_timestamp_seconds;
-
-        // Set success_value.
-        let reply = match Reply::try_decode(&encoded_reply) {
-            Ok(ok) => ok,
-            Err(err) => {
-                println!(
-                    "{}Failed to decode reply of successfully executed proposal: {} (title: {}). Error: {:?} reply: {}",
-                    LOG_PREFIX,
-                    proposal_id,
-                    title,
-                    err,
-                    humanize_blob(&encoded_reply, 200),
-                );
-
-                return;
-            }
-        };
-        proposal_data.success_value = reply.map(SuccessfulProposalExecutionValue::from);
+        proposal_data.success_value = success_value;
         if proposal_data.success_value.is_some() {
             println!(
                 "{}Proposal {} (title: {}): success_value set to {:?}.",
@@ -3769,7 +3737,7 @@ impl Governance {
                 // This should not happen as the proposal was validated when it was created. The
                 // only way it can happen is that some validation is added after the proposal was
                 // created.
-                self.set_proposal_execution_status::<()>(
+                self.set_proposal_execution_status(
                     proposal_id,
                     Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
@@ -3929,7 +3897,7 @@ impl Governance {
         }
     }
 
-    async fn reward_node_provider_helper(
+    async fn try_perform_reward_node_provider(
         &mut self,
         reward: &RewardNodeProvider,
     ) -> Result<(), GovernanceError> {
@@ -3978,11 +3946,6 @@ impl Governance {
     }
 
     /// Rewards a node provider.
-    async fn reward_node_provider(&mut self, pid: u64, reward: &RewardNodeProvider) {
-        let result = self.reward_node_provider_helper(reward).await;
-        self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
-    }
-
     /// Mint and transfer the specified Node Provider rewards
     async fn reward_node_providers(
         &mut self,
@@ -3991,7 +3954,7 @@ impl Governance {
         let mut result = Ok(());
 
         for reward in rewards {
-            let reward_result = self.reward_node_provider_helper(reward).await;
+            let reward_result = self.try_perform_reward_node_provider(reward).await;
             if reward_result.is_err() {
                 println!(
                     "Rewarding {:?} failed. Reason: {:}",
@@ -4003,21 +3966,6 @@ impl Governance {
         }
 
         result
-    }
-
-    /// Execute a RewardNodeProviders proposal
-    async fn reward_node_providers_from_proposal(
-        &mut self,
-        pid: u64,
-        reward_nps: RewardNodeProviders,
-    ) {
-        let result = if reward_nps.use_registry_derived_rewards == Some(true) {
-            self.mint_monthly_node_provider_rewards().await
-        } else {
-            self.reward_node_providers(&reward_nps.rewards).await
-        };
-
-        self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
     }
 
     /// Return `true` if `NODE_PROVIDER_REWARD_PERIOD_SECONDS` has passed since the last monthly
@@ -4154,148 +4102,161 @@ impl Governance {
     }
 
     async fn perform_action(&mut self, pid: u64, action: ValidProposalAction) {
+        let result = self.try_perform_action(pid, action).await;
+        self.set_proposal_execution_status(pid, result);
+    }
+
+    #[rustfmt::skip]
+    async fn try_perform_action(
+        &mut self,
+        proposal_id: u64,
+        action: ValidProposalAction,
+    ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError> {
         match action {
-            ValidProposalAction::ManageNeuron(mgmt) => {
-                // An adopted neuron management command is executed
-                // with the privileges of the controller of the
-                // neuron.
-                match mgmt.get_neuron_id_or_subaccount() {
-                    Ok(Some(ref managed_neuron_id)) => {
-                        if let Ok(controller) = self.with_neuron_by_neuron_id_or_subaccount(
-                            managed_neuron_id,
-                            |managed_neuron| managed_neuron.controller(),
-                        ) {
-                            let result = self.manage_neuron(&controller, &mgmt).await;
-                            match result.command {
-                                Some(manage_neuron_response::Command::Error(err)) => {
-                                    let err = GovernanceError::from(err);
-                                    self.set_proposal_execution_status::<()>(pid, Err(err))
-                                }
-                                _ => self.set_proposal_execution_status::<()>(pid, Ok(vec![])),
-                            };
-                        } else {
-                            self.set_proposal_execution_status::<()>(
-                                pid,
-                                Err(GovernanceError::new_with_message(
-                                    ErrorType::NotAuthorized,
-                                    "Couldn't execute manage neuron proposal.\
-                                        The neuron was not found.",
-                                )),
-                            );
-                        }
-                    }
-                    Ok(None) => {
-                        self.set_proposal_execution_status::<()>(
-                            pid,
-                            Err(GovernanceError::new_with_message(
-                                ErrorType::NotFound,
-                                "Couldn't execute manage neuron proposal.\
-                                          The neuron was not found.",
-                            )),
-                        );
-                    }
-                    Err(e) => self.set_proposal_execution_status::<()>(pid, Err(e)),
-                }
-            }
-            ValidProposalAction::ManageNetworkEconomics(network_economics) => {
-                self.perform_manage_network_economics(pid, network_economics);
-            }
-            // A motion is not executed, just recorded for posterity.
-            ValidProposalAction::Motion(_) => {
-                self.set_proposal_execution_status::<()>(pid, Ok(vec![]));
-            }
-            ValidProposalAction::ExecuteNnsFunction(m) => {
-                // This will eventually set the proposal execution
-                // status.
-                match self.env.execute_nns_function(pid, &m) {
-                    Ok(()) => {
-                        // The status will be set as a result of this
-                        // call. We don't set it now.
-                    }
-                    Err(_) => {
-                        self.set_proposal_execution_status::<()>(
-                            pid,
-                            Err(GovernanceError::new_with_message(
-                                ErrorType::External,
-                                "Couldn't execute NNS function through proposal",
-                            )),
-                        );
-                    }
-                }
-            }
-            ValidProposalAction::ApproveGenesisKyc(proposal) => {
-                let result = self.approve_genesis_kyc(&proposal.principals);
-                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
-            }
-            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
-                let result =
-                    add_or_remove_node_provider.execute(&mut self.heap_data.node_providers);
-                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
-            }
-            ValidProposalAction::RewardNodeProvider(ref reward) => {
-                self.reward_node_provider(pid, reward).await;
-            }
-            ValidProposalAction::RewardNodeProviders(proposal) => {
-                self.reward_node_providers_from_proposal(pid, proposal)
-                    .await;
-            }
-            ValidProposalAction::RegisterKnownNeuron(register_request) => {
-                let result = register_request.execute(&mut self.neuron_store);
-                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
-            }
-            ValidProposalAction::DeregisterKnownNeuron(deregister_request) => {
-                let result = deregister_request.execute(&mut self.neuron_store);
-                self.set_proposal_execution_status::<()>(pid, result.map(|()| vec![]));
-            }
-            ValidProposalAction::CreateServiceNervousSystem(ref create_service_nervous_system) => {
-                self.create_service_nervous_system(pid, create_service_nervous_system)
-                    .await;
-            }
-            ValidProposalAction::InstallCode(install_code) => {
-                self.perform_call_canister(pid, install_code).await;
-            }
-            ValidProposalAction::StopOrStartCanister(stop_or_start) => {
-                self.perform_call_canister(pid, stop_or_start).await;
-            }
-            ValidProposalAction::UpdateCanisterSettings(update_settings) => {
-                self.perform_call_canister(pid, update_settings).await;
-            }
-            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
-                self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
-                    .await
-            }
-            ValidProposalAction::BlessAlternativeGuestOsVersion(
-                bless_alternative_guest_os_version,
-            ) => self.perform_bless_alternative_guest_os_version(
-                pid,
-                bless_alternative_guest_os_version,
-            ),
-            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
-                self.perform_call_canister(pid, take_canister_snapshot)
-                    .await;
-            }
-            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
-                self.perform_call_canister(pid, load_canister_snapshot)
-                    .await;
-            }
-            ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
-                self.perform_call_canister(pid, create_canister_and_install_code)
-                    .await;
-            }
+            ValidProposalAction::Motion(_) => Ok(None),
+
+            // Execution consists of calling self.try_perform_${specific_action} (and maybe some result re-shaping).
+
+            // Sync.
+            ValidProposalAction::ApproveGenesisKyc(a)                => self.try_perform_approve_genesis_kyc(&a.principals).map(|()| None),
+            ValidProposalAction::ManageNetworkEconomics(a)           => self.try_perform_manage_network_economics(a).map(|()| None),
+            // Async.
+            ValidProposalAction::Batch(a)                            => self.try_perform_batch(proposal_id, a).await,
+            ValidProposalAction::CreateServiceNervousSystem(a)       => self.try_perform_create_service_nervous_system(proposal_id, a).await.map(|()| None),
+            ValidProposalAction::ExecuteNnsFunction(a)               => self.try_perform_execute_nns_function(proposal_id, a).await,
+            ValidProposalAction::ManageNeuron(a)                     => self.try_perform_manage_neuron(a).await,
+            ValidProposalAction::RewardNodeProvider(a)               => self.try_perform_reward_node_provider(&a).await.map(|()| None),
+            ValidProposalAction::RewardNodeProviders(a)              => self.try_perform_reward_node_providers(a).await,
+
+            // These do not require (all of) Governance, but maybe just one (sub)field in Governance.
+            ValidProposalAction::AddOrRemoveNodeProvider(a)          => a.execute(&mut self.heap_data.node_providers).map(|()| None),
+            ValidProposalAction::BlessAlternativeGuestOsVersion(a)   => a.execute().map(|()| None),
+            ValidProposalAction::DeregisterKnownNeuron(a)            => a.execute(&mut self.neuron_store).map(|()| None),
+            ValidProposalAction::FulfillSubnetRentalRequest(a)       => a.execute(ProposalId { id: proposal_id }, &self.env).await.map(|()| None),
+            ValidProposalAction::RegisterKnownNeuron(a)              => a.execute(&mut self.neuron_store).map(|()| None),
+
+            ValidProposalAction::CreateCanisterAndInstallCode(a)     => self.try_call_canister(proposal_id, a).await,
+            ValidProposalAction::InstallCode(a)                      => self.try_call_canister(proposal_id, a).await,
+            ValidProposalAction::LoadCanisterSnapshot(a)             => self.try_call_canister(proposal_id, a).await,
+            ValidProposalAction::StopOrStartCanister(a)              => self.try_call_canister(proposal_id, a).await,
+            ValidProposalAction::TakeCanisterSnapshot(a)             => self.try_call_canister(proposal_id, a).await,
+            ValidProposalAction::UpdateCanisterSettings(a)           => self.try_call_canister(proposal_id, a).await,
         }
     }
 
-    fn perform_manage_network_economics(
+    async fn try_perform_manage_neuron(
         &mut self,
-        proposal_id: u64,
-        proposed_network_economics: NetworkEconomics,
-    ) {
-        let result = self.perform_manage_network_economics_impl(proposed_network_economics);
-        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
+        manage_neuron: Box<ManageNeuron>,
+    ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError> {
+        // Get the target neuron's controller. This will be passed to manage_neuron
+        // (where the main implementation of the canister's method of the same name
+        // lives). This way, a ManageNeuron proposal has all the same powers over
+        // the neuron as its controller.
+        let Some(target_neuron_id) = manage_neuron.get_neuron_id_or_subaccount()? else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "Couldn't execute manage neuron proposal. The neuron was not found.",
+            ));
+        };
+        let controller = self
+            .with_neuron_by_neuron_id_or_subaccount(&target_neuron_id, |n| n.controller())
+            .map_err(|_| {
+                GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    "Couldn't execute manage neuron proposal. \
+                    The neuron was not found.",
+                )
+            })?;
+
+        // Apply mutation(s) to the target neuron.
+        let result = self.manage_neuron(&controller, &manage_neuron).await;
+
+        // Reshape result so that it has the same type as try_perform_action.
+        match result.command {
+            Some(manage_neuron_response::Command::Error(err)) => Err(GovernanceError::from(err)),
+            _ => Ok(None),
+        }
     }
 
-    /// Only call this from perform_manage_network_economics.
-    fn perform_manage_network_economics_impl(
+    async fn try_perform_execute_nns_function(
+        &mut self,
+        proposal_id: u64,
+        execute_nns_function: ValidExecuteNnsFunction,
+    ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError> {
+        // Enrich the request with additional information.
+        let proposal_timestamp_seconds = self
+            .get_proposal_data(ProposalId { id: proposal_id })
+            .map(|d| d.proposal_timestamp_seconds)
+            .ok_or_else(|| GovernanceError::new(ErrorType::PreconditionFailed))?;
+        let encoded_request = execute_nns_function
+            .re_encode_payload_to_target_canister(proposal_id, proposal_timestamp_seconds)?;
+
+        // Call the canister.
+        let (canister_id, method) = execute_nns_function.nns_function.canister_and_function();
+        let result = self
+            .env
+            .call_canister_method(canister_id, method, encoded_request)
+            .await;
+
+        // Reshape the result so that it is of the same type as the return value
+        // of try_perform_action.
+        result
+            .map(|_throw_away_reply| None)
+            .map_err(|(code, message)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error executing ExecuteNnsFunction proposal {proposal_id}. \
+                         Rejection code: {code:?}. Message: {message}"
+                    ),
+                )
+            })
+    }
+
+    async fn try_perform_reward_node_providers(
+        &mut self,
+        reward_node_providers: pb::RewardNodeProviders,
+    ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError> {
+        if reward_node_providers.use_registry_derived_rewards == Some(true) {
+            self.mint_monthly_node_provider_rewards()
+                .await
+                .map(|()| None)
+        } else {
+            self.reward_node_providers(&reward_node_providers.rewards)
+                .await
+                .map(|()| None)
+        }
+    }
+
+    async fn try_perform_batch(
+        &mut self,
+        proposal_id: u64,
+        subactions: Vec<ValidProposalAction>,
+    ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError> {
+        let mut sub_results = Vec::with_capacity(subactions.len());
+        for (i, sub_action) in subactions.into_iter().enumerate() {
+            match Box::pin(self.try_perform_action(proposal_id, sub_action)).await {
+                Ok(value) => sub_results.push(value.unwrap_or_default()),
+                Err(e) => {
+                    return Err(GovernanceError {
+                        error_message: format!(
+                            "Step {i} in batch proposal {proposal_id} failed: {}",
+                            e.error_message
+                        ),
+                        ..e
+                    });
+                }
+            }
+        }
+
+        Ok(Some(SuccessfulProposalExecutionValue {
+            proposal_type: Some(SuccessfulProposalExecutionProposalType::Batch(BatchOk {
+                sub_results,
+            })),
+        }))
+    }
+
+    fn try_perform_manage_network_economics(
         &mut self,
         proposed_network_economics: NetworkEconomics,
     ) -> Result<(), GovernanceError> {
@@ -4317,53 +4278,53 @@ impl Governance {
         Ok(())
     }
 
-    async fn perform_fulfill_subnet_rental_request(
+    /// Sends request, and decodes reply.
+    async fn try_call_canister<Request>(
         &mut self,
         proposal_id: u64,
-        fulfill_subnet_rental_request: ValidFulfillSubnetRentalRequest,
-    ) {
-        let result = fulfill_subnet_rental_request
-            .execute(ProposalId { id: proposal_id }, &self.env)
-            .await;
-        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
-    }
-
-    fn perform_bless_alternative_guest_os_version(
-        &mut self,
-        proposal_id: u64,
-        bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
-    ) {
-        let result = bless_alternative_guest_os_version.execute();
-        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
-    }
-
-    /// Sends request, decodes reply, and sets proposal execution status (this last part was
-    /// added later in Mar, 2026).
-    async fn perform_call_canister<Request>(&mut self, proposal_id: u64, request: Request)
+        request: Request,
+    ) -> Result<Option<SuccessfulProposalExecutionValue>, GovernanceError>
     where
         Request: CallCanister,
         SuccessfulProposalExecutionValue: From<Request::Reply>,
     {
-        let result: Result<Vec<u8>, GovernanceError> = async {
-            let (canister_id, function) = request.canister_and_function()?;
-            let payload = request.payload()?;
+        let (canister_id, function) = request.canister_and_function()?;
+        let payload = request.payload()?;
+        let encoded_reply = self
+            .env
+            .call_canister_method(canister_id, function, payload)
+            .await
+            .map_err(|(code, message)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling external canister for proposal {proposal_id}. \
+                        Rejection code: {code:?} message: {message}"
+                    ),
+                )
+            })?;
 
-            self.env
-                .call_canister_method(canister_id, function, payload)
-                .await
-                .map_err(|(code, message)| {
-                    GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "Error calling external canister for proposal {proposal_id}. \
-                            Rejection code: {code:?} message: {message}"
-                        ),
-                    )
-                })
-        }
-        .await;
+        // Decode reply.
+        let reply: Option<_ /* Reply */> = match Request::Reply::try_decode(&encoded_reply) {
+            Ok(ok) => ok,
+            Err(err) => {
+                println!(
+                    "{}ERROR: Failed to decode reply of successfully executed proposal {}. \
+                    Error: {:?} reply: {}",
+                    LOG_PREFIX,
+                    proposal_id,
+                    err,
+                    humanize_blob(&encoded_reply, 200),
+                );
 
-        self.set_proposal_execution_status::<Request::Reply>(proposal_id, result);
+                // It might seem surprising that we return Ok in this case, but the
+                // reason for this is that the primary desired effect of the proposal
+                // has most likely taken place, because the canister did not reject.
+                return Ok(None);
+            }
+        };
+
+        Ok(reply.map(SuccessfulProposalExecutionValue::from))
     }
 
     fn set_sns_token_swap_lifecycle_to_open(proposal_data: &mut ProposalData) {
@@ -4387,21 +4348,10 @@ impl Governance {
         }
     }
 
-    async fn create_service_nervous_system(
+    async fn try_perform_create_service_nervous_system(
         &mut self,
         proposal_id: u64,
-        create_service_nervous_system: &CreateServiceNervousSystem,
-    ) {
-        let result = self
-            .do_create_service_nervous_system(proposal_id, create_service_nervous_system)
-            .await;
-        self.set_proposal_execution_status::<()>(proposal_id, result.map(|()| vec![]));
-    }
-
-    async fn do_create_service_nervous_system(
-        &mut self,
-        proposal_id: u64,
-        create_service_nervous_system: &CreateServiceNervousSystem,
+        create_service_nervous_system: CreateServiceNervousSystem,
     ) -> Result<(), GovernanceError> {
         // Get the current time of proposal execution.
         let current_timestamp_seconds = self.env.now();
@@ -4420,8 +4370,10 @@ impl Governance {
                 let (
                     initial_neurons_fund_participation_snapshot,
                     neurons_fund_participation_constraints,
-                ) = self
-                    .draw_maturity_from_neurons_fund(&proposal_id, create_service_nervous_system)?;
+                ) = self.draw_maturity_from_neurons_fund(
+                    &proposal_id,
+                    &create_service_nervous_system,
+                )?;
                 (
                     initial_neurons_fund_participation_snapshot,
                     Some(neurons_fund_participation_constraints),
@@ -4581,7 +4533,7 @@ impl Governance {
 
     /// Mark all Neurons controlled by the given principals as having passed
     /// KYC verification
-    pub fn approve_genesis_kyc(
+    pub fn try_perform_approve_genesis_kyc(
         &mut self,
         principals: &[PrincipalId],
     ) -> Result<(), GovernanceError> {
@@ -4918,6 +4870,12 @@ impl Governance {
             }
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
                 create_canister_and_install_code.validate()
+            }
+            ValidProposalAction::Batch(actions) => {
+                for action in actions {
+                    self.validate_proposal_action(action)?;
+                }
+                Ok(())
             }
         }
     }
@@ -7700,8 +7658,8 @@ impl Governance {
 
         Ok(MonthlyNodeProviderRewards {
             timestamp: now,
-            start_date: Some(pb::v1::DateUtc::try_from(start_date).expect("from date exists")),
-            end_date: Some(pb::v1::DateUtc::try_from(end_date).expect("to date exists")),
+            start_date: Some(pb::DateUtc::try_from(start_date).expect("from date exists")),
+            end_date: Some(pb::DateUtc::try_from(end_date).expect("to date exists")),
             rewards,
             xdr_conversion_rate: Some(xdr_conversion_rate.into()),
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),

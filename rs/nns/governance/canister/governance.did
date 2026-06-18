@@ -25,6 +25,7 @@ type Action = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
+  Batch : Batch;
 };
 
 type AddHotKey = record {
@@ -255,9 +256,14 @@ type TakeCanisterSnapshotOk = record {
   snapshot_id : blob;
 };
 
+type BatchOk = record {
+  sub_results : vec opt SuccessfulProposalExecutionValue;
+};
+
 type SuccessfulProposalExecutionValue = variant {
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
   TakeCanisterSnapshot : TakeCanisterSnapshotOk;
+  Batch : BatchOk;
 };
 
 type CreateServiceNervousSystem = record {
@@ -1096,6 +1102,15 @@ type ProposalActionRequest = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
+  Batch : BatchRequest;
+};
+
+type Batch = record {
+  actions : opt vec Action;
+};
+
+type BatchRequest = record {
+  actions : opt vec ProposalActionRequest;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental

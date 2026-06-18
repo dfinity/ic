@@ -57,7 +57,7 @@ use ic_nns_governance::{
     governance_proto_builder::GovernanceProtoBuilder,
     is_mission_70_voting_rewards_enabled,
     pb::v1::{
-        AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
+        AddOrRemoveNodeProvider, Ballot, BallotInfo, Batch, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
         InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MaturityModulation,
         MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronType, NeuronsFundData,
@@ -89,7 +89,6 @@ use ic_nns_governance::{
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_neurons_fund_participation_request, swap_background_information,
     },
-    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance::{
     canister_state::{governance_mut, set_governance_for_tests},
@@ -4133,7 +4132,8 @@ fn test_approve_kyc() {
             .expect("Neuron not found")
     );
 
-    gov.approve_genesis_kyc(&[principal1, principal2]).unwrap();
+    gov.try_perform_approve_genesis_kyc(&[principal1, principal2])
+        .unwrap();
 
     assert!(
         gov.neuron_store
@@ -11126,14 +11126,6 @@ impl Environment for MockEnvironment<'_> {
         DEFAULT_TEST_START_TIMESTAMP_SECONDS
     }
 
-    fn execute_nns_function(
-        &self,
-        _proposal_id: u64,
-        _update: &ValidExecuteNnsFunction,
-    ) -> Result<(), GovernanceError> {
-        panic!("Unexpected call to Environment::execute_nns_function");
-    }
-
     fn heap_growth_potential(&self) -> HeapGrowthPotential {
         HeapGrowthPotential::NoIssue
     }
@@ -14392,6 +14384,66 @@ async fn test_grandfathering() {
             .unwrap()
             .followees
             .contains(&NeuronId { id: 1 })
+    );
+}
+
+#[tokio::test]
+async fn test_batch_proposal_with_two_motions() {
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        fixture_for_following(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
+
+    gov.make_proposal(
+        &NeuronId { id: 1 },
+        &principal(1),
+        &Proposal {
+            title: Some("Batch of two motions".to_string()),
+            summary: "test".to_string(),
+            action: Some(proposal::Action::Batch(Batch {
+                actions: vec![
+                    Proposal {
+                        action: Some(proposal::Action::Motion(Motion {
+                            motion_text: "First motion".to_string(),
+                        })),
+                        ..Default::default()
+                    },
+                    Proposal {
+                        action: Some(proposal::Action::Motion(Motion {
+                            motion_text: "Second motion".to_string(),
+                        })),
+                        ..Default::default()
+                    },
+                ],
+            })),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Vote in the proposal.
+    for neuron_id in 5_u64..=8 {
+        fake::register_vote_assert_success(
+            &mut gov,
+            principal(neuron_id),
+            NeuronId { id: neuron_id },
+            ProposalId { id: 1 },
+            Vote::Yes,
+        );
+    }
+
+    gov.process_voting_state_machines().await;
+
+    assert_eq!(
+        ProposalStatus::Executed,
+        gov.get_proposal_data(ProposalId { id: 1 })
+            .unwrap()
+            .status()
     );
 }
 

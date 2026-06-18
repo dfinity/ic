@@ -1,7 +1,5 @@
-use crate::{
-    governance::{Environment, Governance, HeapGrowthPotential, RandomnessGenerator, RngError},
-    pb::v1::{GovernanceError, governance_error::ErrorType},
-    proposals::execute_nns_function::ValidExecuteNnsFunction,
+use crate::governance::{
+    Environment, Governance, HeapGrowthPotential, RandomnessGenerator, RngError,
 };
 
 use async_trait::async_trait;
@@ -11,7 +9,6 @@ use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_runtime::Runtime;
 use ic_nervous_system_time_helpers::now_seconds;
-use ic_nns_common::types::ProposalId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -181,60 +178,6 @@ impl Environment for CanisterEnv {
     #[cfg(any(test, feature = "test"))]
     fn set_time_warp(&self, new_time_warp: crate::governance::TimeWarp) {
         *self.time_warp.write().unwrap() = new_time_warp;
-    }
-
-    fn execute_nns_function(
-        &self,
-        proposal_id: u64,
-        execute_nns_function: &ValidExecuteNnsFunction,
-    ) -> Result<(), crate::pb::v1::GovernanceError> {
-        let reply = move || {
-            governance_mut().set_proposal_execution_status::<()>(proposal_id, Ok(vec![]));
-        };
-        let reject = move |(code, msg): (i32, String)| {
-            let mut msg = msg;
-            // There's no guarantee that the reject response is a string of character, and
-            // it can also be potential large. Propagating error information
-            // here is on a best-effort basis.
-            const MAX_REJECT_MSG_SIZE: usize = 10000;
-            if msg.len() > MAX_REJECT_MSG_SIZE {
-                msg = "(truncated error message) "
-                    .to_string()
-                    .chars()
-                    .chain(
-                        msg.char_indices()
-                            .take_while(|(pos, _)| *pos < MAX_REJECT_MSG_SIZE)
-                            .map(|(_, char)| char),
-                    )
-                    .collect();
-            }
-
-            governance_mut().set_proposal_execution_status::<()>(
-                proposal_id,
-                Err(GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!(
-                        "Error executing ExecuteNnsFunction proposal. Error Code: {code}. Rejection message: {msg}"
-                    ),
-                )),
-            );
-        };
-        let (canister_id, method) = execute_nns_function.nns_function.canister_and_function();
-        let proposal_timestamp_seconds = governance()
-            .get_proposal_data(ProposalId(proposal_id))
-            .map(|data| data.proposal_timestamp_seconds)
-            .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
-        let encoded_request = execute_nns_function
-            .re_encode_payload_to_target_canister(proposal_id, proposal_timestamp_seconds)?;
-
-        ic_cdk::futures::spawn_017_compat(async move {
-            match CdkRuntime::call_bytes_with_cleanup(canister_id, method, &encoded_request).await {
-                Ok(_) => reply(),
-                Err(e) => reject(e),
-            }
-        });
-
-        Ok(())
     }
 
     async fn call_canister_method(
