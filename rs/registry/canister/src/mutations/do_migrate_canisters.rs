@@ -248,19 +248,17 @@ mod test {
         assert_eq!(updated_routing_table, expected_routing_table);
     }
 
+    // Verify that migrate_canisters succeeds when the target subnet does not exist
+    // (has no key in subnet_list and no ranges in routing_table), e.g.,
+    // after the target subnet has been deleted.
     #[test]
     fn test_migrate_canisters_succeeds_if_target_subnet_does_not_exist() {
-        // Verify that migrate_canisters succeeds when the target subnet does not exist
-        // (has no key in subnet_list and no ranges in routing_table).
-        //
-        // We simulate this by using a subnet ID that is not in the routing table to begin with.
-
         let mut registry = invariant_compliant_registry(0);
         let system_subnet_id =
             PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
                 .unwrap();
 
-        // Set up routing table: system subnet covers 0–255.
+        // Set up routing table: system subnet covers canister 0–255.
         let mut initial_routing_table = RoutingTable::new();
         initial_routing_table
             .insert(
@@ -276,10 +274,13 @@ mod test {
             initial_routing_table,
         ));
 
+        // We simulate a deleted subnet by using a subnet ID
+        // that is not in the routing table to begin with.
+        let non_existent_subnet_id = PrincipalId::new_user_test_id(42);
+
         // Migrate canister 100 to a non-existent target subnet.
         // The target subnet is not in the routing table, so the endpoint must succeed
         // without adding any range for the target subnet.
-        let non_existent_subnet_id = PrincipalId::new_user_test_id(42);
         let response = registry.do_migrate_canisters(MigrateCanistersPayload {
             canister_ids: vec![PrincipalId::from(CanisterId::from_u64(100))],
             target_subnet_id: non_existent_subnet_id,
@@ -292,7 +293,7 @@ mod test {
         );
 
         // Canister 100 was removed from the system subnet's range and not assigned to
-        // any other subnet (target absent from routing table), leaving a gap at 100.
+        // any other subnet (as target subnet is absent from routing table), leaving a gap at 100.
         let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
         let mut expected_routing_table = RoutingTable::new();
         expected_routing_table
