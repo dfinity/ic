@@ -390,7 +390,7 @@ fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterI
         .with_subnet_type(SubnetType::Application)
         .build();
     // Use no-heartbeat WASM for the callee so that heartbeat charges don't
-    // interfere with cycle-balance assertions in tests.
+    // interfere with assertions on cycles balance in tests.
     let callee_id = env
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),

@@ -88,6 +88,10 @@ impl CanisterSettings {
         self.reserved_cycles_limit
     }
 
+    pub fn minimum_incoming_canister_call_cycles(&self) -> Option<Cycles> {
+        self.minimum_incoming_canister_call_cycles
+    }
+
     pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
     }
@@ -106,10 +110,6 @@ impl CanisterSettings {
 
     pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
         self.environment_variables.as_ref()
-    }
-
-    pub fn minimum_incoming_canister_call_cycles(&self) -> Option<Cycles> {
-        self.minimum_incoming_canister_call_cycles
     }
 }
 

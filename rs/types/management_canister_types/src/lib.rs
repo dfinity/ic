@@ -1461,6 +1461,10 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
+    pub fn minimum_incoming_canister_call_cycles(&self) -> candid::Nat {
+        self.minimum_incoming_canister_call_cycles.clone()
+    }
+
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
     }
@@ -1495,10 +1499,6 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn environment_variables(&self) -> &[EnvironmentVariable] {
         &self.environment_variables
-    }
-
-    pub fn minimum_incoming_canister_call_cycles(&self) -> candid::Nat {
-        self.minimum_incoming_canister_call_cycles.clone()
     }
 }
 
@@ -2532,7 +2532,7 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
-    /// Sets the minimum number of cycles required for an incoming canister-to-canister message.
+    /// Sets the minimum number of cycles required for an incoming message from another canister.
     pub fn with_minimum_incoming_canister_call_cycles(
         self,
         minimum_incoming_canister_call_cycles: u128,

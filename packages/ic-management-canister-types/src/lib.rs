@@ -191,7 +191,7 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Upper limit on [`CanisterStatusResult::reserved_cycles`] of the canister.
     pub reserved_cycles_limit: Nat,
-    /// Minimum number of cycles required for an incoming canister-to-canister message.
+    /// Minimum number of cycles required for an incoming message from another canister.
     pub minimum_incoming_canister_call_cycles: Nat,
     /// Visibility of canister logs.
     pub log_visibility: LogVisibility,

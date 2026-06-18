@@ -727,7 +727,7 @@ pub struct CanisterStateBits {
     /// The user-specified upper limit on `reserved_balance`.
     #[prost(message, optional, tag = "39")]
     pub reserved_balance_limit: ::core::option::Option<super::super::queues::v1::Cycles>,
-    /// The minimum number of cycles required for an incoming canister-to-canister message.
+    /// The minimum number of cycles required for an incoming message from another canister.
     #[prost(message, optional, tag = "68")]
     pub minimum_incoming_canister_call_cycles:
         ::core::option::Option<super::super::queues::v1::Cycles>,
