@@ -503,14 +503,21 @@ impl Firewall {
 
         // This is the eventual list of rules fetched from the registry.
         // It is built in the order of the priority:
-        // Node > Subnet > Replica Nodes > Global
+        // Node > Subnet > Cloud Engine (cloud engines only) > Replica Nodes > Global
         let mut tcp_rules = Vec::<FirewallRule>::new();
         let mut udp_rules = Vec::<FirewallRule>::new();
 
         let firewall_scopes_to_fetch = match role {
-            Role::AssignedReplica(subnet_id) | Role::AssignedCloudEngine(subnet_id) => vec![
+            Role::AssignedReplica(subnet_id) => vec![
                 FirewallRulesScope::Node(self.node_id),
                 FirewallRulesScope::Subnet(subnet_id),
+                FirewallRulesScope::ReplicaNodes,
+                FirewallRulesScope::Global,
+            ],
+            Role::AssignedCloudEngine(subnet_id) => vec![
+                FirewallRulesScope::Node(self.node_id),
+                FirewallRulesScope::Subnet(subnet_id),
+                FirewallRulesScope::CloudEngines,
                 FirewallRulesScope::ReplicaNodes,
                 FirewallRulesScope::Global,
             ],
@@ -1556,10 +1563,17 @@ mod tests {
         );
         add_firewall_rules_record(
             &registry_data_provider,
-            RegistryVersion::from(registry_version),
+            registry_version,
             &FirewallRulesScope::ApiBoundaryNodes,
             /*ip=*/ "7.7.7.7",
             /*port=*/ 1007,
+        );
+        add_firewall_rules_record(
+            &registry_data_provider,
+            registry_version,
+            &FirewallRulesScope::CloudEngines,
+            /*ip=*/ "8.8.8.8",
+            /*port=*/ 1008,
         );
 
         let mut subnet_ids = vec![system_subnet_id, app_subnet_id, cloud_engine_id];
