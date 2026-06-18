@@ -2995,19 +2995,18 @@ fn network_topology_reference_subnet_size_is_never_zero() {
     assert_ne!(SEV_REFERENCE_SUBNET_SIZE, 0);
 
     let subnet_id = subnet_test_id(1);
-    for (subnet_type, sev_enabled) in [
-        (SubnetType::Application, false),
-        (SubnetType::Application, true),
-        (SubnetType::VerifiedApplication, false),
-        (SubnetType::VerifiedApplication, true),
-        (SubnetType::System, false),
-        (SubnetType::System, true),
+    for subnet_type in [
+        SubnetType::Application,
+        SubnetType::VerifiedApplication,
+        SubnetType::System,
     ] {
-        let topology = make_network_topology_with_subnet(subnet_id, subnet_type, sev_enabled);
-        assert_ne!(
-            topology.get_reference_subnet_size(&subnet_id).unwrap(),
-            0,
-            "reference_subnet_size must not be zero for {subnet_type:?} sev={sev_enabled}"
-        );
+        for sev_enabled in [false, true] {
+            let topology = make_network_topology_with_subnet(subnet_id, subnet_type, sev_enabled);
+            assert_ne!(
+                topology.get_reference_subnet_size(&subnet_id).unwrap(),
+                0,
+                "reference_subnet_size must not be zero for {subnet_type:?} sev={sev_enabled}"
+            );
+        }
     }
 }
