@@ -50,7 +50,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
-use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_registry::{RegistryClient, RegistryRecord};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateHashMetadata,
     StateManager, StateReader,
@@ -92,6 +92,7 @@ use ic_protobuf::{
         v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
     },
 };
+use ic_query_stats::QueryStatsCollector;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -101,8 +102,9 @@ use ic_registry_client_helpers::{
 use ic_registry_keys::{
     NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, make_canister_migrations_record_key,
     make_canister_ranges_key, make_catch_up_package_contents_key,
-    make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
-    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
+    make_chain_key_enabled_subnet_list_key, make_crypto_node_key,
+    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -149,8 +151,9 @@ use ic_types::{
         ValidationContext, XNetPayload,
     },
     canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseReceipt,
     },
     consensus::{
         block_maker::SubnetRecords,
@@ -519,6 +522,56 @@ fn add_subnet_local_registry_records(
         subnet_id,
         record,
     );
+}
+
+pub fn remove_subnet_local_registry_records(
+    subnet_id: SubnetId,
+    nodes: &[StateMachineNode],
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
+    let mut keys = vec![
+        make_catch_up_package_contents_key(subnet_id),
+        make_crypto_threshold_signing_pubkey_key(subnet_id),
+        make_subnet_record_key(subnet_id),
+    ];
+    for node in nodes {
+        keys.push(make_node_record_key(node.node_id));
+        keys.push(make_crypto_tls_cert_key(node.node_id));
+        for key_purpose in [
+            KeyPurpose::NodeSigning,
+            KeyPurpose::CommitteeSigning,
+            KeyPurpose::DkgDealingEncryption,
+            KeyPurpose::IDkgMEGaEncryption,
+        ] {
+            keys.push(make_crypto_node_key(node.node_id, key_purpose));
+        }
+    }
+    let records = keys
+        .into_iter()
+        .map(|key| RegistryRecord {
+            key,
+            version: registry_version,
+            value: None,
+        })
+        .collect();
+    registry_data_provider.add_registry_records(records);
+}
+
+pub fn remove_chain_key_registry_records(
+    chain_key_ids: &[MasterPublicKeyId],
+    registry_data_provider: Arc<ProtoRegistryDataProvider>,
+    registry_version: RegistryVersion,
+) {
+    let records = chain_key_ids
+        .iter()
+        .map(|key_id| RegistryRecord {
+            key: make_chain_key_enabled_subnet_list_key(key_id),
+            version: registry_version,
+            value: None,
+        })
+        .collect();
+    registry_data_provider.add_registry_records(records);
 }
 
 fn add_cup_contents_and_key_record(
@@ -1197,10 +1250,10 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
+    local_query_execution_stats: Arc<QueryStatsCollector>,
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
 }
 
@@ -1885,7 +1938,7 @@ impl StateMachine {
             .unwrap()
             .get_validated_shares()
             .filter_map(|share| {
-                if inducted.contains(&share.content.id) {
+                if inducted.contains(&share.content.id()) {
                     Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
                 } else {
                     None
@@ -1948,6 +2001,8 @@ impl StateMachine {
 
         // Finally execute the payload.
         self.execute_payload(payload);
+        self.local_query_execution_stats
+            .set_epoch_from_height(self.state_manager.latest_state_height());
     }
 
     /// Reload registry derived from a *shared* registry data provider
@@ -2382,10 +2437,10 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
+            local_query_execution_stats: execution_services.local_query_execution_stats,
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            cost_schedule,
             hypervisor_config,
         }
     }
@@ -2718,19 +2773,22 @@ impl StateMachine {
                 canister_id,
                 content: content.clone(),
             };
-            let response_metadata = CanisterHttpResponseMetadata {
-                id: CallbackId::from(request_id),
-                registry_version,
-                content_hash: ic_types::crypto::crypto_hash(&response),
-                content_size: content.count_bytes() as u32,
-                is_reject: content.is_reject(),
-                replica_version: ReplicaVersion::default(),
+            let receipt_share = CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: CallbackId::from(request_id),
+                    registry_version,
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    content_size: content.count_bytes() as u32,
+                    is_reject: content.is_reject(),
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt::default(),
             };
             let signature = CryptoReturningOk::default()
-                .sign(&response_metadata, node.node_id, registry_version)
+                .sign(&receipt_share, node.node_id, registry_version)
                 .unwrap();
             let share = Signed {
-                content: response_metadata,
+                content: receipt_share,
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
@@ -4617,12 +4675,10 @@ impl StateMachine {
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
-        let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             &msg,
             effective_canister_id,
-            subnet_size,
-            self.cost_schedule,
+            self.get_latest_state().get_own_subnet_cycles_config(),
         )
     }
 
@@ -5133,7 +5189,7 @@ impl StateMachine {
             .read()
             .unwrap()
             .get_validated_shares()
-            .map(|share| share.content.id)
+            .map(|share| share.content.id())
             .collect();
         let state = self.state_manager.get_latest_state().take();
         state

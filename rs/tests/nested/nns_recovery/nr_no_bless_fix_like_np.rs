@@ -32,7 +32,6 @@ use std::time::Duration;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .allocate_testnet_to_local_dc()
         .with_setup(|env| {
             setup(
                 env,

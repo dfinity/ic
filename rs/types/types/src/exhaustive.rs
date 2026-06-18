@@ -2,6 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::batch::ChainKeyAgreement;
+use crate::canister_http::CanisterHttpResponseSignature;
 use crate::consensus::dkg::RemoteDkgAttempts;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
@@ -601,7 +602,7 @@ impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignat
     }
 }
 
-impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<T>> {
+impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<U>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let signatures_map: BTreeMap<_, _> = NodeId::exhaustive_set(rng)
             .into_iter()
@@ -1030,6 +1031,7 @@ impl HasId<SubnetId> for CertifiedStreamSlice {}
 impl HasId<NiDkgTargetId> for RemoteDkgAttempts {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
+impl HasId<NodeId> for CanisterHttpResponseSignature {}
 
 #[cfg(test)]
 mod tests {
