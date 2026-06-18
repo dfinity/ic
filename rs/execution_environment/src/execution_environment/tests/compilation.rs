@@ -9,7 +9,7 @@ mod execution_tests {
     use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
     use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
     use ic_types::methods::WasmMethod;
-    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+    use ic_types_cycles::Cycles;
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::collections::BTreeSet;
@@ -268,8 +268,7 @@ mod execution_tests {
                     .cycles_account_manager()
                     .execution_cost(
                         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + reduced_compilation_instructions,
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                     )
                     .real()
@@ -309,8 +308,7 @@ mod execution_tests {
                     .cycles_account_manager()
                     .execution_cost(
                         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + compilation_instructions,
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                     )
                     .real()
