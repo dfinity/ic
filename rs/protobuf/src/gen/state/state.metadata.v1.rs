@@ -455,6 +455,9 @@ pub struct SubnetCallContextManager {
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
     #[prost(message, repeated, tag = "19")]
     pub pre_signature_stashes: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
+    #[prost(message, repeated, tag = "20")]
+    pub delivered_canister_http_request_contexts:
+        ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {

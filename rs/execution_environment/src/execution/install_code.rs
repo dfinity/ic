@@ -4,6 +4,7 @@
 use crate::execution::common::{log_dirty_pages, validate_controller};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges},
     wasmtime_embedder::system_api::ExecutionParameters,
@@ -313,8 +314,7 @@ impl InstallCodeHelper {
             message_instruction_limit,
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            original.subnet_cycles_config,
             original.wasm_execution_mode,
             round.log,
         );
@@ -360,8 +360,7 @@ impl InstallCodeHelper {
             let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
                 bytes,
                 &original.execution_parameters.subnet_memory_saturation,
-                original.subnet_size,
-                round.cost_schedule,
+                original.subnet_cycles_config,
             );
 
             match self
@@ -408,8 +407,7 @@ impl InstallCodeHelper {
                     self.canister.memory_usage(),
                     self.canister.message_memory_usage(),
                     self.canister.system_state.reserved_balance(),
-                    original.subnet_size,
-                    round.cost_schedule,
+                    original.subnet_cycles_config,
                     reveal_top_up,
                 )
             {
@@ -836,7 +834,7 @@ pub(crate) struct OriginalContext {
     pub prepaid_execution_cycles: CompoundCycles<Instructions>,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
-    pub subnet_size: usize,
+    pub subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
@@ -883,8 +881,7 @@ pub(crate) fn finish_err(
         message_instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
-        original.subnet_size,
-        round.cost_schedule,
+        original.subnet_cycles_config,
         original.wasm_execution_mode,
         round.log,
     );
