@@ -799,6 +799,31 @@ mod metrics {
     }
 
     #[test]
+    fn should_export_archiving_histogram_metrics_after_archiving() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_archiving_histogram_metrics_present_after_archiving(
+            ledger_wasm(),
+            encode_init_args,
+            LedgerSuiteType::ICRC,
+        );
+    }
+
+    #[test]
+    fn should_record_archiving_histogram_for_multi_chunk_run() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_archiving_histogram_records_multi_chunk(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
+
+    #[test]
+    fn should_record_archiving_histogram_on_failure() {
+        ic_ledger_suite_state_machine_tests::metrics::assert_archiving_histogram_records_failure(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
+
+    #[test]
     fn should_compute_and_export_total_volume_metric() {
         ic_ledger_suite_state_machine_tests::metrics::should_compute_and_export_total_volume_metric(
             ledger_wasm(),

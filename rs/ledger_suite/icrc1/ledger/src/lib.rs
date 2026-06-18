@@ -14,6 +14,7 @@ use ic_certification::{
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_canister_core::archive::ArchivingStats;
 use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
 use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
 use ic_ledger_canister_core::{
@@ -506,6 +507,10 @@ pub enum LedgerArgument {
     Upgrade(Option<UpgradeArgs>),
 }
 
+use ic_ledger_canister_core::metrics::{
+    ARCHIVING_CHUNKS_BUCKETS, ARCHIVING_DURATION_BUCKETS, HistogramData,
+};
+
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
@@ -540,6 +545,65 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
+
+    static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+        const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
+    static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData<8>> =
+        const { RefCell::new(HistogramData::new(&ARCHIVING_DURATION_BUCKETS)) };
+    static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData<4>> =
+        const { RefCell::new(HistogramData::new(&ARCHIVING_CHUNKS_BUCKETS)) };
+}
+
+/// Encodes the archiving histograms (`ledger_archiving_duration_seconds`,
+/// `ledger_archiving_chunk_duration_seconds`, `ledger_archiving_chunks`) in
+/// Prometheus format. Each individual histogram is omitted until it has at
+/// least one observation.
+pub fn encode_archiving_metrics(
+    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+) -> std::io::Result<()> {
+    ARCHIVING_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_duration_seconds",
+            "Duration of archiving operations in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunk_duration_seconds",
+            "Duration of individual archive chunk operations (append_blocks calls) in seconds.",
+            h,
+        )
+    })?;
+    ARCHIVING_CHUNKS_HISTOGRAM.with_borrow(|h| {
+        encode_histogram(
+            w,
+            "ledger_archiving_chunks",
+            "Number of chunks per archiving operation.",
+            h,
+        )
+    })?;
+    Ok(())
+}
+
+fn encode_histogram<const N: usize>(
+    w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+    name: &str,
+    help: &str,
+    histogram: &HistogramData<N>,
+) -> std::io::Result<()> {
+    if histogram.count() == 0 {
+        return Ok(());
+    }
+    w.encode_histogram(
+        name,
+        histogram.per_bucket_counts().into_iter(),
+        histogram.sum(),
+        help,
+    )?;
+    Ok(())
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
@@ -836,6 +900,18 @@ impl LedgerData for Ledger {
 
     fn get_archiving_failure_metric(&self) -> u64 {
         ARCHIVING_FAILURES.get()
+    }
+
+    fn record_archiving_stats(&mut self, stats: ArchivingStats) {
+        ARCHIVING_DURATION_HISTOGRAM.with_borrow_mut(|total| {
+            ARCHIVING_CHUNK_DURATION_HISTOGRAM.with_borrow_mut(|per_chunk| {
+                ARCHIVING_CHUNKS_HISTOGRAM.with_borrow_mut(|num_chunks| {
+                    ic_ledger_canister_core::metrics::record_archiving_stats_into(
+                        &stats, total, per_chunk, num_chunks,
+                    );
+                });
+            });
+        });
     }
 }
 

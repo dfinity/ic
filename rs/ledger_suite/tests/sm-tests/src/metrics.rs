@@ -4,6 +4,7 @@ use crate::{
 };
 use candid::{CandidType, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_helpers::{parse_metric, retrieve_metrics};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
@@ -279,6 +280,208 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     .expect("transfer failed");
 
     increase_expected_total_volume_and_assert(u64::MAX - 10_000_000_000 + transfer_fee);
+}
+
+pub fn assert_archiving_histogram_metrics_present_after_archiving<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    ledger_suite_type: LedgerSuiteType,
+) where
+    T: CandidType,
+{
+    let (env, ledger_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    // Verify that archiving histogram metrics are NOT present before any archiving
+    let metrics_before = retrieve_metrics(&env, ledger_id);
+    assert!(
+        !metrics_before
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds")),
+        "Archiving duration histogram should not be present before archiving"
+    );
+
+    // Make enough transactions to trigger archiving
+    let p1 = PrincipalId::new_user_test_id(1);
+    for i in 0..=ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
+    }
+
+    // Verify that archiving histogram metrics ARE present after archiving
+    let metrics_after = retrieve_metrics(&env, ledger_id);
+
+    // Check for ledger_archiving_duration_seconds histogram
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds_bucket")),
+        "Expected ledger_archiving_duration_seconds_bucket metric after archiving"
+    );
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds_sum")),
+        "Expected ledger_archiving_duration_seconds_sum metric after archiving"
+    );
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_duration_seconds_count")),
+        "Expected ledger_archiving_duration_seconds_count metric after archiving"
+    );
+
+    // Check for ledger_archiving_chunk_duration_seconds histogram
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_chunk_duration_seconds_bucket")),
+        "Expected ledger_archiving_chunk_duration_seconds_bucket metric after archiving"
+    );
+
+    // Check for ledger_archiving_chunks histogram
+    assert!(
+        metrics_after
+            .iter()
+            .any(|line| line.contains("ledger_archiving_chunks_bucket")),
+        "Expected ledger_archiving_chunks_bucket metric after archiving"
+    );
+
+    // Verify that the count metrics show 1 observation
+    let count_value = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+    assert_eq!(
+        count_value, 1,
+        "Expected 1 archiving operation, got {}",
+        count_value
+    );
+
+    let archived_metric = match ledger_suite_type {
+        LedgerSuiteType::ICP => "ledger_archived_blocks",
+        LedgerSuiteType::ICRC => "ledger_archived_transactions",
+    };
+    let blocks_archived = parse_metric(&env, ledger_id, archived_metric);
+    assert_eq!(
+        blocks_archived, NUM_BLOCKS_TO_ARCHIVE,
+        "Expected {} blocks to be archived, got {}",
+        NUM_BLOCKS_TO_ARCHIVE, blocks_archived
+    );
+}
+
+/// Installs a ledger with a custom `max_message_size_bytes` for the archive,
+/// so tests can force a specific number of `append_blocks` chunks per archiving
+/// operation (or trigger the empty-chunk failure path).
+fn setup_with_archive_max_message_size<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    max_message_size_bytes: u64,
+) -> (StateMachine, CanisterId)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    let mut args = init_args(vec![]);
+    args.archive_options = ArchiveOptions {
+        max_message_size_bytes: Some(max_message_size_bytes),
+        ..args.archive_options
+    };
+    let encoded_args = Encode!(&encode_init_args(args)).unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm, encoded_args, None)
+        .unwrap();
+    (env, ledger_id)
+}
+
+/// Verifies that archiving an operation that spans multiple inter-canister
+/// `append_blocks` calls produces one observation in the per-archiving
+/// histograms (`ledger_archiving_duration_seconds`,
+/// `ledger_archiving_chunks`) but multiple observations in
+/// `ledger_archiving_chunk_duration_seconds`.
+pub fn assert_archiving_histogram_records_multi_chunk<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Small enough that NUM_BLOCKS_TO_ARCHIVE blocks won't fit in one
+    // `append_blocks` call. ICP/ICRC1 encoded blocks are >100 bytes each, so
+    // 256 bytes per chunk forces splitting.
+    const MAX_MESSAGE_SIZE_BYTES: u64 = 256;
+
+    let (env, ledger_id) =
+        setup_with_archive_max_message_size(ledger_wasm, encode_init_args, MAX_MESSAGE_SIZE_BYTES);
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    for i in 0..=ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
+    }
+
+    let archiving_runs = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+    assert_eq!(
+        archiving_runs, 1,
+        "Expected exactly 1 archiving operation, got {archiving_runs}"
+    );
+
+    let chunks_runs = parse_metric(&env, ledger_id, "ledger_archiving_chunks_count");
+    assert_eq!(
+        chunks_runs, 1,
+        "Expected 1 observation in ledger_archiving_chunks, got {chunks_runs}"
+    );
+
+    let chunk_duration_obs = parse_metric(
+        &env,
+        ledger_id,
+        "ledger_archiving_chunk_duration_seconds_count",
+    );
+    assert!(
+        chunk_duration_obs >= 2,
+        "Expected at least 2 chunk-duration observations (multi-chunk archiving), \
+         got {chunk_duration_obs}"
+    );
+}
+
+/// Verifies that, when an archiving operation fails, the failure counter
+/// increments AND the duration histogram still receives an observation. This
+/// pins the contract that `record_archiving_stats` runs on both Ok and Err
+/// branches of `archive_blocks`.
+pub fn assert_archiving_histogram_records_failure<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Smaller than any single encoded block, so `take_prefix` returns an empty
+    // chunk and `send_blocks_to_archive` short-circuits to ArchivingError.
+    const MAX_MESSAGE_SIZE_BYTES: u64 = 1;
+
+    let (env, ledger_id) =
+        setup_with_archive_max_message_size(ledger_wasm, encode_init_args, MAX_MESSAGE_SIZE_BYTES);
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    for i in 0..=ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
+    }
+
+    // A failed archiving attempt does not remove the blocks, so the archive
+    // trigger condition persists and archiving re-fires on subsequent rounds,
+    // failing each time. The counter therefore reflects the number of failed
+    // attempts (>= 1), not a single distinct failure. This matches the
+    // pre-existing per-attempt semantics of `increment_archiving_failure_metric`.
+    let failures = parse_metric(&env, ledger_id, "ledger_archiving_failures");
+    assert!(
+        failures >= 1,
+        "Expected ledger_archiving_failures >= 1 after a failed archiving attempt, got {failures}"
+    );
+
+    // `record_archiving_stats` runs on both the Ok and Err branches of
+    // `archive_blocks`, so each failed attempt also adds a duration observation.
+    let archiving_runs = parse_metric(&env, ledger_id, "ledger_archiving_duration_seconds_count");
+    assert!(
+        archiving_runs >= 1,
+        "Expected the archiving duration histogram to record the failed run(s), got count {archiving_runs}"
+    );
+    assert_eq!(
+        archiving_runs, failures,
+        "Every failed archiving attempt should record both a failure and a duration observation, \
+         got {archiving_runs} duration observations vs {failures} failures"
+    );
 }
 
 fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) {

@@ -1240,6 +1240,8 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ledger.get_archiving_failure_metric() as f64,
         "Number of archiving failures since canister initialization.",
     )?;
+
+    ledger_canister::encode_archiving_metrics(w)?;
     Ok(())
 }
 

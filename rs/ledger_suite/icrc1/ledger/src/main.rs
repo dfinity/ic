@@ -412,8 +412,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.approvals().get_num_approvals() as f64,
             "Total number of approvals.",
         )?;
-        Ok(())
-    })
+        Ok::<(), std::io::Error>(())
+    })?;
+
+    ic_icrc1_ledger::encode_archiving_metrics(w)?;
+    Ok(())
 }
 
 /// Update the total volume of token transactions. Since the total volume counter is an `f64`, it
