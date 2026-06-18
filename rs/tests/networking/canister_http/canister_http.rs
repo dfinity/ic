@@ -17,7 +17,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, PrincipalId};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use slog::info;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -67,6 +67,14 @@ pub fn install_nns_canisters(env: &TestEnv) {
 }
 
 pub fn setup(env: TestEnv) {
+    setup_with_cost_schedule(env, CanisterCyclesCostSchedule::Normal);
+}
+
+pub fn setup_with_free_cost_schedule(env: TestEnv) {
+    setup_with_cost_schedule(env, CanisterCyclesCostSchedule::Free);
+}
+
+fn setup_with_cost_schedule(env: TestEnv, cost_schedule: CanisterCyclesCostSchedule) {
     std::thread::scope(|s| {
         // Set up IC with 1 system subnet with one node, and one application subnet with 4 nodes.
         s.spawn(|| {
@@ -78,6 +86,7 @@ pub fn setup(env: TestEnv) {
                             http_requests: true,
                             ..SubnetFeatures::default()
                         })
+                        .with_cost_schedule(cost_schedule)
                         .add_nodes(4),
                 )
                 .setup_and_start(&env)

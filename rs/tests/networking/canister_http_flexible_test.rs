@@ -18,13 +18,14 @@ end::catalog[] */
 
 use anyhow::Result;
 use anyhow::bail;
+use candid::Decode;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, HttpMethod, TransformContext,
-    TransformFunc,
+    BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, FlexibleHttpRequestResult, HttpMethod,
+    TransformContext, TransformFunc,
 };
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
@@ -38,7 +39,7 @@ use slog::{Logger, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(canister_http::setup)
+        .with_setup(canister_http::setup_with_free_cost_schedule)
         .add_test(systest!(test))
         .execute_from_args()?;
 
@@ -75,58 +76,83 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
         RETRY_BACKOFF,
         || async {
             let context = "There is context to be appended in body";
-            let res = proxy_canister
-                .update_(
-                    "send_flexible_request",
-                    candid_one::<
-                        Result<Vec<u8>, (RejectionCode, String)>,
-                        FlexibleRemoteHttpRequest,
-                    >,
-                    FlexibleRemoteHttpRequest {
-                        request: FlexibleCanisterHttpRequestArgs {
-                            url: url.clone(),
-                            headers: BoundedHttpHeaders::new(vec![]),
-                            body: None,
-                            transform: Some(TransformContext {
-                                function: TransformFunc(candid::Func {
-                                    principal: proxy_canister.canister_id().get().0,
-                                    method: "transform_with_context".to_string(),
+            let res =
+                proxy_canister
+                    .update_(
+                        "send_flexible_request",
+                        candid_one::<
+                            Result<Vec<u8>, (RejectionCode, String)>,
+                            FlexibleRemoteHttpRequest,
+                        >,
+                        FlexibleRemoteHttpRequest {
+                            request: FlexibleCanisterHttpRequestArgs {
+                                url: url.clone(),
+                                headers: BoundedHttpHeaders::new(vec![]),
+                                body: None,
+                                transform: Some(TransformContext {
+                                    function: TransformFunc(candid::Func {
+                                        principal: proxy_canister.canister_id().get().0,
+                                        method: "transform_with_context".to_string(),
+                                    }),
+                                    context: context.as_bytes().to_vec(),
                                 }),
-                                context: context.as_bytes().to_vec(),
-                            }),
-                            method: HttpMethod::GET,
-                            replication: None,
+                                method: HttpMethod::GET,
+                                replication: None,
+                            },
+                            cycles: 500_000_000_000,
                         },
-                        cycles: 500_000_000_000,
-                    },
-                )
-                .await
-                .expect("Update call to proxy canister failed");
+                    )
+                    .await
+                    .expect("Update call to proxy canister failed");
 
-            let expected_error_msg = "FlexibleHttpRequest is not yet implemented";
-
-            match res {
-                Ok(_) => {
-                    bail!("Update call succeeded unexpectedly.");
-                }
+            let response_bytes = match res {
+                Ok(response_bytes) => response_bytes,
                 Err((code, message)) => {
-                    if message == expected_error_msg {
-                        info!(
-                            &logger,
-                            "Http request failed with expected error. Code: {:?}, Message: {}",
-                            code, message
-                        );
-                        Ok(())
-                    } else {
-                        bail!(
-                            "Http request failed with unexpected error. Code: {:?}, Message: '{}'. Expected: '{}'",
-                            code, message, expected_error_msg
-                        );
+                    bail!(
+                        "Flexible http request failed unexpectedly. Code: {:?}, Message: '{}'",
+                        code,
+                        message
+                    );
+                }
+            };
+
+            // The reply is the candid-encoded `FlexibleHttpRequestResult`.
+            let result =
+                candid::Decode!(&response_bytes, FlexibleHttpRequestResult).map_err(|err| {
+                    anyhow::anyhow!("Failed to decode FlexibleHttpRequestResult: {err}")
+                })?;
+
+            match result {
+                FlexibleHttpRequestResult::Ok(payloads) => {
+                    if payloads.is_empty() {
+                        bail!("Flexible http request returned no response payloads.");
                     }
+                    for payload in &payloads {
+                        if payload.status != 200 {
+                            bail!(
+                                "Flexible http request returned unexpected status {}.",
+                                payload.status
+                            );
+                        }
+                    }
+                    info!(
+                        &logger,
+                        "Flexible http request succeeded: {} response(s), status {}, {}-byte body.",
+                        payloads.len(),
+                        payloads[0].status,
+                        payloads[0].body.len(),
+                    );
+                    Ok(())
+                }
+                FlexibleHttpRequestResult::Err(err) => {
+                    bail!(
+                        "Flexible http request returned an error: '{}'.",
+                        err.message
+                    )
                 }
             }
         }
     )
     .await
-    .expect("Timeout waiting for http call to fail with the correct error");
+    .expect("Timeout waiting for the flexible http call to succeed");
 }
