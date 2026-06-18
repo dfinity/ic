@@ -72,6 +72,7 @@ use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, Signed
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
+    canister_http::Replication,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -567,6 +568,19 @@ impl ExecutionTest {
             request_size,
             response_size_limit,
             self.subnet_size(),
+            self.cost_schedule(),
+        )
+    }
+
+    pub fn http_request_base_fee(
+        &self,
+        request_size: NumBytes,
+        replication: &Replication,
+    ) -> CompoundCycles<HTTPOutcalls> {
+        self.cycles_account_manager.http_request_base_fee(
+            request_size,
+            self.subnet_size(),
+            replication,
             self.cost_schedule(),
         )
     }
@@ -2652,6 +2666,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
         self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_flexible_http_requests_enabled(mut self) -> Self {
+        self.execution_config.flexible_http_requests = FlagStatus::Enabled;
         self
     }
 

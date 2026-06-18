@@ -12,7 +12,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SubnetId,
-    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication},
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
@@ -1317,6 +1317,53 @@ impl CyclesAccountManager {
             * (subnet_size as u64);
 
         CompoundCycles::new(amount, cost_schedule)
+    }
+
+    pub fn http_request_base_fee(
+        &self,
+        request_size: NumBytes,
+        subnet_size: usize,
+        replication: &Replication,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> CompoundCycles<HTTPOutcalls> {
+        const BASE_FEE: u128 = 1_000_000;
+        const PER_REQUEST_BYTE_FEE: u128 = 50;
+        const FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
+        const FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
+        const FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
+        const FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
+        const FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
+
+        let n = subnet_size as u128;
+        let request_bytes = request_size.get() as u128;
+        let per_replica = match replication {
+            Replication::FullyReplicated => {
+                BASE_FEE
+                    + PER_REQUEST_BYTE_FEE * request_bytes
+                    + FULLY_REPLICATED_PER_NODE_FEE * n
+                    + FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
+            }
+            Replication::Flexible {
+                min_responses: min, ..
+            } => {
+                let min = *min as u128;
+                BASE_FEE
+                    + PER_REQUEST_BYTE_FEE * request_bytes
+                    + FLEXIBLE_PER_NODE_FEE * n
+                    + FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min
+                    + FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min
+            }
+            Replication::NonReplicated(_) => {
+                // Non-replicated is the same as flexible replication with min requests of 1.
+                BASE_FEE
+                    + PER_REQUEST_BYTE_FEE * request_bytes
+                    + FLEXIBLE_PER_NODE_FEE * n
+                    + FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
+                    + FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE
+            }
+        };
+
+        CompoundCycles::new(Cycles::new(n * per_replica), cost_schedule)
     }
 
     pub fn http_request_fee_v2(
