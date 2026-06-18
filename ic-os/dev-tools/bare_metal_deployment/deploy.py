@@ -431,7 +431,7 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 
 def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
-    command = f"python3 {idrac_script_dir}/{script_and_args}"
+    command = f"{sys.executable} {idrac_script_dir}/{script_and_args}"
     result = invoke.run(command)
 
     if result and not result.ok:
