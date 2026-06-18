@@ -585,8 +585,8 @@ impl CanisterHttpRequestContext {
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
             },
-            // The refund status is populated in `try_add_http_context_to_replicated_state`,
-            // once the base fee is subtracted from the request's payment.
+            // The refund status is populated in `try_add_http_context_to_replicated_state`
+            // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             // TODO: populate with the actual registry version this request is processed at.
             registry_version: RegistryVersion::from(0),
@@ -690,8 +690,8 @@ impl CanisterHttpRequestContext {
                 max_responses,
             },
             pricing_version: PricingVersion::PayAsYouGo,
-            // The refund status is populated in `try_add_http_context_to_replicated_state`,
-            // once the base fee is subtracted from the request's payment.
+            // The refund status is populated in `try_add_http_context_to_replicated_state`
+            // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             // TODO: populate with the actual registry version this request is processed at.
             registry_version: RegistryVersion::from(0),

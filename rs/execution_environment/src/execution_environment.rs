@@ -2174,7 +2174,7 @@ impl ExecutionEnvironment {
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "{} request sent with {} cycles, but {} cycles are required.",
-                    Ic00Method::HttpRequest,
+                    request.method_name,
                     request.payment,
                     charged_fee.real()
                 ),
