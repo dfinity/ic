@@ -21,6 +21,10 @@ on the process that this file is part of, see
 * Added `vcpu_type` to `GuestLaunchMeasurementMetadata` to record the virtual CPU type used for a guest launch measurement.
 * Added a new endpoint `get_subnet` to the registry canister, returning the subnet record
   of a given subnet.
+* The firewall rule endpoints (`add_firewall_rules`, `remove_firewall_rules`, and
+  `update_firewall_rules`) now accept a new `cloud_engines` scope
+  (`FirewallRulesScope::CloudEngines`). Firewall rules registered under this scope are
+  applied by assigned cloud engine nodes.
 
 ## Changed
 
