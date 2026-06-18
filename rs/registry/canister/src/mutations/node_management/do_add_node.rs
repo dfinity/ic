@@ -136,12 +136,15 @@ impl Registry {
                 "{LOG_PREFIX}do_add_node: Node reward type is required."
             ))?;
 
-            // TODO(CLO-15): Re-enable the max_rewardable_nodes quota check for
-            // type4.1-type4.4 once we no longer treat rewards of type4.5 as type1.1.
-            // For now, node providers may deploy arbitrarily many nodes of these
-            // types without being constrained by `max_rewardable_nodes`. Type4.5 is
-            // explicitly excluded from this exemption.
-            let bypass_max_rewardable_nodes_check = matches!(
+            // TODO(CLO-15): Remove the type4.1-type4.4 special case below once
+            // we no longer treat rewards of type4.5 as type1.1. For now, node
+            // providers must be able to deploy arbitrarily many nodes of these
+            // types without being constrained by `max_rewardable_nodes`. Rather
+            // than branching around the check, we model this as an effectively
+            // unbounded quota so the same code path is exercised for every
+            // reward type. Type4.5 is explicitly excluded from this exemption.
+            const EXCESSIVE_NUMBER_OF_TYPE_4_NODES: u32 = 1_000;
+            let is_unbounded_type4 = matches!(
                 node_reward_type,
                 NodeRewardType::Type4dot1
                     | NodeRewardType::Type4dot2
@@ -149,29 +152,31 @@ impl Registry {
                     | NodeRewardType::Type4dot4
             );
 
-            if !bypass_max_rewardable_nodes_check {
-                let max_rewardable_nodes_same_type = *node_operator_record
+            let max_rewardable_nodes_same_type = if is_unbounded_type4 {
+                EXCESSIVE_NUMBER_OF_TYPE_4_NODES
+            } else {
+                *node_operator_record
                     .max_rewardable_nodes
                     .get(&(node_reward_type.to_string()))
-                    .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
+                    .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?
+            };
 
-                let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
-                    .into_iter()
-                    .filter_map(|node| node.node_reward_type)
-                    .filter(|t| t == &(node_reward_type as i32))
-                    .count() as u32;
+            let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
+                .into_iter()
+                .filter_map(|node| node.node_reward_type)
+                .filter(|t| t == &(node_reward_type as i32))
+                .count() as u32;
 
-                // Validate node operator's max_rewardable_nodes quota
-                if max_rewardable_nodes_same_type
-                    <= num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type)
-                {
-                    return Err(format!(
-                        "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}.\
-                        Number of nodes in the registry with {node_reward_type} type = {num_in_registry_same_type},\
-                        Number of removed nodes with same IP and same type = {num_removed_same_ip_same_type},\
-                        {node_reward_type} quota = {max_rewardable_nodes_same_type}"
-                    ));
-                }
+            // Validate node operator's max_rewardable_nodes quota.
+            let num_remaining_nodes =
+                num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type);
+            if num_remaining_nodes >= max_rewardable_nodes_same_type {
+                return Err(format!(
+                    "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}.\
+                    Number of nodes in the registry with {node_reward_type} type = {num_in_registry_same_type},\
+                    Number of removed nodes with same IP and same type = {num_removed_same_ip_same_type},\
+                    {node_reward_type} quota = {max_rewardable_nodes_same_type}"
+                ));
             }
         }
 
@@ -1162,7 +1167,12 @@ mod tests {
                 registry_add_node_operator_for_node(&mut registry, node_ids[0], btreemap! {});
 
             // Adding several nodes of this type should all succeed even
-            // though no quota is configured.
+            // though no quota is configured. Note that for other reward types
+            // this would fail; the immediately following
+            // `should_panic_if_max_rewardable_nodes_is_exhausted_for_type4dot5`
+            // test demonstrates that the underlying quota check is still
+            // exercised, so passing here is meaningful and not simply due to
+            // the check being a no-op.
             for i in 0..3_u8 {
                 let (payload, _) = prepare_add_node_payload(10 + i, node_reward_type);
                 registry
