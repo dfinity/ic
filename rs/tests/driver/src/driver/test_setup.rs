@@ -42,6 +42,18 @@ pub enum SystemTestBackend {
     Local,
 }
 
+impl SystemTestBackend {
+    /// Determines the backend from the `SYSTEM_TEST_BACKEND` environment
+    /// variable, defaulting to [`SystemTestBackend::Farm`] unless it is set to
+    /// `"local"`.
+    pub fn from_env() -> Self {
+        match std::env::var("SYSTEM_TEST_BACKEND").as_deref() {
+            Ok("local") => SystemTestBackend::Local,
+            _ => SystemTestBackend::Farm,
+        }
+    }
+}
+
 impl TestEnvAttribute for SystemTestBackend {
     fn attribute_name() -> String {
         "system_test_backend".to_string()

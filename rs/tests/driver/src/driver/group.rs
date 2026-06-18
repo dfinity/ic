@@ -986,8 +986,7 @@ impl SystemTestGroup {
         // The Local backend has no TTL; libvirt resources live for the lifetime of the
         // libvirtd subprocess owned by the LocalBackend instance, so the keepalive task
         // (which refreshes the Farm group TTL) is not needed there.
-        let use_local_backend =
-            matches!(std::env::var("SYSTEM_TEST_BACKEND").as_deref(), Ok("local"));
+        let use_local_backend = SystemTestBackend::from_env() == SystemTestBackend::Local;
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
         let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !use_local_backend
         {
@@ -1410,10 +1409,7 @@ impl SystemTestGroup {
             if let Some(required_args) = args.required_host_features {
                 required_args.write_attribute(&root_env);
             }
-            let backend = match std::env::var("SYSTEM_TEST_BACKEND").as_deref() {
-                Ok("local") => SystemTestBackend::Local,
-                _ => SystemTestBackend::Farm,
-            };
+            let backend = SystemTestBackend::from_env();
             backend.write_attribute(&root_env);
             // Become a child-subreaper so that orphaned, double-forked daemons
             // (e.g. libvirtd/dnsmasq/QEMU started by the local backend, or any
