@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
 # ubuntu:resolute-20260413
-FROM ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4 as base
+FROM ghcr.io/dfinity/library/ubuntu@sha256:5e275723f82c67e387ba9e3c24baa0abdcb268917f276a0561c97bef9450d0b4 as packages
 
 ENV TZ=UTC
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -17,6 +17,20 @@ RUN touch /home/ubuntu/.ic-build-container
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
+
+# Build AFLplusplus in its own stage (off the package installation) so the slow
+# compilation is isolated and can run independently; the base stage below only
+# copies the resulting binaries. (`make install` puts the executables in
+# /usr/local/bin/ and the instrumentation passes/runtime in /usr/local/lib/afl/.)
+FROM packages as afl
+ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
+RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
+    cd /afl && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make install && \
+    rm -rf /afl
+
+FROM packages as base
 
 # Drop troublesome SSH file (Potentially related: Debian #1072221)
 RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
@@ -47,13 +61,10 @@ RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
-RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
-    cd /afl && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make install && \
-    rm -rf /afl
+# Copy the AFLplusplus binaries built in the `afl` stage. `make install` lands
+# everything under /usr/local (binaries in bin/, passes/runtime in lib/afl/), so
+# copying /usr/local merges those in alongside the tools installed above.
+COPY --from=afl /usr/local /usr/local
 
 # Install rustup proxies system-wide as root:
 # - Binaries land in /opt/cargo/bin/ owned by root, world-readable.
@@ -74,7 +85,11 @@ FROM base as build
 
 USER buildifier
 
-FROM base as dev
+FROM build as dev
+
+# The package installation below needs root; the `build` stage switched to the
+# buildifier user, so switch back to root for the setup steps.
+USER root
 
 # Add GitHub CLI repository to get the latest version
 RUN mkdir -p -m 755 /etc/apt/keyrings \
