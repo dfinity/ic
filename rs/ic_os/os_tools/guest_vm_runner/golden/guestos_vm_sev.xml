@@ -1,6 +1,6 @@
 <domain type='kvm' id='1'>
-  <name>guestos0</name>
-  <uuid>fd897da5-8017-41c8-8575-a706dba30700</uuid>
+  <name>guestos</name>
+  <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://ubuntu.com/ubuntu/26.04"/>
