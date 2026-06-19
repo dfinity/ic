@@ -87,6 +87,9 @@ def image_deps(mode, _malicious = False):
         # Allow root console access on dev
         console_override_label_1 = Label("//ic-os/hostos:console-override-dev")
         console_override_label_2 = Label("//ic-os/hostos:console-override-dev-alias")
+    elif "multi" in mode:
+        console_override_label_1 = Label("//ic-os/hostos:console-override-dev")
+        console_override_label_2 = Label("//ic-os/hostos:console-override-dev-alias")
     else:
         # Allow limited-console access on prod
         console_override_label_1 = Label("//ic-os/hostos:console-override-prod")

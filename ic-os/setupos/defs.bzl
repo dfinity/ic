@@ -66,7 +66,7 @@ def image_deps(mode, _malicious = False):
         })
 
     # Update dev rootfs
-    if "dev" in mode:
+    if "dev" in mode or "multi" in mode:
         deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})
 
@@ -100,7 +100,7 @@ def _custom_partitions(mode):
         include_nns_public_key_override = False
         deployment_environment = "mainnet"
     elif mode == "multi":
-        guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
+        guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/multi:disk-img.tar.zst")
         nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
         include_nns_public_key_override = False
@@ -129,7 +129,7 @@ def _custom_partitions(mode):
         Label("//ic-os/setupos:config/ssh_authorized_keys/admin"): "ssh_authorized_keys/admin",
     }
 
-    if "dev" in mode:
+    if "dev" in mode or "multi" in mode:
         config_dict[Label("//ic-os/setupos:config/node_operator_private_key.pem")] = "node_operator_private_key.pem"
 
     pkg_tar(
