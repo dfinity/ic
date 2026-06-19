@@ -827,7 +827,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         }
 
         match t {
-            LazyTree::Blob(b, None) if b.is_empty() => ht.new_leaf(EMPTY_LEAF_HASH),
+            LazyTree::Blob([], None) => ht.new_leaf(EMPTY_LEAF_HASH),
             LazyTree::Blob(b, None) => {
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(b);
