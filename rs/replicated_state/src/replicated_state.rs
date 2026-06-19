@@ -937,7 +937,7 @@ impl ReplicatedState {
             }
         }
 
-        let mut available_guaranteed_response_memory = i64::MAX / 2;
+        let mut available_guaranteed_response_memory = 0;
         let mut errors = Vec::new();
         for (canister_id, callbacks) in rejects {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
