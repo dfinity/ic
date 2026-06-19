@@ -197,7 +197,6 @@ jobs:
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
-      - run: ci/container/init.sh
       - name: Run Local System Tests
         uses: ./.github/actions/bazel
         with:
