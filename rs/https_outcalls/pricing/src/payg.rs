@@ -91,7 +91,7 @@ impl BudgetTracker for PayAsYouGoTracker {
         } = network_usage;
         let cost = PER_DOWNLOADED_BYTE_FEE
             .saturating_mul(response_size.get() as u128)
-            .saturating_add(PER_RESPONSE_MS_FEE.saturating_mul(response_time.as_millis() as u128));
+            .saturating_add(PER_RESPONSE_MS_FEE.saturating_mul(response_time.as_millis()));
         self.charge(cost)
     }
 
