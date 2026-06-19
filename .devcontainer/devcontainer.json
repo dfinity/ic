@@ -10,7 +10,7 @@
     "--cgroupns",
     "host",
     "--add-host",
-    "devenv-container:127.0.0.1",
+    "devenv-container:127.0.0.1"
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
