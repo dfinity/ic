@@ -177,6 +177,10 @@ impl Registry {
                 .count() as u32;
 
             // Validate node operator's max_rewardable_nodes quota.
+            // TODO(@pietrodimarco-dfinity): confirm whether `>=` is intended
+            // here (i.e. `num_remaining_nodes == max_rewardable_nodes_same_type`
+            // should reject) or whether this should be `>`. Preserving the
+            // pre-existing behavior for now.
             let num_remaining_nodes =
                 num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type);
             if num_remaining_nodes >= max_rewardable_nodes_same_type {
