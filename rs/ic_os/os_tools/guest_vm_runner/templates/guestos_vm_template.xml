@@ -20,7 +20,7 @@
   {% else %}
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
-    <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
+    <topology sockets='{{nr_of_sockets}}' cores='{{nr_of_cores}}' threads='{{nr_of_threads}}'/>
     <feature policy='require' name='topoext'/>
   </cpu>
   {%- if enable_sev %}

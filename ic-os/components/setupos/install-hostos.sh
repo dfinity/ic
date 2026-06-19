@@ -110,12 +110,12 @@ function resize_partition() {
 
 
         if [[ $node_reward_type =~ ^type4.1$ ]]; then
-            each=$((free / 16))
-            for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+            each=$((free / 32))
+            for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
                 lvcreate -i "${count}" --type striped -l $each -n guestos$i hostlvm >/dev/null 2>&1
                 log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
             done
-            lvcreate -i "${count}" --type striped -l 100%FREE -n guestos15 hostlvm >/dev/null 2>&1
+            lvcreate -i "${count}" --type striped -l 100%FREE -n guestos31 hostlvm >/dev/null 2>&1
             log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
         elif [[ $node_reward_type =~ ^type4.2$ ]]; then
             each=$((free / 8))

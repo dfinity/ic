@@ -31,6 +31,9 @@ pub struct GuestOSTemplateProps {
     pub console_log_path: String,
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
+    pub nr_of_sockets: u32,
+    pub nr_of_cores: u32,
+    pub nr_of_threads: u32,
     pub mac_address: macaddr::MacAddr6,
     pub disk_device: PathBuf,
     pub config_media_path: PathBuf,
@@ -123,7 +126,8 @@ pub fn generate_vm_config(
         node_type,
     );
 
-    let (cpu_domain, total_vm_memory, nr_of_vcpus) = vm_resources(config);
+    let (cpu_domain, total_vm_memory, nr_of_vcpus, nr_of_sockets, nr_of_cores, nr_of_threads) =
+        vm_resources(config);
 
     // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
     // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
@@ -155,6 +159,9 @@ pub fn generate_vm_config(
         console_log_path: serial_log_path.display().to_string(),
         vm_memory: vm_memory_gib,
         nr_of_vcpus,
+        nr_of_sockets,
+        nr_of_cores,
+        nr_of_threads,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -180,29 +187,48 @@ pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
 }
 
 #[cfg(not(feature = "dev"))]
-pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32, u32, u32, u32) {
     match &config.icos_settings.node_reward_type {
         Some(val) if val == "type4.1" => (
             "kvm".to_string(),
-            DEFAULT_VM_MEMORY_GIB / 16,
-            DEFAULT_VM_VCPUS / 16,
+            DEFAULT_VM_MEMORY_GIB / 32,
+            DEFAULT_VM_VCPUS / 32,
+            1,
+            DEFAULT_VM_VCPUS / 32,
+            1,
         ),
         Some(val) if val == "type4.2" => (
             "kvm".to_string(),
             DEFAULT_VM_MEMORY_GIB / 8,
             DEFAULT_VM_VCPUS / 8,
+            2,
+            DEFAULT_VM_VCPUS / 8 / 4,
+            2,
         ),
         Some(val) if val == "type4.3" => (
             "kvm".to_string(),
             DEFAULT_VM_MEMORY_GIB / 4,
             DEFAULT_VM_VCPUS / 4,
+            2,
+            DEFAULT_VM_VCPUS / 4 / 4,
+            2,
         ),
         Some(val) if val == "type4.4" => (
             "kvm".to_string(),
             DEFAULT_VM_MEMORY_GIB / 2,
             DEFAULT_VM_VCPUS / 2,
+            2,
+            DEFAULT_VM_VCPUS / 2 / 4,
+            2,
         ),
-        _ => ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS),
+        _ => (
+            "kvm".to_string(),
+            DEFAULT_VM_MEMORY_GIB,
+            DEFAULT_VM_VCPUS,
+            2,
+            DEFAULT_VM_VCPUS / 4,
+            2,
+        ),
     }
 }
 
@@ -215,7 +241,7 @@ pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: usize) -> String {
 
 pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: usize) -> String {
     match guest_vm_type {
-        GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba3076{slot:x}"),
+        GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba307{slot:02x}"),
         GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd".to_string(),
     }
 }
