@@ -566,7 +566,9 @@ impl StreamBuilderImpl {
                     };
                 }
 
-                // Destination subnet not found.
+                // Destination subnet not found: always consume the message immediately
+                // (no stream capacity check), so that `generate_reject_responses_for_deleted_subnets()`
+                // can rely on all such requests having an enqueued reject response after `build_streams()`.
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
@@ -608,6 +610,15 @@ impl StreamBuilderImpl {
         }
 
         for req in requests_to_reject {
+            // A response may already be enqueued if `generate_reject_responses_for_deleted_subnets()`
+            // ran before `build_streams()`. Skip to avoid a duplicate response.
+            if state.canister_state(&req.sender).is_some_and(|c| {
+                c.system_state
+                    .queues()
+                    .has_enqueued_response(&req.sender_reply_callback)
+            }) {
+                continue;
+            }
             let dst_canister_id = req.receiver;
             self.reject_local_request(
                 &mut state,
