@@ -947,9 +947,9 @@ impl ReplicatedState {
                     respondent,
                     originator_reply_callback: callback_id,
                     refund: Cycles::zero(),
-                    // Use the same reject code and message as canister uninstallation:
-                    // the callee may have partially executed the request before the subnet
-                    // was deleted, making this semantically equivalent to uninstallation.
+                    // Use the same reject code and message as canister uninstallation, but do not
+                    // refund cycles here: the deleted subnet may have partially executed the request
+                    // and consumed some or all of the payment/refund cycles.
                     response_payload: Payload::Reject(
                         RejectContext::new_with_message_length_limit(
                             RejectCode::CanisterReject,
