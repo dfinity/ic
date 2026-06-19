@@ -15,7 +15,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId, NumBytes, NumInstructions,
+    CanisterId, CountBytes, NumBytes, NumInstructions,
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
@@ -203,7 +203,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                 // Only apply the transform if a function name is specified
                 let transform_timer = metrics.transform_execution_duration.start_timer();
-                let max_response_size_bytes = budget.get_adapter_limits().max_response_size.get();
+                let max_response_size_bytes = budget.get_gossip_limit().get();
                 let transformed_payload = match &request_transform {
                     Some(transform) => {
                         let (transform_result, instruction_count) = transform_adapter_response(
@@ -261,6 +261,20 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 transformed_payload
             }
             .await;
+
+            let payload_size = match &payload {
+                Ok(data) => data.len(),
+                Err(reject) => reject.count_bytes(),
+            };
+            let payload = match budget.subtract_gossip_usage(payload_size) {
+                Ok(()) => payload,
+                Err(PricingError::InsufficientCycles) => {
+                    Err(CanisterHttpReject {
+                        reject_code: RejectCode::SysFatal,
+                        message: "Insufficient cycles".to_string(),
+                    })
+                }
+            };
 
             // Create the payment receipt after all processing is complete.
             let receipt = budget.create_payment_receipt();

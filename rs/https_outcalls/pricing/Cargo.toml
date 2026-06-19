@@ -8,4 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 ic-config = { path = "../../config" }
+ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
