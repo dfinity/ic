@@ -191,18 +191,8 @@ jobs:
     runs-on: *dind-large-setup
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5d243bf51c816ec96cf4db0690744171ca0eb76148dca0e34647c2048ae26e87
-      # `--group-add 993` gives the container -- and thus the bazel server that
-      # spawns the QEMU-backed `*_local` system tests -- membership in the
-      # runner's `kvm` group so it can open /dev/kvm. Supplementary group
-      # membership is fixed at process creation, so it must be granted here (at
-      # container creation), mirroring the `--group-add` in
-      # .devcontainer/devcontainer.json and ci/container/container-run.sh. 993 is
-      # the dfinity runners' /dev/kvm GID; GitHub Actions `container.options` is
-      # static, so -- unlike container-run.sh, which derives it via `stat -c %g
-      # /dev/kvm` -- it cannot be computed here and must match the runner.
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
-         --group-add 993
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers" --entrypoint=/ic/ci/container/init.sh
     timeout-minutes: 180
     steps:
       - *checkout

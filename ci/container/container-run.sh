@@ -227,13 +227,24 @@ if [ "$RUNTIME" = docker ]; then
     # CAP_SYS_ADMIN so newuidmap can set up the nested user namespace; and host
     # networking so the inner build reaches the registry. This is much narrower
     # than the --privileged podman uses below.
+    #
+    # /dev/kvm, /dev/net/tun and CAP_NET_ADMIN are additionally required by the local
+    # system-test backend (the `_local` tests; see
+    # rs/tests/driver/src/driver/local_backend.rs): it creates a per-group Linux
+    # bridge and per-VM TAP devices (`ip tuntap add`, which opens /dev/net/tun)
+    # via the baked-in `ic-net-admin` capability launcher, which can only raise
+    # CAP_NET_ADMIN into the ambient set if it is in the container's bounding
+    # set. podman's --privileged covers both; docker's defaults expose neither.
     RUNTIME_RUN_ARGS+=(
         --device /dev/fuse
+        --device /dev/kvm
+        --device /dev/net/tun
         --security-opt seccomp=unconfined
         --security-opt apparmor=unconfined
         --security-opt label=disable
         --security-opt systempaths=unconfined
         --cap-add SYS_ADMIN
+        --cap-add NET_ADMIN
         --network=host
 
         # docker exposes /dev/fuse as 0600 root:root; this shim opens it up so
@@ -243,7 +254,7 @@ if [ "$RUNTIME" = docker ]; then
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;
     # additionally, we need to use hosts's cgroups and network.
-    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
+    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host --entrypoint=/ic/ci/container/init.sh)
 fi
 
 # In the devenv, inject some extra files into the container for convenience
@@ -301,22 +312,6 @@ if [ -f "$HOME/.container-run.conf" ]; then
     warn "Sourcing user's ~/.container-run.conf"
     source "$HOME/.container-run.conf"
     RUNTIME_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
-fi
-
-# Grant /dev/kvm access from container start.
-#
-# /dev/kvm is owned by root:<kvm-gid> (mode 0660). The container's main process
-# and all its descendants (bazel, the test driver, the on-demand libvirtd and
-# qemu) inherit the supplementary groups podman assigns at container start and
-# never recompute them, so the only way they can open /dev/kvm is if the owning
-# GID is added as a supplementary group *at container creation time* -- which is
-# what we do here. Without it they cannot open /dev/kvm, and libvirtd then
-# probes/caches QEMU as not supporting `virt type 'kvm'` (the "Emulator
-# '/usr/bin/qemu-system-x86_64' does not support virt type 'kvm'" error). We add
-# it by numeric GID since the matching group may not exist in the image yet.
-if [ -e /dev/kvm ]; then
-    KVM_GID="$(stat -c %g /dev/kvm)"
-    RUNTIME_RUN_ARGS+=(--group-add "$KVM_GID")
 fi
 
 set -x

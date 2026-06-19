@@ -18,4 +18,4 @@ if [ ! -d /tmp/zig-cache ]; then
     sudo chown "$(id -u)":"$(id -g)" /tmp/zig-cache
 fi
 
-exec "$@"
+exec /ic/ci/container/init.sh "$@"
