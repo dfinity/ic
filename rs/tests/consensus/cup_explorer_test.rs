@@ -55,9 +55,8 @@ const DKG_INTERVAL: u64 = 14;
 // the registry's `do_recover_subnet` traps and the RecoverSubnet proposal fails.
 // On the fast single-node NNS subnet a DKG interval lasts only a few wall-clock
 // seconds, which under CI load is not always enough for the single dealer to
-// produce and aggregate the recovery transcript, making the test flaky. Use a
-// longer interval for the NNS subnet so each remote-DKG attempt has enough time
-// to complete.
+// produce the transcripts, making the test flaky. Use a longer interval for the
+// NNS subnet so each remote-DKG attempt has enough time to complete.
 const NNS_DKG_INTERVAL: u64 = 29;
 const NODES_COUNT: usize = 4;
 
