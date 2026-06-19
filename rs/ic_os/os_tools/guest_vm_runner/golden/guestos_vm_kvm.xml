@@ -1,6 +1,6 @@
 <domain type='kvm' id='1'>
-  <name>guestos</name>
-  <uuid>fd897da5-8017-41c8-8575-a706dba30766</uuid>
+  <name>guestos0</name>
+  <uuid>fd897da5-8017-41c8-8575-a706dba30700</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
       <libosinfo:os id="http://ubuntu.com/ubuntu/26.04"/>
@@ -21,7 +21,7 @@
     <type arch='x86_64' machine='pc-q35-10.2'>hvm</type>
     <boot dev='hd'/>
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
-    <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
+    <nvram>/var/lib/libvirt/qemu/nvram/guestos0_VARS.fd</nvram>
   </os>
   <features>
     <acpi/>

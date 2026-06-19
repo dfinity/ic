@@ -108,7 +108,6 @@ function resize_partition() {
         # And set up new split volumes
         free=$(vgs --noheadings -o vg_free_count hostlvm | tr -d ' ')
 
-
         if [[ $node_reward_type =~ ^type4.1$ ]]; then
             each=$((free / 32))
             for i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do

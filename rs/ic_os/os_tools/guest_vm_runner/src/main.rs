@@ -1062,6 +1062,7 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
+                guest_vm_slot: 0,
                 sev_certificate_provider,
                 disk_device: GUESTOS_DEVICE.into(),
                 _upgrade_mapped_device: None,
@@ -1081,7 +1082,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
-                vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
+                vm_domain_name: vm_domain_name(guest_vm_type, 0).to_string(),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }

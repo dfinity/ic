@@ -16,6 +16,17 @@ const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovery_h
 /// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config(
     hostos_config: &HostOSConfig,
+    guest_vm_type: GuestVMType,
+    sev_certificate_chain_pem: Option<String>,
+) -> Result<GuestOSConfig> {
+    generate_guestos_config_w_slot(hostos_config, 0, guest_vm_type, sev_certificate_chain_pem)
+}
+
+/// Generate the GuestOS configuration based on the provided HostOS configuration.
+/// If hostos_config.icos_settings.enable_trusted_execution_environment is true,
+/// sev_certificate_chain_pem must be provided.
+pub fn generate_guestos_config_w_slot(
+    hostos_config: &HostOSConfig,
     guest_vm_slot: usize,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,

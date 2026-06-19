@@ -1,7 +1,7 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
 
-icos_images = icos_build(
+icos_build(
     name = "multi",
     image_deps_func = image_deps,
     visibility = [
