@@ -153,7 +153,7 @@ impl Registry {
             // why type4.1-type4.4 are handled via a sentinel quota rather than
             // the per-operator `max_rewardable_nodes` map. Type4.5 is
             // explicitly excluded from this exemption.
-            let is_unbounded_type4 = matches!(
+            let is_permissionless_type_4_x = matches!(
                 node_reward_type,
                 NodeRewardType::Type4dot1
                     | NodeRewardType::Type4dot2
@@ -161,7 +161,7 @@ impl Registry {
                     | NodeRewardType::Type4dot4
             );
 
-            let max_rewardable_nodes_same_type = if is_unbounded_type4 {
+            let max_rewardable_nodes_same_type = if is_permissionless_type_4_x {
                 EXCESSIVE_NUMBER_OF_TYPE_4_NODES
             } else {
                 *node_operator_record
