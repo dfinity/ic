@@ -928,10 +928,11 @@ impl ReplicatedState {
                         .queues()
                         .has_enqueued_response(callback_id)
                 {
-                    rejects
-                        .entry(*canister_id)
-                        .or_default()
-                        .push((*callback_id, respondent, callback.deadline));
+                    rejects.entry(*canister_id).or_default().push((
+                        *callback_id,
+                        respondent,
+                        callback.deadline,
+                    ));
                 }
             }
         }
