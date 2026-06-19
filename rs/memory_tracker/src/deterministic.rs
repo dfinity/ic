@@ -330,12 +330,13 @@ pub(crate) struct DeterministicMemoryTracker {
     checksum: RefCell<checksum::SigsegChecksum>,
     pub metrics: MemoryTrackerMetrics,
     state: RefCell<DeterministicState>,
+    page_overhead: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 }
 
 impl DeterministicMemoryTracker {
     /// Marks a Wasm page as accessed and adds its OS pages to the accessed_pages list.
-    /// Charges 1 instruction per OS page accessed.
+    /// Charges instructions per OS page accessed.
     fn mark_wasm_page_accessed(
         &self,
         state: &mut DeterministicState,
@@ -344,7 +345,6 @@ impl DeterministicMemoryTracker {
         state.mark_wasm_page_accessed(wasm_page_idx);
 
         // Add the corresponding OS pages to the accessed_pages vector
-        // and charge 1 instruction per OS page accessed.
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let mut accessed_pages = self.accessed_pages.borrow_mut();
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
@@ -352,19 +352,18 @@ impl DeterministicMemoryTracker {
             accessed_pages.push(PageIndex::new(os_page_idx));
         }
 
-        // Charge 1 instruction per OS page accessed.
-        (self.subtract_instruction_counter.lock())(num_os_pages);
+        // Charge instructions per OS page accessed.
+        (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
     }
 
     /// Marks a Wasm page as dirty.
-    /// Charges 1 instruction per OS page dirtied.
+    /// Charges instructions per OS page dirtied.
     fn mark_wasm_page_dirty(&self, state: &mut DeterministicState, wasm_page_idx: WasmPageIndex) {
         state.mark_wasm_page_dirty(wasm_page_idx);
 
-        // Charge 1 instruction per OS page dirtied.
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
-        (self.subtract_instruction_counter.lock())(num_os_pages);
+        (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
     }
 
     /// A missing OS page handler that provides deterministic prefetching behavior
@@ -473,6 +472,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
+        page_overhead: u64,
         subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
@@ -506,6 +506,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
             metrics: MemoryTrackerMetrics::default(),
             state: RefCell::new(state),
+            page_overhead,
             subtract_instruction_counter,
         };
 
