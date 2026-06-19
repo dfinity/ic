@@ -50,22 +50,11 @@ use slog::info;
 use tempfile::NamedTempFile;
 
 const DKG_INTERVAL: u64 = 14;
-// The recovery `setup_initial_dkg` is dealt by the NNS (system) subnet and must
-// complete within `MAX_REMOTE_DKG_ATTEMPTS` (= 5) of its DKG intervals, otherwise
-// the registry's `do_recover_subnet` traps and the RecoverSubnet proposal fails.
-// On the fast single-node NNS subnet a DKG interval lasts only a few wall-clock
-// seconds, which under CI load is not always enough for the single dealer to
-// produce the transcripts, making the test flaky. Use a longer interval for the
-// NNS subnet so each remote-DKG attempt has enough time to complete.
-const NNS_DKG_INTERVAL: u64 = 29;
 const NODES_COUNT: usize = 4;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(
-            Subnet::fast_single_node(SubnetType::System)
-                .with_dkg_interval_length(Height::from(NNS_DKG_INTERVAL)),
-        )
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
