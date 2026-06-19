@@ -439,6 +439,8 @@ impl StreamBuilderImpl {
 
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
+        let mut responses_to_discard = Vec::new();
+        let own_cost_schedule = state.get_own_cost_schedule();
 
         let mut output_iter = state.output_into_iter();
         let mut last_output_size = usize::MAX;
@@ -588,12 +590,22 @@ impl StreamBuilderImpl {
                                     rep
                                 );
                             }
+                            responses_to_discard.push(rep);
                         }
                     }
                 }
             };
         }
         drop(output_iter);
+
+        for rep in responses_to_discard {
+            if !rep.refund.is_zero() {
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    rep.refund,
+                    own_cost_schedule,
+                ));
+            }
+        }
 
         for req in requests_to_reject {
             let dst_canister_id = req.receiver;
