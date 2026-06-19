@@ -797,7 +797,7 @@ impl<'a> CanisterFork<'a> {
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
                 CERTIFIED_DATA_LABEL => {
-                    Blob(&canister.system_state.certified_data.as_slice(), None)
+                    Blob(canister.system_state.certified_data.as_slice(), None)
                 }
                 CONTROLLERS_LABEL => {
                     blob(move || encode_controllers(&canister.system_state.controllers))
@@ -979,7 +979,7 @@ fn canister_ranges_as_tree(
         map_filter: NoFilter,
         certification_version,
         mk_tree: move |subnet_id, _subnet_topology, _certification_version| {
-            let split_ranges = split_routing_table.get(&subnet_id).map(Arc::clone);
+            let split_ranges = split_routing_table.get(subnet_id).map(Arc::clone);
             fork(CanisterRangesFork {
                 split_ranges,
                 phantom: PhantomData,
