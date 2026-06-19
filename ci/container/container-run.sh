@@ -219,8 +219,6 @@ RUNTIME_RUN_ARGS=(
     --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
 
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
-
-    --entrypoint=/ic/ci/container/init.sh
 )
 
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
