@@ -890,7 +890,7 @@ impl ReplicatedState {
     /// Must be called after `build_streams()` has processed all output queues,
     /// so that callbacks whose requests are still in output queues have already
     /// received reject responses from the stream builder.
-    pub fn generate_reject_responses_for_deleted_subnets(&mut self) {
+    pub fn generate_reject_responses_for_deleted_subnets(&mut self) -> Vec<StateError> {
         let routing_table = self.routing_table();
         // Collect subnet IDs to also skip callbacks to management canisters of other subnets
         // (where respondent = subnet_id, which has no entry in the routing table).
@@ -943,6 +943,7 @@ impl ReplicatedState {
             .collect();
 
         let mut available_guaranteed_response_memory = i64::MAX / 2;
+        let mut errors = Vec::new();
         for (canister_id, callback_id, respondent, deadline) in rejects {
             let response = RequestOrResponse::Response(Arc::new(Response {
                 originator: canister_id,
@@ -958,14 +959,17 @@ impl ReplicatedState {
             }));
 
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let _ = Arc::make_mut(&mut canister).push_input(
+            if let Err((error, _)) = Arc::make_mut(&mut canister).push_input(
                 response,
                 &mut available_guaranteed_response_memory,
                 own_subnet_type,
                 InputQueueType::RemoteSubnet,
-            );
+            ) {
+                errors.push(error);
+            }
             self.canister_states.insert(canister);
         }
+        errors
     }
 
     /// Returns the sum of reserved compute allocations of all currently

@@ -267,7 +267,16 @@ impl StateMachine for StateMachineImpl {
 
         // Enqueue synthetic rejects for callbacks to canisters on deleted subnets before
         // enforcing the best-effort memory limit, so those rejects are subject to shedding.
-        state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
+        for error in state_after_stream_builder.generate_reject_responses_for_deleted_subnets() {
+            // Critical error, responses should always be inducted successfully.
+            error!(
+                self.log,
+                "{}: Inducting synthetic reject response for deleted subnet failed: {}",
+                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                error
+            );
+            self.metrics.critical_error_induct_response_failed.inc();
+        }
 
         // Shed enough messages to stay below the best-effort message memory limit.
         let shed_messages_timer = self.metrics.start_phase_timer(PHASE_SHED_MESSAGES);
