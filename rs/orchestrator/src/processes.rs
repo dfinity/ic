@@ -316,7 +316,7 @@ impl IcBoundaryManager {
         }
     }
 
-    // TODO: consider returning an error when thing fail instead of logging
+    // TODO: consider returning an error when things fail instead of logging
     pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
         &mut self,
         replica_version: ReplicaVersion,
@@ -387,11 +387,10 @@ impl IcBoundaryManager {
 // ---------------------------------------------------------------------------
 
 /// Whether the orchestrator is currently allowed to actually launch
-/// `ic-gateway`. CloudEngine nodes *should* run `ic-gateway` (see
-/// [`should_run_ic_gateway`]), but the launch is gated off for now while the
-/// rollout is being prepared. To trigger it later, flip this to `true` (and
-/// re-enable the `cloud_engine_ic_gateway_test` system test by removing its
-/// `manual` tag in `rs/tests/consensus/orchestrator/BUILD.bazel`).
+/// `ic-gateway`. CloudEngine nodes *should* run `ic-gateway`, but the launch
+/// is gated off for now while the rollout is being prepared. To trigger it
+/// later, flip this to `true` (and re-enable the `cloud_engine_ic_gateway_test`
+/// system test by removing its `manual` tag).
 const IC_GATEWAY_LAUNCH_ENABLED: bool = false;
 
 pub(crate) struct MultipleProcessesManager {
@@ -473,8 +472,8 @@ impl MultipleProcessesManager {
             .ensure_running((replica_version.clone(), subnet_id))?;
 
         // Cloud-engine nodes run ic-gateway as a sidecar, but only once the
-        // launch is enabled (see `IC_GATEWAY_LAUNCH_ENABLED`). Until then we
-        // keep it stopped.
+        // launch is enabled (see `IC_GATEWAY_LAUNCH_ENABLED`). Until then,
+        // ignore it.
         if self.ic_gateway_launch_enabled {
             match self.registry.get_subnet_type(subnet_id, registry_version)? {
                 None
