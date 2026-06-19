@@ -796,9 +796,7 @@ impl<'a> CanisterFork<'a> {
         let canister = self.canister;
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
-                CERTIFIED_DATA_LABEL => {
-                    Blob(canister.system_state.certified_data.as_slice(), None)
-                }
+                CERTIFIED_DATA_LABEL => Blob(canister.system_state.certified_data.as_slice(), None),
                 CONTROLLERS_LABEL => {
                     blob(move || encode_controllers(&canister.system_state.controllers))
                 }
