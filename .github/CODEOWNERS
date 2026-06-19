@@ -9,13 +9,13 @@
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/fuzzing/             @dfinity/product-security
+/bin/fuzzing/             @dfinity/security
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
 .bazelversion                      @dfinity/idx
 /bazel/                            @dfinity/idx
-/bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/product-security
+/bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/security
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
@@ -76,18 +76,18 @@ go.sum                    @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
-/.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/product-security
-/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/product-security
+/.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/security
+/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/security
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/idx
-/.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/infrasec
+/.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/security
 /.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi @dfinity/idx
-/.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/product-security
+/.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/security
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
-.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/infrasec
+.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/security
 /ci/                                                                     @dfinity/idx
-/ci/actions/dependencies/                                                @dfinity/product-security
-/ci/src/dependencies/                                                    @dfinity/product-security
+/ci/actions/dependencies/                                                @dfinity/security
+/ci/src/dependencies/                                                    @dfinity/security
 /ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
 /ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
@@ -118,9 +118,9 @@ go.sum                    @dfinity/idx
 /rs/ethereum/                                           @dfinity/defi
 /rs/engine_controller/                                  @dfinity/dre
 /rs/execution_environment/                              @dfinity/core-protocol
-/rs/fuzzers/                                            @dfinity/product-security
+/rs/fuzzers/                                            @dfinity/security
 /rs/http_endpoints/                                     @dfinity/core-protocol
-/rs/http_endpoints/fuzz/                                @dfinity/product-security
+/rs/http_endpoints/fuzz/                                @dfinity/security
 /rs/http_utils/                                         @dfinity/core-protocol
 /rs/https_outcalls/                                     @dfinity/core-protocol
 /rs/https_outcalls/consensus/                           @dfinity/core-protocol
