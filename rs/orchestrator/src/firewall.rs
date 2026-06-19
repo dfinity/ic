@@ -5,7 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig,
+    AssignedNodePortLists, BoundaryNodeConfig as BoundaryNodeFirewallConfig,
     CloudEngineConfig as CloudEngineFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
 };
 use ic_logger::{ReplicaLogger, debug, info, warn};
@@ -145,7 +145,7 @@ impl Firewall {
     }
 
     // Get all the registry versions between the latest CUP and the latest version in the registry (inclusive)
-    fn get_registry_versions(&mut self, registry_version: RegistryVersion) -> Vec<RegistryVersion> {
+    fn get_registry_versions(&self, registry_version: RegistryVersion) -> Vec<RegistryVersion> {
         self.local_cup_reader
             .get_local_cup()
             .map(|latest_cup| {
@@ -275,8 +275,9 @@ impl Firewall {
     /// Rules are returned in the order of priority (higher priority rules are returned first). TCP
     /// and UDP rules are returned separately.
     fn get_node_whitelisting_rules(
-        &mut self,
+        &self,
         registry_version: RegistryVersion,
+        port_lists: AssignedNodePortLists,
     ) -> (Vec<FirewallRule>, Vec<FirewallRule>) {
         // First, get all the registry versions between the latest CUP and the latest version
         // in the registry inclusive.
@@ -345,10 +346,7 @@ impl Firewall {
         let whitelisted_nodes_tcp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: whitelisted_ipv4s.clone(),
             ipv6_prefixes: whitelisted_ipv6s.clone(),
-            ports: self
-                .replica_config
-                .whitelisted_nodes_tcp_ports_whitelist
-                .clone(),
+            ports: port_lists.whitelisted_nodes_tcp_ports_whitelist,
             action: FirewallAction::Allow as i32,
             comment: "Automatic whitelisted nodes whitelisting".to_string(),
             user: None,
@@ -357,10 +355,7 @@ impl Firewall {
         let whitelisted_nodes_udp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: whitelisted_ipv4s,
             ipv6_prefixes: whitelisted_ipv6s,
-            ports: self
-                .replica_config
-                .whitelisted_nodes_udp_ports_whitelist
-                .clone(),
+            ports: port_lists.whitelisted_nodes_udp_ports_whitelist,
             action: FirewallAction::Allow as i32,
             comment: "Automatic whitelisted nodes whitelisting".to_string(),
             user: None,
@@ -371,7 +366,7 @@ impl Firewall {
         let all_nodes_tcp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: all_ipv4s.clone(),
             ipv6_prefixes: all_ipv6s.clone(),
-            ports: self.replica_config.all_nodes_tcp_ports_whitelist.clone(),
+            ports: port_lists.all_nodes_tcp_ports_whitelist,
             action: FirewallAction::Allow as i32,
             comment: "Automatic all nodes whitelisting".to_string(),
             user: None,
@@ -381,7 +376,7 @@ impl Firewall {
         let all_nodes_udp_whitelisting_rule = FirewallRule {
             ipv4_prefixes: all_ipv4s.clone(),
             ipv6_prefixes: all_ipv6s.clone(),
-            ports: self.replica_config.all_nodes_udp_ports_whitelist.clone(),
+            ports: port_lists.all_nodes_udp_ports_whitelist,
             action: FirewallAction::Allow as i32,
             comment: "Automatic all nodes whitelisting".to_string(),
             user: None,
@@ -405,7 +400,7 @@ impl Firewall {
         let tcp_ic_http_adapter_rule = FirewallRule {
             ipv4_prefixes: all_ipv4s,
             ipv6_prefixes: all_ipv6s,
-            ports: self.replica_config.ports_for_http_adapter_blacklist.clone(),
+            ports: port_lists.ports_for_http_adapter_blacklist,
             action: FirewallAction::Reject as i32,
             comment: "Automatic blacklisting for ic-http-adapter".to_string(),
             user: Some("ic-http-adapter".to_string()),
@@ -572,18 +567,26 @@ impl Firewall {
             // In addition to any explicit firewall rules we might apply, we also ALWAYS whitelist
             // all nodes in the registry on the ports used by the protocol
             Role::AssignedReplica(_) | Role::AssignedCloudEngine(_) | Role::Unassigned => {
+                let (port_lists, template): (&AssignedNodePortLists, &dyn FirewallConfigTemplate) =
+                    if matches!(role, Role::AssignedCloudEngine(_)) {
+                        (
+                            &self.cloud_engine_config.assigned_node_port_lists,
+                            &self.cloud_engine_config,
+                        )
+                    } else {
+                        // matches!(role, Role::AssignedReplica(_) | Role::Unassigned)
+                        (
+                            &self.replica_config.assigned_node_port_lists,
+                            &self.replica_config,
+                        )
+                    };
                 let (more_tcp_rules, more_udp_rules) =
-                    self.get_node_whitelisting_rules(registry_version);
+                    self.get_node_whitelisting_rules(registry_version, port_lists.clone());
                 // Insert the whitelisting rules at the top of the list (highest priority)
                 tcp_rules = more_tcp_rules.into_iter().chain(tcp_rules).collect();
                 udp_rules = more_udp_rules.into_iter().chain(udp_rules).collect();
 
-                if matches!(role, Role::AssignedCloudEngine(_)) {
-                    self.cloud_engine_config.insert_rules(tcp_rules, udp_rules)
-                } else {
-                    // matches!(role, Role::AssignedReplica(_) | Role::Unassigned)
-                    self.replica_config.insert_rules(tcp_rules, udp_rules)
-                }
+                template.insert_rules(tcp_rules, udp_rules)
             }
             Role::BoundaryNode => {
                 let socks_proxy_whitelisting_rules =
@@ -1108,11 +1111,7 @@ mod tests {
             ipv4_user_output_rule_template: "".to_string(),
             ipv6_user_output_rule_template: "".to_string(),
             default_rules: vec![],
-            whitelisted_nodes_tcp_ports_whitelist: vec![],
-            whitelisted_nodes_udp_ports_whitelist: vec![],
-            all_nodes_tcp_ports_whitelist: vec![],
-            all_nodes_udp_ports_whitelist: vec![],
-            ports_for_http_adapter_blacklist: vec![],
+            assigned_node_port_lists: AssignedNodePortLists::default(),
             max_simultaneous_connections_per_ip_address,
         };
 
@@ -1178,6 +1177,100 @@ mod tests {
             NFTABLES_UNASSIGNED_CLOUD_ENGINE_GOLDEN_BYTES,
             "unassigned_cloud_engine",
         );
+    }
+
+    /// The automatic node whitelisting/blacklisting rules of an assigned cloud engine must
+    /// be derived from the *cloud engine* firewall config, while those of an assigned replica
+    /// must be derived from the *replica* firewall config. This must hold even when the two
+    /// configs use different port lists.
+    #[test]
+    fn node_whitelisting_rules_use_role_specific_firewall_config() {
+        // Two disjoint, easily identifiable sets of port lists.
+        let replica_port_lists = AssignedNodePortLists {
+            whitelisted_nodes_tcp_ports_whitelist: vec![51001],
+            whitelisted_nodes_udp_ports_whitelist: vec![51002],
+            all_nodes_tcp_ports_whitelist: vec![51003],
+            all_nodes_udp_ports_whitelist: vec![51004],
+            ports_for_http_adapter_blacklist: vec![51005],
+        };
+        let cloud_engine_port_lists = AssignedNodePortLists {
+            whitelisted_nodes_tcp_ports_whitelist: vec![52001],
+            whitelisted_nodes_udp_ports_whitelist: vec![52002],
+            all_nodes_tcp_ports_whitelist: vec![52003],
+            all_nodes_udp_ports_whitelist: vec![52004],
+            ports_for_http_adapter_blacklist: vec![52005],
+        };
+        let replica_ports = [51001, 51002, 51003, 51004, 51005];
+        let cloud_engine_ports = [52001, 52002, 52003, 52004, 52005];
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let nftables_config_path = tmp_dir.path().join("nftables.conf");
+        let config = get_config();
+        let replica_firewall_config = ReplicaFirewallConfig {
+            config_file: nftables_config_path.clone(),
+            assigned_node_port_lists: replica_port_lists.clone(),
+            ..config.firewall.unwrap()
+        };
+        let cloud_engine_firewall_config = CloudEngineFirewallConfig {
+            config_file: nftables_config_path.clone(),
+            assigned_node_port_lists: cloud_engine_port_lists.clone(),
+            ..config.cloud_engine_firewall.unwrap()
+        };
+        let boundary_node_firewall_config = BoundaryNodeFirewallConfig {
+            config_file: nftables_config_path.clone(),
+            ..config.boundary_node_firewall.unwrap()
+        };
+
+        set_up_firewall_dependencies(
+            replica_firewall_config.clone(),
+            cloud_engine_firewall_config.clone(),
+            boundary_node_firewall_config.clone(),
+            tmp_dir.path(),
+            Role::AssignedReplica(SUBNET_ID),
+            node_test_id(0),
+            Some(NodeRewardType::Type0),
+        )
+        .check_for_firewall_config(RegistryVersion::new(1))
+        .expect("Should successfully produce a firewall config");
+        let replica_nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
+        // An assigned replica must reference the replica port lists
+        for port in replica_ports {
+            assert!(
+                replica_nftables.contains(&port.to_string()),
+                "replica firewall should use replica port {port}:\n{replica_nftables}"
+            );
+        }
+        for port in cloud_engine_ports {
+            assert!(
+                !replica_nftables.contains(&port.to_string()),
+                "replica firewall must not use cloud engine port {port}:\n{replica_nftables}"
+            );
+        }
+
+        set_up_firewall_dependencies(
+            replica_firewall_config,
+            cloud_engine_firewall_config,
+            boundary_node_firewall_config,
+            tmp_dir.path(),
+            Role::AssignedCloudEngine(SUBNET_ID),
+            node_test_id(0),
+            Some(NodeRewardType::Type4),
+        )
+        .check_for_firewall_config(RegistryVersion::new(1))
+        .expect("Should successfully produce a firewall config");
+        let cloud_engine_nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
+        // An assigned cloud engine must reference the cloud engine port lists
+        for port in cloud_engine_ports {
+            assert!(
+                cloud_engine_nftables.contains(&port.to_string()),
+                "cloud engine firewall should use cloud engine port {port}:\n{cloud_engine_nftables}"
+            );
+        }
+        for port in replica_ports {
+            assert!(
+                !cloud_engine_nftables.contains(&port.to_string()),
+                "cloud engine firewall must not use replica port {port}:\n{cloud_engine_nftables}"
+            );
+        }
     }
 
     #[test]
