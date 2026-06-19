@@ -869,7 +869,7 @@ impl ReplicatedState {
 
     /// Discards outgoing streams targeting subnets no longer present in the network topology.
     ///
-    /// Once a subnet is removed from the current topology/routing table, messages can no longer be
+    /// Once a subnet is removed from the current network topology, messages can no longer be
     /// delivered to it; any remaining stream messages are treated as dropped when the stream entry
     /// is removed.
     pub fn discard_streams_for_deleted_subnets(&mut self) {
