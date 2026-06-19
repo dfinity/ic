@@ -265,6 +265,10 @@ impl StateMachine for StateMachineImpl {
             self.stream_builder.build_streams(state_after_execution);
         message_routing_timer.observe_duration();
 
+        // Enqueue synthetic rejects for callbacks to canisters on deleted subnets before
+        // enforcing the best-effort memory limit, so those rejects are subject to shedding.
+        state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
+
         // Shed enough messages to stay below the best-effort message memory limit.
         let shed_messages_timer = self.metrics.start_phase_timer(PHASE_SHED_MESSAGES);
         state_after_stream_builder.enforce_best_effort_message_limit(
@@ -274,8 +278,6 @@ impl StateMachine for StateMachineImpl {
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         shed_messages_timer.observe_duration();
-
-        state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
         state_after_stream_builder
     }
 }
