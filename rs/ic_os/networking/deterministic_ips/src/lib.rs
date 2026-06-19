@@ -118,7 +118,6 @@ mod test {
         let mgmt_mac: MacAddr6 = "70:B5:E8:E8:25:DE".parse().unwrap();
         let expected_mac: MacAddr6 = "6a:00:f8:87:a4:8a".parse().unwrap();
         let mac = calculate_deterministic_mac(
-            0,
             &mgmt_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,

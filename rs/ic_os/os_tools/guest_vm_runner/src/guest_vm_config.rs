@@ -3,10 +3,12 @@ use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config_tool::hostos::guestos_config::generate_guestos_config;
+use config_tool::hostos::guestos_config::{
+    generate_guestos_config, generate_guestos_config_w_slot,
+};
 use config_types::{GuestOSConfig, HostOSConfig};
-use deterministic_ips::calculate_deterministic_mac_w_slot;
 use deterministic_ips::node_type::NodeType;
+use deterministic_ips::{calculate_deterministic_mac, calculate_deterministic_mac_w_slot};
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -56,17 +58,25 @@ pub struct DirectBootConfig {
 
 pub fn assemble_config_media(
     hostos_config: &HostOSConfig,
-    guest_vm_slot: usize,
+    guest_vm_slot: Option<usize>,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
-    let guestos_config = generate_guestos_config(
-        hostos_config,
-        guest_vm_slot,
-        guest_vm_type.to_config_type(),
-        sev_certificate_chain_pem,
-    )
+    let guestos_config = if let Some(slot) = guest_vm_slot {
+        generate_guestos_config_w_slot(
+            hostos_config,
+            slot,
+            guest_vm_type.to_config_type(),
+            sev_certificate_chain_pem,
+        )
+    } else {
+        generate_guestos_config(
+            hostos_config,
+            guest_vm_type.to_config_type(),
+            sev_certificate_chain_pem,
+        )
+    }
     .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
@@ -110,7 +120,7 @@ pub fn generate_vm_config(
     direct_boot: Option<DirectBootConfig>,
     disk_device: &Path,
     serial_log_path: &Path,
-    guest_vm_slot: usize,
+    guest_vm_slot: Option<usize>,
     guest_vm_type: GuestVMType,
     available_hugepages_gib: u64,
     metrics: &GuestVmMetrics,
@@ -119,12 +129,20 @@ pub fn generate_vm_config(
         GuestVMType::Default => NodeType::GuestOS,
         GuestVMType::Upgrade => NodeType::UpgradeGuestOS,
     };
-    let mac_address = calculate_deterministic_mac_w_slot(
-        &config.icos_settings.mgmt_mac,
-        config.icos_settings.deployment_environment,
-        guest_vm_slot,
-        node_type,
-    );
+    let mac_address = if let Some(slot) = guest_vm_slot {
+        calculate_deterministic_mac_w_slot(
+            &config.icos_settings.mgmt_mac,
+            config.icos_settings.deployment_environment,
+            slot,
+            node_type,
+        )
+    } else {
+        calculate_deterministic_mac(
+            &config.icos_settings.mgmt_mac,
+            config.icos_settings.deployment_environment,
+            node_type,
+        )
+    };
 
     let (cpu_domain, total_vm_memory, nr_of_vcpus, nr_of_sockets, nr_of_cores, nr_of_threads) =
         vm_resources(config);
@@ -137,11 +155,10 @@ pub fn generate_vm_config(
         total_vm_memory >= UPGRADE_VM_MEMORY_GIB,
         "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
-    let vm_memory_gib = match guest_vm_type {
-        // XXX TODO
-        // GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
-        GuestVMType::Default => total_vm_memory,
-        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GIB,
+    let vm_memory_gib = match (guest_vm_type, &config.icos_settings.node_reward_type) {
+        (GuestVMType::Default, Some(val)) if val.starts_with("type4") => total_vm_memory,
+        (GuestVMType::Default, _) => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
+        (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
     };
 
     // Enable hugepages if enough are available for this VM and TEE is disabled (hugepages are not
@@ -173,7 +190,7 @@ pub fn generate_vm_config(
 }
 
 #[cfg(feature = "dev")]
-pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32, u32, u32, u32) {
     let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
         "qemu".to_string()
     } else {
@@ -183,7 +200,14 @@ pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
     let total_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
     let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
 
-    (cpu_domain, total_vm_memory, vm_nr_of_vcpus)
+    (
+        cpu_domain,
+        total_vm_memory,
+        vm_nr_of_vcpus,
+        2,
+        vm_nr_of_vcpus / 4,
+        2,
+    )
 }
 
 #[cfg(not(feature = "dev"))]
@@ -232,23 +256,26 @@ pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32, u32, u32
     }
 }
 
-pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: usize) -> String {
+pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: Option<usize>) -> String {
+    let slot_suffix = slot.map(|v| v.to_string()).unwrap_or_default();
     match guest_vm_type {
-        GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot}"),
+        GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot_suffix}"),
         GuestVMType::Upgrade => UPGRADE_GUEST_VM_DOMAIN_NAME.to_string(),
     }
 }
 
-pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: usize) -> String {
+pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: Option<usize>) -> String {
+    let slot = slot.unwrap_or(0x66);
     match guest_vm_type {
         GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba307{slot:02x}"),
         GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd".to_string(),
     }
 }
 
-pub fn serial_log_path(guest_vm_type: GuestVMType, slot: usize) -> PathBuf {
+pub fn serial_log_path(guest_vm_type: GuestVMType, slot: Option<usize>) -> PathBuf {
+    let slot_suffix = slot.map(|v| v.to_string()).unwrap_or_default();
     match guest_vm_type {
-        GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot}")),
+        GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot_suffix}")),
         GuestVMType::Upgrade => PathBuf::from(UPGRADE_SERIAL_LOG_PATH.to_string()),
     }
 }
@@ -256,6 +283,7 @@ pub fn serial_log_path(guest_vm_type: GuestVMType, slot: usize) -> PathBuf {
 #[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
+    use config_tool::hostos::guestos_config::generate_guestos_config;
     use config_types::{
         DeterministicIpv6Config, HostOSConfig, HostOSDevSettings, HostOSSettings, ICOSSettings,
         Ipv6Config, NetworkSettings,
@@ -370,7 +398,7 @@ mod tests {
             direct_boot,
             Path::new("/dev/guest_disk"),
             Path::new("/var/serial/console.txt"),
-            0,
+            None,
             guest_vm_type,
             available_hugepages_gib,
             &metrics,
@@ -461,7 +489,7 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(&config, GuestVMType::Upgrade, None, &media_path);
+        let result = assemble_config_media(&config, None, GuestVMType::Upgrade, None, &media_path);
 
         assert!(
             result.is_ok(),
