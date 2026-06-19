@@ -1,6 +1,11 @@
 use super::{CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND};
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::CyclesAccountManagerConfig;
+use ic_config::subnet_config::{
+    CyclesAccountManagerConfig, HTTP_REQUEST_BASE_FEE, HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE,
+    HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE,
+    HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE, HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE,
+    HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE, HTTP_REQUEST_PER_BYTE_FEE,
+};
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
@@ -12,7 +17,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
     SubnetId,
-    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication},
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
@@ -1234,6 +1239,47 @@ impl CyclesAccountManager {
             * (subnet_size as u64);
 
         CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
+    }
+
+    pub fn http_request_base_fee(
+        &self,
+        request_size: NumBytes,
+        replication: &Replication,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+    ) -> CompoundCycles<HTTPOutcalls> {
+        let n = subnet_cycles_config.subnet_size as u128;
+        let request_bytes = request_size.get() as u128;
+        let per_replica = match replication {
+            Replication::FullyReplicated => {
+                HTTP_REQUEST_BASE_FEE
+                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+                    + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
+                    + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
+            }
+            Replication::Flexible {
+                min_responses: min, ..
+            } => {
+                let min = *min as u128;
+                HTTP_REQUEST_BASE_FEE
+                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
+                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min
+                    + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min
+            }
+            Replication::NonReplicated(_) => {
+                // Non-replicated is equivalent to flexible replication with min_responses = 1.
+                HTTP_REQUEST_BASE_FEE
+                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
+                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
+                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
+                    + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE
+            }
+        };
+
+        CompoundCycles::new(
+            Cycles::new(n * per_replica),
+            subnet_cycles_config.cost_schedule,
+        )
     }
 
     pub fn http_request_fee_v2(
