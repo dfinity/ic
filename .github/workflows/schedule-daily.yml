@@ -192,11 +192,12 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:5d243bf51c816ec96cf4db0690744171ca0eb76148dca0e34647c2048ae26e87
       options: >-
-         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers" --entrypoint=/ic/ci/container/init.sh
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
+      - run: ci/container/init.sh
       - name: Run Local System Tests
         uses: ./.github/actions/bazel
         with:
