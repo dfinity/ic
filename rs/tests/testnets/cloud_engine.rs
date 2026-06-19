@@ -419,16 +419,16 @@ pub fn setup(env: TestEnv) {
     // install II, NNS dapp, and Subnet Rental Canister
     install_ii_nns_dapp_and_subnet_rental_with_dummy_auth(&env, &ic_gateway_url, None);
 
-    // Install a demo canister on the Application subnet, fund it with 300T
-    // cycles and set its controllers to TEST_NEURON_1_OWNER_PRINCIPAL and the
-    // anonymous principal.
-    install_demo_canister_on_app_subnet(&env);
+    // Create an empty (no wasm installed) canister on the Application subnet,
+    // fund it with 300T cycles and set its controllers to
+    // TEST_NEURON_1_OWNER_PRINCIPAL and the anonymous principal.
+    create_demo_canister_on_app_subnet(&env);
 }
 
-/// Installs the universal canister on the (single) Application subnet, funds
-/// it with 300T cycles, and sets its controllers to
-/// `TEST_NEURON_1_OWNER_PRINCIPAL` and the anonymous principal.
-fn install_demo_canister_on_app_subnet(env: &TestEnv) {
+/// Creates an empty canister (no wasm installed) on the (single) Application
+/// subnet, funds it with 300T cycles via the provisional API, and sets its
+/// controllers to `TEST_NEURON_1_OWNER_PRINCIPAL` and the anonymous principal.
+fn create_demo_canister_on_app_subnet(env: &TestEnv) {
     let topology = env.topology_snapshot();
     let app_subnet = topology
         .subnets()
@@ -438,36 +438,31 @@ fn install_demo_canister_on_app_subnet(env: &TestEnv) {
         .nodes()
         .next()
         .expect("Application subnet has no nodes");
-
-    // Read the universal canister wasm from the path injected by Bazel.
-    let wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
-        .expect("UNIVERSAL_CANISTER_WASM_PATH env var not set");
-
-    let canister_id = app_node
-        .canister_installer(&wasm_path)
-        .with_cycles_amount(DEMO_CANISTER_CYCLES)
-        .block_on_install()
-        .expect("failed to install demo canister on Application subnet");
+    let effective_canister_id = app_node.effective_canister_id();
 
     let test_neuron_principal = Principal::from(*TEST_NEURON_1_OWNER_PRINCIPAL);
     let anonymous_principal = Principal::anonymous();
 
-    block_on(async {
+    let canister_id = block_on(async {
         let agent = app_node.build_default_agent_async().await;
         let mgr = ManagementCanister::create(&agent);
-        mgr.update_settings(&canister_id)
+        let (canister_id,) = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(Some(DEMO_CANISTER_CYCLES))
+            .with_effective_canister_id(effective_canister_id)
             .with_controller(test_neuron_principal)
             .with_controller(anonymous_principal)
             .call_and_wait()
             .await
-            .map_err(|err| anyhow!("failed to set controllers on demo canister: {err}"))
+            .map_err(|err| anyhow!("failed to create demo canister: {err}"))
             .unwrap();
+        canister_id
     });
 
     let log = env.logger();
     slog::info!(
         log,
-        "Installed demo canister {canister_id} on Application subnet with 300T cycles; \
+        "Created empty demo canister {canister_id} on Application subnet with 300T cycles; \
          controllers: TEST_NEURON_1_OWNER_PRINCIPAL ({}) and anonymous",
         *TEST_NEURON_1_OWNER_PRINCIPAL
     );

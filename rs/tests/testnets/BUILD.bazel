@@ -245,7 +245,6 @@ system_test_nns(
         "II_FRONTEND_WASM_PATH": "@mainnet_canisters//:internet_identity_frontend.wasm.gz",
         "NNS_DAPP_WASM_PATH": "@mainnet_canisters//:nns_dapp_test.wasm.gz",
         "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
-        "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
     },
     deps = [
         # Keep sorted.
