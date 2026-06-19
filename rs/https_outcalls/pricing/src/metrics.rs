@@ -1,0 +1,36 @@
+use ic_metrics::MetricsRegistry;
+use prometheus::{IntCounter, IntCounterVec};
+
+/// Label identifying the accounting step at which the shadow tracker diverged
+/// from the real one.
+pub const LABEL_STEP: &str = "step";
+
+#[derive(Clone)]
+pub struct PricingMetrics {
+    /// Total number of requests evaluated by the dark-launch budget tracker.
+    pub shadow_requests_total: IntCounter,
+    /// Number of requests that would be rejected (pricing error) under the
+    /// shadow pricing while succeeding under the real pricing, by the
+    /// accounting step at which the divergence was first observed.
+    ///
+    /// The fraction `shadow_incompatible_total / shadow_requests_total` is the
+    /// share of requests that would NOT be backwards compatible.
+    pub shadow_incompatible_total: IntCounterVec,
+}
+
+impl PricingMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            shadow_requests_total: metrics_registry.int_counter(
+                "canister_http_pricing_shadow_requests_total",
+                "Total canister http requests evaluated by the dark-launch budget tracker.",
+            ),
+            shadow_incompatible_total: metrics_registry.int_counter_vec(
+                "canister_http_pricing_shadow_incompatible_total",
+                "Canister http requests that would be rejected (pricing error) under the shadow \
+                 pricing while succeeding under the real pricing, by accounting step.",
+                &[LABEL_STEP],
+            ),
+        }
+    }
+}

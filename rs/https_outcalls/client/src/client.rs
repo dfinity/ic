@@ -65,6 +65,7 @@ pub struct CanisterHttpAdapterClientImpl {
     rx: Receiver<(CanisterHttpResponse, CanisterHttpPaymentReceipt)>,
     query_service: TransformExecutionService,
     metrics: Metrics,
+    pricing_factory: PricingFactory,
     log: ReplicaLogger,
 }
 
@@ -79,6 +80,7 @@ impl CanisterHttpAdapterClientImpl {
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
         let metrics = Metrics::new(&metrics_registry);
+        let pricing_factory = PricingFactory::new(&metrics_registry, log.clone());
         Self {
             rt_handle,
             grpc_channel,
@@ -86,6 +88,7 @@ impl CanisterHttpAdapterClientImpl {
             rx,
             query_service,
             metrics,
+            pricing_factory,
             log,
         }
     }
@@ -121,6 +124,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
+        let pricing_factory = self.pricing_factory.clone();
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -133,7 +137,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 socks_proxy_addrs,
             } = canister_http_request;
 
-            let mut budget = PricingFactory::new_tracker(&request_context);
+            let mut budget = pricing_factory.new_tracker(&request_context);
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {
