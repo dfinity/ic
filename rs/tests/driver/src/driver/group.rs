@@ -1529,8 +1529,7 @@ impl SystemTestGroup {
                 // outlived teardown. Because this process is a child-subreaper
                 // (see `enable_child_subreaper` above), any orphaned daemon
                 // (libvirtd/dnsmasq/QEMU) has been reparented here and would
-                // otherwise hang the bazel test process-wrapper. Harmless on
-                // Farm, where well-behaved subprocesses have already exited.
+                // otherwise hang the bazel test process-wrapper.
                 crate::driver::process::kill_all_descendants(group_ctx.log());
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))

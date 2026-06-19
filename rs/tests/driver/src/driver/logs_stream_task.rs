@@ -1,3 +1,15 @@
+//! Streams journald logs from a system test's deployed machines into the test
+//! log. A background task (`logs_stream_task`) periodically discovers the
+//! group's universal VMs (and, when `--stream-ic-node-logs` is set, its IC
+//! nodes) and, for every newly discovered target, opens a long-lived
+//! `follow` connection to that machine's systemd-journal-gatewayd over IPv6.
+//! Each journald record received is parsed and printed to stdout so it appears
+//! inline in the test output. Targets matching an `--exclude-logs` pattern are
+//! skipped, streams resume from the last cursor after transient failures, and
+//! on the Local backend IC node streams bind to a dedicated per-group source
+//! address to avoid exhausting the GuestOS per-source firewall connection
+//! budget.
+
 use crate::driver::{
     constants::{COLOCATE_CONTAINER_NAME, GROUP_SETUP_DIR},
     context::GroupContext,

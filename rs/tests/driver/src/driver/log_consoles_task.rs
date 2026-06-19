@@ -316,7 +316,7 @@ async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
                     if line.ends_with('\n') {
                         let trimmed = line.trim_end_matches(['\n', '\r']);
                         let cleaned = strip_control_codes(trimmed);
-                        println!("[console={label}] {cleaned}");
+                        info!(logger, "[console={label}] {cleaned}");
                         line.clear();
                     }
                     // Otherwise the line is incomplete (no trailing newline yet);

@@ -249,9 +249,10 @@ fn reap_foreign_zombie_children(my_pid: i32, my_comm: &str) {
             Some(p) => p,
             None => continue,
         };
-        match read_state_and_ppid(pid) {
-            Some((state, ppid)) if ppid == my_pid && state == 'Z' => {}
-            _ => continue,
+        // Skip anything that is not a zombie ('Z') direct child of ours: only
+        // such processes are ours to reap, and reaping them won't block.
+        if !matches!(read_state_and_ppid(pid), Some(('Z', ppid)) if ppid == my_pid) {
+            continue;
         }
         // Only reap foreign daemons; leave our own (Tokio-managed) task
         // subprocesses for Tokio to reap so their exit status is preserved.
@@ -301,7 +302,7 @@ pub fn kill_all_descendants(logger: &Logger) {
 
         // Reap any zombies that have been reparented to us so they do not
         // linger and so that subsequent scans see an accurate tree.
-        reap_zombies();
+        reap_exited_children();
 
         if Instant::now() >= deadline {
             warn!(
@@ -315,7 +316,7 @@ pub fn kill_all_descendants(logger: &Logger) {
     }
 
     // Final drain of any remaining zombies.
-    reap_zombies();
+    reap_exited_children();
 
     if !total_killed.is_empty() {
         info!(
@@ -397,8 +398,11 @@ fn read_comm(pid: i32) -> Option<String> {
     Some(content.trim_end().to_string())
 }
 
-/// Reaps any children that have already exited, without blocking.
-fn reap_zombies() {
+/// Reaps any direct children that have already exited, without blocking.
+///
+/// Only direct children are reaped: `waitpid(-1, ...)` waits on immediate
+/// children of the calling process, not arbitrary descendants.
+fn reap_exited_children() {
     loop {
         match waitpid(Pid::from_raw(-1), Some(WaitPidFlag::WNOHANG)) {
             // No more children have exited yet (still running).
