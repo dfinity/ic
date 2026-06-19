@@ -892,7 +892,15 @@ impl ReplicatedState {
     /// received reject responses from the stream builder.
     pub fn generate_reject_responses_for_deleted_subnets(&mut self) {
         let routing_table = self.routing_table();
-        let own_subnet_id = self.metadata.own_subnet_id;
+        // Collect subnet IDs to also skip callbacks to management canisters of other subnets
+        // (where respondent = subnet_id, which has no entry in the routing table).
+        let subnet_ids: BTreeSet<SubnetId> = self
+            .metadata
+            .network_topology
+            .subnets()
+            .keys()
+            .cloned()
+            .collect();
         let own_subnet_type = self.metadata.own_subnet_type;
 
         // Collect all (canister_id, callback_id, respondent, deadline) tuples where
@@ -908,14 +916,18 @@ impl ReplicatedState {
                     .map(|ccm: &CallContextManager| ccm.callbacks().iter().collect())
                     .unwrap_or_default();
                 let routing_table = Arc::clone(&routing_table);
+                let subnet_ids = &subnet_ids;
                 callbacks
                     .into_iter()
                     .filter_map(move |(callback_id, callback)| {
                         let callback_id = *callback_id;
                         let respondent = callback.respondent;
                         let deadline = callback.deadline;
+                        // Skip if respondent has a route in the routing table (canister on an active subnet)
+                        // or if respondent's principal ID is a subnet ID in the current topology
+                        // (management canister calls to any subnet, including own subnet).
                         if routing_table.lookup_entry(respondent).is_none()
-                            && respondent.get() != own_subnet_id.get()
+                            && !subnet_ids.contains(&SubnetId::from(respondent.get()))
                             && !canister
                                 .system_state
                                 .queues()
