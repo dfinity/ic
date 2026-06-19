@@ -125,11 +125,14 @@ if ! "${image_exists_cmd[@]}" >/dev/null 2>&1; then
     fi
 fi
 
-if [ "$DEVENV" = true ]; then
-    # on the devenv we issue a warning if the images start taking up a lot of space.
-    # Podman does not have a dedicated layer cache like docker, so we avoid nuking dangling/unused images unless space becomes a concern;
-    # this allows new image builds to benefit from cached layers.
-    # We only issue a warning so that the user can GC when it's most convenient.
+# On the devenv we issue a warning if the images start taking up a lot of space.
+# Podman does not have a dedicated layer cache like docker, so we avoid nuking dangling/unused images unless space becomes a concern;
+# this allows new image builds to benefit from cached layers.
+# We only issue a warning so that the user can GC when it's most convenient.
+# This is podman-specific: docker manages its own layer cache and reports image
+# sizes in a different JSON shape (a stream of objects without a RawSize field),
+# so we skip the check under docker.
+if [ "$DEVENV" = true ] && [ "$RUNTIME" = podman ]; then
     MAX_GB=20
     images_rawsize=$("${CONTAINER_CMD[@]}" system df --format json | jq -cMr '.[]|select(.Type == "Images")|.RawSize')
     if ((images_rawsize > MAX_GB * 10 ** 9)); then
