@@ -10303,7 +10303,12 @@ name = "ic-https-outcalls-pricing"
 version = "0.9.0"
 dependencies = [
  "ic-config",
+ "ic-logger",
+ "ic-metrics",
  "ic-types",
+ "ic-types-cycles",
+ "prometheus",
+ "slog",
 ]
 
 [[package]]
