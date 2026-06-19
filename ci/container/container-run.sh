@@ -216,6 +216,8 @@ RUNTIME_RUN_ARGS=(
     --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
 
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
+
+    --entrypoint=/ic/ci/container/init.sh
 )
 
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
@@ -246,15 +248,11 @@ if [ "$RUNTIME" = docker ]; then
         --cap-add SYS_ADMIN
         --cap-add NET_ADMIN
         --network=host
-
-        # docker exposes /dev/fuse as 0600 root:root; this shim opens it up so
-        # the unprivileged container user (and fuse-overlayfs) can use it.
-        --entrypoint=/ic/ci/container/docker-init.sh
     )
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;
     # additionally, we need to use hosts's cgroups and network.
-    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host --entrypoint=/ic/ci/container/init.sh)
+    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
 fi
 
 # In the devenv, inject some extra files into the container for convenience
