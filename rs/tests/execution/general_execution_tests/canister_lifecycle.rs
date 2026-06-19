@@ -107,7 +107,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
     use ic_base_types::NumBytes;
     use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
-    use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 
     let logger = env.logger();
     let app_node = env.get_first_healthy_application_node_snapshot();
@@ -229,8 +229,10 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                         > cycles_account_manager
                             .ingress_induction_cost_from_bytes(
                                 NumBytes::new(bytes.len() as u64),
-                                1,
-                                CanisterCyclesCostSchedule::Normal
+                                CyclesAccountManagerSubnetConfig::new(
+                                    1,
+                                    CanisterCyclesCostSchedule::Normal,
+                                ),
                             )
                             .real()
                             .get()
