@@ -907,9 +907,11 @@ impl ReplicatedState {
             .collect();
         let own_subnet_type = self.metadata.own_subnet_type;
 
-        // Collect all (canister_id, callback_id, respondent, deadline) tuples where
+        // Collect per-canister (callback_id, respondent, deadline) tuples where
         // the respondent is on a deleted subnet and no response has been enqueued yet.
-        let mut rejects: Vec<(CanisterId, CallbackId, CanisterId, CoarseTime)> = Vec::new();
+        // Grouped by canister_id so each canister is removed and reinserted exactly once.
+        let mut rejects: BTreeMap<CanisterId, Vec<(CallbackId, CanisterId, CoarseTime)>> =
+            BTreeMap::new();
         for (canister_id, canister) in self.canister_states.all_iter() {
             let Some(ccm) = canister.system_state.call_context_manager() else {
                 continue;
@@ -926,38 +928,44 @@ impl ReplicatedState {
                         .queues()
                         .has_enqueued_response(callback_id)
                 {
-                    rejects.push((*canister_id, *callback_id, respondent, callback.deadline));
+                    rejects
+                        .entry(*canister_id)
+                        .or_default()
+                        .push((*callback_id, respondent, callback.deadline));
                 }
             }
         }
 
         let mut available_guaranteed_response_memory = i64::MAX / 2;
         let mut errors = Vec::new();
-        for (canister_id, callback_id, respondent, deadline) in rejects {
-            let response = RequestOrResponse::Response(Arc::new(Response {
-                originator: canister_id,
-                respondent,
-                originator_reply_callback: callback_id,
-                refund: Cycles::zero(),
-                // Use the same reject code and message as canister uninstallation:
-                // the callee may have partially executed the request before the subnet
-                // was deleted, making this semantically equivalent to uninstallation.
-                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
-                    RejectCode::CanisterReject,
-                    "Canister has been uninstalled.",
-                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-                )),
-                deadline,
-            }));
-
+        for (canister_id, callbacks) in rejects {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            if let Err((error, _)) = Arc::make_mut(&mut canister).push_input(
-                response,
-                &mut available_guaranteed_response_memory,
-                own_subnet_type,
-                InputQueueType::RemoteSubnet,
-            ) {
-                errors.push(error);
+            for (callback_id, respondent, deadline) in callbacks {
+                let response = RequestOrResponse::Response(Arc::new(Response {
+                    originator: canister_id,
+                    respondent,
+                    originator_reply_callback: callback_id,
+                    refund: Cycles::zero(),
+                    // Use the same reject code and message as canister uninstallation:
+                    // the callee may have partially executed the request before the subnet
+                    // was deleted, making this semantically equivalent to uninstallation.
+                    response_payload: Payload::Reject(
+                        RejectContext::new_with_message_length_limit(
+                            RejectCode::CanisterReject,
+                            "Canister has been uninstalled.",
+                            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                        ),
+                    ),
+                    deadline,
+                }));
+                if let Err((error, _)) = Arc::make_mut(&mut canister).push_input(
+                    response,
+                    &mut available_guaranteed_response_memory,
+                    own_subnet_type,
+                    InputQueueType::RemoteSubnet,
+                ) {
+                    errors.push(error);
+                }
             }
             self.canister_states.insert(canister);
         }
