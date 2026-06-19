@@ -1,9 +1,7 @@
 use crate::canister_state::queues::{
     CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
-use crate::canister_state::system_state::{
-    CallContextManager, CanisterOutputQueuesIterator, push_input,
-};
+use crate::canister_state::system_state::{CanisterOutputQueuesIterator, push_input};
 use crate::metadata_state::subnet_call_context_manager::{
     PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
 };
@@ -911,42 +909,27 @@ impl ReplicatedState {
 
         // Collect all (canister_id, callback_id, respondent, deadline) tuples where
         // the respondent is on a deleted subnet and no response has been enqueued yet.
-        let rejects: Vec<(CanisterId, CallbackId, CanisterId, CoarseTime)> = self
-            .canister_states
-            .all_iter()
-            .flat_map(|(canister_id, canister)| {
-                let canister_id = *canister_id;
-                let callbacks: Vec<_> = canister
-                    .system_state
-                    .call_context_manager()
-                    .map(|ccm: &CallContextManager| ccm.callbacks().iter().collect())
-                    .unwrap_or_default();
-                let routing_table = Arc::clone(&routing_table);
-                let subnet_ids = &subnet_ids;
-                callbacks
-                    .into_iter()
-                    .filter_map(move |(callback_id, callback)| {
-                        let callback_id = *callback_id;
-                        let respondent = callback.respondent;
-                        let deadline = callback.deadline;
-                        // Skip if respondent has a route in the routing table (canister on an active subnet)
-                        // or if respondent's principal ID is a subnet ID in the current topology
-                        // (management canister calls to any subnet, including own subnet).
-                        if routing_table.lookup_entry(respondent).is_none()
-                            && !subnet_ids.contains(&SubnetId::from(respondent.get()))
-                            && !canister
-                                .system_state
-                                .queues()
-                                .has_enqueued_response(&callback_id)
-                        {
-                            Some((canister_id, callback_id, respondent, deadline))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        let mut rejects: Vec<(CanisterId, CallbackId, CanisterId, CoarseTime)> = Vec::new();
+        for (canister_id, canister) in self.canister_states.all_iter() {
+            let Some(ccm) = canister.system_state.call_context_manager() else {
+                continue;
+            };
+            for (callback_id, callback) in ccm.callbacks().iter() {
+                let respondent = callback.respondent;
+                // Skip if respondent has a route in the routing table (canister on an active subnet)
+                // or if respondent's principal ID is a subnet ID in the current topology
+                // (management canister calls to any subnet, including own subnet).
+                if routing_table.lookup_entry(respondent).is_none()
+                    && !subnet_ids.contains(&SubnetId::from(respondent.get()))
+                    && !canister
+                        .system_state
+                        .queues()
+                        .has_enqueued_response(callback_id)
+                {
+                    rejects.push((*canister_id, *callback_id, respondent, callback.deadline));
+                }
+            }
+        }
 
         let mut available_guaranteed_response_memory = i64::MAX / 2;
         let mut errors = Vec::new();
