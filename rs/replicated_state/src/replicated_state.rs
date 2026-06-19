@@ -869,11 +869,11 @@ impl ReplicatedState {
         self.metadata.streams.get(destination_subnet_id)
     }
 
-    /// Discards streams to subnets no longer present in the network topology.
+    /// Discards outgoing streams targeting subnets no longer present in the network topology.
     ///
-    /// Safe to call because by the time subnet deletion takes effect in the registry,
-    /// all certified stream slices from the deleted subnet have already been inducted
-    /// and no new certified slices can be produced.
+    /// Once a subnet is removed from the current topology/routing table, messages can no longer be
+    /// delivered to it; any remaining stream messages are treated as dropped when the stream entry
+    /// is removed.
     pub fn discard_streams_for_deleted_subnets(&mut self) {
         let mut streams = self.take_streams();
         streams.retain(|subnet_id, _| {
