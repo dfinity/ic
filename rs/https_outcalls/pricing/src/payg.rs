@@ -198,12 +198,12 @@ mod tests {
 
     #[test]
     fn charges_per_replica_cost_fully_replicated() {
-        let allowance = 1_000_000_000u128;
+        let allowance = 1_000_000_000_u128;
         let ctx = context(Replication::FullyReplicated, allowance);
         let mut tracker = PayAsYouGoTracker::new(&ctx);
 
-        let response_size = 1_000u64;
-        let response_ms = 2_000u128;
+        let response_size = 1_000_u64;
+        let response_ms = 2_000_u128;
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
                 response_size: NumBytes::from(response_size),
@@ -214,7 +214,7 @@ mod tests {
         let network =
             PER_DOWNLOADED_BYTE_FEE * response_size as u128 + PER_RESPONSE_MS_FEE * response_ms;
 
-        let instructions = 13_000u64;
+        let instructions = 13_000_u64;
         assert_eq!(
             tracker.subtract_transform_usage(NumInstructions::from(instructions)),
             Ok(())
@@ -237,12 +237,12 @@ mod tests {
 
     #[test]
     fn charges_transformed_response_for_flexible() {
-        let allowance = 1_000_000_000u128;
+        let allowance = 1_000_000_000_u128;
         let n = 13;
         let ctx = context(flexible(n), allowance);
         let mut tracker = PayAsYouGoTracker::new(&ctx);
 
-        let transformed_size = 500u64;
+        let transformed_size = 500_u64;
         assert_eq!(
             tracker.subtract_transformed_response_usage(NumBytes::from(transformed_size)),
             Ok(())
