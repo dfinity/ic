@@ -384,6 +384,7 @@ pub trait MemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
+        page_overhead: u64,
         subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
@@ -440,6 +441,7 @@ pub fn new(
     page_map: PageMap,
     missing_page_handler_kind: Option<MissingPageHandlerKind>,
     memory_limits: MemoryLimits,
+    page_overhead: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 ) -> nix::Result<SigsegvMemoryTracker> {
     match missing_page_handler_kind {
@@ -451,6 +453,7 @@ pub fn new(
                 dirty_page_tracking,
                 page_map,
                 memory_limits,
+                page_overhead,
                 subtract_instruction_counter,
             )?))
         }
@@ -461,6 +464,7 @@ pub fn new(
             dirty_page_tracking,
             page_map,
             memory_limits,
+            page_overhead,
             subtract_instruction_counter,
         )?)),
     }
