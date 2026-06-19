@@ -452,8 +452,11 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         )
         .unwrap();
 
-    // Simulate the requests being moved from output queues to the stream
-    // (so output queues are empty but input slots are still reserved).
+    // Simulate the requests being moved from output queues to the stream:
+    // drain the output queues (returning Ok(()) consumes each message) while
+    // leaving the input-slot reservations intact (created by push_output_request).
+    // The reservations must remain because generate_reject_responses_for_deleted_subnets()
+    // calls push_input() to deliver the synthetic reject, which requires a matching slot.
     stream_canister
         .system_state
         .output_queues_for_each(|_, _| Ok(()));

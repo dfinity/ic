@@ -882,15 +882,20 @@ impl ReplicatedState {
                 .subnets()
                 .contains_key(subnet_id)
         });
+        // Cycles in dropped stream messages (refunds in responses, payments in requests)
+        // are intentionally not observed as lost: the deleted subnet may have partially
+        // executed the message and consumed some or all of those cycles.
         self.put_streams(streams);
     }
 
     /// Generates synthetic reject responses for callbacks to deleted subnets.
     ///
-    /// Must be called after `build_streams()`, because `build_streams()`
-    /// unconditionally rejects any request in an output queue with no route
-    /// (i.e. destined for a deleted subnet), ensuring such callbacks already
-    /// have an enqueued response and are skipped by this function.
+    /// Should be called after `build_streams()`: `build_streams()` unconditionally
+    /// rejects any request in an output queue with no route (e.g. destined for a
+    /// deleted subnet), ensuring such callbacks already have an enqueued response
+    /// and are skipped by this function. Calling before `build_streams()` is not
+    /// incorrect, but may result in a less precise error message for those callbacks
+    /// (the reject from `build_streams()` contains `DestinationInvalid` which is more precise).
     pub fn generate_reject_responses_for_deleted_subnets(&mut self) -> Vec<StateError> {
         let routing_table = self.routing_table();
         // Collect subnet IDs to also skip callbacks to management canisters of other subnets
@@ -951,6 +956,9 @@ impl ReplicatedState {
                 respondent,
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
+                // Use the same reject code and message as canister uninstallation:
+                // the callee may have partially executed the request before the subnet
+                // was deleted, making this semantically equivalent to uninstallation.
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                     RejectCode::CanisterReject,
                     "Canister has been uninstalled.",
