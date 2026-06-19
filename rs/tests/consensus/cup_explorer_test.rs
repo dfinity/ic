@@ -168,7 +168,7 @@ fn test(env: TestEnv) {
     );
     let update_subnet_payload = UpdateSubnetPayload {
         subnet_id: app_subnet.subnet_id,
-        dkg_interval_length: Some(14),
+        dkg_interval_length: Some(DKG_INTERVAL),
         subnet_admins: None,
         ..empty_subnet_update()
     };
