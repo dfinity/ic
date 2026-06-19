@@ -24,6 +24,20 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Temporarily bypass the per-operator `max_rewardable_nodes` quota check in
+  `add_node` for node reward types `type4.1` through `type4.4`. Instead of the
+  configured quota, these types are subjected to a single high sentinel cap
+  (`EXCESSIVE_NUMBER_OF_TYPE_4_NODES`, currently 1000 per node operator),
+  chosen to be well above any realistic per-operator deployment while still
+  preventing runaway registrations. `type4.5` is explicitly excluded and
+  remains subject to the standard `max_rewardable_nodes` quota.
+
+  Motivation: node providers are starting to deploy gen4 hardware now, but the
+  reward canister currently still treats `type4.5` rewards as `type1.1`, which
+  means we cannot yet meaningfully size `max_rewardable_nodes` quotas for the
+  `type4.x` family. Enforcing the quota in the meantime would block legitimate
+  gen4 onboarding. The quota check will be restored once the reward-side
+  handling of `type4.5` is fixed (see CLO-15).
 * One-time post-upgrade migration converting the reward type of 100 currently
   unassigned nodes from `type1.1` to `type4.5`. The migration only mutates nodes
   whose reward type is still `type1.1`, so it is idempotent across upgrades.
