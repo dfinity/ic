@@ -42,7 +42,7 @@ EXCLUDED_TAGS = [
     "nns_tests_nightly",
     "pocketic_tests_nightly",
     # The `_local` system-tests use too many resources to run on every PR so
-    # they run in the `local-system-tests` job of schedule-daily.yml instead of
+    # they run in the dedicated `local-system-tests.yml` workflow instead of
     # in the `bazel-test-all` job.
     "local_system_test",
 ]

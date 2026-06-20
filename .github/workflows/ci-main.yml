@@ -193,7 +193,7 @@ jobs:
 
             # The `_local` system-tests are excluded from the inferred targets
             # (via the `local_system_test` tag in ci/scripts/targets.py) and run
-            # in the `local-system-tests` job of schedule-daily.yml instead.
+            # in the dedicated `local-system-tests.yml` workflow instead.
             # To still smoke-test the local-backend machinery, we re-add a single
             # `_local` test, but only when its Farm sibling
             # `//rs/tests/idx:basic_health_test` is already being tested so that
