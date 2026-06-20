@@ -283,8 +283,10 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     // causing the stream builder to generate a reject for output requests.
     let remote_canister_id = CANISTER_RANGE_B.start;
     let deadline = CoarseTime::from_secs_since_unix_epoch(u32::MAX);
+    // Defined here so it can be used as the sender for in-stream requests below.
+    let stream_local_canister_id = CanisterId::from_u64(CANISTER_IDS_PER_SUBNET + 1);
     // Pre-populate the stream to the deleted subnet with bounded-wait and unbounded-wait
-    // responses — these are dropped silently when the stream is discarded.
+    // requests and responses — all are dropped silently when the stream is discarded.
     initial_state.modify_streams(|streams| {
         let stream = streams.entry(SUBNET_2).or_default();
         stream.push(StreamMessage::Response(Arc::new(Response {
@@ -303,6 +305,20 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             response_payload: Payload::Data(vec![]),
             deadline: NO_DEADLINE,
         })));
+        stream.push(StreamMessage::Request(Arc::new(
+            RequestBuilder::new()
+                .sender(stream_local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(deadline)
+                .build(),
+        )));
+        stream.push(StreamMessage::Request(Arc::new(
+            RequestBuilder::new()
+                .sender(stream_local_canister_id)
+                .receiver(remote_canister_id)
+                .deadline(NO_DEADLINE)
+                .build(),
+        )));
     });
     assert_eq!(
         initial_state
@@ -310,7 +326,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             .unwrap()
             .messages()
             .len(),
-        2
+        4
     );
 
     // Add a canister with bounded-wait and unbounded-wait output requests, a bounded-wait
@@ -402,7 +418,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         deadline: ic_types::messages::NO_DEADLINE,
     }));
 
-    // Output subnet message: local → SUBNET_2 (callee = the deleted subnet's ID).
+    // Bounded-wait output subnet message: local → SUBNET_2 (callee = the deleted subnet's ID).
     // Subnet messages with no route get a reject response — no critical error.
     let subnet_as_canister_id = CanisterId::from(SUBNET_2);
     canister_state
@@ -416,11 +432,23 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         )
         .unwrap();
 
+    // Unbounded-wait output subnet message: local → SUBNET_2 (callee = the deleted subnet's ID).
+    // Subnet messages with no route get a reject response — no critical error.
+    canister_state
+        .push_output_request(
+            OutputRequestBuilder::default()
+                .sender(local_canister_id)
+                .receiver(subnet_as_canister_id)
+                .deadline(NO_DEADLINE)
+                .build(),
+            UNIX_EPOCH,
+        )
+        .unwrap();
+
     initial_state.put_canister_state(canister_state);
 
     // Second local canister: has callbacks to the deleted subnet but requests
     // already in the stream (output queues cleared). Synthetic rejects should be generated.
-    let stream_local_canister_id = CanisterId::from_u64(CANISTER_IDS_PER_SUBNET + 1);
     let mut stream_canister = new_canister_state(
         stream_local_canister_id,
         PrincipalId::new_anonymous(),
@@ -463,8 +491,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
     initial_state.put_canister_state(stream_canister);
 
-    // Subnet output response: local subnet → remote (bounded-wait).
-    // Bounded-wait responses with no route are dropped without a critical error.
+    // Bounded-wait subnet output response: local subnet → remote.
+    // Responses with no route are dropped without a critical error.
     // First push then pop a matching input request to create the output-queue reservation.
     initial_state
         .push_input(
@@ -485,6 +513,31 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         refund: Cycles::zero(),
         response_payload: Payload::Data(vec![]),
         deadline,
+    }));
+
+    // Unbounded-wait subnet output response: local subnet → remote (no deadline).
+    // Responses with no route are dropped without a critical error.
+    // Use CallbackId::from(1) to get a distinct reservation from the bounded-wait one above.
+    initial_state
+        .push_input(
+            RequestBuilder::new()
+                .sender(remote_canister_id)
+                .receiver(CanisterId::from(SUBNET_1))
+                .sender_reply_callback(CallbackId::from(1))
+                .deadline(NO_DEADLINE)
+                .build()
+                .into(),
+            &mut subnet_available_memory,
+        )
+        .unwrap();
+    initial_state.pop_subnet_input().unwrap();
+    initial_state.push_subnet_output_response(Arc::new(Response {
+        originator: remote_canister_id,
+        respondent: CanisterId::from(SUBNET_1),
+        originator_reply_callback: CallbackId::from(1),
+        refund: Cycles::zero(),
+        response_payload: Payload::Data(vec![]),
+        deadline: NO_DEADLINE,
     }));
 
     // Network topology with only SUBNET_0 (NNS) and SUBNET_1 (local); SUBNET_2 is absent.
@@ -549,11 +602,10 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             Default::default(),
         );
 
-        // Stream to the deleted subnet (which contained 2 responses) is gone — both
-        // the bounded-wait and unbounded-wait responses were dropped silently.
+        // Stream to the deleted subnet (which contained 4 messages: 2 requests + 2 responses)
+        // is gone — all were dropped silently.
         assert!(state.get_stream(&SUBNET_2).is_none());
-        // Output queues are empty: requests were consumed,
-        // bounded-wait responses were dropped.
+        // Output queues are empty: requests were consumed, responses were dropped.
         assert!(
             !state
                 .canister_state(&local_canister_id)
@@ -561,14 +613,16 @@ fn state_machine_handles_messages_to_deleted_subnet() {
                 .has_output()
         );
         assert!(!state.subnet_queues().has_output());
-        // Reject responses for all 3 unroutable output requests (bounded-wait request,
-        // unbounded-wait request, and subnet message) are in the local canister's input queue.
+        // Reject responses for all 4 unroutable output requests (bounded-wait request,
+        // unbounded-wait request, bounded-wait subnet message, unbounded-wait subnet message)
+        // are in the local canister's input queue.
         let canister = Arc::make_mut(state.canister_state_mut_arc(&local_canister_id).unwrap());
         let msg1 = canister.pop_input().unwrap();
         let msg2 = canister.pop_input().unwrap();
         let msg3 = canister.pop_input().unwrap();
+        let msg4 = canister.pop_input().unwrap();
         assert!(canister.pop_input().is_none());
-        for msg in [msg1, msg2, msg3] {
+        for msg in [msg1, msg2, msg3, msg4] {
             assert!(matches!(
                 msg,
                 CanisterMessage::Response { response, .. }
