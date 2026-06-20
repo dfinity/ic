@@ -1,7 +1,6 @@
 use super::test_fixtures::*;
 use super::*;
 use crate::certified_slice_pool::CertifiedSliceError;
-use std::sync::{Arc, Mutex};
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
@@ -18,6 +17,7 @@ use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNE
 use ic_types::state_manager::StateManagerError;
 use maplit::btreemap;
 use mockall::predicate::eq;
+use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn build_payload_no_subnets() {
@@ -537,12 +537,7 @@ impl XNetSlicePool for TestSlicePool {
         _msg_limit: Option<usize>,
         _byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
-        Ok(self
-            .0
-            .lock()
-            .unwrap()
-            .remove(&subnet_id)
-            .map(|s| (s, 1)))
+        Ok(self.0.lock().unwrap().remove(&subnet_id).map(|s| (s, 1)))
     }
 
     fn observe_pool_size_bytes(&self) {}
