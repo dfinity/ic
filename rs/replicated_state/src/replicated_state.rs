@@ -864,9 +864,9 @@ impl ReplicatedState {
     /// verifies certified stream slices against the block's registry version:
     /// a slice from a deleted subnet fails validation so no slice from the
     /// deleted subnet can appear in a block at a registry version where the
-    /// subnet is deleted. Therefore, by the time this is called, all certified
-    /// slices from the deleted subnet have already been processed and we don't
-    /// need the outgoing stream anymore.
+    /// subnet is deleted. After the outgoing stream is dropped, no new
+    /// certified stream slices from the deleted subnet can be pulled and refer
+    /// to the deleted outgoing stream.
     pub fn discard_streams_for_deleted_subnets(&mut self) {
         let mut streams = self.take_streams();
         streams.retain(|subnet_id, _| {

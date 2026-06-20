@@ -622,8 +622,9 @@ async fn get_xnet_payload_excludes_deleted_subnet_slice() {
 ///
 /// This is the key invariant that makes `discard_streams_for_deleted_subnets`
 /// safe: no block can carry a certified slice from the deleted subnet after
-/// deletion takes effect, so all slices have already been processed before the
-/// stream is discarded.
+/// deletion takes effect, so after the outgoing stream is discarded, no new
+/// certified stream slices from the deleted subnet can be pulled and refer to
+/// the deleted outgoing stream.
 #[tokio::test]
 async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
     with_test_replica_logger(|log| {
