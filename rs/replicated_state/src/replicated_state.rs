@@ -859,9 +859,14 @@ impl ReplicatedState {
 
     /// Discards streams to subnets no longer present in the network topology.
     ///
-    /// Safe to call because by the time subnet deletion takes effect in the registry,
-    /// all certified stream slices from the deleted subnet have already been inducted
-    /// and no new certified slices can be produced.
+    /// Safe to call because the XNet payload builder excludes deleted subnets
+    /// from the set of subnets it pulls slices for, and XNet payload validation
+    /// verifies certified stream slices against the block's registry version:
+    /// a slice from a deleted subnet fails validation so no slice from the
+    /// deleted subnet can appear in a block at a registry version where the
+    /// subnet is deleted. Therefore, by the time this is called, all certified
+    /// slices from the deleted subnet have already been processed and we don't
+    /// need the outgoing stream anymore.
     pub fn discard_streams_for_deleted_subnets(&mut self) {
         let mut streams = self.take_streams();
         streams.retain(|subnet_id, _| {
