@@ -374,7 +374,7 @@ fn canister_and_replica_logs() {
         .unwrap()
         .read_to_string(&mut stdout)
         .unwrap();
-    assert!(stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+    assert!(stdout.contains("Finished executing install_code message on canister CanisterId(xp3jw-ot777-77777-aaaaa-cai)"));
 
     let mut stderr = String::new();
     out.stderr
@@ -411,7 +411,7 @@ fn canister_and_no_replica_logs() {
         .unwrap()
         .read_to_string(&mut stdout)
         .unwrap();
-    assert!(!stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+    assert!(!stdout.contains("Finished executing install_code message on canister CanisterId(xp3jw-ot777-77777-aaaaa-cai)"));
 
     let mut stderr = String::new();
     out.stderr
@@ -838,7 +838,7 @@ fn with_app_subnet_state_twice() {
 
 #[test]
 #[should_panic(
-    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }, CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] for a different subnet kind NNS."
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }, CanisterIdRange { start: CanisterId(xp3jw-ot777-77777-aaaaa-cai), end: CanisterId(le5t5-53777-77777-p777q-cai) }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] for a different subnet kind NNS."
 )]
 fn with_nns_as_app_subnet_state() {
     let (_state_dir, nns_state_dir) = create_nns_subnet_state();
@@ -851,7 +851,7 @@ fn with_nns_as_app_subnet_state() {
 
 #[test]
 #[should_panic(
-    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] do not contain the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] expected for the subnet kind NNS."
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(xp3jw-ot777-77777-aaaaa-cai), end: CanisterId(le5t5-53777-77777-p777q-cai) }] do not contain the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] expected for the subnet kind NNS."
 )]
 fn with_app_as_nns_subnet_state() {
     let (_state_dir, app_state_dir) = create_app_subnet_state();
