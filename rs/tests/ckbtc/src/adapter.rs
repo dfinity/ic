@@ -177,6 +177,13 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
                 }
 
                 tries += 1;
+                // Don't retry forever: once `max_tries` is exhausted, give up and
+                // return the blocks collected so far (matching the outer loop's
+                // behaviour) instead of looping indefinitely on a persistently failing
+                // adapter.
+                if tries >= max_tries {
+                    break (vec![], vec![]);
+                }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             };
 
