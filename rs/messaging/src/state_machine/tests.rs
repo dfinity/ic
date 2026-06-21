@@ -699,7 +699,10 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             };
             assert_eq!(response.originator, local_canister_id);
             let Payload::Reject(ctx) = &response.response_payload else {
-                panic!("expected reject payload, got {:?}", response.response_payload);
+                panic!(
+                    "expected reject payload, got {:?}",
+                    response.response_payload
+                );
             };
             if ctx.code() == ic_error_types::RejectCode::DestinationInvalid {
                 assert!(ctx.message().contains("No route to canister"));
