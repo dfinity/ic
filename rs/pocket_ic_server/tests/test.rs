@@ -374,7 +374,10 @@ fn canister_and_replica_logs() {
         .unwrap()
         .read_to_string(&mut stdout)
         .unwrap();
-assert!(stdout.contains(&format!("Finished executing install_code message on canister CanisterId({})", canister_id)));
+    assert!(stdout.contains(&format!(
+        "Finished executing install_code message on canister CanisterId({})",
+        canister_id
+    )));
 
     let mut stderr = String::new();
     out.stderr
@@ -411,7 +414,10 @@ fn canister_and_no_replica_logs() {
         .unwrap()
         .read_to_string(&mut stdout)
         .unwrap();
-assert!(!stdout.contains(&format!("Finished executing install_code message on canister CanisterId({})", canister_id)));
+    assert!(!stdout.contains(&format!(
+        "Finished executing install_code message on canister CanisterId({})",
+        canister_id
+    )));
 
     let mut stderr = String::new();
     out.stderr
