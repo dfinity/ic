@@ -266,9 +266,7 @@ def system_test(
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
-    # Runtime deps that are only needed when running on the local (libvirt-based)
-    # backend. The Local backend boots Universal-VMs and the Prometheus-VM from
-    # these locally-vendored images instead of fetching them from Farm.
+    # Runtime deps that are only needed when running on the local (libvirt-based) backend.
     _local_only_deps = {
         image_name + "_PATH": image_path
         for image_name, image_path in icos_images.items()
@@ -283,6 +281,8 @@ def system_test(
     for image_name, image_path in icos_config.local_only_icos_images.items():
         _local_only_deps[image_name + "_PATH"] = image_path
 
+    # The Local backend boots Universal-VMs and the Prometheus-VM from
+    # these locally-vendored images instead of fetching them from Farm.
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
 

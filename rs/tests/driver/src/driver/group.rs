@@ -1411,20 +1411,7 @@ impl SystemTestGroup {
             }
             let backend = SystemTestBackend::from_env();
             backend.write_attribute(&root_env);
-            // Become a child-subreaper so that orphaned, double-forked daemons
-            // (e.g. libvirtd/dnsmasq/QEMU started by the local backend, or any
-            // stray subprocess) are reparented to this long-lived parent process
-            // instead of escaping to the bazel test process-wrapper. This
-            // lets `kill_all_descendants` reliably reap them at teardown. The
-            // attribute is per-process and not inherited across fork, so it must
-            // be set here on the parent before any children are spawned.
             crate::driver::process::enable_child_subreaper(group_ctx.log());
-            // Start a background thread that promptly reaps the orphaned,
-            // double-forked daemons (QEMU/dnsmasq) that the subreaper
-            // attribute reparents to us. Without this they linger as zombies for
-            // the whole run, and—worse—libvirt's domain teardown stalls for ~2
-            // minutes waiting for a QEMU zombie that only we can reap. See
-            // `spawn_descendant_reaper` for details.
             crate::driver::process::spawn_descendant_reaper(group_ctx.log());
             if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);

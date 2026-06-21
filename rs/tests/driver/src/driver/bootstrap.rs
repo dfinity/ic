@@ -192,10 +192,7 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    // Both the URL and the sha256 are backend-aware: under Farm they point at
-    // Farm's content-addressed store; under the Local backend the URL points at
-    // the per-group file server (see `serve_files_task`) and the sha256 is
-    // exported by `run_systest.sh`.
+
     let ic_os_update_img_sha256 = get_guestos_initial_update_img_sha256();
     let ic_os_update_img_url = get_guestos_initial_update_img_url(test_env);
     let ic_os_launch_measurements = get_guestos_launch_measurements();
