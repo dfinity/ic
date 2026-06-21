@@ -571,7 +571,7 @@ impl StreamBuilderImpl {
                 // `RejectCode::DestinationInvalid` for requests
                 // so that `generate_reject_responses_for_deleted_subnets()`
                 // does not generate a reject response with the less precise
-                // `RejectCode::CanisterRejected`.
+                // `RejectCode::CanisterReject`.
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
