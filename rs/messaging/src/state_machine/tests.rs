@@ -689,9 +689,9 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         //   - 2 synthetic rejects from generate_reject_responses_for_deleted_subnets()
         //       for callbacks with requests already delivered to the deleted subnet (refund = zero).
         let canister = Arc::make_mut(state.canister_state_mut_arc(&local_canister_id).unwrap());
-        let mut n_rejects = 0u32;
-        let mut n_destination_invalid = 0u32;
-        let mut n_canister_uninstalled = 0u32;
+        let mut n_rejects = 0_u32;
+        let mut n_destination_invalid = 0_u32;
+        let mut n_canister_uninstalled = 0_u32;
         let mut total_refund = Cycles::zero();
         while let Some(msg) = canister.pop_input() {
             let CanisterMessage::Response { response, .. } = msg else {
@@ -723,7 +723,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         assert_eq!(n_rejects, 10);
         // 4 rejects for output-queue requests each refund req_payment;
         // synthetic rejects from generate_reject_responses_for_deleted_subnets() refund zero.
-        assert_eq!(total_refund, req_payment * 4u64);
+        assert_eq!(total_refund, req_payment * 4_u64);
 
         // Dropped output responses (4 total: 2 from canister + 2 from subnet) contribute to the
         // DroppedMessages metric. Stream message cycles are intentionally not tracked.
