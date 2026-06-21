@@ -50,6 +50,16 @@ rust_binary(
 
 system_test_nns(
     name = "backup_manager_upgrade_test",
+    # Pinned to the Farm backend. This test drives `ic-backup`, which replays the
+    # subnet's artifacts with a version-specific `ic-replay` binary. For the initial
+    # mainnet replica version (`guestos = "mainnet_nns"`) the test does not provide
+    # that binary locally, so `ic-backup` downloads it from download.dfinity.systems.
+    # The `_local` variant runs in a network-isolated sandbox (no `requires-network`
+    # tag), so the download fails, replay never progresses, no checkpoint is ever
+    # archived, and the test times out. Supporting the local backend would require
+    # vendoring the mainnet `ic-replay`/sandbox binaries (none are available offline
+    # today) and copying them into `binaries/{initial_replica_version}/`.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -66,6 +76,12 @@ system_test_nns(
 
 system_test_nns(
     name = "backup_manager_downgrade_test",
+    # Pinned to the Farm backend for the same reason as `backup_manager_upgrade_test`:
+    # `ic-backup` downloads the mainnet `ic-replay` binary (here for the
+    # `guestos_update = "mainnet_nns"` target version) from download.dfinity.systems,
+    # which the network-isolated `_local` variant cannot reach, so replay stalls and
+    # the test times out.
+    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     guestos_update = "mainnet_nns",
     tags = [
