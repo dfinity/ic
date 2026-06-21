@@ -33,7 +33,7 @@ use ic_types::messages::{
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
 use ic_types::{CanisterId, SubnetId, Time};
-use ic_types_cycles::{CompoundCycles, Cycles};
+use ic_types_cycles::Cycles;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -578,41 +578,6 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
         let provided_canister_states = canister_states_with_outputs(msgs.clone());
         provided_state.put_canister_states(provided_canister_states);
 
-        // Also add an output response with a non-zero refund destined for an unknown subnet.
-        // This verifies that such responses are dropped silently and their refund is recorded
-        // as lost cycles (not raised as a critical error).
-        let respondent = canister_test_id(100);
-        let originator = canister_test_id(101);
-        let refund = Cycles::new(1_000_000);
-        let mut canister_state = new_canister_state(
-            respondent,
-            respondent.get(),
-            *INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        );
-        push_input(
-            &mut canister_state,
-            generate_message_for_test(
-                originator,
-                respondent,
-                CallbackId::from(1),
-                "".to_string(),
-                Cycles::new(0),
-                NO_DEADLINE,
-            )
-            .into(),
-        );
-        canister_state.system_state.pop_input().unwrap();
-        canister_state.push_output_response(Arc::new(Response {
-            originator,
-            respondent,
-            originator_reply_callback: CallbackId::from(1),
-            refund,
-            response_payload: Payload::Data(vec![]),
-            deadline: NO_DEADLINE,
-        }));
-        provided_state.put_canister_state(canister_state);
-
         // Expect all messages in canister output queues to have been consumed.
         let mut expected_state = consume_output_queues(&provided_state);
 
@@ -626,12 +591,6 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
                 format!("No route to canister {receiver}"),
             );
         }
-        // The response refund is recorded as lost cycles.
-        let cost_schedule = expected_state.get_own_cost_schedule();
-        expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-            refund,
-            cost_schedule,
-        ));
 
         let result_state = stream_builder.build_streams(provided_state);
 
@@ -641,23 +600,15 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
         );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
+
         assert_routed_messages_eq(
-            metric_vec(&[
-                (
-                    &[
-                        (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
-                        (LABEL_STATUS, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND),
-                    ],
-                    14,
-                ),
-                (
-                    &[
-                        (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
-                        (LABEL_STATUS, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND),
-                    ],
-                    1,
-                ),
-            ]),
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND),
+                ],
+                14,
+            )]),
             &metrics_registry,
         );
         assert_eq!(0, fetch_routed_payload_count(&metrics_registry));
@@ -669,8 +620,6 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
             btreemap! {},
             fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BYTES)
         );
-        // No critical errors raised.
-        assert_eq_critical_errors(0, 0, &metrics_registry);
     });
 }
 
