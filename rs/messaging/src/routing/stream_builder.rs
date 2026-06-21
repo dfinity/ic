@@ -566,9 +566,12 @@ impl StreamBuilderImpl {
                     };
                 }
 
-                // Destination subnet not found: always consume the message immediately
-                // (no stream capacity check), so that `generate_reject_responses_for_deleted_subnets()`
-                // can rely on all such requests having an enqueued reject response after `build_streams()`.
+                // Destination subnet not found: process the message immediately;
+                // in particular, generate a reject response with the more precise
+                // `RejectCode::DestinationInvalid` for requests
+                // so that `generate_reject_responses_for_deleted_subnets()`
+                // does not generate a reject response with the less precise
+                // `RejectCode::CanisterRejected`.
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
