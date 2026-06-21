@@ -690,19 +690,33 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         //       for callbacks with requests already delivered to the deleted subnet (refund = zero).
         let canister = Arc::make_mut(state.canister_state_mut_arc(&local_canister_id).unwrap());
         let mut n_rejects = 0u32;
+        let mut n_destination_invalid = 0u32;
+        let mut n_canister_uninstalled = 0u32;
         let mut total_refund = Cycles::zero();
         while let Some(msg) = canister.pop_input() {
-            assert!(matches!(
-                msg,
-                CanisterMessage::Response { ref response, .. }
-                    if response.originator == local_canister_id
-                        && matches!(response.response_payload, Payload::Reject(_))
-            ));
-            if let CanisterMessage::Response { response, .. } = msg {
-                total_refund += response.refund;
-                n_rejects += 1;
+            let CanisterMessage::Response { response, .. } = msg else {
+                panic!("expected reject response, got {msg:?}");
+            };
+            assert_eq!(response.originator, local_canister_id);
+            let Payload::Reject(ctx) = &response.response_payload else {
+                panic!("expected reject payload, got {:?}", response.response_payload);
+            };
+            if ctx.code() == ic_error_types::RejectCode::DestinationInvalid {
+                assert!(ctx.message().contains("No route to canister"));
+                n_destination_invalid += 1;
+            } else {
+                ctx.assert_contains(
+                    ic_error_types::RejectCode::CanisterReject,
+                    "Canister has been uninstalled",
+                );
+                n_canister_uninstalled += 1;
             }
+            total_refund += response.refund;
+            n_rejects += 1;
         }
+        assert_eq!(n_rejects, 10);
+        assert_eq!(n_destination_invalid, 4);
+        assert_eq!(n_canister_uninstalled, 6);
         assert_eq!(n_rejects, 10);
         // 4 rejects for output-queue requests each refund req_payment;
         // synthetic rejects from generate_reject_responses_for_deleted_subnets() refund zero.
