@@ -156,11 +156,22 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
                 match self.get_successors(anchor.clone(), headers.clone()).await {
                     // Break inner loop, if adapter returned data
                     Ok(successor) => break successor,
-                    // Retry if the call returned an `Unavailable` error
+                    // Retry on transient adapter errors. The request fails with
+                    // `Unavailable` while the adapter is not yet reachable (e.g. still
+                    // starting up or syncing the header chain), and with
+                    // `Cancelled(Timeout expired)` when the adapter does not respond within
+                    // the replica's (short, 50ms) adapter timeout, which can happen e.g. for
+                    // the very first request right after the adapter started. Both are
+                    // transient, so the request should simply be retried.
+                    //
+                    // Note: the call is proxied through the `message` canister, which
+                    // re-rejects any error via `msg_reject`. The reject code observed here is
+                    // therefore always `CanisterReject`, regardless of the adapter's original
+                    // reject code, so we match on the reject message instead.
                     Err(AgentError::CertifiedReject { reject, .. })
                     | Err(AgentError::UncertifiedReject { reject, .. })
-                        if reject.reject_code == RejectCode::SysTransient
-                            && reject.reject_message.starts_with("Unavailable") => {}
+                        if reject.reject_message.starts_with("Unavailable")
+                            || reject.reject_message.starts_with("Cancelled") => {}
                     // Other errors are fatal
                     Err(err) => return Err(err),
                 }
