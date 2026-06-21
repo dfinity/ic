@@ -288,6 +288,7 @@ impl StateMachine for StateMachineImpl {
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         shed_messages_timer.observe_duration();
+
         state_after_stream_builder
     }
 }

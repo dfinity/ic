@@ -613,8 +613,10 @@ impl StreamBuilderImpl {
         }
 
         for req in requests_to_reject {
-            // A response may already be enqueued if `build_streams()` did not process all
-            // output messages to a deleted subnet (e.g. due to a critical error).
+            // A response may already be enqueued if a previous `build_streams()`
+            // did not process some output messages to a deleted subnet (e.g. due to a critical error)
+            // and `generate_reject_responses_for_deleted_subnets` subsequently processed such a message
+            // and generated a response.
             // Skip to avoid a duplicate response.
             if state.canister_state(&req.sender).is_some_and(|c| {
                 c.system_state
