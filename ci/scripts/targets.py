@@ -14,6 +14,9 @@
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
 #
+# For the `test` command a single `_local` system-test is re-added to smoke-test the local-backend machinery
+# whenever its Farm sibling is already selected.
+#
 # When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
@@ -205,13 +208,31 @@ def targets(
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
-    result = subprocess.run(args, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
         log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
         sys.exit(result.returncode)
+
+    result_targets = result.stdout.splitlines()
+
+    # The `_local` system-tests are excluded from the inferred test targets (via
+    # the `local_system_test` tag in EXCLUDED_TAGS) and run in the dedicated
+    # `local-system-tests.yml` workflow instead. To still smoke-test the
+    # local-backend machinery, we re-add a single `_local` test, but only when
+    # its Farm sibling is already being tested so that it respects the diff-only
+    # target selection.
+    LOCAL_SMOKE_TEST_FARM_SIBLING = "//rs/tests/idx:basic_health_test"
+    if command == "test" and LOCAL_SMOKE_TEST_FARM_SIBLING in result_targets:
+        result_targets.append(f"{LOCAL_SMOKE_TEST_FARM_SIBLING}_local")
+
+    # Print the targets each on their own line. When there are no targets we
+    # print nothing (instead of an empty line) so the caller can detect the
+    # empty case, e.g. `bazel test` errors out when given an empty target file.
+    if result_targets:
+        print("\n".join(result_targets))
 
 
 def check():

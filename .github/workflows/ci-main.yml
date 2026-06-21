@@ -191,17 +191,6 @@ jobs:
             ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
             ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
 
-            # The `_local` system-tests are excluded from the inferred targets
-            # (via the `local_system_test` tag in ci/scripts/targets.py) and run
-            # in the dedicated `local-system-tests.yml` workflow instead.
-            # To still smoke-test the local-backend machinery, we re-add a single
-            # `_local` test, but only when its Farm sibling
-            # `//rs/tests/idx:basic_health_test` is already being tested so that
-            # it respects the diff-only target selection.
-            if grep -qxF "//rs/tests/idx:basic_health_test" "${{ runner.temp }}/test-targets"; then
-              echo "//rs/tests/idx:basic_health_test_local" >>"${{ runner.temp }}/test-targets"
-            fi
-
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
