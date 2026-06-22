@@ -110,7 +110,8 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsW
 use ic_state_machine_tests::{
     FakeVerifier, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
     SubmitIngressError, Subnets, WasmResult, add_global_registry_records,
-    add_initial_registry_records,
+    add_initial_registry_records, remove_chain_key_registry_records,
+    remove_subnet_local_registry_records, update_global_registry_records,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
@@ -532,6 +533,9 @@ impl SubnetsImpl {
     }
     pub(crate) fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.read().unwrap().values().cloned().collect()
+    }
+    fn remove(&self, subnet_id: SubnetId) -> Option<Arc<Subnet>> {
+        self.subnets.write().unwrap().remove(&subnet_id)
     }
     fn clear(&self) {
         self.subnets.write().unwrap().clear();
@@ -2090,6 +2094,7 @@ impl PocketIcSubnets {
             //         };
             //       };
             //       sso_discoverable_domains = null;
+            //       sso_credential_migration = null;
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
@@ -2159,6 +2164,7 @@ impl PocketIcSubnets {
             //         };
             //       };
             //       backend_origin = null;
+            //       enable_dnssec_email_recovery = null;
             //       captcha_config = opt record {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
@@ -2209,13 +2215,15 @@ impl PocketIcSubnets {
                 related_origins: None,         // DIFFERENT FROM ICP MAINNET
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
-                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
+                sso_discoverable_domains: None,
+                sso_credential_migration: None,
+                analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
-                sso_discoverable_domains: None,
+                enable_dnssec_email_recovery: None,
                 dnssec_config: None, // DIFFERENT FROM ICP MAINNET
                 doh_config: None,    // DIFFERENT FROM ICP MAINNET
             });
@@ -2740,6 +2748,126 @@ impl PocketIcSubnets {
             subnet.state_machine.reload_registry();
         }
     }
+
+    fn delete_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        default_effective_canister_id: Principal,
+    ) -> Result<(), PocketIcError> {
+        let config_pos = self
+            .subnet_configs
+            .iter()
+            .position(|c| c.subnet_id == subnet_id)
+            .ok_or(PocketIcError::SubnetNotFound(subnet_id.get().0))?;
+
+        let subnet_kind = self.subnet_configs[config_pos].subnet_kind;
+        if subnet_kind.is_named() {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete named subnet {} (kind: {:?}).",
+                subnet_id, subnet_kind
+            )));
+        }
+
+        if let Some(root_subnet) = self.nns_subnet.as_ref()
+            && root_subnet.get_subnet_id() == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(
+                "Cannot delete the root subnet of the PocketIC instance.".to_string(),
+            ));
+        }
+
+        let default_canister_id: CanisterId = PrincipalId(default_effective_canister_id)
+            .try_into()
+            .unwrap();
+        // The default effective canister ID is used as the routing target for canister
+        // creation calls that don't specify an explicit subnet (provisional API with ic_00
+        // as effective ID, or no effective principal). Deleting its subnet would break
+        // all such calls.
+        if let Some((_, default_subnet_id)) = self.routing_table.lookup_entry(default_canister_id)
+            && default_subnet_id == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete subnet {} which contains the default effective canister ID.",
+                subnet_id
+            )));
+        }
+
+        let config = self.subnet_configs.remove(config_pos);
+
+        let subnet = self
+            .subnets
+            .remove(subnet_id)
+            .expect("subnet in subnet_configs must be in subnets");
+
+        subnet.state_machine.drop_payload_builder();
+
+        self.routing_table.remove_subnet(subnet_id);
+
+        for subnets in self.chain_keys.values_mut() {
+            subnets.retain(|&sid| sid != subnet_id);
+        }
+        let empty_chain_key_ids: Vec<MasterPublicKeyId> = self
+            .chain_keys
+            .iter()
+            .filter(|(_, subnets)| subnets.is_empty())
+            .map(|(key_id, _)| key_id.clone())
+            .collect();
+        self.chain_keys.retain(|_, subnets| !subnets.is_empty());
+
+        // Delete the subnet state directory from disk.
+        if let Some(state_dir) = self.state_dir.get() {
+            let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
+            let subnet_state_dir = state_dir.join(hex::encode(subnet_seed));
+            if subnet_state_dir.exists()
+                && let Err(e) = std::fs::remove_dir_all(&subnet_state_dir)
+            {
+                eprintln!(
+                    "Failed to delete subnet state directory {}: {}",
+                    subnet_state_dir.display(),
+                    e
+                );
+            }
+        }
+
+        // Update global registry records to reflect the removed subnet.
+        if self.nns_subnet.is_some() {
+            let next_version =
+                RegistryVersion::new(self.registry_data_provider.latest_version().get() + 1);
+            remove_chain_key_registry_records(
+                &empty_chain_key_ids,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
+            let subnet_list = self
+                .subnets
+                .get_all()
+                .into_iter()
+                .map(|s| s.get_subnet_id())
+                .collect();
+            update_global_registry_records(
+                next_version,
+                self.routing_table.clone(),
+                subnet_list,
+                self.chain_keys.clone(),
+                self.registry_data_provider.clone(),
+            );
+            remove_subnet_local_registry_records(
+                subnet_id,
+                &subnet.state_machine.nodes,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
+            self.persist_registry_changes();
+        }
+
+        // Drop the StateMachine, waiting until no other Arc holders remain.
+        let state_machine = subnet.state_machine.clone();
+        drop(subnet);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
+        drop_state_machine(state_machine, deadline);
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -2776,6 +2904,25 @@ pub struct PocketIc {
     default_effective_canister_id: Principal,
 }
 
+fn drop_state_machine(state_machine: Arc<StateMachine>, deadline: std::time::Instant) {
+    let mut state_machine = Some(state_machine);
+    loop {
+        match Arc::try_unwrap(state_machine.take().unwrap()) {
+            Ok(sm) => {
+                sm.drop();
+                break;
+            }
+            Err(sm) => {
+                state_machine = Some(sm);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("Timed out while dropping StateMachine.");
+        }
+    }
+}
+
 impl Drop for PocketIc {
     fn drop(&mut self) {
         if self.subnets.state_dir.get().is_some() {
@@ -2800,24 +2947,10 @@ impl Drop for PocketIc {
             .collect();
         self.subnets.clear();
         // for every StateMachine, wait until nobody else has an Arc to that StateMachine
-        // and then drop that StateMachine
-        let start = std::time::Instant::now();
+        // and then drop that StateMachine; the deadline is shared across all StateMachines
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
         for state_machine in state_machines {
-            let mut state_machine = Some(state_machine);
-            while state_machine.is_some() {
-                match Arc::try_unwrap(state_machine.take().unwrap()) {
-                    Ok(sm) => {
-                        sm.drop();
-                        break;
-                    }
-                    Err(sm) => {
-                        state_machine = Some(sm);
-                    }
-                }
-                if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
-                    panic!("Timed out while dropping PocketIC.");
-                }
-            }
+            drop_state_machine(state_machine, deadline);
         }
     }
 }
@@ -3408,10 +3541,15 @@ impl RangeGen {
         Ok(())
     }
 
-    /// Returns the next canister id range from the top
+    /// Returns the next canister id range from the middle of the canister ID space.
     pub fn next_range(&mut self) -> CanisterIdRange {
         loop {
-            let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
+            // Use the midpoint instead of u64::MAX so that the upper half of the canister ID
+            // space remains available for subnets created via the registry canister's
+            // `create_subnet` endpoint, which allocates new ranges by appending directly after
+            // the last existing range in the routing table.
+            let midpoint = u64::MAX / 2;
+            let offset = (midpoint / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
             self.range_offset += 1;
             let start = offset * CANISTER_IDS_PER_SUBNET;
             let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
@@ -5457,6 +5595,28 @@ impl Operation for GetSubnet {
 
     fn id(&self) -> OpId {
         OpId(format!("get_subnet({})", self.canister_id))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DeleteSubnet {
+    pub subnet_id: SubnetId,
+}
+
+impl Operation for DeleteSubnet {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let default_effective_canister_id = pic.default_effective_canister_id;
+        match pic
+            .subnets
+            .delete_subnet(self.subnet_id, default_effective_canister_id)
+        {
+            Ok(()) => OpOut::NoOutput,
+            Err(e) => OpOut::Error(e),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("delete_subnet({})", self.subnet_id))
     }
 }
 

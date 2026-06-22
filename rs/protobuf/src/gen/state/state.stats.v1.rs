@@ -10,6 +10,8 @@ pub struct QueryStats {
     pub highest_aggregated_epoch: ::core::option::Option<u64>,
     #[prost(message, repeated, tag = "2")]
     pub query_stats: ::prost::alloc::vec::Vec<QueryStatsInner>,
+    #[prost(message, repeated, tag = "3")]
+    pub empty_epochs: ::prost::alloc::vec::Vec<EmptyEpochEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryStatsInner {
@@ -27,4 +29,11 @@ pub struct QueryStatsInner {
     pub ingress_payload_size: u64,
     #[prost(uint64, tag = "6")]
     pub egress_payload_size: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EmptyEpochEntry {
+    #[prost(message, optional, tag = "1")]
+    pub proposer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub epoch: u64,
 }

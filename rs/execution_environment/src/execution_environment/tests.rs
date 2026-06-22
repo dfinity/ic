@@ -8,10 +8,11 @@ use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
     CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, HttpMethod, IC_00, LogVisibilityV2,
+    MasterPublicKeyId, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId,
+    TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UploadChunkArgs, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
@@ -31,7 +32,7 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
     CanisterId, CountBytes, PrincipalId, RegistryVersion,
-    canister_http::{CanisterHttpMethod, Transform},
+    canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -829,13 +830,13 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .gib_storage_per_second_fee(test.get_own_subnet_cycles_config())
                 .real()
                 .get())
             / one_gib
             + test
                 .cycles_account_manager()
-                .base_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .base_per_second_fee(test.get_own_subnet_cycles_config())
                 .real()
                 .get()
                 * seconds_per_day
@@ -3265,6 +3266,41 @@ fn execute_canister_http_request() {
         );
         assert_eq!(http_request_context.request.payment, payment - fee.real());
 
+        // Legacy pricing populates the refund status from the base fee: the
+        // refundable cycles are everything beyond the base fee (zero on a free
+        // cost schedule), split across the refunding nodes (the whole subnet for
+        // a fully replicated request).
+        assert_eq!(
+            http_request_context.replication,
+            Replication::FullyReplicated
+        );
+        let base_fee = test.http_request_base_fee(
+            http_request_context.variable_parts_size(),
+            &http_request_context.replication,
+        );
+        let expected_refundable = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
+        };
+        assert_eq!(
+            http_request_context.refund_status.refundable_cycles,
+            expected_refundable
+        );
+        assert_eq!(
+            http_request_context.refund_status.per_replica_allowance,
+            expected_refundable / test.subnet_size().max(1)
+        );
+        assert_eq!(
+            http_request_context.refund_status.refunded_cycles,
+            Cycles::new(0)
+        );
+        assert!(
+            http_request_context
+                .refund_status
+                .refunding_nodes
+                .is_empty()
+        );
+
         assert_eq!(
             fee.nominal(),
             test.state()
@@ -3336,6 +3372,361 @@ fn execute_canister_http_request_disabled() {
         .subnet_call_context_manager
         .canister_http_request_contexts;
     assert_eq!(canister_http_request_contexts.len(), 0);
+}
+
+#[test]
+fn execute_canister_http_request_insufficient_payment() {
+    // Under legacy pricing the *full* request fee is charged upfront, not just
+    // the (smaller) base fee. A payment that covers the base fee but not the
+    // full legacy fee must therefore still be rejected. This pins the legacy
+    // threshold to the legacy fee and guards against it being accidentally
+    // lowered to the base fee.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let legacy_http_request_args = || CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        // A large response limit makes the legacy fee (which has a response-size
+        // term) strictly exceed the base fee (which has none).
+        max_response_bytes: Some(1_000_000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version: None,
+    };
+    let build_test = || {
+        ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister)
+            .build()
+    };
+
+    // Probe with ample payment to learn the base and legacy fees for these args.
+    let (base_fee_real, legacy_fee_real) = {
+        let mut probe = build_test();
+        probe.inject_call_to_ic00(
+            Method::HttpRequest,
+            legacy_http_request_args().encode(),
+            Cycles::new(100_000_000_000),
+        );
+        probe.execute_all();
+        let context = probe
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        let size = context.variable_parts_size();
+        let base_fee = probe.http_request_base_fee(size, &context.replication);
+        let legacy_fee = probe.http_request_fee(size, context.max_response_bytes);
+        (base_fee.real(), legacy_fee.real())
+    };
+    // The test is only meaningful if the legacy fee strictly exceeds the base
+    // fee, so that a payment equal to the base fee discriminates between the two
+    // thresholds.
+    assert!(base_fee_real < legacy_fee_real);
+
+    // A payment equal to the base fee covers the base fee but not the legacy
+    // fee, so legacy pricing must reject it without adding a context.
+    let mut test = build_test();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        legacy_http_request_args().encode(),
+        base_fee_real,
+    );
+    test.execute_all();
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .len(),
+        0
+    );
+    assert!(get_reject_message(test.xnet_messages()[0].clone()).contains("cycles are required"));
+}
+
+#[test]
+fn execute_canister_http_request_non_replicated_refund_status() {
+    // A non-replicated legacy request has a single participating replica, so its
+    // per-replica allowance equals the full refundable amount (divisor of 1).
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let args = CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::HttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    assert!(matches!(
+        http_request_context.replication,
+        Replication::NonReplicated(_)
+    ));
+
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let expected_refundable = payment - base_fee.real();
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_refundable
+    );
+    // A single participating replica means the allowance is the full refundable
+    // amount.
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        expected_refundable
+    );
+}
+
+fn flexible_http_request_args(caller_canister: CanisterId) -> FlexibleCanisterHttpRequestArgs {
+    FlexibleCanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        replication: None,
+    }
+}
+
+#[test]
+fn execute_flexible_canister_http_request() {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let caller_canister = canister_test_id(10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister)
+            .with_cost_schedule(cost_schedule)
+            .with_flexible_http_requests_enabled()
+            .build();
+
+        let args = flexible_http_request_args(caller_canister);
+        let payment = Cycles::new(1_000_000_000);
+        test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+        test.execute_all();
+
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
+
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        // The flexible endpoint always uses pay-as-you-go pricing and flexible
+        // replication.
+        assert_eq!(
+            http_request_context.pricing_version,
+            PricingVersion::PayAsYouGo
+        );
+        let committee_size = match &http_request_context.replication {
+            Replication::Flexible { committee, .. } => committee.len(),
+            other => panic!("expected flexible replication, got {other:?}"),
+        };
+
+        // Pay-as-you-go takes out the entire payment upfront (unless the cost
+        // schedule is free), refunding everything beyond the base fee per
+        // replica.
+        let base_fee = test.http_request_base_fee(
+            http_request_context.variable_parts_size(),
+            &http_request_context.replication,
+        );
+        let (expected_payment, expected_refundable) = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => (payment, Cycles::new(0)),
+            CanisterCyclesCostSchedule::Normal => (Cycles::new(0), payment - base_fee.real()),
+        };
+        assert_eq!(http_request_context.request.payment, expected_payment);
+        assert_eq!(
+            http_request_context.refund_status.refundable_cycles,
+            expected_refundable
+        );
+        assert_eq!(
+            http_request_context.refund_status.per_replica_allowance,
+            expected_refundable / committee_size.max(1)
+        );
+        assert_eq!(
+            http_request_context.refund_status.refunded_cycles,
+            Cycles::new(0)
+        );
+        assert!(
+            http_request_context
+                .refund_status
+                .refunding_nodes
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn execute_flexible_canister_http_request_explicit_replication() {
+    // An explicit replication request with total_requests < subnet_size yields a
+    // committee smaller than the subnet, so the per-replica allowance is split
+    // across the committee rather than the whole subnet.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    let total_requests = 4;
+    let mut args = flexible_http_request_args(caller_canister);
+    args.replication = Some(ReplicationCounts {
+        total_requests,
+        min_responses: 2,
+        max_responses: 4,
+    });
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let (committee_size, min_responses, max_responses) = match &http_request_context.replication {
+        Replication::Flexible {
+            committee,
+            min_responses,
+            max_responses,
+        } => (committee.len(), *min_responses, *max_responses),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    assert_eq!(committee_size, total_requests as usize);
+    assert!(committee_size < test.subnet_size());
+    assert_eq!(min_responses, 2);
+    assert_eq!(max_responses, 4);
+
+    // Pay-as-you-go takes the entire payment upfront and splits the refundable
+    // remainder across the committee.
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let expected_refundable = payment - base_fee.real();
+    assert_eq!(http_request_context.request.payment, Cycles::new(0));
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_refundable
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        expected_refundable / committee_size.max(1)
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_insufficient_payment() {
+    // Pay-as-you-go rejects a request whose payment does not cover the base fee.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), Cycles::new(1));
+    test.execute_all();
+
+    // The request is rejected and no context is added.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 0);
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled() {
+    // The flexible HTTP outcalls feature is gated behind a feature flag that is
+    // disabled by default.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    // No context is added and the request is rejected specifically because the
+    // feature flag is disabled (as opposed to any other rejection reason).
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 0);
+    assert_eq!(
+        get_reject_message(test.xnet_messages()[0].clone()),
+        "This API is not enabled on this subnet"
+    );
 }
 
 fn get_reject_message(response: RequestOrResponse) -> String {

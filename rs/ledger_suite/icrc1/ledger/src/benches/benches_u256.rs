@@ -1,3 +1,5 @@
+#[cfg(not(feature = "get-blocks-disabled"))]
+use crate::get_blocks;
 use crate::{
     Access, Account, LOG,
     benches::{
@@ -114,6 +116,16 @@ fn bench_icrc1_transfers() -> BenchResult {
             };
             let _p = canbench_rs::bench_scope("icrc3_get_blocks");
             let blocks_res = icrc3_get_blocks(vec![req]);
+            assert_eq!(blocks_res.blocks.len(), NUM_GET_BLOCKS as usize);
+        }
+        #[cfg(not(feature = "get-blocks-disabled"))]
+        {
+            let req = GetBlocksRequest {
+                start: Nat::from(3 * NUM_OPERATIONS),
+                length: Nat::from(NUM_GET_BLOCKS),
+            };
+            let _p = canbench_rs::bench_scope("get_blocks");
+            let blocks_res = get_blocks(req);
             assert_eq!(blocks_res.blocks.len(), NUM_GET_BLOCKS as usize);
         }
         upgrade();

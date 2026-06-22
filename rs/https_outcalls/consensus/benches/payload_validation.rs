@@ -29,15 +29,16 @@ use ic_types::{
         ValidationContext,
     },
     canister_http::{
-        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus, PricingVersion, RefundStatus,
-        Replication,
+        CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
+        CanisterHttpResponseShare, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus, PricingVersion, RefundStatus, Replication,
     },
     consensus::get_faults_tolerated,
-    crypto::{BasicSigOf, Signed, crypto_hash},
+    crypto::{BasicSigOf, crypto_hash},
     messages::CallbackId,
-    signature::{BasicSignature, BasicSignatureBatch},
+    signature::BasicSignature,
     time::UNIX_EPOCH,
 };
 
@@ -241,8 +242,8 @@ fn build_target(
     }
 }
 
-/// Helper that signs `CanisterHttpResponseMetadata` with a committee node's
-/// crypto component.
+/// Helper that signs `CanisterHttpResponseReceipt` with a committee
+/// node's crypto component.
 struct Signer<'a> {
     crypto: &'a [TempCryptoComponent],
 }
@@ -251,11 +252,11 @@ impl Signer<'_> {
     fn sign(
         &self,
         node_index: usize,
-        metadata: &CanisterHttpResponseMetadata,
-    ) -> BasicSigOf<CanisterHttpResponseMetadata> {
+        receipt_share: &CanisterHttpResponseReceipt,
+    ) -> BasicSigOf<CanisterHttpResponseReceipt> {
         self.crypto[node_index]
-            .sign_basic(metadata)
-            .expect("failed to sign response metadata")
+            .sign_basic(receipt_share)
+            .expect("failed to sign response receipt share")
     }
 }
 
@@ -284,6 +285,48 @@ impl<'a> PayloadAssembler<'a> {
         id
     }
 
+    /// Builds a node's contribution to an aggregated proof: a default (zero
+    /// refund) payment receipt together with that node's signature over the
+    /// corresponding receipt share.
+    fn signature(
+        &self,
+        signer: &Signer,
+        node: usize,
+        metadata: &CanisterHttpResponseMetadata,
+    ) -> CanisterHttpResponseSignature {
+        let receipt_share = CanisterHttpResponseReceipt {
+            metadata: metadata.clone(),
+            payment_receipt: CanisterHttpPaymentReceipt::default(),
+        };
+        let signature = signer.sign(node, &receipt_share);
+        CanisterHttpResponseSignature {
+            payment_receipt: receipt_share.payment_receipt,
+            signature,
+        }
+    }
+
+    /// Builds a single signed [`CanisterHttpResponseShare`] (receipt share with
+    /// a default, zero-refund payment receipt) for the given node.
+    fn share(
+        &self,
+        signer: &Signer,
+        node: usize,
+        metadata: CanisterHttpResponseMetadata,
+    ) -> CanisterHttpResponseShare {
+        let receipt_share = CanisterHttpResponseReceipt {
+            metadata,
+            payment_receipt: CanisterHttpPaymentReceipt::default(),
+        };
+        let signature = signer.sign(node, &receipt_share);
+        CanisterHttpResponseShare {
+            signature: BasicSignature {
+                signature,
+                signer: self.committee[node],
+            },
+            content: receipt_share,
+        }
+    }
+
     fn assemble(&mut self, signer: &Signer) -> CanisterHttpPayload {
         let subnet_size = self.config.subnet_size;
         let threshold = subnet_size - get_faults_tolerated(subnet_size);
@@ -307,14 +350,19 @@ impl<'a> PayloadAssembler<'a> {
         for _ in 0..self.config.num_replicated {
             let callback_id = self.alloc_callback_id();
             let (response, metadata) = response_and_metadata(callback_id, success_content());
-            let signatures_map = (0..threshold)
-                .map(|node| (self.committee[node], signer.sign(node, &metadata)))
+            let signatures = (0..threshold)
+                .map(|node| {
+                    (
+                        self.committee[node],
+                        self.signature(signer, node, &metadata),
+                    )
+                })
                 .collect();
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
-                proof: Signed {
-                    content: metadata,
-                    signature: BasicSignatureBatch { signatures_map },
+                proof: CanisterHttpResponseProof {
+                    metadata,
+                    signatures,
                 },
             });
             self.contexts.push((
@@ -328,16 +376,16 @@ impl<'a> PayloadAssembler<'a> {
             let callback_id = self.alloc_callback_id();
             let designated = (callback_id as usize) % subnet_size;
             let (response, metadata) = response_and_metadata(callback_id, success_content());
-            let mut signatures_map = BTreeMap::new();
-            signatures_map.insert(
+            let mut signatures = BTreeMap::new();
+            signatures.insert(
                 self.committee[designated],
-                signer.sign(designated, &metadata),
+                self.signature(signer, designated, &metadata),
             );
             responses.push(CanisterHttpResponseWithConsensus {
                 content: response,
-                proof: Signed {
-                    content: metadata,
-                    signature: BasicSignatureBatch { signatures_map },
+                proof: CanisterHttpResponseProof {
+                    metadata,
+                    signatures,
                 },
             });
             self.contexts.push((
@@ -358,13 +406,7 @@ impl<'a> PayloadAssembler<'a> {
                         format!("divergent-{callback_id}-{node}").into_bytes(),
                     );
                     let (_, metadata) = response_and_metadata(callback_id, content);
-                    Signed {
-                        signature: BasicSignature {
-                            signature: signer.sign(node, &metadata),
-                            signer: self.committee[node],
-                        },
-                        content: metadata,
-                    }
+                    self.share(signer, node, metadata)
                 })
                 .collect();
             divergence_responses.push(CanisterHttpResponseDivergence { shares });
@@ -385,13 +427,7 @@ impl<'a> PayloadAssembler<'a> {
             let entries = (0..threshold)
                 .map(|node| FlexibleCanisterHttpResponseWithProof {
                     response: response.clone(),
-                    proof: Signed {
-                        signature: BasicSignature {
-                            signature: signer.sign(node, &metadata),
-                            signer: self.committee[node],
-                        },
-                        content: metadata.clone(),
-                    },
+                    proof: self.share(signer, node, metadata.clone()),
                 })
                 .collect();
             flexible_responses.push(FlexibleCanisterHttpResponses {
@@ -456,6 +492,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         replication,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
     }
 }
 

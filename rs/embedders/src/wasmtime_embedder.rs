@@ -631,14 +631,6 @@ impl WasmtimeEmbedder {
             }
         };
 
-        let memory_trackers = sigsegv_memory_tracker(
-            memories,
-            &mut *store,
-            self.log.clone(),
-            self.config.feature_flags.deterministic_memory_tracker,
-            subtract_instruction_counter,
-        );
-
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
         if let Some(mem) = instance.get_memory(&mut *store, WASM_HEAP_MEMORY_NAME)
@@ -646,6 +638,7 @@ impl WasmtimeEmbedder {
         {
             main_memory_type = WasmMemoryType::Wasm64;
         }
+
         let dirty_page_overhead = match main_memory_type {
             WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
             WasmMemoryType::Wasm64 => NumInstructions::from(
@@ -653,6 +646,15 @@ impl WasmtimeEmbedder {
                     * self.config.wasm64_dirty_page_overhead_multiplier,
             ),
         };
+
+        let memory_trackers = sigsegv_memory_tracker(
+            memories,
+            &mut *store,
+            self.log.clone(),
+            self.config.feature_flags.deterministic_memory_tracker,
+            /*dirty_page_overhead*/ NumInstructions::new(1),
+            subtract_instruction_counter,
+        );
 
         Ok(WasmtimeInstance {
             instance,
@@ -798,6 +800,7 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
     deterministic_memory_tracker: FlagStatus,
+    page_overhead: NumInstructions,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<SignalMutex<SigsegvMemoryTracker>>> {
     let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
@@ -843,6 +846,7 @@ fn sigsegv_memory_tracker<S>(
                     page_map,
                     maybe_missing_page_handler_kind,
                     memory_limits,
+                    page_overhead.get(),
                     subtract_instruction_counter.clone(),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
