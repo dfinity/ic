@@ -58,6 +58,7 @@ pub(crate) trait Process {
 
 /// Trait for running a single versioned [`Process`]
 pub(crate) trait ProcessRunner<P: Process>: Send {
+    /// Start the given process.
     fn start(&mut self, process: P) -> Result<()>;
 
     /// Stop the currently running process.
@@ -71,7 +72,7 @@ pub(crate) trait ProcessRunner<P: Process>: Send {
     fn get_pid(&self) -> Option<Pid>;
 }
 
-/// Runs a single versioned [`Process`] by implementing [`ProcessRunner<P>`].
+/// A [`SingleProcessRunner`] manages running a single versioned [`Process`]
 pub(crate) struct SingleProcessRunner<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
@@ -115,9 +116,7 @@ impl<P: Process> SingleProcessRunner<P> {
     /// (so its PID equals its PGID, which is what the negation below
     /// relies on) by setting its process group at spawn time via
     /// `Command::process_group(0)` -- see `start`. We therefore do not
-    /// rely on the managed binary calling `setpgid` itself. Sub-processes
-    /// cannot escape the group because `setpgid` is restricted in
-    /// production by SELinux type enforcement.
+    /// rely on the managed binary calling `setpgid` itself.
     ///
     /// We still depend on init to handle reaping of adopted children,
     /// as the orchestrator has no way of adopting or even knowing the
