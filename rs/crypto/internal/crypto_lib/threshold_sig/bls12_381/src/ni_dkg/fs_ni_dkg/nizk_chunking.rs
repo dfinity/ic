@@ -62,17 +62,29 @@ impl ChunkingInstance {
         &self.randomizers_r
     }
 
+    /// Creates a new `ChunkingInstance`, validating the inputs.
+    ///
+    /// Returns `Err(ZkProofChunkingError::InvalidInstance)` if
+    ///   * `public_keys` is empty,
+    ///   * `ciphertext_chunks` is empty, or
+    ///   * `public_keys` and `ciphertext_chunks` have different lengths.
     pub fn new(
         public_keys: Vec<G1Affine>,
         ciphertext_chunks: Vec<[G1Affine; NUM_CHUNKS]>,
         randomizers_r: [G1Affine; NUM_CHUNKS],
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ZkProofChunkingError> {
+        if public_keys.is_empty() || ciphertext_chunks.is_empty() {
+            return Err(ZkProofChunkingError::InvalidInstance);
+        }
+        if public_keys.len() != ciphertext_chunks.len() {
+            return Err(ZkProofChunkingError::InvalidInstance);
+        }
+        Ok(Self {
             g1_gen: G1Affine::generator().clone(),
             public_keys,
             ciphertext_chunks,
             randomizers_r,
-        }
+        })
     }
 }
 
@@ -126,21 +138,6 @@ struct SecondMoveChunking {
     z_s: Vec<Scalar>,
     dd: Vec<G1Affine>,
     yy: G1Affine,
-}
-
-impl ChunkingInstance {
-    pub fn check_instance(&self) -> Result<(), ZkProofChunkingError> {
-        if self.public_keys.is_empty()
-            || self.ciphertext_chunks.is_empty()
-            || self.randomizers_r.is_empty()
-        {
-            return Err(ZkProofChunkingError::InvalidInstance);
-        };
-        if self.public_keys.len() != self.ciphertext_chunks.len() {
-            return Err(ZkProofChunkingError::InvalidInstance);
-        };
-        Ok(())
-    }
 }
 
 impl FirstMoveChunking {
@@ -200,10 +197,6 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     witness: &ChunkingWitness,
     rng: &mut R,
 ) -> ProofChunking {
-    instance
-        .check_instance()
-        .expect("The chunking proof instance is invalid");
-
     let m = instance.randomizers_r.len();
     let n = instance.public_keys.len();
 
@@ -329,8 +322,6 @@ pub fn verify_chunking(
     instance: &ChunkingInstance,
     nizk: &ProofChunking,
 ) -> Result<(), ZkProofChunkingError> {
-    instance.check_instance()?;
-
     let num_receivers = instance.public_keys.len();
     require_eq("bb", nizk.bb.len(), NUM_ZK_REPETITIONS)?;
     require_eq("cc", nizk.cc.len(), NUM_ZK_REPETITIONS)?;

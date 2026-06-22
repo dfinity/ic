@@ -171,15 +171,14 @@ pub fn encrypt_and_prove(
 
     #[cfg(test)]
     {
+        let chunking_instance = crypto::ChunkingInstance::new(
+            public_keys.clone(),
+            ciphertext.ciphertext_chunks().to_vec(),
+            ciphertext.randomizers_r().clone(),
+        )
+        .expect("We just created an invalid chunking instance");
         assert_eq!(
-            crypto::verify_chunking(
-                &crypto::ChunkingInstance::new(
-                    public_keys.clone(),
-                    ciphertext.ciphertext_chunks().to_vec(),
-                    ciphertext.randomizers_r().clone(),
-                ),
-                &chunking_proof,
-            ),
+            crypto::verify_chunking(&chunking_instance, &chunking_proof,),
             Ok(()),
             "We just created an invalid chunking proof"
         );
@@ -189,16 +188,15 @@ pub fn encrypt_and_prove(
             .map(|s| util::g1_from_big_endian_chunks(s))
             .collect();
 
+        let sharing_instance = crypto::SharingInstance::new(
+            public_keys,
+            public_coefficients,
+            util::g1_from_big_endian_chunks(ciphertext.randomizers_r()),
+            combined_ciphertexts,
+        )
+        .expect("We just created an invalid sharing instance");
         assert_eq!(
-            crypto::verify_sharing(
-                &crypto::SharingInstance::new(
-                    public_keys,
-                    public_coefficients,
-                    util::g1_from_big_endian_chunks(ciphertext.randomizers_r()),
-                    combined_ciphertexts,
-                ),
-                &sharing_proof,
-            ),
+            crypto::verify_sharing(&sharing_instance, &sharing_proof,),
             Ok(()),
             "We just created an invalid sharing proof"
         );
@@ -270,7 +268,8 @@ fn prove_chunking<R: RngCore + CryptoRng>(
         public_keys.to_vec(),
         ciphertext.ciphertext_chunks().to_vec(),
         ciphertext.randomizers_r().clone(),
-    );
+    )
+    .expect("Chunking instance constructed from valid encryption output");
 
     let chunking_witness =
         crypto::ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
@@ -303,13 +302,16 @@ fn prove_sharing<R: RngCore + CryptoRng>(
         .map(|chunks| chunks.recombine_to_scalar())
         .collect::<Vec<_>>();
 
+    let sharing_instance = crypto::SharingInstance::new(
+        receiver_fs_public_keys.to_vec(),
+        public_coefficients.to_vec(),
+        combined_r,
+        combined_ciphertexts,
+    )
+    .expect("Sharing instance constructed from valid encryption output");
+
     crypto::prove_sharing(
-        &crypto::SharingInstance::new(
-            receiver_fs_public_keys.to_vec(),
-            public_coefficients.to_vec(),
-            combined_r,
-            combined_ciphertexts,
-        ),
+        &sharing_instance,
         &crypto::SharingWitness::new(combined_r_scalar, combined_plaintexts),
         rng,
     )
@@ -387,16 +389,19 @@ pub fn verify_zk_proofs(
         })
     })?;
 
-    // Verify proof
-    crypto::verify_chunking(
-        &crypto::ChunkingInstance::new(
-            public_keys.clone(),
-            ciphertext.ciphertext_chunks().to_vec(),
-            ciphertext.randomizers_r().clone(),
-        ),
-        &chunking_proof,
+    let chunking_instance = crypto::ChunkingInstance::new(
+        public_keys.clone(),
+        ciphertext.ciphertext_chunks().to_vec(),
+        ciphertext.randomizers_r().clone(),
     )
     .map_err(|_| {
+        CspDkgVerifyDealingError::InvalidDealingError(InvalidArgumentError {
+            message: "Invalid chunking instance".to_string(),
+        })
+    })?;
+
+    // Verify proof
+    crypto::verify_chunking(&chunking_instance, &chunking_proof).map_err(|_| {
         let error = InvalidArgumentError {
             message: "Invalid chunking proof".to_string(),
         };
@@ -429,16 +434,19 @@ pub fn verify_zk_proofs(
         })
     })?;
 
-    crypto::verify_sharing(
-        &crypto::SharingInstance::new(
-            public_keys,
-            public_coefficients,
-            combined_r,
-            combined_ciphertexts,
-        ),
-        &sharing_proof,
+    let sharing_instance = crypto::SharingInstance::new(
+        public_keys,
+        public_coefficients,
+        combined_r,
+        combined_ciphertexts,
     )
     .map_err(|_| {
+        CspDkgVerifyDealingError::InvalidDealingError(InvalidArgumentError {
+            message: "Invalid sharing instance".to_string(),
+        })
+    })?;
+
+    crypto::verify_sharing(&sharing_instance, &sharing_proof).map_err(|_| {
         let error = InvalidArgumentError {
             message: "Invalid sharing proof".to_string(),
         };
