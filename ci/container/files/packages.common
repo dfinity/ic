@@ -2,33 +2,26 @@
 build-essential
 curl
 git
-git-lfs
-gnupg
 iproute2
 jq
 rclone
 retry
-shellcheck
 sudo
 time
-uuid-dev
-vim
 xxd
 zip
 
-# Bitcoin core (for bitcoin adapter integration test)
+# Autotools (libtoolize/autoconf/automake), pulled in via libtool. Needed by
+# rules_foreign_cc source builds, e.g. jemalloc's autogen.sh runs autoconf.
 libtool
-libevent-dev
-libboost-dev
 
 # RUST
-gcc
 pkg-config
 libclang-dev
-libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)  
+libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)
 libusb-1.0-0-dev # required for HSM
 lld # required for ovmf_sev genrule
-protobuf-compiler
+protobuf-compiler # needed by cargo for prost-build/tonic-build (Bazel brings its own)
 llvm
 
 # IC-OS
@@ -66,10 +59,6 @@ ovmf
 # Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
 # plus `setcap`/`getcap`; see ci/container/Dockerfile.
 libcap2-bin
-
-# Unknown
-containernetworking-plugins
-buildah
 
 # For ci/githubstats/query.py
 libpq-dev
