@@ -394,7 +394,7 @@ impl IcBoundaryManager {
 }
 
 // ---------------------------------------------------------------------------
-// MultipleProcessManager
+// MultipleProcessesManager
 //
 // This struct manages all processes that the upgrade loop is responsible for,
 // providing a single entry point for starting and stopping them according to
