@@ -811,7 +811,8 @@ mod tests {
         ) -> std::result::Result<(), TestCaseError> {
             match expected_metadata {
                 None => {
-                    // memo and created_at_time should always be set but the value is random
+                    // memo and created_at_time are always populated by construction_payloads
+                    // (memo defaults to 0, created_at_time to the current time)
                     prop_assert!(
                         actual_metadata.contains_key("memo"),
                         "Metadata should always contain a memo"
