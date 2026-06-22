@@ -36,6 +36,14 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
+# Normalize paths embedded in Rust crate metadata (.rmeta inside .rlib files)
+# and debug info. Without this, absolute paths from the Bazel execution root
+# leak into the artifacts, causing hash mismatches between cached and locally
+# built outputs. On Linux, /proc/self/cwd resolves to the current working
+# directory (the execroot), so this remaps all absolute execroot paths to
+# relative ones.
+build --@rules_rust//:extra_rustc_flag=-Cremap-path-prefix=/proc/self/cwd=.
+
 # Build everything ic-os without sandbox
 build --strategy_regexp=ic-os[:/].*=local
 
