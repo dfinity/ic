@@ -8,6 +8,8 @@
 pub mod materialize;
 
 use ic_crypto_tree_hash::Label;
+use std::any::Any;
+use std::fmt;
 use std::sync::Arc;
 
 /// A hash of the tree leaf contents according to the IC interface spec.  See
@@ -53,6 +55,22 @@ pub trait LazyFork<'a>: Send + Sync {
     /// True if there are no children
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// The source that the subtree rooted at this fork is derived from, including
+    /// the [`SubtreeExpander`] that rebuilds it; produced iff the subtree should
+    /// be collapsed to a digest-only, reusable subtree node in the
+    /// [`HashTree`](crate::hash_tree::HashTree).
+    ///
+    /// Defaults to `None` (materialize the subtree inline). Forks that wrap shared,
+    /// copy-on-write state (e.g. an `Arc<CanisterState>`) should override this to
+    /// return that `Arc`, together with an expander that bakes in the certification
+    /// version), as a [`SubtreeSource`]. Such subtrees are hashed once and, when an
+    /// unchanged subtree (same source) is found in a baseline tree, its digest is
+    /// reused instead of being recomputed. See
+    /// [`hash_lazy_tree_with_baseline`](crate::hash_tree::hash_lazy_tree_with_baseline).
+    fn subtree_source(&self) -> Option<SubtreeSource> {
+        None
     }
 }
 
@@ -114,5 +132,96 @@ pub fn follow_path<'a>(t: &LazyTree<'a>, path: &[&[u8]]) -> Option<LazyTree<'a>>
             follow_path(&node, &path[1..])
         }
         _ => None,
+    }
+}
+
+/// An owned, type-erased handle to the source that a reusable lazy subtree was
+/// derived from (e.g. an `Arc<CanisterState>`), paired with the
+/// [`SubtreeExpander`] that rebuilds the subtree from it.
+///
+/// The held `Arc` keeps the source allocation alive, so its address cannot be
+/// recycled for a different object while the handle exists (no ABA), and the
+/// source stays available to [`expand`](Self::expand) the subtree for witnesses.
+///
+/// Equality is a conservative reuse-gate, *not* a general-purpose comparison:
+/// two `SubtreeSource`s are equal iff they point to the same source allocation
+/// **and** carry the same expander. The expander encodes the producer's
+/// certification version (baked into a version-specific monomorphization), so
+/// equality implies the two subtrees would hash identically. The function
+/// pointer comparison ([`std::ptr::fn_addr_eq`]) is best-effort: it may report
+/// `false` for two pointers that are in fact the same function, but never `true`
+/// for genuinely different ones. The sole consumer (baseline reuse) treats
+/// inequality as "rebuild the subtree", so a false negative only costs a
+/// recomputation and never compromises correctness.
+#[derive(Clone)]
+pub struct SubtreeSource {
+    source: Arc<dyn Any + Send + Sync>,
+    expander: SubtreeExpander,
+}
+
+/// Rebuilds a stubbed subtree's [`HashTree`](crate::hash_tree::HashTree) from
+/// its type-erased [`SubtreeSource`], by [downcasting](SubtreeSource::downcast)
+/// the held `Arc` back to its concrete source and re-materializing it. Used to
+/// expand a [`NodeKind::Stub`](crate::hash_tree::HashTree) on demand during
+/// witness generation.
+///
+/// It is a plain (non-capturing) function pointer, so the producer of the stub
+/// must bake the certification version into it. The pointer alone fully
+/// determines the expansion so it can be safely used as a conservative equality
+/// gate for subtree reuse.
+pub type SubtreeExpander =
+    fn(&SubtreeSource) -> Result<crate::hash_tree::HashTree, crate::hash_tree::HashTreeError>;
+
+impl SubtreeSource {
+    /// Creates a handle that shares ownership of the subtree's `source` and can
+    /// rebuild the subtree from it, via the `expander`.
+    pub fn new<T: Any + Send + Sync>(source: &Arc<T>, expander: SubtreeExpander) -> Self {
+        let this = Self {
+            source: Arc::clone(source) as Arc<dyn Any + Send + Sync>,
+            expander,
+        };
+        debug_assert!((expander)(&this).is_ok());
+        this
+    }
+
+    /// The bare address of the source allocation, used for identity comparison.
+    fn addr(&self) -> *const () {
+        Arc::as_ptr(&self.source) as *const ()
+    }
+
+    /// Recovers shared ownership of the source as an `Arc<T>`. Used by a
+    /// [`SubtreeExpander`] to rebuild the subtree from its source.
+    ///
+    /// Panics if this handle was not created from an `Arc<T>`.
+    pub fn downcast<T: Any + Send + Sync>(&self) -> Arc<T> {
+        Arc::clone(&self.source)
+            .downcast::<T>()
+            .unwrap_or_else(|_| {
+                panic!(
+                    "subtree source is not an Arc<{}>",
+                    std::any::type_name::<T>()
+                )
+            })
+    }
+
+    /// Rebuilds the subtree's [`HashTree`](crate::hash_tree::HashTree) from this
+    /// source, to expand a stub on demand during witness generation.
+    pub fn expand(&self) -> Result<crate::hash_tree::HashTree, crate::hash_tree::HashTreeError> {
+        (self.expander)(self)
+    }
+}
+
+impl PartialEq for SubtreeSource {
+    /// A conservative, false-negative-only reuse-gate; see the type-level note.
+    fn eq(&self, other: &Self) -> bool {
+        self.addr() == other.addr() && std::ptr::fn_addr_eq(self.expander, other.expander)
+    }
+}
+
+impl Eq for SubtreeSource {}
+
+impl fmt::Debug for SubtreeSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubtreeSource({:p})", self.addr())
     }
 }
