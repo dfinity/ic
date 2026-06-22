@@ -88,11 +88,13 @@ jobs:
         run: |
           echo "$ZH2_DLL01_INI_SECRET" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+          
+          run_output_base="/var/tmp/bazel-output-${GITHUB_RUN_ID:-stable}"
 
           launch_bare_metal() {
 
             # shellcheck disable=SC2046,SC2086
-            bazel --output_base=/var/tmp/bazel-output run \
+            bazel --output_base="${run_output_base}" run \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
                 --ini_filename "$(realpath file1)" \
@@ -113,12 +115,12 @@ jobs:
           launch_bare_metal --check_hostos_metrics
 
           # Run SEV tests
-          bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+          bazel --output_base="${run_output_base}" test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+          bazel --output_base="${run_output_base}" test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+          bazel --output_base="${run_output_base}" test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+          bazel --output_base="${run_output_base}" test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
-          bazel clean
+          bazel --output_base="${run_output_base}" clean
         env:
           ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
