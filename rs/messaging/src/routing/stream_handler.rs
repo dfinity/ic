@@ -777,7 +777,7 @@ impl StreamHandlerImpl {
         let is_at_engine_boundary =
             remote_subnet_id != self.subnet_id && (own_is_engine || remote_is_engine);
 
-        let (msg, msg_type) = match msg {
+        let (mut msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
                 (RequestOrResponse::Request(req), LABEL_VALUE_TYPE_REQUEST)
             }
@@ -820,6 +820,7 @@ impl StreamHandlerImpl {
             | (SenderSubnet::OnMigrationPath, RequestOrResponse::Response(_)) => {
                 // Apply the engine filter before inducting. See `is_at_engine_boundary`.
                 if is_at_engine_boundary {
+                    let mut stripped_msg: Option<RequestOrResponse> = None;
                     match &msg {
                         // Requests are not allowed across the engine boundary if they are
                         // guaranteed-response (unbounded-wait) or carry cycles. Reject them
@@ -844,38 +845,52 @@ impl StreamHandlerImpl {
                             return;
                         }
                         // A response that should not exist at the engine boundary: a
-                        // guaranteed-response response, or one carrying cycles. Neither is
-                        // allowed across the boundary, so this can only come from a buggy or
-                        // malicious peer. As with the disallowed requests above, drop it and
-                        // raise a critical error (any cycles are lost); the only difference is
-                        // that a response is dropped with an accept signal rather than rejected,
-                        // since there is no caller left to reject to.
+                        // guaranteed-response response, or one carrying cycles. This can only
+                        // come from a buggy or malicious peer, so raise a critical error. Any
+                        // attached cycles are stripped here, before induction, so that none
+                        // cross the boundary -- not even as anonymous refunds credited while
+                        // inducting; the stripped cycles are lost.
                         RequestOrResponse::Response(rep)
                             if rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero() =>
                         {
                             error!(
                                 self.log,
-                                "{}: Dropping engine-boundary response (from {}): {:?}",
+                                "{}: Illegal engine-boundary response (from {}): {:?}",
                                 CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                                 remote_subnet_id,
                                 rep,
                             );
                             self.metrics.critical_error_engine_message.inc();
-                            self.observe_inducted_message_status(
-                                msg_type,
-                                LABEL_VALUE_ENGINE_NOT_ALLOWED,
-                            );
                             if rep.refund > Cycles::zero() {
                                 state.observe_lost_cycles_due_to_dropped_messages(
                                     CompoundCycles::new(rep.refund, own_cost_schedule),
                                 );
                             }
-                            stream.push_accept_signal();
-                            return;
+                            if rep.deadline != NO_DEADLINE {
+                                // Best-effort illegal response: drop it. The caller will time
+                                // out on its own, so there is no need to deliver it.
+                                self.observe_inducted_message_status(
+                                    msg_type,
+                                    LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                                );
+                                stream.push_accept_signal();
+                                return;
+                            }
+                            // Guaranteed response: still induct it (with any cycles stripped)
+                            // so the caller is not left hanging forever on our bug.
+                            if rep.refund > Cycles::zero() {
+                                let mut stripped = (**rep).clone();
+                                stripped.refund = Cycles::zero();
+                                stripped_msg =
+                                    Some(RequestOrResponse::Response(Arc::new(stripped)));
+                            }
                         }
                         // Best-effort request with no cycles, or a best-effort response with
                         // no cycles: induct normally.
                         _ => {}
+                    }
+                    if let Some(stripped) = stripped_msg {
+                        msg = stripped;
                     }
                 }
                 match self.induct_message_impl(

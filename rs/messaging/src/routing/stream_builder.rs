@@ -530,27 +530,41 @@ impl StreamBuilderImpl {
                         // or cycle-bearing request it received from across the boundary -- but
                         // that request would itself have been rejected at the boundary. So
                         // reaching here means an earlier engine-boundary check failed: a bug,
-                        // not something a canister can trigger on its own. Drop the response
-                        // (any cycles are lost) and raise a critical error. Kept above the
-                        // oversized-response arm, which truncates and routes; matching here
-                        // first ensures such a response is dropped, not routed.
-                        RequestOrResponse::Response(ref rep)
+                        // not something a canister can trigger on its own. Raise a critical
+                        // error and strip any attached cycles (so that none cross the boundary,
+                        // not even as anonymous refunds on the receiving side; they are lost).
+                        // A guaranteed response is then still routed, so the waiting caller is
+                        // not stranded forever; a best-effort response is dropped (the caller
+                        // will time out). Kept above the oversized-response arm so that the
+                        // cycle stripping always happens first.
+                        RequestOrResponse::Response(ref mut rep)
                             if (is_engine_dst || is_engine_src)
                                 && (rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero()) =>
                         {
                             error!(
                                 self.log,
-                                "{}: Dropping engine-boundary response (to {}): {:?}",
+                                "{}: Illegal engine-boundary response (to {}): {:?}",
                                 CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                                 dst_subnet_id,
                                 rep,
                             );
                             self.metrics.critical_error_engine_message.inc();
-                            engine_response_dropped_cycles += rep.refund;
                             self.observe_message_type_status(
                                 LABEL_VALUE_TYPE_RESPONSE,
                                 LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
                             );
+                            let is_guaranteed_response = rep.deadline == NO_DEADLINE;
+                            // Strip any attached cycles; they are lost.
+                            engine_response_dropped_cycles += rep.refund;
+                            if rep.refund > Cycles::zero() {
+                                Arc::make_mut(rep).refund = Cycles::zero();
+                            }
+                            if is_guaranteed_response {
+                                // Still deliver the (now cycle-free) response so the caller is
+                                // not left hanging forever on our bug.
+                                dst_stream_entry.or_default().push(msg.into());
+                            }
+                            // Best-effort illegal responses are dropped (consumed here).
                         }
 
                         // Remote request above the payload size limit.

@@ -1006,6 +1006,75 @@ fn build_streams_engine_src_drops_cycles_response() {
     });
 }
 
+/// Tests that a guaranteed-response response with a cycles refund from a CloudEngine
+/// subnet (own subnet) to a non-engine subnet has its cycles stripped but is still
+/// routed, so a waiting caller is not stranded forever by our bug; the
+/// `illegal_engine_message` critical error is raised.
+#[test]
+fn build_streams_engine_src_strips_and_routes_guaranteed_response() {
+    let local_canister_id = canister_test_id(0);
+    let remote_canister_id = canister_test_id(1);
+    with_test_replica_logger(|log| {
+        let response = Arc::new(Response {
+            originator: remote_canister_id,
+            respondent: local_canister_id,
+            originator_reply_callback: CallbackId::from(1),
+            refund: Cycles::new(100),
+            response_payload: Payload::Data(vec![]),
+            deadline: NO_DEADLINE,
+        });
+
+        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
+
+        provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
+        provided_state.metadata.network_topology.set_subnets(btreemap! {
+            LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
+            REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
+        });
+        provided_state.metadata.network_topology.set_routing_table(
+            RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
+                CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
+            })
+            .unwrap(),
+        );
+
+        let provided_canister_states =
+            canister_states_with_outputs(vec![RequestOrResponse::Response(response)]);
+        provided_state.put_canister_states(provided_canister_states);
+
+        let result_state = stream_builder.build_streams(provided_state);
+
+        // The guaranteed response was routed into the REMOTE_SUBNET stream, with its cycles
+        // stripped so none crossed the boundary.
+        let stream = result_state
+            .streams()
+            .get(&REMOTE_SUBNET)
+            .expect("guaranteed response should have been routed");
+        assert_eq!(1, stream.messages().len());
+        match stream.messages().iter().next().unwrap().1 {
+            StreamMessage::Response(rep) => {
+                assert_eq!(NO_DEADLINE, rep.deadline);
+                assert_eq!(Cycles::zero(), rep.refund);
+            }
+            _ => panic!("expected a routed response"),
+        }
+
+        assert_routed_messages_eq(
+            metric_vec(&[(
+                &[
+                    (LABEL_TYPE, LABEL_VALUE_TYPE_RESPONSE),
+                    (LABEL_STATUS, LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED),
+                ],
+                1,
+            )]),
+            &metrics_registry,
+        );
+        // A response that should never have reached the boundary raises a critical error.
+        assert_eq_critical_errors(0, 0, 1, &metrics_registry);
+    });
+}
+
 /// Tests that refunds destined to cross an engine boundary are dropped, in both
 /// directions:
 ///   * engine → non-engine (own subnet is engine, recipient on a non-engine subnet)
