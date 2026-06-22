@@ -22,6 +22,9 @@ def launch_bare_metal(name, image_zst_file):
             requirement("simple-parsing"),
             requirement("tqdm"),
         ],
+        data = [
+            "//ic-os/dev-tools/bare_metal_deployment:redfish_scripts",
+        ],
         config_settings = {
             "@rules_python//python/config_settings:bootstrap_impl": "script",
         },
