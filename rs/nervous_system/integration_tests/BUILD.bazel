@@ -196,6 +196,7 @@ rust_test_suite_with_extra_srcs(
             "tests/sns_topics.rs",
             "tests/sns_extension_test.rs",
             "tests/custom_proposal_criticality.rs",
+            "tests/sns_lifecycle.rs",
         ],
     ),
     data = DEV_DATA,
@@ -207,6 +208,30 @@ rust_test_suite_with_extra_srcs(
     ],
     tags = [
         "cpu:6",
+    ],
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
+)
+
+rust_test(
+    name = "sns_lifecycle",
+    timeout = "long",
+    srcs = ["tests/sns_lifecycle.rs"],
+    data = DEV_DATA,
+    env = DEV_ENV | {
+        "RUST_TEST_NOCAPTURE": "1",
+        # Each SNS lifecycle scenario spins up a full NNS + SNS on the shared
+        # PocketIC server. Running all scenarios concurrently exhausts the
+        # server's memory, causing it to drop connections ("Connection reset by
+        # peer") and flake the test. Cap the number of concurrently running
+        # scenarios to keep the server's memory usage bounded.
+        "RUST_TEST_THREADS": "4",
+    },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:rust_decimal_macros",
+    ],
+    tags = [
+        "cpu:8",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )

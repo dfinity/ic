@@ -22,13 +22,15 @@ def launch_bare_metal(name, image_zst_file):
             requirement("simple-parsing"),
             requirement("tqdm"),
         ],
+        config_settings = {
+            "@rules_python//python/config_settings:bootstrap_impl": "script",
+        },
         tags = ["manual"],
     )
     sh_binary(
         name = name,
         srcs = ["//toolchains/sysimage:proc_wrapper.sh"],
         args = [
-            "python3",
             "$(location :" + binary_name + ")",
             "--inject_configuration_tool",
             "$(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config)",
