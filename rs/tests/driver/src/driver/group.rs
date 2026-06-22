@@ -690,11 +690,6 @@ pub fn assert_no_critical_errors(env: &TestEnv) {
     );
 }
 
-/// Environment variable that, when set to `true` or `1`, makes every
-/// `SystemTestGroup` automatically download the Prometheus data directory of the
-/// `PrometheusVm` (if one was deployed) to the local test directory on teardown.
-const DOWNLOAD_P8S_DATA_ENV: &str = "DOWNLOAD_P8S_DATA";
-
 /// Environment variable specifying how many seconds to wait before downloading the
 /// Prometheus data directory, giving Prometheus time to scrape the final metrics of
 /// the test. Defaults to `0` (no wait) when unset or unparseable. Only consulted
@@ -708,8 +703,7 @@ const DOWNLOAD_P8S_DATA_COOLDOWN_SECS_ENV: &str = "DOWNLOAD_P8S_DATA_COOLDOWN_SE
 /// Before downloading, the teardown waits for `DOWNLOAD_P8S_DATA_COOLDOWN_SECS`
 /// seconds (default `0`) such that Prometheus has time to scrape the final metrics.
 fn download_prometheus_data_teardowns() -> Vec<Box<dyn PotSetupFn>> {
-    let should_download =
-        std::env::var(DOWNLOAD_P8S_DATA_ENV).is_ok_and(|v| v == "true" || v == "1");
+    let should_download = std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
     if !should_download {
         return Vec::new();
     }
