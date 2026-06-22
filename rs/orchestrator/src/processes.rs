@@ -316,6 +316,21 @@ impl IcBoundaryManager {
         }
     }
 
+    // Used in tests to inject a mock ProcessManager.
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        inner: ProcessManager<IcBoundaryProcess>,
+        registry: Arc<RegistryHelper>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        Self {
+            inner,
+            registry,
+            current_domain_name: None,
+            logger,
+        }
+    }
+
     // TODO: consider returning an error when things fail instead of logging
     pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
         &mut self,
@@ -503,5 +518,212 @@ impl MultipleProcessesManager {
         self.replica_manager.stop()?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::node_operator::NodeRecord;
+    use ic_registry_keys::make_node_record_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_types::ids::NODE_1;
+    use std::{path::Path, sync::Mutex};
+    use tempfile::tempdir;
+
+    const REPLICA_VERSION: &str = "replica_version_0.1";
+
+    /// Counters recorded by [`RecordingRunner`], so tests can assert whether
+    /// (and how often) the managed process was started/stopped.
+    #[derive(Default)]
+    struct RunnerLog {
+        running: bool,
+        starts: usize,
+        stops: usize,
+    }
+
+    /// A `ProcessRunner` fake that records start/stop calls instead of spawning.
+    struct RecordingRunner {
+        log: Arc<Mutex<RunnerLog>>,
+    }
+
+    impl<P: Process> ProcessRunner<P> for RecordingRunner {
+        fn start(&mut self, _process: P) -> std::io::Result<()> {
+            let mut log = self.log.lock().unwrap();
+            log.running = true;
+            log.starts += 1;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            let mut log = self.log.lock().unwrap();
+            log.running = false;
+            log.stops += 1;
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.log.lock().unwrap().running
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            self.log
+                .lock()
+                .unwrap()
+                .running
+                .then_some(Pid::from_raw(12345))
+        }
+    }
+
+    /// Builds a registry whose node record for `NODE_1` carries the given domain
+    /// at each listed registry version (`None` means "no domain").
+    fn registry_with_node_domains(domains: &[(u64, Option<&str>)]) -> Arc<RegistryHelper> {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        for &(version, domain) in domains {
+            data_provider
+                .add(
+                    &make_node_record_key(NODE_1),
+                    RegistryVersion::from(version),
+                    Some(NodeRecord {
+                        domain: domain.map(str::to_string),
+                        ..Default::default()
+                    }),
+                )
+                .unwrap();
+        }
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+        registry_client.update_to_latest_version();
+        Arc::new(RegistryHelper::new(NODE_1, registry_client, no_op_logger()))
+    }
+
+    /// Builds an [`IcBoundaryManager`] backed by a [`RecordingRunner`], returning
+    /// the manager and a handle to the runner's log.
+    fn ic_boundary_manager_for_test(
+        registry: Arc<RegistryHelper>,
+        dir: &Path,
+    ) -> (IcBoundaryManager, Arc<Mutex<RunnerLog>>) {
+        let log = Arc::new(Mutex::new(RunnerLog::default()));
+        let runner = Box::new(RecordingRunner { log: log.clone() });
+        let env_file = dir.join("ic-boundary.env");
+        std::fs::write(&env_file, b"TEST_KEY=TEST_VALUE").unwrap();
+        let config = IcBoundaryProcessConfig {
+            ic_binary_dir: dir.to_path_buf(),
+            ic_boundary_env_file: env_file,
+            crypto_config: CryptoConfig::default(),
+        };
+        let inner = ProcessManager::new_for_test(
+            runner,
+            config,
+            Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
+            no_op_logger(),
+        );
+        let manager = IcBoundaryManager::new_for_test(inner, registry, no_op_logger());
+        (manager, log)
+    }
+
+    fn ensure(manager: &mut IcBoundaryManager, registry_version: u64) {
+        manager.ensure_ic_boundary_running_and_restarted_on_domain_change(
+            ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
+            RegistryVersion::from(registry_version),
+        );
+    }
+
+    #[test]
+    fn ic_boundary_not_started_when_node_has_no_domain() {
+        let dir = tempdir().unwrap();
+        let registry = registry_with_node_domains(&[(1, None)]);
+        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
+
+        ensure(&mut manager, 1);
+
+        let log = log.lock().unwrap();
+        assert!(!log.running);
+        assert_eq!(log.starts, 0);
+        assert_eq!(log.stops, 0);
+        assert_eq!(manager.current_domain_name, None);
+    }
+
+    #[test]
+    fn ic_boundary_starts_when_node_has_domain() {
+        let dir = tempdir().unwrap();
+        let registry = registry_with_node_domains(&[(1, Some("api1.example.com"))]);
+        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
+
+        ensure(&mut manager, 1);
+
+        let log = log.lock().unwrap();
+        assert!(log.running);
+        assert_eq!(log.starts, 1);
+        assert_eq!(log.stops, 0);
+        assert_eq!(
+            manager.current_domain_name.as_deref(),
+            Some("api1.example.com")
+        );
+    }
+
+    #[test]
+    fn ic_boundary_not_restarted_when_domain_unchanged() {
+        let dir = tempdir().unwrap();
+        let registry = registry_with_node_domains(&[(1, Some("api1.example.com"))]);
+        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
+
+        ensure(&mut manager, 1);
+        ensure(&mut manager, 1);
+
+        let log = log.lock().unwrap();
+        assert!(log.running);
+        // Started once on the first call; the second call must not restart it.
+        assert_eq!(log.starts, 1);
+        assert_eq!(log.stops, 0);
+        assert_eq!(
+            manager.current_domain_name.as_deref(),
+            Some("api1.example.com")
+        );
+    }
+
+    #[test]
+    fn ic_boundary_restarted_when_domain_changes() {
+        let dir = tempdir().unwrap();
+        let registry = registry_with_node_domains(&[
+            (1, Some("api1.example.com")),
+            (2, Some("api2.example.com")),
+        ]);
+        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
+
+        ensure(&mut manager, 1);
+        ensure(&mut manager, 2);
+
+        let log = log.lock().unwrap();
+        assert!(log.running);
+        // Restart on domain change: stopped once, started twice.
+        assert_eq!(log.starts, 2);
+        assert_eq!(log.stops, 1);
+        assert_eq!(
+            manager.current_domain_name.as_deref(),
+            Some("api2.example.com")
+        );
+    }
+
+    #[test]
+    fn ic_boundary_stopped_when_domain_is_deleted() {
+        let dir = tempdir().unwrap();
+        let registry = registry_with_node_domains(&[(1, Some("api1.example.com")), (2, None)]);
+        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
+
+        // Running with a domain ...
+        ensure(&mut manager, 1);
+        assert!(log.lock().unwrap().running);
+
+        // ... then the domain is removed: ic-boundary must be stopped.
+        ensure(&mut manager, 2);
+
+        let log = log.lock().unwrap();
+        assert!(!log.running);
+        assert_eq!(log.starts, 1);
+        assert_eq!(log.stops, 1);
+        assert_eq!(manager.current_domain_name, None);
     }
 }
