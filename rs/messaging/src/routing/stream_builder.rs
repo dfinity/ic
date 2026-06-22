@@ -1,5 +1,5 @@
 use crate::message_routing::{
-    CRITICAL_ERROR_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
+    CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
     MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
@@ -541,7 +541,7 @@ impl StreamBuilderImpl {
                             error!(
                                 self.log,
                                 "{}: Dropping engine-boundary response (to {}): {:?}",
-                                CRITICAL_ERROR_ENGINE_MESSAGE,
+                                CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                                 dst_subnet_id,
                                 rep,
                             );
@@ -787,7 +787,7 @@ impl StreamBuilderImpl {
                         error!(
                             self.log,
                             "{}: Dropping engine-boundary refund (to {}): {:?}",
-                            CRITICAL_ERROR_ENGINE_MESSAGE,
+                            CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                             dst_subnet_id,
                             refund,
                         );

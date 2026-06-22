@@ -1986,7 +1986,10 @@ fn assert_eq_critical_errors(
                 &[("error", &CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND)],
                 response_destination_not_found
             ),
-            (&[("error", &CRITICAL_ERROR_ENGINE_MESSAGE)], engine_message)
+            (
+                &[("error", &CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE)],
+                engine_message
+            )
         ])),
         nonzero_values(fetch_int_counter_vec(metrics_registry, "critical_errors"))
     );

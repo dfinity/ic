@@ -1,5 +1,5 @@
 use crate::message_routing::{
-    CRITICAL_ERROR_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
+    CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
     MessageRoutingMetrics,
 };
 use ic_base_types::NumBytes;
@@ -790,7 +790,7 @@ impl StreamHandlerImpl {
                     error!(
                         self.log,
                         "{}: Dropping refund from {}: {:?}",
-                        CRITICAL_ERROR_ENGINE_MESSAGE,
+                        CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                         remote_subnet_id,
                         refund,
                     );
@@ -831,7 +831,7 @@ impl StreamHandlerImpl {
                             error!(
                                 self.log,
                                 "{}: Rejecting disallowed request at engine boundary (from {}): {:?}",
-                                CRITICAL_ERROR_ENGINE_MESSAGE,
+                                CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                                 remote_subnet_id,
                                 req,
                             );
@@ -856,7 +856,7 @@ impl StreamHandlerImpl {
                             error!(
                                 self.log,
                                 "{}: Dropping engine-boundary response (from {}): {:?}",
-                                CRITICAL_ERROR_ENGINE_MESSAGE,
+                                CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
                                 remote_subnet_id,
                                 rep,
                             );

@@ -130,7 +130,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
-pub const CRITICAL_ERROR_ENGINE_MESSAGE: &str = "mr_engine_message";
+pub const CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE: &str = "mr_illegal_engine_message";
 const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
@@ -496,7 +496,7 @@ impl MessageRoutingMetrics {
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
             critical_error_engine_message: metrics_registry
-                .error_counter(CRITICAL_ERROR_ENGINE_MESSAGE),
+                .error_counter(CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE),
             critical_error_illegal_non_empty_subnet_admins: metrics_registry
                 .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 

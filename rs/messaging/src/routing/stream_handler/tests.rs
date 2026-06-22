@@ -4260,7 +4260,7 @@ impl MetricsFixture {
                     counts.receiver_subnet_mismatch
                 ),
                 (
-                    &[("error", &CRITICAL_ERROR_ENGINE_MESSAGE.to_string())],
+                    &[("error", &CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE.to_string())],
                     counts.engine_message
                 ),
             ])),
