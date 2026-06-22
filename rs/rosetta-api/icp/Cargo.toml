@@ -36,7 +36,6 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
-rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 rolling-file = { workspace = true }
