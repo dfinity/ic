@@ -436,7 +436,8 @@ def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, 
     script_path = next(idrac_script_dir.glob(f"*.data/scripts/{script_name}"), None)
     if not script_path:
         raise FileNotFoundError(
-            f"Could not find '{script_name}' inside any *.data/scripts/ directory under {idrac_script_dir}")
+            f"Could not find '{script_name}' inside any *.data/scripts/ directory under {idrac_script_dir}"
+        )
 
     command = f"{sys.executable} {script_path} {args}".strip()
 
