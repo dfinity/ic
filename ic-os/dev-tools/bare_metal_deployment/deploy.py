@@ -800,7 +800,16 @@ def main():
     network_image_url: str = f"http://{args.file_share_url}/{args.file_share_image_filename}"
     log.info(f"Using network_image_url: {network_image_url}")
 
-    idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
+    idrac_script_dir = Path(args.idrac_script) if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
+
+
+    # Get a list of all files recursively
+    # 'is_file()' filters out directories from the final list
+    files = [str(file) for file in idrac_script_dir.rglob("*") if file.is_file()]
+
+    log.info("Printing files:")
+    log.info(files)
+
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
     ini_filename: str = args.ini_filename
