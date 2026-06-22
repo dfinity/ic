@@ -672,7 +672,7 @@ mod tests {
         models::{
             Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
             ConstructionParseRequest, ConstructionPayloadsRequest,
-            ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
+            ConstructionPayloadsRequestMetadata, Currency, CurveType, NetworkIdentifier, Operation,
             OperationIdentifier, PublicKey, Signature, SignatureType, operation::OperationType,
         },
         request_handler::RosettaRequestHandler,
@@ -923,5 +923,168 @@ mod tests {
 
             check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
         });
+    }
+
+    /// Builds a `RosettaRequestHandler` together with a single ICP transfer
+    /// (debit + credit + fee) and the signer's public key, shared by the memo
+    /// tests below.
+    fn setup_transfer_test() -> (
+        RosettaRequestHandler,
+        NetworkIdentifier,
+        Vec<Operation>,
+        PublicKey,
+    ) {
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let ledger_client = futures::executor::block_on(LedgerClient::new(
+            Url::from_str("http://localhost:1234").unwrap(),
+            CanisterId::from_u64(1),
+            "TKN".into(),
+            CanisterId::from_u64(2),
+            None,
+            None,
+            true,
+            None,
+            false,
+            false, // optimize_search_indexes: disabled for tests
+        ))
+        .unwrap();
+        let mock_canister_id_hex = "00000000000000000101";
+        let initial_sync_complete = AtomicBool::new(true);
+        let handler = RosettaRequestHandler::new(
+            "Internet Computer".into(),
+            ledger_client.into(),
+            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
+            Arc::new(initial_sync_complete),
+        );
+
+        let network_identifier = handler.network_id();
+        let currency = Currency {
+            symbol: "TKN".into(),
+            decimals: 8,
+            metadata: None,
+        };
+
+        let pub_key = PublicKey {
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
+            curve_type: CurveType::Edwards25519,
+        };
+        let account = handler
+            .construction_derive(ConstructionDeriveRequest {
+                network_identifier: network_identifier.clone(),
+                public_key: pub_key.clone(),
+                metadata: None,
+            })
+            .unwrap()
+            .account_identifier;
+
+        let operations = vec![
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 0,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Transaction.to_string(),
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "-100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 1,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Transaction.to_string(),
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 2,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Fee.to_string(),
+                status: None,
+                account,
+                amount: Some(Amount {
+                    value: "-1000000".into(),
+                    currency,
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+        ];
+
+        (handler, network_identifier, operations, pub_key)
+    }
+
+    /// Returns the `memo` that `construction_payloads` embeds in the
+    /// transaction when invoked without a caller-specified memo.
+    fn memo_without_caller_memo(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        operations: &[Operation],
+        pub_key: &PublicKey,
+    ) -> serde_json::Value {
+        let payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.to_vec(),
+                metadata: None,
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+        let parsed = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: false,
+                transaction: payloads.unsigned_transaction,
+            })
+            .unwrap();
+        parsed
+            .metadata
+            .expect("metadata should always be returned")
+            .get("memo")
+            .expect("memo should always be present")
+            .clone()
+    }
+
+    // When the caller does not specify a memo, `construction_payloads`
+    // substitutes a fresh random memo on every invocation. Because the memo is
+    // part of the transaction hash, reconstructing the same transfer yields a
+    // different hash each time, which defeats the ledger's `created_at_time`
+    // based deduplication. This test pins down that behavior: three subsequent
+    // reconstructions of the same transfer produce at least two different
+    // memos.
+    #[test]
+    fn test_payloads_without_memo_produces_varying_memos() {
+        let (handler, network_identifier, operations, pub_key) = setup_transfer_test();
+
+        let memos: Vec<serde_json::Value> = (0..3)
+            .map(|_| memo_without_caller_memo(&handler, &network_identifier, &operations, &pub_key))
+            .collect();
+
+        let distinct: std::collections::HashSet<String> =
+            memos.iter().map(|m| m.to_string()).collect();
+        assert!(
+            distinct.len() >= 2,
+            "expected at least two different memos across three reconstructions, got {memos:?}"
+        );
     }
 }
