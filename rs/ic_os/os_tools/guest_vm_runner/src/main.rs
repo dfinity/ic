@@ -24,6 +24,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::pin::pin;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use strum_macros::AsRefStr;
@@ -556,12 +557,19 @@ impl GuestVmService {
         // returns, stop the boot monitoring.
         let mut monitor_vm =
             pin!(self.monitor_virtual_machine(&virtual_machine, termination_token));
-        tokio::select! {
+        let result = tokio::select! {
             // Wait for VM to shut down or for stop signal
             monitor_vm_result = &mut monitor_vm => monitor_vm_result,
             // Monitor GuestOS boot process in the background
             _ = self.monitor_guestos_boot() => monitor_vm.await,
+        };
+
+        if self.guest_vm_type == GuestVMType::Upgrade {
+            dump_host_network_diagnostics();
         }
+
+        // virtual_machine is dropped here, which tears down the tap interface
+        result
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
@@ -787,6 +795,30 @@ impl GuestVmService {
                 let _ignore = writeln!(console_tty, "{message}");
                 let _ignore = console_tty.flush();
             }
+        }
+    }
+}
+
+fn dump_host_network_diagnostics() {
+    info!("Dumping host network state for upgrade VM diagnostics:");
+    for cmd in [
+        "ip link show",
+        "bridge fdb show br br6",
+        "ip -6 neigh show dev br6",
+    ] {
+        info!("=== {cmd} ===");
+        match Command::new("sh").args(["-c", cmd]).output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stdout.is_empty() {
+                    info!("{}", stdout.trim_end());
+                }
+                if !stderr.is_empty() {
+                    warn!("{}", stderr.trim_end());
+                }
+            }
+            Err(e) => warn!("Failed to run command: {e}"),
         }
     }
 }

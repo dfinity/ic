@@ -24,6 +24,7 @@ use rustls::version::TLS13;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::firmware::SevGuestFirmware;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tonic::transport::{Channel, Endpoint};
@@ -95,11 +96,19 @@ impl DiskEncryptionKeyExchangeClientAgent {
             peer_guest_vm_address, self.server_port
         ))
         .context("Could not parse URL")?;
+
         println!("Connecting to server at {server_uri}");
-        let (mut upgrade_service_client, server_public_key_der) = self
+        let connect_result = self
             .create_upgrade_service_client(server_uri.clone(), my_certificate)
             .await
-            .context(format!("Could not connect to server at {server_uri}"))?;
+            .context(format!("Could not connect to server at {server_uri}"));
+
+        if connect_result.is_err() {
+            eprintln!("Connection failed, dumping network state:");
+            dump_network_diagnostics();
+        }
+
+        let (mut upgrade_service_client, server_public_key_der) = connect_result?;
         println!("Connected successfully to server");
 
         // If we can already open the store, we don't need to run the key exchange.
@@ -336,6 +345,25 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
     .to_vec();
 
     Ok(public_key_der)
+}
+
+fn dump_network_diagnostics() {
+    for cmd in ["ip -6 addr show", "ip -6 route show", "ip -6 neigh show"] {
+        println!("=== {cmd} ===");
+        match Command::new("sh").args(["-c", cmd]).output() {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if !stdout.is_empty() {
+                    print!("{stdout}");
+                }
+                if !stderr.is_empty() {
+                    eprint!("{stderr}");
+                }
+            }
+            Err(e) => eprintln!("Failed to run command: {e}"),
+        }
+    }
 }
 
 pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {

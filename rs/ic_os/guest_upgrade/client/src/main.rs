@@ -10,6 +10,7 @@ use sev::firmware::guest::Firmware;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
+use std::time::Instant;
 
 #[tokio::main]
 #[cfg(target_os = "linux")]
@@ -35,7 +36,14 @@ pub async fn main() -> Result<()> {
 
 async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
+
+    println!("Starting NNS registry client creation...");
+    let start = Instant::now();
     let nns_registry_client = create_nns_registry_client(&guestos_config)?;
+    println!(
+        "NNS registry client created in {:.1}s",
+        start.elapsed().as_secs_f64()
+    );
 
     let sev_firmware = Firmware::open().context("Failed to open SEV firmware")?;
 
