@@ -28,7 +28,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::{
         canister_state_bits::v1::{TotalQueryStats as TotalQueryStatsProto, Unsigned128},
-        stats::v1::{QueryStats as QueryStatsProto, QueryStatsInner},
+        stats::v1::{EmptyEpochEntry, QueryStats as QueryStatsProto, QueryStatsInner},
     },
     types::v1::{self as pb},
 };
@@ -141,11 +141,17 @@ pub struct RawQueryStats {
 
 impl RawQueryStats {
     pub fn as_query_stats(&self) -> Option<QueryStatsProto> {
-        // Serialize BTreeMap as vector
         let mut query_stats = vec![];
+        let mut empty_epochs = vec![];
 
         for (node_id, inner) in &self.stats {
             for (epoch, inner) in inner {
+                if inner.is_empty() {
+                    empty_epochs.push(EmptyEpochEntry {
+                        proposer: Some(node_id_into_protobuf(*node_id)),
+                        epoch: epoch.get(),
+                    });
+                }
                 for (canister_id, stats) in inner {
                     query_stats.push(QueryStatsInner {
                         proposer: Some(node_id_into_protobuf(*node_id)),
@@ -160,12 +166,16 @@ impl RawQueryStats {
             }
         }
 
-        if query_stats.is_empty() && self.highest_aggregated_epoch.is_none() {
+        if query_stats.is_empty()
+            && empty_epochs.is_empty()
+            && self.highest_aggregated_epoch.is_none()
+        {
             None
         } else {
             Some(QueryStatsProto {
                 highest_aggregated_epoch: self.highest_aggregated_epoch.map(|epoch| epoch.get()),
                 query_stats,
+                empty_epochs,
             })
         }
     }
@@ -184,7 +194,6 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
                 let epoch = QueryStatsEpoch::new(entry.epoch);
                 let canister: CanisterId =
                     try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
-
                 r.stats
                     .entry(proposer)
                     .or_default()
@@ -199,6 +208,16 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
                             egress_payload_size: entry.egress_payload_size,
                         },
                     );
+            }
+        }
+        for entry in value.empty_epochs {
+            if let Ok(proposer) = node_id_try_from_option(entry.proposer) {
+                let epoch = QueryStatsEpoch::new(entry.epoch);
+                r.stats
+                    .entry(proposer)
+                    .or_default()
+                    .entry(epoch)
+                    .or_default();
             }
         }
         Ok(r)
@@ -224,10 +243,6 @@ impl QueryStatsPayload {
     /// This function will drop trailing stats to guarantee, that the
     /// payload will fit into the `byte_limit`
     pub fn serialize_with_limit(&self, byte_limit: NumBytes) -> Vec<u8> {
-        if self.stats.is_empty() {
-            return vec![];
-        }
-
         let mut buffer = vec![].limit(byte_limit.get() as usize);
 
         // Encode the metadata about the messages
@@ -240,6 +255,11 @@ impl QueryStatsPayload {
             Ok(()) => (),
             // Return immidiately, if there is not enough space to fit the metadata
             Err(_) => return vec![],
+        }
+
+        // If there are no stats, return just epoch+proposer to signal epoch advancement.
+        if self.stats.is_empty() {
+            return buffer.into_inner();
         }
 
         let mut num_stats_included = 0;
@@ -382,6 +402,28 @@ mod tests {
         assert!(original_stats.stats.len() > deserialized_stats.stats.len());
     }
 
+    /// Empty stats serialize to a metadata-only payload that round-trips correctly.
+    #[test]
+    fn empty_stats_metadata_only_roundtrip() {
+        let epoch = QueryStatsEpoch::new(42);
+        let proposer = NodeId::from(PrincipalId::new_node_test_id(7));
+        let payload = QueryStatsPayload {
+            epoch,
+            proposer,
+            stats: vec![],
+        };
+
+        let serialized = payload.serialize_with_limit(NumBytes::new(2 * 1024 * 1024));
+        assert!(!serialized.is_empty());
+
+        let deserialized = QueryStatsPayload::deserialize(&serialized)
+            .unwrap()
+            .unwrap();
+        assert_eq!(deserialized.epoch, epoch);
+        assert_eq!(deserialized.proposer, proposer);
+        assert!(deserialized.stats.is_empty());
+    }
+
     fn test_message(num_stats: u64) -> QueryStatsPayload {
         let mut rng = ChaCha8Rng::seed_from_u64(1454);
 
@@ -418,6 +460,35 @@ mod tests {
         let check_test = RawQueryStats::try_from(pb_test).unwrap();
 
         assert_eq!(test, check_test);
+    }
+
+    /// An epoch entry with an empty canister map must survive the as_query_stats() -> try_from() roundtrip.
+    #[test]
+    fn serialization_roundtrip_raw_query_stats_empty_epoch() {
+        // One node with two epochs: one that has canister stats and one that is empty.
+        let mut rng = ChaCha8Rng::seed_from_u64(1454);
+
+        let mut record = BTreeMap::new();
+        let mut inner = BTreeMap::new();
+        inner.insert(canister_test_id(1), rng_epoch_stats(&mut rng));
+        record.insert(QueryStatsEpoch::new(0), inner);
+        // Empty canister map — the sentinel path.
+        record.insert(QueryStatsEpoch::new(1), BTreeMap::new());
+
+        let mut stats = BTreeMap::new();
+        stats.insert(node_test_id(1), record);
+
+        let test = RawQueryStats {
+            highest_aggregated_epoch: None,
+            stats,
+        };
+
+        let pb_test = test.as_query_stats().unwrap();
+        let check_test = RawQueryStats::try_from(pb_test).unwrap();
+
+        assert_eq!(test, check_test);
+        // The empty epoch must be preserved as an empty map, not absent.
+        assert!(check_test.stats[&node_test_id(1)][&QueryStatsEpoch::new(1)].is_empty());
     }
 
     fn rng_epoch_stats<R>(rng: &mut R) -> QueryStats

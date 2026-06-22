@@ -174,15 +174,18 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		command = append(command, "--")
 
 		env := os.Environ()
-		cmd.Println(GREEN + "Will try to sync dashboards from k8s branch: " + cfg.k8sBranch)
-		icDashboardsDir, err := sparse_checkout("git@github.com:dfinity-ops/k8s.git", "", []string{"bases/apps/ic-dashboards"}, cfg.k8sBranch)
-		if err != nil {
-			cmd.PrintErrln(YELLOW + "Failed to sync k8s dashboards. Received the following error: " + err.Error())
+		// run_systest.sh syncs the Grafana dashboards and exposes them to the test
+		// driver via the IC_DASHBOARDS_DIR environment variable. If IC_DASHBOARDS_DIR is
+		// already set to a non-empty value (e.g. a local clone) run_systest.sh uses it
+		// directly and skips the checkout, so we only request a sync from the k8s branch
+		// otherwise. We treat empty values as unset to match run_systest.sh.
+		if dashboardsDir := os.Getenv("IC_DASHBOARDS_DIR"); dashboardsDir != "" {
+			cmd.Println(GREEN + "Using Grafana dashboards from IC_DASHBOARDS_DIR: " + dashboardsDir + NC)
+		} else if cfg.k8sBranch != "" {
+			cmd.Println(GREEN + "Dashboards will be synced from k8s branch: " + cfg.k8sBranch + NC)
+			env = append(env, "IC_DASHBOARDS_BRANCH="+cfg.k8sBranch)
 		} else {
-			cmd.PrintErrln(GREEN + "Successfully synced dashboards to path " + icDashboardsDir)
-			icDashboardsDir = filepath.Join(icDashboardsDir, "bases", "apps", "ic-dashboards")
-			cmd.Println(GREEN + "Will use " + icDashboardsDir + " as a root for dashboards")
-			env = append(env, "IC_DASHBOARDS_DIR="+icDashboardsDir)
+			cmd.PrintErrln(YELLOW + "Both IC_DASHBOARDS_DIR and --k8s-branch are empty; Grafana dashboards will not be synced." + NC)
 		}
 		if len(cfg.farmBaseUrl) > 0 {
 			command = append(command, "--farm-base-url="+cfg.farmBaseUrl)
