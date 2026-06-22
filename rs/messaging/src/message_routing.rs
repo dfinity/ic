@@ -35,7 +35,7 @@ use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    DroppedMessageMetrics, FullTopology, NetworkTopology, ReplicatedState, SubnetTopology,
+    DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
@@ -936,7 +936,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
         // Populate subnet topologies for all subnets.
-        let mut all_subnets = BTreeMap::new();
+        let mut subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
             let public_key = self
@@ -1057,7 +1057,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 );
             }
 
-            all_subnets.insert(
+            subnets.insert(
                 *subnet_id,
                 SubnetTopology {
                     public_key,
@@ -1071,23 +1071,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             );
         }
 
-        let full_routing_table = self
+        // Every subnet sees the full topology, including CloudEngine subnets.
+        let routing_table = self
             .registry
             .get_routing_table(registry_version)
             .map_err(|err| registry_error("routing table", None, err))?
             .unwrap_or_default();
-
-        // All subnets see the full topology, including CloudEngine subnets.
-        let subnets: BTreeMap<_, _> = all_subnets
-            .iter()
-            .map(|(id, topo)| (*id, topo.clone()))
-            .collect();
-        let routing_table = full_routing_table
-            .iter()
-            .map(|(range, id)| (*range, *id))
-            .collect::<BTreeMap<_, _>>()
-            .try_into()
-            .map_err(|err| Persistent(format!("routing table err: {:?}", err)))?;
         let canister_migrations = self
             .registry
             .get_canister_migrations(registry_version)
@@ -1144,18 +1133,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             })
             .collect();
 
-        // Only the NNS subnet needs the full (unfiltered) topology so that its
-        // certified state tree contains entries for every subnet (including
-        // cloud engines).
-        let full_topology = if own_subnet_id == nns_subnet_id {
-            Some(FullTopology {
-                subnets: all_subnets,
-                routing_table: Arc::new(full_routing_table),
-            })
-        } else {
-            None
-        };
-
         Ok(NetworkTopology::new(
             subnets,
             Arc::new(routing_table),
@@ -1164,7 +1141,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             chain_key_enabled_subnets,
             self.bitcoin_config.testnet_canister_id,
             self.bitcoin_config.mainnet_canister_id,
-            full_topology,
             default_initial_dkg_subnet_id,
         ))
     }

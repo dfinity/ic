@@ -432,10 +432,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(
-        state
-            .metadata
-            .network_topology
-            .routing_table_for_certification(),
+        state.metadata.network_topology.routing_table(),
     ));
     let split_routing_table = Arc::new(split_inverted_routing_table(
         &inverted_routing_table,
@@ -465,7 +462,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
             )
             .with("subnet", move || {
                 subnets_as_tree(
-                    state.metadata.network_topology.subnets_for_certification(),
+                    state.metadata.network_topology.subnets(),
                     own_subnet_id,
                     &state.metadata.node_public_keys,
                     inverted_routing_table.clone(),
@@ -482,7 +479,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 "canister_ranges",
                 move || {
                     canister_ranges_as_tree(
-                        state.metadata.network_topology.subnets_for_certification(),
+                        state.metadata.network_topology.subnets(),
                         Arc::clone(&split_routing_table),
                         certification_version,
                     )
