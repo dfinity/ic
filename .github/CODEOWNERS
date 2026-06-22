@@ -76,19 +76,21 @@ go.sum                    @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
-/.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/security
-/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/security
+/.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx
+/.github/workflows/container-scan-nightly.yml                            @dfinity/idx @dfinity/node
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi @dfinity/idx
 /.github/workflows/publish-crates.yml                                    @dfinity/idx @dfinity/security
 /.github/workflows/repro-check.yml                                       @dfinity/dre @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi @dfinity/idx
-/.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/security
+/.github/workflows/security-checks.yml                                   @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/security
 /ci/                                                                     @dfinity/idx
-/ci/actions/dependencies/                                                @dfinity/security
-/ci/src/dependencies/                                                    @dfinity/security
-/ci/src/dependencies/resources/container_scanner_finding_failover_ignore_list_guestos.txt @dfinity/node
+/ci/src/dependencies/                                                    @dfinity/node
+/ci/src/dependencies/integration/github/github_api.py                    @dfinity/idx @dfinity/node
+/ci/src/dependencies/integration/github/github_dependency_submission.py  @dfinity/idx
+/ci/src/dependencies/job/bazel_rust_gh_submission_job.py                 @dfinity/idx
+/ci/src/dependencies/parser/                                             @dfinity/idx
 /ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
