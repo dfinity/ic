@@ -116,7 +116,7 @@ class Args:
     parallel: int = 1
 
     # Path to an idrac script, which we use to find the directory. If None, pip bin directory will be used.
-    idrac_script: Optional[str] = None
+    idrac_script_dir: Optional[str] = None
 
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
@@ -431,21 +431,14 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 
 def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
+    script_name, _, extra_args = script_and_args.partition(" ")
 
-    # Separate the script filename from any appended runtime credentials/flags
-    parts = script_and_args.split(" ", 1)
-    script_filename = parts[0]
-    extra_args = parts[1] if len(parts) > 1 else ""
+    script_path = next(Path(idrac_script_dir).glob(f"*.data/scripts/{script_name}"), None)
+    if not script_path:
+        raise FileNotFoundError(
+            f"Could not find '{script_name}' inside any *.data/scripts/ directory under {idrac_script_dir}")
 
-    # Look for the script file recursively inside the directory target provided by Bazel
-    resolved_script_path = next(Path(idrac_script_dir).rglob(script_filename), None)
-
-    if not resolved_script_path:
-        # Fallback to the top-level path if rglob finds nothing
-        resolved_script_path = Path(idrac_script_dir) / script_filename
-
-    # Construct the execution command with the dynamically resolved path
-    command = f"{sys.executable} {resolved_script_path} {extra_args}".strip()
+    command = f"{sys.executable} {script_path} {extra_args}".strip()
 
     log.info(f"Invoking subprocess command: {command}")
     result = invoke.run(command)
@@ -800,16 +793,7 @@ def main():
     network_image_url: str = f"http://{args.file_share_url}/{args.file_share_image_filename}"
     log.info(f"Using network_image_url: {network_image_url}")
 
-    idrac_script_dir = Path(args.idrac_script) if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
-
-
-    # Get a list of all files recursively
-    # 'is_file()' filters out directories from the final list
-    files = [str(file) for file in idrac_script_dir.rglob("*") if file.is_file()]
-
-    log.info("Printing files:")
-    log.info(files)
-
+    idrac_script_dir = Path(args.idrac_script_dir) if args.idrac_script_dir else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
     ini_filename: str = args.ini_filename

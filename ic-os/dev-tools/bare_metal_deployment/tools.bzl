@@ -22,9 +22,6 @@ def launch_bare_metal(name, image_zst_file):
             requirement("simple-parsing"),
             requirement("tqdm"),
         ],
-        data = [
-            "//ic-os/dev-tools/bare_metal_deployment:redfish_scripts",
-        ],
         config_settings = {
             "@rules_python//python/config_settings:bootstrap_impl": "script",
         },
@@ -41,7 +38,7 @@ def launch_bare_metal(name, image_zst_file):
             "$(location " + image_zst_file + ")",
             "--deterministic_ips_tool",
             "$(location //rs/ic_os/networking/deterministic_ips:deterministic-ips)",
-            "--idrac_script",
+            "--idrac_script_dir",
             "$(location //ic-os/dev-tools/bare_metal_deployment:redfish_scripts)",
             "--benchmark_driver_script",
             "$(location //ic-os/dev-tools/bare_metal_deployment:benchmark_driver.sh)",
