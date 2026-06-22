@@ -674,6 +674,7 @@ def upload_to_file_share(
     file_share_image_name: str,
     file_share_ssh_key: Optional[str] = None,
 ):
+    return
     log.info(f'''Uploading "{upload_img}" to "{file_share_endpoint}"''')
 
     connect_kw_args = {"key_filename": file_share_ssh_key} if file_share_ssh_key else None
