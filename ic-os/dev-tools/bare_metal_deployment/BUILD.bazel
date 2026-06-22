@@ -11,6 +11,7 @@ exports_files([
 whl_filegroup(
     name = "redfish_scripts",
     pattern = ".*/scripts/.*",
+    runfiles = True,
     tags = ["manual"],
     whl = "@python_deps//idracredfishsupport:whl",
 )
