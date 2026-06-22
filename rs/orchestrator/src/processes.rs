@@ -514,7 +514,9 @@ impl MultipleProcessesManager {
 
     /// Stop every managed process.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
-        self.ic_gateway_manager.stop()?;
+        if self.ic_gateway_launch_enabled {
+            self.ic_gateway_manager.stop()?;
+        }
         self.replica_manager.stop()?;
 
         Ok(())
