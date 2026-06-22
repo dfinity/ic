@@ -124,6 +124,26 @@ fn test_execute_nns_function_try_from_errors() {
     }
 }
 
+#[test]
+fn test_update_guestos_version_for_subnets_routing() {
+    use ic_nns_constants::REGISTRY_CANISTER_ID;
+
+    let valid = ValidExecuteNnsFunction::try_from(ExecuteNnsFunction {
+        nns_function: NnsFunction::UpdateGuestosVersionForSubnets as i32,
+        payload: vec![],
+    })
+    .expect("UpdateGuestosVersionForSubnets should be a valid NNS function");
+
+    assert_eq!(
+        valid.nns_function,
+        ValidNnsFunction::UpdateGuestosVersionForSubnets
+    );
+    assert_eq!(
+        valid.nns_function.canister_and_function(),
+        (REGISTRY_CANISTER_ID, "update_guestos_version_for_subnets"),
+    );
+}
+
 // This tests a "normal" NNS function where the payload is translated through a candid file fetched
 // by the `canister_metadata` method on the management canister.
 #[tokio::test]

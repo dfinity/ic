@@ -5286,6 +5286,12 @@ pub enum NnsFunction {
     /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
     /// calling subnet (NNS).
     SetDefaultInitialDkgSubnet = 58,
+    /// Deploy a GuestOS version to an explicit list of subnets at once. The
+    /// proposal changes the GuestOS version used on every subnet in the provided
+    /// list. The version must be contained in the list of elected GuestOS
+    /// versions. The upgrade is completed when each subnet creates the next
+    /// regular CUP.
+    UpdateGuestosVersionForSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5362,6 +5368,9 @@ impl NnsFunction {
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
             Self::SetDefaultInitialDkgSubnet => "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET",
+            Self::UpdateGuestosVersionForSubnets => {
+                "NNS_FUNCTION_UPDATE_GUESTOS_VERSION_FOR_SUBNETS"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5445,6 +5454,9 @@ impl NnsFunction {
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
             "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
+            "NNS_FUNCTION_UPDATE_GUESTOS_VERSION_FOR_SUBNETS" => {
+                Some(Self::UpdateGuestosVersionForSubnets)
+            }
             _ => None,
         }
     }

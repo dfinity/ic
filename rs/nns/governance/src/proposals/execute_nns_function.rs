@@ -459,6 +459,7 @@ pub enum ValidNnsFunction {
     SplitSubnet,
     DeleteSubnet,
     SetDefaultInitialDkgSubnet,
+    UpdateGuestosVersionForSubnets,
 }
 
 impl ValidNnsFunction {
@@ -468,6 +469,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::HardResetNnsRootToVersion
                 | ValidNnsFunction::ReviseElectedGuestosVersions
                 | ValidNnsFunction::DeployGuestosToAllSubnetNodes
+                | ValidNnsFunction::UpdateGuestosVersionForSubnets
         )
     }
 
@@ -505,6 +507,9 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::DeployGuestosToAllSubnetNodes => {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
+            }
+            ValidNnsFunction::UpdateGuestosVersionForSubnets => {
+                (REGISTRY_CANISTER_ID, "update_guestos_version_for_subnets")
             }
             ValidNnsFunction::ReviseElectedHostosVersions => {
                 (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
@@ -630,6 +635,7 @@ impl ValidNnsFunction {
 
             ValidNnsFunction::DeployHostosToSomeNodes
             | ValidNnsFunction::DeployGuestosToAllSubnetNodes
+            | ValidNnsFunction::UpdateGuestosVersionForSubnets
             | ValidNnsFunction::DeployGuestosToSomeApiBoundaryNodes
             | ValidNnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
 
@@ -667,6 +673,9 @@ impl ValidNnsFunction {
             ValidNnsFunction::UpdateConfigOfSubnet => "Update Subnet Config",
             ValidNnsFunction::AssignNoid => "Assign Node Operator ID (NOID)",
             ValidNnsFunction::DeployGuestosToAllSubnetNodes => "Deploy GuestOS To All Subnet Nodes",
+            ValidNnsFunction::UpdateGuestosVersionForSubnets => {
+                "Update GuestOS Version For Subnets"
+            }
             ValidNnsFunction::ClearProvisionalWhitelist => "Clear Provisional Whitelist",
             ValidNnsFunction::RemoveNodesFromSubnet => "Remove Node from Subnet",
             ValidNnsFunction::SetAuthorizedSubnetworks => "Set Authorized Subnets",
@@ -766,6 +775,12 @@ impl ValidNnsFunction {
                 version that is used on the specified subnet.\n\n\
                 The version must be contained in the list of elected GuestOS versions.\n\n\
                 The upgrade is completed when the subnet creates the next regular CUP."
+            }
+            ValidNnsFunction::UpdateGuestosVersionForSubnets => {
+                "Deploy a GuestOS version to an explicit list of subnets at once. The proposal \
+                changes the GuestOS version used on every subnet in the provided list.\n\n\
+                The version must be contained in the list of elected GuestOS versions.\n\n\
+                The upgrade is completed when each subnet creates the next regular CUP."
             }
             ValidNnsFunction::ClearProvisionalWhitelist => {
                 "Clear the provisional whitelist, which allows the listed principals to create \
@@ -1035,6 +1050,9 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
             NnsFunction::DeleteSubnet => Ok(ValidNnsFunction::DeleteSubnet),
             NnsFunction::SetDefaultInitialDkgSubnet => {
                 Ok(ValidNnsFunction::SetDefaultInitialDkgSubnet)
+            }
+            NnsFunction::UpdateGuestosVersionForSubnets => {
+                Ok(ValidNnsFunction::UpdateGuestosVersionForSubnets)
             }
 
             // Obsolete functions - based on check_obsolete

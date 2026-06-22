@@ -66,6 +66,7 @@ use registry_canister::{
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
         },
+        do_update_guestos_version_for_subnets::UpdateGuestosVersionForSubnetsPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::{
@@ -561,6 +562,18 @@ fn deploy_guestos_to_all_subnet_nodes() {
 fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
     let caller = dfn_core::api::caller();
     registry_mut().do_deploy_guestos_to_all_subnet_nodes(caller, payload);
+    recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update update_guestos_version_for_subnets")]
+fn update_guestos_version_for_subnets() {
+    check_caller_is_governance_and_log("update_guestos_version_for_subnets");
+    over(candid_one, update_guestos_version_for_subnets_);
+}
+
+#[candid_method(update, rename = "update_guestos_version_for_subnets")]
+fn update_guestos_version_for_subnets_(payload: UpdateGuestosVersionForSubnetsPayload) {
+    registry_mut().do_update_guestos_version_for_subnets(payload);
     recertify_registry();
 }
 

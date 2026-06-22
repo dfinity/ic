@@ -441,6 +441,11 @@ type UpdateFirewallRulesPayload = record {
   rules : vec FirewallRule;
 };
 
+type UpdateGuestosVersionForSubnetsPayload = record {
+  subnet_ids : vec principal;
+  replica_version_id : text;
+};
+
 type UpdateNodeDirectlyPayload = record {
   idkg_dealing_encryption_pk : opt blob;
 };
@@ -655,6 +660,7 @@ service : {
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   revise_elected_hostos_versions : (ReviseElectedHostosVersionsPayload) -> ();
   update_firewall_rules : (UpdateFirewallRulesPayload) -> ();
+  update_guestos_version_for_subnets : (UpdateGuestosVersionForSubnetsPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> ();
   update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (UpdateNodeDomainDirectlyResponse);
   update_node_ipv4_config_directly : (UpdateNodeIPv4ConfigDirectlyPayload) -> (

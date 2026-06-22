@@ -27,6 +27,7 @@ pub mod do_split_subnet;
 pub mod do_swap_node_in_subnet_directly;
 pub mod do_update_api_boundary_nodes_version;
 pub mod do_update_elected_hostos_versions;
+pub mod do_update_guestos_version_for_subnets;
 pub mod do_update_node_directly;
 pub mod do_update_node_operator_config;
 pub mod do_update_node_operator_config_directly;
