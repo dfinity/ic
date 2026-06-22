@@ -85,7 +85,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 
 WORKDIR /
 # Bake the entrypoint into the image so it works without the repo bind-mounted.
-# It lives in the shared base stage so both the build and dev stages inherit it.
 COPY ./ci/container/init.sh /ci/container/init.sh
 ENTRYPOINT ["/ci/container/init.sh"]
 CMD ["/bin/bash"]
