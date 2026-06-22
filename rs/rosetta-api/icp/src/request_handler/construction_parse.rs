@@ -1065,26 +1065,24 @@ mod tests {
             .clone()
     }
 
-    // When the caller does not specify a memo, `construction_payloads`
-    // substitutes a fresh random memo on every invocation. Because the memo is
-    // part of the transaction hash, reconstructing the same transfer yields a
-    // different hash each time, which defeats the ledger's `created_at_time`
-    // based deduplication. This test pins down that behavior: three subsequent
-    // reconstructions of the same transfer produce at least two different
-    // memos.
+    // When the caller does not specify a memo, `construction_payloads` uses a
+    // deterministic memo of 0 (the ledger's "no memo" value). Because the memo
+    // is part of the transaction hash, reconstructing the same transfer must
+    // therefore yield the same hash every time, so that the ledger's
+    // `created_at_time` based deduplication can catch a retried transfer. This
+    // test verifies that three subsequent reconstructions of the same transfer
+    // all produce a memo of 0.
     #[test]
-    fn test_payloads_without_memo_produces_varying_memos() {
+    fn test_payloads_without_memo_uses_deterministic_zero_memo() {
         let (handler, network_identifier, operations, pub_key) = setup_transfer_test();
 
         let memos: Vec<serde_json::Value> = (0..3)
             .map(|_| memo_without_caller_memo(&handler, &network_identifier, &operations, &pub_key))
             .collect();
 
-        let distinct: std::collections::HashSet<String> =
-            memos.iter().map(|m| m.to_string()).collect();
         assert!(
-            distinct.len() >= 2,
-            "expected at least two different memos across three reconstructions, got {memos:?}"
+            memos.iter().all(|memo| *memo == serde_json::json!(0)),
+            "expected a deterministic memo of 0 on every reconstruction, got {memos:?}"
         );
     }
 }
