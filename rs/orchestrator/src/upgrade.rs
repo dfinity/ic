@@ -1190,15 +1190,15 @@ mod tests {
 
     /// Fake runner that tracks running state without spawning a real process.
     /// Used as a drop-in for `SingleProcessRunner<P>` inside process managers.
-    pub(crate) struct FakeRunner {
+    pub(crate) struct FakeProcessRunner {
         running: bool,
     }
-    impl FakeRunner {
+    impl FakeProcessRunner {
         pub(crate) fn new() -> Self {
             Self { running: false }
         }
     }
-    impl<P: Process> ProcessRunner<P> for FakeRunner {
+    impl<P: Process> ProcessRunner<P> for FakeProcessRunner {
         fn start(&mut self, _process: P) -> std::io::Result<()> {
             self.running = true;
             Ok(())
@@ -1519,13 +1519,13 @@ mod tests {
         let ic_gateway_env_file = dir.join("ic-gateway.env");
         std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
 
-        let mut replica_runner = Box::new(FakeRunner::new());
+        let mut replica_runner = Box::new(FakeProcessRunner::new());
         let replica_process_config = ReplicaProcessConfig {
             ic_binary_dir: ic_binary_dir.clone(),
             cup_path,
             replica_config_file: replica_config_file.clone(),
         };
-        let mut ic_gateway_runner = Box::new(FakeRunner::new());
+        let mut ic_gateway_runner = Box::new(FakeProcessRunner::new());
         let ic_gateway_process_config = IcGatewayProcessConfig {
             ic_binary_dir,
             ic_gateway_env_file,
