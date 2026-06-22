@@ -431,7 +431,23 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 
 def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
-    command = f"{sys.executable} {idrac_script_dir}/{script_and_args}"
+
+    # Separate the script filename from any appended runtime credentials/flags
+    parts = script_and_args.split(" ", 1)
+    script_filename = parts[0]
+    extra_args = parts[1] if len(parts) > 1 else ""
+
+    # Look for the script file recursively inside the directory target provided by Bazel
+    resolved_script_path = next(Path(idrac_script_dir).rglob(script_filename), None)
+
+    if not resolved_script_path:
+        # Fallback to the top-level path if rglob finds nothing
+        resolved_script_path = Path(idrac_script_dir) / script_filename
+
+    # Construct the execution command with the dynamically resolved path
+    command = f"{sys.executable} {resolved_script_path} {extra_args}".strip()
+
+    log.info(f"Invoking subprocess command: {command}")
     result = invoke.run(command)
 
     if result and not result.ok:
