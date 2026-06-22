@@ -524,9 +524,8 @@ impl PayloadBuilderTestFixture {
 }
 
 /// A minimal `XNetSlicePool` for testing: stores one slice per subnet and
-/// drops entries for subnets absent from the map passed to `garbage_collect`.
-/// The real `CertifiedSlicePool` has this behavior, tested by
-/// `pool_garbage_collect_deleted_subnet` in `tests/certified_slice_pool.rs`.
+/// never garbage collects (neither `garbage_collect` nor `garbage_collect_slice`
+/// removes or trims slices).
 struct TestSlicePool(Mutex<BTreeMap<SubnetId, CertifiedStreamSlice>>);
 
 impl XNetSlicePool for TestSlicePool {
@@ -542,22 +541,15 @@ impl XNetSlicePool for TestSlicePool {
 
     fn observe_pool_size_bytes(&self) {}
 
-    fn garbage_collect(&self, new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>) {
-        self.0
-            .lock()
-            .unwrap()
-            .retain(|subnet_id, _| new_stream_positions.contains_key(subnet_id));
-    }
+    fn garbage_collect(&self, _: BTreeMap<SubnetId, ExpectedIndices>) {}
 
-    fn garbage_collect_slice(&self, subnet_id: SubnetId, _: ExpectedIndices) {
-        self.0.lock().unwrap().remove(&subnet_id);
-    }
+    fn garbage_collect_slice(&self, _: SubnetId, _: ExpectedIndices) {}
 }
 
 /// `get_xnet_payload` must not include a slice from a deleted subnet even if
 /// the pool contains one (e.g., populated just before deletion). The deleted
-/// subnet is absent from `expected_stream_indices`, so its pool entry is
-/// garbage-collected before payload assembly and it never appears in the result.
+/// subnet is absent from `expected_stream_indices`, so it is never iterated
+/// over during payload assembly and never appears in the result.
 #[tokio::test]
 async fn get_xnet_payload_excludes_deleted_subnet_slice() {
     with_test_replica_logger(|log| {
