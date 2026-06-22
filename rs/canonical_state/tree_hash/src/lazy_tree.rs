@@ -65,7 +65,7 @@ pub trait LazyFork<'a>: Send + Sync {
     /// Defaults to `None` (materialize the subtree inline). Forks that wrap shared,
     /// copy-on-write state (e.g. an `Arc<CanisterState>`) should override this to
     /// return that `Arc`, together with an expander that bakes in the certification
-    /// version), as a [`SubtreeSource`]. Such subtrees are hashed once and, when an
+    /// version, as a [`SubtreeSource`]. Such subtrees are hashed once and, when an
     /// unchanged subtree (same source) is found in a baseline tree, its digest is
     /// reused instead of being recomputed. See
     /// [`hash_lazy_tree_with_baseline`](crate::hash_tree::hash_lazy_tree_with_baseline).
