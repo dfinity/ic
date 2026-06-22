@@ -3798,7 +3798,10 @@ fn run_wasm_and_get_instructions_used(
     wat: &str,
     use_deterministic_tracker: bool,
 ) -> NumInstructions {
+    let mut config = Config::default();
+    config.dirty_page_overhead = NumInstructions::new(1);
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
         .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
         .with_wat(wat)
         .with_api_type(ApiType::update(
@@ -3830,7 +3833,6 @@ fn assert_deterministic_charges_extra(
 ) {
     let prefetching_instructions = run_wasm_and_get_instructions_used(wat, false);
     let deterministic_instructions = run_wasm_and_get_instructions_used(wat, true);
-
     assert_eq!(
         deterministic_instructions.get() - prefetching_instructions.get(),
         expected_extra_instructions,

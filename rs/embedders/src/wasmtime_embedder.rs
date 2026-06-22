@@ -415,9 +415,12 @@ impl WasmtimeEmbedder {
             bytemap_name: Some(STABLE_BYTEMAP_MEMORY_NAME),
             memory: stable_memory.clone(),
             memory_type: CanisterMemoryType::Stable,
-            // Wasm native stable memory will always be tracked by a
-            // bytemap within the wasm module.
-            dirty_page_tracking: DirtyPageTracking::Ignore,
+            // Wasm native stable memory is tracked by a
+            // bytemap within the wasm module, but that's used
+            // only for limiting the memory. The deterministic
+            // memory tracker accounts for page fault charging,
+            // same as for the heap pages.
+            dirty_page_tracking,
         });
 
         result
@@ -652,7 +655,7 @@ impl WasmtimeEmbedder {
             &mut *store,
             self.log.clone(),
             self.config.feature_flags.deterministic_memory_tracker,
-            /*dirty_page_overhead*/ NumInstructions::new(1),
+            self.config.dirty_page_overhead,
             subtract_instruction_counter,
         );
 

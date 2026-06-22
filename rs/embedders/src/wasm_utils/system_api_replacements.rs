@@ -912,21 +912,6 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
-                        // Decrement instruction counter to charge for dirty pages
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: dirty_page_overhead.get().try_into().unwrap(),
-                        },
-                        I64Mul,
-                        // Bounds check above should guarantee that we don't
-                        // overflow as the over head is a small constant.
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // perform memory fill
                         LocalGet {
                             local_index: BYTEMAP_START,
@@ -1155,21 +1140,6 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
-                        // Decrement instruction counter to charge for dirty pages
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: dirty_page_overhead.get().try_into().unwrap(),
-                        },
-                        I64Mul,
-                        // Bounds check above should guarantee that we don't
-                        // overflow as the over head is a small constant.
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // perform memory fill
                         LocalGet {
                             local_index: BYTEMAP_START,
