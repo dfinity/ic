@@ -114,12 +114,6 @@ fn setup(env: TestEnv) {
 fn subnet_splitting_test(env: TestEnv) {
     ic_system_test_driver::util::block_on(async {
         let test_params = prepare_canisters(&env).await;
-        info!(
-            env.logger(),
-            "Sleeping for 10 seconds before splitting the subnet \
-            so the canisters have some time to chit chat"
-        );
-        tokio::time::sleep(Duration::from_secs(10)).await;
 
         if !TEST_ENABLED {
             info!(
@@ -418,8 +412,10 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
     info!(
         env.logger(),
         "Successfully installed {CHATTING_CANISTERS_ON_SOURCE_SUBNET_COUNT} chatting canisters on \
-        the source and the third subnet, each"
+        the source and the third subnet, each. Sleeping for 10 seconds, so the canisters have some \
+        time to chit chat."
     );
+    tokio::time::sleep(Duration::from_secs(10)).await;
 
     (
         source_subnet_canisters
@@ -446,6 +442,7 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
     let canister_ids = futures::future::try_join_all((0..COUNTER_CANISTERS_COUNT).map(|_| async {
         source_node
             .canister_installer_from_env("COUNTER_CANISTER_WAT_PATH")
+            .with_retries(Duration::from_mins(2))
             .install()
             .await
             .map(|canister_id| CanisterId::unchecked_from_principal(PrincipalId(canister_id)))
@@ -458,8 +455,8 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
         retry_with_msg_async!(
             format!("Making an update call to the counter canister with id {canister_id}"),
             &env.logger(),
-            std::time::Duration::from_secs(120),
-            std::time::Duration::from_secs(5),
+            Duration::from_mins(2),
+            Duration::from_secs(5),
             || async {
                 agent
                     .get()
