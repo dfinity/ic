@@ -1,6 +1,6 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, SchedulerConfig};
 use ic_embedders::wasm_utils;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -287,9 +287,7 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 /// - `n_heap_wasm_pages`: pages first *written* on the heap.
 ///   Each triggers `mark_wasm_page_accessed` + `mark_wasm_page_dirty`:
 ///   2 × (WASM_PAGE_SIZE / OS_PAGE_SIZE) = 2 × 16 = 32 instructions.
-/// - `n_stable_wasm_pages`: pages first *accessed* in stable memory.
-///   Stable memory uses `DirtyPageTracking::Ignore`, so only
-///   `mark_wasm_page_accessed` fires: 16 instructions per page.
+/// - `n_stable_wasm_pages`: same as for heap: 32 instructions per page.
 ///
 /// Returns 0 when the deterministic memory tracker is disabled.
 fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
@@ -300,7 +298,7 @@ fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u
     {
         let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
         n_heap_wasm_pages * 2 * os_pages_per_wasm_page
-            + n_stable_wasm_pages * os_pages_per_wasm_page
+            + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
     } else {
         0
     }
@@ -813,23 +811,20 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let mut cd = SchedulerConfig::application_subnet()
+    let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-
-    if let WasmMemoryType::Wasm64 = wasm_memory_type {
-        cd *= EmbeddersConfig::default().wasm64_dirty_page_overhead_multiplier;
-    }
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
     let overhead = deterministic_tracker_overhead(1, 0);
+    let dirty_page_overhead = DEFAULT_DIRTY_PAGE_OVERHEAD.get();
 
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
     assert_eq!(
         instructions_used,
-        1 + 5 * cc + cg + 2 * cs + cl + 2 * cd + overhead
+        1 + 5 * cc + cg + 2 * cs + cl + 2 * cd + overhead * dirty_page_overhead
     );
 
     // Now run the same with insufficient instructions
@@ -1170,7 +1165,8 @@ fn metering_wasm64_load_store_canister() {
             (memory i64 1000)
         )"#;
 
-    let embedder_config = EmbeddersConfig::default();
+    let mut embedder_config = EmbeddersConfig::default();
+    // embedder_config.dirty_page_overhead = NumInstructions::new(1);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(embedder_config)
@@ -1224,6 +1220,7 @@ fn metering_wasm64_load_store_canister() {
     // Both stores hit Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
     let overhead = deterministic_tracker_overhead(1, 0);
+    println!("overhead {}", overhead);
     let total_cost =
         1 + 2 * const_0 + const_17 + const_117 + const_4096 + 2 * store + load + drop + overhead;
     assert_eq!(instr_used_wasm64, total_cost);
