@@ -1254,7 +1254,6 @@ pub struct StateMachine {
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
 }
 
@@ -2442,7 +2441,6 @@ impl StateMachine {
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            cost_schedule,
             hypervisor_config,
         }
     }
@@ -4677,12 +4675,10 @@ impl StateMachine {
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
-        let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             &msg,
             effective_canister_id,
-            subnet_size,
-            self.cost_schedule,
+            self.get_latest_state().get_own_subnet_cycles_config(),
         )
     }
 

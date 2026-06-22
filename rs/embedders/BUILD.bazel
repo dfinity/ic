@@ -185,6 +185,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/nns/constants",
         "//rs/registry/routing_table",

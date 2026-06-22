@@ -796,11 +796,7 @@ impl SystemTestGroup {
                     BTreeSet::from([
                         // Canisters are expected to panic:
                         "canister".to_string(),
-                        // TODO: remove the following two lines after mainnet has advanced to include the `allowed_panics.rs` changes:
-                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:2185".to_string(),
-                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:1030".to_string(),
                         "rs/canister_sandbox/src/replica_controller/allowed_panics.rs".to_string(),
-                        "rs/state_manager/src/allowed_panics.rs".to_string(),
                     ]),
                 ),
             ]),

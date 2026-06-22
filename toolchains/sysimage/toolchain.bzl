@@ -383,6 +383,9 @@ def _ext4_image_impl(ctx):
         fail("could not locate mke2fs binary among //:mkfs.ext4 outputs")
     inputs.extend(ctx.files._mkfs_ext4)
 
+    e2fsdroid = _find_tool(ctx.files._e2fsdroid, "e2fsdroid")
+    inputs.extend(ctx.files._e2fsdroid)
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -396,6 +399,8 @@ def _ext4_image_impl(ctx):
         ctx.executable._zstd.path,
         "--mkfs-ext4",
         mke2fs.path,
+        "--e2fsdroid",
+        e2fsdroid.path,
     ])
 
     if ctx.attr.file_contexts:
@@ -448,6 +453,11 @@ ext4_image = _icos_build_rule(
         ),
         "_mkfs_ext4": attr.label(
             default = "//:mkfs.ext4",
+            cfg = "exec",
+            allow_files = True,
+        ),
+        "_e2fsdroid": attr.label(
+            default = "//:e2fsdroid",
             cfg = "exec",
             allow_files = True,
         ),
