@@ -243,9 +243,8 @@ impl Orchestrator {
             Arc::clone(&crypto) as _,
         );
 
-        let ic_binary_directory = args.ic_binary_directory;
         let manageboot_runner = Box::new(ManagebootRunnerImpl::new(
-            ic_binary_directory.join("manageboot.sh"),
+            args.ic_binary_directory.join("manageboot.sh"),
         ));
 
         // Create a read-only CUP reader that can be shared among Dashboard and Firewall
@@ -263,12 +262,12 @@ impl Orchestrator {
         );
 
         let replica_process_config = ReplicaProcessConfig {
-            ic_binary_dir: ic_binary_directory.clone(),
+            ic_binary_dir: args.ic_binary_directory.clone(),
             cup_path: local_cup_reader.get_cup_path(),
             replica_config_file: args.replica_config_file.clone(),
         };
         let ic_gateway_process_config = IcGatewayProcessConfig {
-            ic_binary_dir: ic_binary_directory.clone(),
+            ic_binary_dir: args.ic_binary_directory.clone(),
             ic_gateway_env_file: args.ic_gateway_env_file.clone(),
         };
 
@@ -340,7 +339,7 @@ impl Orchestrator {
         };
 
         let ic_boundary_process_config = IcBoundaryProcessConfig {
-            ic_binary_dir: ic_binary_directory.clone(),
+            ic_binary_dir: args.ic_binary_directory.clone(),
             ic_boundary_env_file: args.ic_boundary_env_file.clone(),
             crypto_config: config.crypto.clone(),
         };
@@ -371,7 +370,7 @@ impl Orchestrator {
         let ipv4_configurator = Ipv4Configurator::new(
             Arc::clone(&registry),
             Arc::clone(&metrics),
-            ic_binary_directory,
+            args.ic_binary_directory,
             logger.clone(),
         );
 
