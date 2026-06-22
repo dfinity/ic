@@ -33,9 +33,7 @@ pub struct GuestOSTemplateProps {
     pub console_log_path: String,
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
-    pub nr_of_sockets: u32,
-    pub nr_of_cores: u32,
-    pub nr_of_threads: u32,
+    pub topology: Topology,
     pub mac_address: macaddr::MacAddr6,
     pub disk_device: PathBuf,
     pub config_media_path: PathBuf,
@@ -54,6 +52,12 @@ pub struct DirectBootConfig {
     pub ovmf_sev: PathBuf,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
+}
+
+pub struct Topology {
+    pub nr_of_sockets: u32,
+    pub nr_of_cores: u32,
+    pub nr_of_threads: u32,
 }
 
 pub fn assemble_config_media(
@@ -144,20 +148,21 @@ pub fn generate_vm_config(
         )
     };
 
-    let (cpu_domain, total_vm_memory, nr_of_vcpus, nr_of_sockets, nr_of_cores, nr_of_threads) =
-        vm_resources(config);
+    let (cpu_domain, total_vm_memory, nr_of_vcpus) = vm_resources(config);
+    let (vm_memory, nr_of_vcpus, topology) =
+        split_resources_for_type_4(config, total_vm_memory, nr_of_vcpus);
 
     // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
     // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
     // contain nodes with and without SEV should have the same memory settings for consistency
     // across nodes.
     ensure!(
-        total_vm_memory >= UPGRADE_VM_MEMORY_GIB,
+        vm_memory >= UPGRADE_VM_MEMORY_GIB,
         "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GIB}GiB but is {total_vm_memory}GiB."
     );
     let vm_memory_gib = match (guest_vm_type, &config.icos_settings.node_reward_type) {
-        (GuestVMType::Default, Some(val)) if val.starts_with("type4") => total_vm_memory,
-        (GuestVMType::Default, _) => total_vm_memory - UPGRADE_VM_MEMORY_GIB,
+        (GuestVMType::Default, Some(val)) if val.starts_with("type4") => vm_memory,
+        (GuestVMType::Default, _) => vm_memory - UPGRADE_VM_MEMORY_GIB,
         (GuestVMType::Upgrade, _) => UPGRADE_VM_MEMORY_GIB,
     };
 
@@ -176,9 +181,7 @@ pub fn generate_vm_config(
         console_log_path: serial_log_path.display().to_string(),
         vm_memory: vm_memory_gib,
         nr_of_vcpus,
-        nr_of_sockets,
-        nr_of_cores,
-        nr_of_threads,
+        topology,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -190,7 +193,7 @@ pub fn generate_vm_config(
 }
 
 #[cfg(feature = "dev")]
-pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32, u32, u32, u32) {
+pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
     let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
         "qemu".to_string()
     } else {
@@ -200,60 +203,41 @@ pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32, u32, u32
     let total_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
     let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
 
-    (
-        cpu_domain,
-        total_vm_memory,
-        vm_nr_of_vcpus,
-        2,
-        vm_nr_of_vcpus / 4,
-        2,
-    )
+    (cpu_domain, total_vm_memory, vm_nr_of_vcpus)
 }
 
 #[cfg(not(feature = "dev"))]
-pub(crate) fn vm_resources(config: &HostOSConfig) -> (String, u32, u32, u32, u32, u32) {
-    match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.1" => (
-            "kvm".to_string(),
-            DEFAULT_VM_MEMORY_GIB / 32,
-            DEFAULT_VM_VCPUS / 32,
-            1,
-            DEFAULT_VM_VCPUS / 32,
-            1,
-        ),
-        Some(val) if val == "type4.2" => (
-            "kvm".to_string(),
-            DEFAULT_VM_MEMORY_GIB / 8,
-            DEFAULT_VM_VCPUS / 8,
-            2,
-            DEFAULT_VM_VCPUS / 8 / 4,
-            2,
-        ),
-        Some(val) if val == "type4.3" => (
-            "kvm".to_string(),
-            DEFAULT_VM_MEMORY_GIB / 4,
-            DEFAULT_VM_VCPUS / 4,
-            2,
-            DEFAULT_VM_VCPUS / 4 / 4,
-            2,
-        ),
-        Some(val) if val == "type4.4" => (
-            "kvm".to_string(),
-            DEFAULT_VM_MEMORY_GIB / 2,
-            DEFAULT_VM_VCPUS / 2,
-            2,
-            DEFAULT_VM_VCPUS / 2 / 4,
-            2,
-        ),
-        _ => (
-            "kvm".to_string(),
-            DEFAULT_VM_MEMORY_GIB,
-            DEFAULT_VM_VCPUS,
-            2,
-            DEFAULT_VM_VCPUS / 4,
-            2,
-        ),
-    }
+pub(crate) fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
+    ("kvm".to_string(), DEFAULT_VM_MEMORY_GIB, DEFAULT_VM_VCPUS)
+}
+
+fn split_resources_for_type_4(
+    config: &HostOSConfig,
+    memory: u32,
+    vcpus: u32,
+) -> (u32, u32, Topology) {
+    let (memory, vcpus) = match &config.icos_settings.node_reward_type {
+        Some(val) if val == "type4.1" => (memory / 32, vcpus / 32),
+        Some(val) if val == "type4.2" => (memory / 8, vcpus / 8),
+        Some(val) if val == "type4.3" => (memory / 4, vcpus / 4),
+        Some(val) if val == "type4.4" => (memory / 2, vcpus / 2),
+        _ => (memory, vcpus),
+    };
+
+    let topology = match &config.icos_settings.node_reward_type {
+        Some(val) if val == "type4.1" => Topology {
+            nr_of_sockets: 1,
+            nr_of_cores: vcpus,
+            nr_of_threads: 1,
+        },
+        _ => Topology {
+            nr_of_sockets: 2,
+            nr_of_cores: vcpus / 4,
+            nr_of_threads: 2,
+        },
+    };
+
+    (memory, vcpus, topology)
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: Option<usize>) -> String {

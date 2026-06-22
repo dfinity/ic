@@ -17,7 +17,7 @@ def image_deps(mode, _malicious = False):
     Define all SetupOS inputs.
 
     Args:
-      mode: Variant to be built, dev or prod (or multi).
+      mode: Variant to be built, dev or prod.
       _malicious: Unused, but currently needed to fit generic build structure.
     Returns:
       A dict containing inputs to build this image.
@@ -96,12 +96,6 @@ def _custom_partitions(mode):
     elif mode == "prod":
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
-        nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
-        include_nns_public_key_override = False
-        deployment_environment = "mainnet"
-    elif mode == "multi":
-        guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
-        host_image = Label("//ic-os/hostos/envs/multi:disk-img.tar.zst")
         nns_urls = '["https://icp-api.io", "https://icp0.io", "https://ic0.app"]'
         include_nns_public_key_override = False
         deployment_environment = "mainnet"
