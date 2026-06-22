@@ -690,12 +690,6 @@ pub fn assert_no_critical_errors(env: &TestEnv) {
     );
 }
 
-/// Environment variable specifying how many seconds to wait before downloading the
-/// Prometheus data directory, giving Prometheus time to scrape the final metrics of
-/// the test. Defaults to `0` (no wait) when unset or unparseable. Only consulted
-/// when `DOWNLOAD_P8S_DATA` is enabled.
-const DOWNLOAD_P8S_DATA_COOLDOWN_SECS_ENV: &str = "DOWNLOAD_P8S_DATA_COOLDOWN_SECS";
-
 /// Returns the teardowns that download the Prometheus data directory to the local
 /// test directory when the `DOWNLOAD_P8S_DATA` environment variable is set to `true`
 /// or `1`, and an empty vector otherwise.
@@ -708,7 +702,7 @@ fn download_prometheus_data_teardowns() -> Vec<Box<dyn PotSetupFn>> {
         return Vec::new();
     }
     let teardown = |env: TestEnv| {
-        let cooldown_secs = std::env::var(DOWNLOAD_P8S_DATA_COOLDOWN_SECS_ENV)
+        let cooldown_secs = std::env::var("DOWNLOAD_P8S_DATA_COOLDOWN_SECS")
             .ok()
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(0);
