@@ -25,7 +25,7 @@ use ic_registry_keys::{
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{
-    KeyConfig as KeyConfigInternal, SubnetFeatures, SubnetFeaturesInput,
+    KeyConfig as KeyConfigInternal, SubnetFeatures, SubnetFeaturesV2,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
@@ -328,7 +328,7 @@ pub struct CreateSubnetPayload {
 }
 
 /// Input type for `create_subnet` canister method.
-/// Same as `CreateSubnetPayload` but with `SubnetFeaturesInput` (all `Option<bool>`) for `features`.
+/// Same as `CreateSubnetPayload` but with `SubnetFeaturesV2` (all `Option<bool>`) for `features`.
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct CreateSubnetArg {
     pub node_ids: Vec<NodeId>,
@@ -352,7 +352,7 @@ pub struct CreateSubnetArg {
 
     pub is_halted: bool,
 
-    pub features: SubnetFeaturesInput,
+    pub features: SubnetFeaturesV2,
 
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,

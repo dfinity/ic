@@ -13,14 +13,14 @@ pub const DEFAULT_ECDSA_MAX_QUEUE_SIZE: u32 = 20;
 /// Input type for subnet features in canister API calls.
 /// All fields are optional; `None` means "use the default value".
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct SubnetFeaturesInput {
+pub struct SubnetFeaturesV2 {
     pub canister_sandboxing: Option<bool>,
     pub http_requests: Option<bool>,
     pub sev_enabled: Option<bool>,
 }
 
-impl From<SubnetFeaturesInput> for SubnetFeatures {
-    fn from(input: SubnetFeaturesInput) -> Self {
+impl From<SubnetFeaturesV2> for SubnetFeatures {
+    fn from(input: SubnetFeaturesV2) -> Self {
         let default = SubnetFeatures::default();
         Self {
             canister_sandboxing: input

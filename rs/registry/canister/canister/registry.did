@@ -86,7 +86,7 @@ type ResourceLimits = record {
   maximum_state_delta : opt nat64;
 };
 
-type SubnetFeaturesInput = record {
+type SubnetFeaturesV2 = record {
   canister_sandboxing : opt bool;
   http_requests : opt bool;
   sev_enabled : opt bool;
@@ -94,7 +94,7 @@ type SubnetFeaturesInput = record {
 
 type CreateSubnetPayload = record {
   unit_delay_millis : nat64;
-  features : SubnetFeaturesInput;
+  features : SubnetFeaturesV2;
   max_ingress_bytes_per_message : nat64;
   max_ingress_bytes_per_block: opt nat64;
   dkg_dealings_per_block : nat64;
@@ -503,7 +503,7 @@ type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
 type UpdateSubnetPayload = record {
   unit_delay_millis : opt nat64;
   max_duplicity : opt nat32;
-  features : opt SubnetFeaturesInput;
+  features : opt SubnetFeaturesV2;
   resource_limits : opt ResourceLimits;
   set_gossip_config_to_default : bool;
   halt_at_cup_height : opt bool;

@@ -14,7 +14,7 @@ use ic_protobuf::{
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, KeyConfig as KeyConfigInternal, SubnetFeatures,
-    SubnetFeaturesInput,
+    SubnetFeaturesV2,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
@@ -404,7 +404,7 @@ pub struct UpdateSubnetPayload {
 }
 
 /// Input type for `update_subnet` canister method.
-/// Same as `UpdateSubnetPayload` but with `SubnetFeaturesInput` (all `Option<bool>`) for `features`.
+/// Same as `UpdateSubnetPayload` but with `SubnetFeaturesV2` (all `Option<bool>`) for `features`.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateSubnetArg {
     pub subnet_id: SubnetId,
@@ -425,7 +425,7 @@ pub struct UpdateSubnetArg {
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
 
-    pub features: Option<SubnetFeaturesInput>,
+    pub features: Option<SubnetFeaturesV2>,
     pub resource_limits: Option<ResourceLimitsPb>,
 
     pub chain_key_config: Option<ChainKeyConfig>,
