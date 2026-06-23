@@ -429,9 +429,9 @@ impl Upgrade {
             .await
             .map_err(OrchestratorError::FileDownloadError)?;
         if let Err(e) = self.stop_children() {
-            // Even though we fail to stop the replica, we should still
+            // Even though we fail to stop child processes, we should still
             // replace the registry local store, so we simply issue a warning.
-            warn!(self.logger, "Failed to stop replica with error {:?}", e);
+            warn!(self.logger, "Failed to stop children with error {:?}.", e);
         }
         let new_local_store = LocalStoreImpl::new(local_store_location);
         self.registry_replicator
