@@ -2532,7 +2532,7 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
-    /// Sets the minimum number of cycles required for an incoming message from another canister.
+    /// Sets the minimum number of cycles required for an incoming call from another canister.
     pub fn with_minimum_incoming_canister_call_cycles(
         self,
         minimum_incoming_canister_call_cycles: u128,
