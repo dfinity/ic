@@ -66,6 +66,7 @@ rust_test(
         "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/helpers",
+        "//rs/registry/keys",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
@@ -89,6 +90,7 @@ rust_test(
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:slog",
+        "@crate_index//:strum",
     ],
 )
 

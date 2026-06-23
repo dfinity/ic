@@ -10277,6 +10277,7 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
+ "ic-registry-keys",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -10296,6 +10297,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+ "strum 0.26.3",
 ]
 
 [[package]]
