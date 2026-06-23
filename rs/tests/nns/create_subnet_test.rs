@@ -69,7 +69,6 @@ use std::time::Duration;
 const METRIC_TIMEOUT: Duration = Duration::from_secs(120);
 const METRIC_BACKOFF: Duration = Duration::from_secs(5);
 const MR_REGISTRY_VERSION_METRIC: &str = "mr_registry_version";
-const REMOTE_TRANSCRIPTS_METRIC: &str = "consensus_dkg_remote_transcripts_delivered_total";
 
 const NODES_PER_SUBNET: usize = 4;
 const ORIGINAL_SUBNETS: usize = 3;
@@ -384,7 +383,7 @@ async fn wait_for_expected_transcripts(
 ) {
     let tag_keys: Vec<String> = ["LowThreshold", "HighThreshold"]
         .iter()
-        .map(|tag| format!("{REMOTE_TRANSCRIPTS_METRIC}{{tag=\"{tag}\"}}"))
+        .map(|tag| format!("consensus_dkg_remote_transcripts_delivered_total{{tag=\"{tag}\"}}"))
         .collect();
     let fetchers: Vec<(SubnetId, usize, MetricsFetcher)> = subnets
         .iter()
