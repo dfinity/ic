@@ -23,12 +23,12 @@ use askama::Template;
 use deterministic_ips::MacAddr6Ext;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, info};
+use slog::{Logger, info, warn};
 use std::collections::HashMap;
 use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use virt::connect::Connect;
@@ -61,18 +61,19 @@ impl TestEnvAttribute for ActiveLocalBackend {
 /// `from_test_env` call in a process resolves to the same backend.
 static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 
-/// Per-test handle that owns a libvirtd subprocess (in the setup process only)
-/// and a `virt::Connect`.
+/// Per-test handle wrapping a `virt::Connect` to the per-invocation libvirtd.
+///
+/// The daemon is not owned via a `Child` handle: it is spawned in
+/// [`spawn`](Self::spawn) (the setup process) and must outlive that process so
+/// forked task subprocesses can [`connect_only`](Self::connect_only) to its
+/// socket. It is reparented to the child-subreaper parent when the setup
+/// process exits, stopped explicitly in [`delete_group`](Self::delete_group)
+/// via [`stop_libvirtd`](Self::stop_libvirtd), and SIGKILLed by
+/// `kill_all_descendants` as a final safety net at the end of the run.
 pub struct LocalBackend {
     /// Socket path and working dir.
     /// [`from_test_env`](Self::from_test_env).
     active_local_backend: ActiveLocalBackend,
-    /// `Some(child)` only in the process that spawned libvirtd; `None` in forked
-    /// tasks that merely connect. `Drop` kills the child only if we own it.
-    libvirtd: Option<Child>,
-    /// Path to the libvirtd pid-file; `Some` only in the spawning process. Used
-    /// as a teardown fallback from a connect-only handle in the finalize task.
-    pid_path: Option<PathBuf>,
     /// libvirt connection.
     connect: Connect,
     logger: Logger,
@@ -239,7 +240,7 @@ impl LocalBackend {
         })?;
 
         let conf_path = libvirt_dir.join("libvirtd.conf");
-        let pid_path = libvirt_dir.join("libvirtd.pid");
+        let pid_path = Self::libvirtd_pid_path(&working_dir);
         let log_path = libvirt_dir.join("libvirtd.log");
 
         // libvirtd runs as the current (non-root) user in *session* mode
@@ -318,7 +319,14 @@ impl LocalBackend {
         info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
         let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
-        let child = Command::new(&libvirtd_path)
+        // We deliberately do not keep the `Child` handle. libvirtd must outlive
+        // this (setup) process so forked task subprocesses can `connect_only` to
+        // its socket; dropping the handle is harmless because
+        // `std::process::Child`'s drop neither kills nor reaps. The daemon keeps
+        // running and is reparented to the child-subreaper parent when this
+        // process exits; it is stopped in `delete_group` via its pid-file and
+        // SIGKILLed by `kill_all_descendants` as a final safety net.
+        Command::new(&libvirtd_path)
             .arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
@@ -350,8 +358,6 @@ impl LocalBackend {
                 socket_path,
                 working_dir,
             },
-            libvirtd: Some(child),
-            pid_path: Some(pid_path),
             connect,
             logger,
             vm_ipv6: Mutex::new(HashMap::new()),
@@ -364,8 +370,6 @@ impl LocalBackend {
         let connect = open_connect(&active_local_backend.socket_path, &logger)?;
         Ok(LocalBackend {
             active_local_backend,
-            libvirtd: None,
-            pid_path: None,
             connect,
             logger,
             vm_ipv6: Mutex::new(HashMap::new()),
@@ -685,6 +689,74 @@ impl LocalBackend {
         let _ = std::fs::remove_file(&pid_path);
     }
 
+    /// Path of the libvirtd pid-file (written via `--pid-file` in [`spawn`]).
+    /// Derived from `working_dir` so a connect-only handle — which never held
+    /// the spawning `Child` — can still locate the daemon for teardown.
+    fn libvirtd_pid_path(working_dir: &Path) -> PathBuf {
+        working_dir.join("libvirt").join("libvirtd.pid")
+    }
+
+    /// Stop the backend's libvirtd, if running.
+    ///
+    /// libvirtd is per-backend rather than per-group, but a backend hosts a
+    /// single group per `bazel test` invocation, so tearing the group down also
+    /// ends the daemon. It is signalled via its pid-file (like
+    /// [`stop_ra_daemon`](Self::stop_ra_daemon)) because the connect-only handle
+    /// that runs teardown never owned the spawning `Child`. Sends SIGTERM, waits
+    /// briefly for a graceful exit, then escalates to SIGKILL. Best-effort and
+    /// idempotent; `kill_all_descendants` remains the final safety net.
+    fn stop_libvirtd(&self) {
+        let pid_path = Self::libvirtd_pid_path(&self.active_local_backend.working_dir);
+        if let Ok(contents) = std::fs::read_to_string(&pid_path)
+            && let Ok(pid) = contents.trim().parse::<i32>()
+        {
+            info!(self.logger, "Stopping libvirtd (pid {pid}) via SIGTERM");
+            // SIGTERM lets libvirtd shut down gracefully, removing its socket
+            // and pid-file.
+            let _ = Command::new("kill").arg(pid.to_string()).status();
+
+            // Wait briefly for it to exit so teardown is deterministic (and
+            // `kill_all_descendants` finds nothing left to do). libvirtd is our
+            // reparented child, so the descendant-reaper removes `/proc/<pid>`
+            // once it exits; poll for that. If it overruns the grace period,
+            // escalate to SIGKILL.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while Path::new(&format!("/proc/{pid}")).exists() {
+                if Instant::now() >= deadline {
+                    // Guard against PID reuse before force-killing: the pid-file
+                    // was written minutes ago, so confirm the process still
+                    // looks like libvirtd (exec basename `libvirtd.bin`, hence a
+                    // prefix match). Failing closed just defers to
+                    // `kill_all_descendants`.
+                    let still_libvirtd = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+                        .map(|c| c.trim_end().starts_with("libvirtd"))
+                        .unwrap_or(false);
+                    if still_libvirtd {
+                        warn!(
+                            self.logger,
+                            "libvirtd (pid {pid}) survived the SIGTERM grace period; \
+                             sending SIGKILL"
+                        );
+                        let _ = Command::new("kill")
+                            .arg("-KILL")
+                            .arg(pid.to_string())
+                            .status();
+                    }
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        } else {
+            warn!(
+                self.logger,
+                "No readable libvirtd pid-file at {}; relying on \
+                 kill_all_descendants to stop the daemon",
+                pid_path.display()
+            );
+        }
+        let _ = std::fs::remove_file(&pid_path);
+    }
+
     /// Tear down all domains in `group_name`, remove the bridge and any TAPs
     /// attached to it, and remove the per-group addresses (management,
     /// journald-streaming and file-server) from `lo`.
@@ -729,6 +801,10 @@ impl LocalBackend {
              true"
         );
         let _ = Self::run_net_admin(&delete_script, "delete group bridge");
+
+        // Finally stop the per-invocation libvirtd, after all libvirt
+        // operations above (domain destruction needs the live connection).
+        self.stop_libvirtd();
 
         Ok(())
     }
@@ -982,18 +1058,6 @@ impl LocalBackend {
         })?;
         serde_json::from_slice(&json)
             .with_context(|| format!("deserializing VM metadata {}", path.display()))
-    }
-}
-
-impl Drop for LocalBackend {
-    fn drop(&mut self) {
-        // libvirtd runs as the current user in session mode (no `sudo`), so the
-        // `Child` handle refers to the daemon itself and we can signal it.
-        if let Some(mut child) = self.libvirtd.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        let _ = self.pid_path.take();
     }
 }
 
