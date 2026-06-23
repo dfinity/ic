@@ -36,7 +36,7 @@ pub struct OrchestratorArgs {
     pub(crate) ic_gateway_env_file: PathBuf,
 
     /// The path to the Replica binary location containing the following in case
-    /// of guest OS deployment: version.txt, manageboot.sh, replica,
+    /// of guest OS deployment: replica, ic-boundary, ic-gateway, manageboot.sh,
     /// install-upgrade.sh
     #[clap(long)]
     pub(crate) ic_binary_directory: PathBuf,
