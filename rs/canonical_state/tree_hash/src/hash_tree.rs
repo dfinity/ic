@@ -1013,24 +1013,31 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
 /// `baseline` built under a different certification version is safe to pass:
 /// its subtrees carry a different expander, so none of them are reused (they
 /// are simply rebuilt).
-pub fn hash_lazy_tree_with_baseline(
-    t: &LazyTree<'_>,
-    baseline: &HashTree,
+pub fn hash_lazy_tree_with_baseline<'a>(
+    t: &LazyTree<'a>,
+    baseline: &'a HashTree,
 ) -> Result<HashTree, HashTreeError> {
     hash_lazy_tree_impl(t, Some(baseline))
 }
 
-fn hash_lazy_tree_impl(
-    t: &LazyTree<'_>,
-    baseline: Option<&HashTree>,
+fn hash_lazy_tree_impl<'a>(
+    t: &LazyTree<'a>,
+    baseline: Option<&'a HashTree>,
 ) -> Result<HashTree, HashTreeError> {
+    /// A labeled node built by a worker thread, to be written into the final tree
+    /// at preallocated index [`index`](Self::index) once its subtree is spliced in.
     struct SubtreeRoot {
+        index: usize,
+        label: Label,
+        /// The labeled-node digest `H("ic-hashtree-labeled" · label · root_digest)`,
+        /// computed in the worker thread (subtree digests are invariant under
+        /// splicing).
+        digest: Digest,
         children_range: NodeIndexRange,
         root: NodeId,
     }
 
     /// One child of a fork, to be turned into a labeled node in the hash tree.
-    #[derive(Clone)]
     enum Child<'a> {
         /// A regular subtree, materialized inline via [`build_tree`].
         Tree(LazyTree<'a>),
@@ -1075,13 +1082,13 @@ fn hash_lazy_tree_impl(
     /// materializing the child at all), else the subtree is rebuilt from its
     /// [`SubtreeSource`] (expensive). A [`Child::Tree`] is materialized normally
     /// via [`build_tree`] (expensive).
-    fn build_child(
-        child: Child<'_>,
+    fn build_child<'a>(
+        child: Child<'a>,
         ht: &mut HashTree,
         parent: NodeId,
         parallelism_strategy: &mut ParallelismStrategy,
         recursion_depth: u32,
-        baseline: Option<BaselineCursor<'_>>,
+        baseline: Option<BaselineCursor<'a>>,
     ) -> Result<(NodeId, bool), HashTreeError> {
         match child {
             Child::Stub(source) => {
@@ -1122,13 +1129,13 @@ fn hash_lazy_tree_impl(
     /// The hash tree is always materialized; collapsing a fork's children into
     /// digest-only [`NodeKind::Stub`] nodes happens here, driven by the parent
     /// fork's [`LazyFork::stub_sources`], via [`build_child`].
-    fn build_tree(
-        t: &LazyTree<'_>,
+    fn build_tree<'a>(
+        t: &LazyTree<'a>,
         ht: &mut HashTree,
         parent: NodeId,
         parallelism_strategy: &mut ParallelismStrategy,
         recursion_depth: u32,
-        baseline: Option<BaselineCursor<'_>>,
+        baseline: Option<BaselineCursor<'a>>,
     ) -> Result<NodeId, HashTreeError> {
         if recursion_depth > MAX_RECURSION_DEPTH {
             return Err(HashTreeError::RecursionTooDeep(MAX_RECURSION_DEPTH));
@@ -1246,7 +1253,8 @@ fn hash_lazy_tree_impl(
                         &mut nodes,
                         recursion_depth,
                         bucket,
-                        joined.collect(),
+                        joined,
+                        num_children - num_processed,
                     )?;
                 }
 
@@ -1287,19 +1295,19 @@ fn hash_lazy_tree_impl(
     /// preallocated node index and `base` is its baseline counterpart (already
     /// merge-joined by the caller).
     #[allow(clippy::type_complexity)]
-    fn build_fork_parallel(
+    fn build_fork_parallel<'a>(
         thread_pool: &mut scoped_threadpool::Pool,
         ht: &mut HashTree,
         nodes: &mut Vec<NodeId>,
         depth: u32,
         bucket: usize,
-        tail: Vec<(usize, (Label, Child<'_>, Option<BaselineCursor<'_>>))>,
+        mut tail: impl Iterator<Item = (usize, (Label, Child<'a>, Option<BaselineCursor<'a>>))>,
+        tail_len: usize,
     ) -> Result<(), HashTreeError> {
         let bucket_offset = ht.node_children.len();
         let threads = thread_pool.thread_count() as usize;
         debug_assert!(threads > 0);
-        let per_thread = ((tail
-            .len()
+        let per_thread = ((tail_len
             .checked_add(threads)
             .ok_or(HashTreeError::IndexOverflow)?
             - 1)
@@ -1310,13 +1318,23 @@ fn hash_lazy_tree_impl(
             .take(threads)
             .collect();
 
+        // Partition `tail` into owned, consecutive per-thread chunks (mirroring
+        // `slice::chunks`, but by value) so each thread can *move* its children into
+        // `build_child` rather than clone them — dropping the duplicated
+        // `SubtreeSource` `Arc`s would otherwise add significant overhead.
+        let mut chunks: Vec<Vec<(usize, (Label, Child<'_>, Option<BaselineCursor<'_>>))>> =
+            Vec::with_capacity(threads);
+        loop {
+            let chunk: Vec<_> = tail.by_ref().take(per_thread).collect();
+            if chunk.is_empty() {
+                break;
+            }
+            chunks.push(chunk);
+        }
+
         thread_pool.scoped(|scope| {
-            for (i, (children, subtree, roots)) in izip!(
-                tail.chunks(per_thread),
-                subtrees.iter_mut(),
-                roots.iter_mut()
-            )
-            .enumerate()
+            for (i, (chunk, subtree, roots)) in
+                izip!(chunks, subtrees.iter_mut(), roots.iter_mut()).enumerate()
             {
                 scope.execute(move || {
                     // In each thread, we use a bucket offset b. All e.g fork digests
@@ -1327,7 +1345,7 @@ fn hash_lazy_tree_impl(
                     // lookup based on NodeId.
                     let mut ht = HashTree::new_with_bucket_offset(bucket_offset + i);
                     let mut error: Option<HashTreeError> = None;
-                    for (_i, (_label, child, base)) in children {
+                    for (index, (label, child, base)) in chunk {
                         // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
                         // and fix the link from `root` to the parent later. A `Child::Stub` is
                         // collapsed to a stub here.
@@ -1336,7 +1354,7 @@ fn hash_lazy_tree_impl(
                         // `children_range` is empty (and is never consulted: stubs are descended into
                         // via their source during witness generation).
                         match build_child(
-                            child.clone(),
+                            child,
                             &mut ht,
                             NodeId::empty(),
                             // Run with `ParallelismStrategy::Sequential`: besides avoiding nested thread
@@ -1344,7 +1362,7 @@ fn hash_lazy_tree_impl(
                             // `splice_subtree` relies on to place worker `i` at bucket `bucket_offset + i`.
                             &mut ParallelismStrategy::Sequential,
                             depth,
-                            *base,
+                            base,
                         ) {
                             Ok((root, _was_built)) => {
                                 let children_range = if root.kind() == NodeKind::Stub {
@@ -1352,9 +1370,18 @@ fn hash_lazy_tree_impl(
                                 } else {
                                     ht.root_labels_range.clone()
                                 };
+                                // The subtree digest is invariant under splicing, so the labeled-node
+                                // digest can be computed here (in parallel) rather than on the main
+                                // thread after the splice.
+                                let mut h = Hasher::for_domain("ic-hashtree-labeled");
+                                h.update(label.as_bytes());
+                                h.update(ht.digest(root).as_bytes());
                                 roots.push(SubtreeRoot {
-                                    root,
+                                    index,
+                                    label,
+                                    digest: h.finalize(),
                                     children_range,
+                                    root,
                                 });
                             }
                             Err(err) => {
@@ -1374,16 +1401,20 @@ fn hash_lazy_tree_impl(
         for subtree in subtrees.into_iter().flatten() {
             ht.splice_subtree(subtree?);
         }
-        for ((i, (label, _child, _base)), root) in tail.into_iter().zip(roots.into_iter().flatten())
+        // The roots are flattened in (thread, chunk) order, i.e. ascending node index.
+        for SubtreeRoot {
+            index,
+            label,
+            digest,
+            children_range,
+            root,
+        } in roots.into_iter().flatten()
         {
-            ht.node_children_labels_ranges[bucket][i] = root.children_range;
-            let mut h = Hasher::for_domain("ic-hashtree-labeled");
-            h.update(label.as_bytes());
-            h.update(ht.digest(root.root).as_bytes());
-            ht.node_digests[bucket][i] = h.finalize();
-            ht.node_children[bucket][i] = root.root;
-            ht.node_labels[bucket][i] = label;
-            nodes.push(NodeId::node(bucket, i)?);
+            ht.node_children_labels_ranges[bucket][index] = children_range;
+            ht.node_digests[bucket][index] = digest;
+            ht.node_children[bucket][index] = root;
+            ht.node_labels[bucket][index] = label;
+            nodes.push(NodeId::node(bucket, index)?);
         }
         Ok(())
     }
