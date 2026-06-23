@@ -373,7 +373,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ), // 10B max
-            529004006 + common::deterministic_tracker_write_overhead(1),
+            529001006 + common::deterministic_tracker_write_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_debug_print()/1B".into(),
@@ -787,7 +787,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            517004006 + common::deterministic_tracker_write_overhead(1),
+            517001006 + common::deterministic_tracker_write_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_msg_cycles_available()".into(),
@@ -937,7 +937,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            19004006 + common::deterministic_tracker_write_overhead(1),
+            19001006 + common::deterministic_tracker_write_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_is_controller()".into(),
@@ -1027,7 +1027,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            519004006 + common::deterministic_tracker_write_overhead(1),
+            519001006 + common::deterministic_tracker_write_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_cost_create_canister()".into(),
@@ -1047,7 +1047,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            517004006 + common::deterministic_tracker_write_overhead(1),
+            517001006 + common::deterministic_tracker_write_overhead(1),
         ),
         common::Benchmark(
             "wasm32/ic0_cost_http_request()".into(),
@@ -1067,7 +1067,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 Result::No,
                 Wasm64::Enabled,
             ),
-            519004006 + common::deterministic_tracker_write_overhead(1),
+            519001006 + common::deterministic_tracker_write_overhead(1),
         ),
         {
             let serialized_params = candid::encode_one(COST_HTTP_REQUEST_V2_PARAMS).unwrap();
@@ -1111,7 +1111,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     },
                     Wasm64::Enabled,
                 ),
-                10019004006 + common::deterministic_tracker_write_overhead(1),
+                10019001006 + common::deterministic_tracker_write_overhead(1),
             )
         },
         common::Benchmark(
