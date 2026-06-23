@@ -642,13 +642,7 @@ impl WasmtimeEmbedder {
             main_memory_type = WasmMemoryType::Wasm64;
         }
 
-        let dirty_page_overhead = match main_memory_type {
-            WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
-            WasmMemoryType::Wasm64 => NumInstructions::from(
-                self.config.dirty_page_overhead.get()
-                    * self.config.wasm64_dirty_page_overhead_multiplier,
-            ),
-        };
+        let dirty_page_overhead = self.config.dirty_page_overhead;
 
         let memory_trackers = sigsegv_memory_tracker(
             memories,
