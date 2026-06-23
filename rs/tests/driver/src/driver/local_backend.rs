@@ -43,20 +43,23 @@ use virt::domain::Domain;
 /// forked task subprocesses can connect to the daemon spawned by the setup
 /// task instead of trying to spawn their own.
 #[derive(Serialize, Deserialize, Clone)]
-struct LocalBackendSocket {
-    /// Absolute path on the host's filesystem; survives `cp -R` of the
-    /// surrounding TestEnv directory because it is just a JSON string.
+struct ActiveLocalBackend {
+    /// Path of the libvirtd unix socket the spawning process bound. Forked task
+    /// subprocesses open a connect-only handle to it (see
+    /// [`LocalBackend::connect_only`]).
     socket_path: PathBuf,
-    /// Backend working directory (where VM disks and the libvirt pid/log
-    /// files live). Persisted alongside the socket because the socket no
-    /// longer lives under `working_dir` (it is placed at a short `/tmp` path,
-    /// see `spawn`), so it can no longer be derived from `socket_path`.
+    /// Working directory under which VM disks and the per-VM metadata
+    /// (`meta.json`) are materialized. It resolves to the same
+    /// `<group_dir>/local_backend` path in every process, so a `connect_only`
+    /// handle in a forked task subprocess (e.g. a test calling `vm.start()`)
+    /// reads back the metadata that the setup process persisted in
+    /// [`LocalBackend::create_vm`] / [`LocalBackend::attach_disk_images`].
     working_dir: PathBuf,
 }
 
-impl TestEnvAttribute for LocalBackendSocket {
+impl TestEnvAttribute for ActiveLocalBackend {
     fn attribute_name() -> String {
-        "local_backend_socket".to_string()
+        "active_local_backend".to_string()
     }
 }
 
@@ -69,7 +72,11 @@ static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 /// Per-test handle that owns a libvirtd subprocess (in the setup process only)
 /// and a `virt::Connect`.
 pub struct LocalBackend {
-    socket_path: PathBuf,
+    /// The libvirtd socket path and backend working directory. Persisted (in
+    /// the setup process) as a `TestEnvAttribute` so forked task subprocesses
+    /// can reconstruct a connect-only handle from the same values; see
+    /// [`from_test_env`](Self::from_test_env).
+    active_local_backend: ActiveLocalBackend,
     /// `Some(child)` only in the process that spawned libvirtd; `None` in
     /// forked tasks that merely connect to an already-running daemon. `Drop`
     /// only kills the child if we own it.
@@ -86,14 +93,6 @@ pub struct LocalBackend {
     logger: Logger,
     /// Per-VM allocated IPv6, keyed by `vm_name`.
     vm_ipv6: Mutex<HashMap<String, Ipv6Addr>>,
-    /// Working directory under which VM disks and the per-VM metadata
-    /// (`meta.json`) are materialized. It resolves to the same
-    /// `<group_dir>/local_backend` path in every process, so a `connect_only`
-    /// handle in a forked task subprocess (e.g. a test calling `vm.start()`)
-    /// reads back the metadata that the setup process persisted in
-    /// [`create_vm`](Self::create_vm) /
-    /// [`attach_disk_images`](Self::attach_disk_images).
-    working_dir: PathBuf,
 }
 
 /// Per-VM configuration persisted to disk (as `meta.json` under the VM's
@@ -128,7 +127,7 @@ impl LocalBackend {
     /// Return the LocalBackend for the libvirtd associated with `env`.
     ///
     /// Behavior:
-    /// - If `env` already has a `LocalBackendSocket` attribute (i.e. setup has
+    /// - If `env` already has an `ActiveLocalBackend` attribute (i.e. setup has
     ///   run and persisted the socket path), open a connect-only handle to
     ///   that socket. This is what forked task subprocesses get.
     /// - Otherwise, spawn a new libvirtd in `env`'s working directory, persist
@@ -144,14 +143,10 @@ impl LocalBackend {
             return Ok(b.clone());
         }
 
-        if let Ok(existing) = LocalBackendSocket::try_read_attribute(env) {
+        if let Ok(existing) = ActiveLocalBackend::try_read_attribute(env) {
             // Setup has run and persisted the socket path: open a connect-only
             // handle to the already-running daemon.
-            let backend = Arc::new(LocalBackend::connect_only(
-                existing.socket_path,
-                existing.working_dir,
-                env.logger(),
-            )?);
+            let backend = Arc::new(LocalBackend::connect_only(existing, env.logger())?);
             *reg = Some(backend.clone());
             return Ok(backend);
         }
@@ -192,11 +187,7 @@ impl LocalBackend {
         })?;
         let backend = Arc::new(LocalBackend::spawn(working_dir.clone(), env.logger())?);
         // Persist the socket path so forked subprocesses can find it.
-        LocalBackendSocket {
-            socket_path: backend.socket_path.clone(),
-            working_dir: backend.working_dir.clone(),
-        }
-        .write_attribute(env);
+        backend.active_local_backend.write_attribute(env);
         *reg = Some(backend.clone());
         Ok(backend)
     }
@@ -429,38 +420,39 @@ impl LocalBackend {
         let connect = open_connect(&socket_path, &logger)?;
 
         Ok(LocalBackend {
-            socket_path,
+            active_local_backend: ActiveLocalBackend {
+                socket_path,
+                working_dir,
+            },
             libvirtd: Some(child),
             pid_path: Some(pid_path),
             connect,
             logger,
             vm_ipv6: Mutex::new(HashMap::new()),
-            working_dir,
         })
     }
 
     /// Open a connection-only handle to an already-running libvirtd. Used by
     /// forked task subprocesses.
     ///
-    /// The working dir (where VM disks live) is passed in (persisted in the
-    /// `LocalBackendSocket` attribute by the spawning process) rather than
+    /// The [`ActiveLocalBackend`] (socket path + working dir) is passed in
+    /// (persisted as a `TestEnvAttribute` by the spawning process) rather than
     /// derived from the socket path, because the socket lives at a short
-    /// `/tmp` path (see `spawn`) and no longer sits under `working_dir`. It
-    /// resolves to the SAME `<group_dir>/local_backend` directory the spawning
-    /// process used, regardless of which env (`root_env`, `setup`,
+    /// `/tmp` path (see `spawn`) and no longer sits under `working_dir`. The
+    /// working dir resolves to the SAME `<group_dir>/local_backend` directory
+    /// the spawning process used, regardless of which env (`root_env`, `setup`,
     /// `tests/<name>`) this handle was constructed from. This keeps VM disks
     /// out of the env tree that gets recursively `cp -R`'d into every per-test
     /// directory.
-    fn connect_only(socket_path: PathBuf, working_dir: PathBuf, logger: Logger) -> Result<Self> {
-        let connect = open_connect(&socket_path, &logger)?;
+    fn connect_only(active_local_backend: ActiveLocalBackend, logger: Logger) -> Result<Self> {
+        let connect = open_connect(&active_local_backend.socket_path, &logger)?;
         Ok(LocalBackend {
-            socket_path,
+            active_local_backend,
             libvirtd: None,
             pid_path: None,
             connect,
             logger,
             vm_ipv6: Mutex::new(HashMap::new()),
-            working_dir,
         })
     }
 
@@ -750,7 +742,8 @@ impl LocalBackend {
 
     /// Path of the pid-file for the group's `dnsmasq` RA daemon.
     fn dnsmasq_pid_path(&self, bridge: &str) -> PathBuf {
-        self.working_dir
+        self.active_local_backend
+            .working_dir
             .join("dnsmasq")
             .join(format!("{bridge}.pid"))
     }
@@ -769,7 +762,7 @@ impl LocalBackend {
         prefix: &str,
         ipv4_prefix: &str,
     ) -> Result<()> {
-        let dnsmasq_dir = self.working_dir.join("dnsmasq");
+        let dnsmasq_dir = self.active_local_backend.working_dir.join("dnsmasq");
         std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
             format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
         })?;
@@ -1110,7 +1103,8 @@ impl LocalBackend {
     }
 
     fn vm_dir(&self, vm_name: &str) -> PathBuf {
-        self.working_dir
+        self.active_local_backend
+            .working_dir
             .join("vms")
             .join(sanitize_libvirt_name(vm_name))
     }
