@@ -165,7 +165,7 @@ pub struct SubtreeSource {
 /// expand a [`NodeKind::Stub`](crate::hash_tree::HashTree) on demand during
 /// witness generation.
 ///
-/// It is a plain (non-capturing) function pointer, so the producer of the stub
+/// It is a plain function pointer (not a closure), so the producer of the stub
 /// must bake the certification version into it. The pointer alone fully
 /// determines the expansion so it can be safely used as a conservative equality
 /// gate for subtree reuse.
@@ -180,7 +180,7 @@ impl SubtreeSource {
             source: Arc::clone(source) as Arc<dyn Any + Send + Sync>,
             expander,
         };
-        debug_assert!((expander)(&this).is_ok());
+        debug_assert!(expander(&this).is_ok());
         this
     }
 

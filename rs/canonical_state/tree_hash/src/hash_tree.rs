@@ -21,12 +21,14 @@ const MAX_RECURSION_DEPTH: u32 = 128;
 /// built sequentially: it is too small for the thread pool to pay for itself.
 pub const PARALLEL_MIN_CHILDREN: usize = 1000;
 
-/// When building against a baseline, a large fork starts building sequentially
-/// and samples this many children before extrapolating, over the whole fork, the
-/// rate at which they have to be *built* — i.e. hashed, rather than cheaply
-/// reused from the baseline. With no baseline nothing can be reused, so the
-/// switch to the thread pool happens immediately, without a warmup.
-const ADAPTIVE_WARMUP_CHILDREN: usize = 1000;
+/// Forks start being built sequentially. In the meantime, we track how many
+/// children have been materialized and hashed — as opposed to cheaply reused
+/// from the baseline.
+///
+/// Once we've sampled at least this many children, if the projected number of
+/// expensively built children exceeds `PARALLEL_MIN_CHILDREN`, we switch to
+/// building in parallel.
+const ADAPTIVE_WARMUP_CHILDREN: usize = 500;
 
 /// SHA256 of the domain separator "ic-hashtree-empty"
 const EMPTY_HASH: Digest = Digest([
@@ -333,8 +335,9 @@ pub struct HashTree {
 /// A reusable subtree collapsed to a single digest ("stub"), stored in a
 /// [`NodeKind::Stub`] node.
 ///
-/// Holds one `Arc` (inside the [`SubtreeSource`]) plus a cheap [`Digest`], so it
-/// can be stored inline, avoiding extra allocation and/or indirection.
+/// Holds one `Arc` and one function pointer (inside the [`SubtreeSource`]) plus
+/// a cheap [`Digest`], so it can be stored inline, avoiding extra allocation
+/// and/or indirection.
 #[derive(Clone, Debug)]
 struct StubNode {
     /// The subtree's root digest. Its contents are not materialized; they are
@@ -804,16 +807,16 @@ impl HashTree {
                         B::make_node(label.clone(), B::make_pruned(ht.digest(child).clone()))
                     }
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
-                    // Intercepted above; a stub behaves like an opaque subtree.
-                    HashTreeView::Stub(digest) => B::make_pruned(digest.clone()),
+                    // Intercepted above.
+                    HashTreeView::Stub(_) => unreachable!(),
                 }),
                 LabeledTree::SubTree(children) if children.is_empty() => Ok(match ht.view(pos) {
                     HashTreeView::Empty => B::make_empty(),
                     HashTreeView::Leaf(digest) => B::make_pruned(digest.clone()),
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
                     HashTreeView::Node(digest, _label, _child) => B::make_pruned(digest.clone()),
-                    // Intercepted above; a stub behaves like an opaque subtree.
-                    HashTreeView::Stub(digest) => B::make_pruned(digest.clone()),
+                    // Intercepted above.
+                    HashTreeView::Stub(_) => unreachable!(),
                 }),
                 LabeledTree::SubTree(children) => children
                     .iter()
@@ -856,10 +859,15 @@ impl PartialEq<crypto::HashTree> for HashTree {
         fn eq_recursive(ht: &HashTree, ht_root: NodeId, other: &crypto::HashTree) -> bool {
             ht.digest(ht_root) == other.digest()
                 && match (ht_root.kind(), other) {
-                    // A stub collapses a whole subtree to its root digest, which the top-level
-                    // digest comparison above already checked; there is no materialized structure
-                    // left to compare.
-                    (NodeKind::Stub, _) => true,
+                    // A stub collapses a whole subtree to its root digest. Expand it from its
+                    // source and compare the materialized subtree structurally.
+                    (NodeKind::Stub, _) => {
+                        let expanded = ht.stubs[ht_root.bucket()][ht_root.index()]
+                            .source
+                            .expand()
+                            .expect("expanding a stub should not fail");
+                        eq_recursive(&expanded, expanded.root, other)
+                    }
                     (NodeKind::Leaf | NodeKind::Empty, crypto::HashTree::Leaf { digest: _ }) => {
                         true
                     }
@@ -1022,13 +1030,13 @@ fn hash_lazy_tree_impl(
     }
 
     // We only initialize thread pools lazily the first time we need them
-    enum ParStrategy {
+    enum ParallelismStrategy {
         Sequential,
         Concurrent,
         ConcurrentInPool(scoped_threadpool::Pool),
     }
 
-    impl ParStrategy {
+    impl ParallelismStrategy {
         fn pool(&mut self) -> Option<&mut scoped_threadpool::Pool> {
             match self {
                 Self::Sequential => None,
@@ -1060,7 +1068,7 @@ fn hash_lazy_tree_impl(
         child: &LazyTree<'_>,
         ht: &mut HashTree,
         parent: NodeId,
-        par_strategy: &mut ParStrategy,
+        parallelism_strategy: &mut ParallelismStrategy,
         recursion_depth: u32,
         baseline: Option<BaselineCursor<'_>>,
     ) -> Result<(NodeId, bool), HashTreeError> {
@@ -1083,7 +1091,7 @@ fn hash_lazy_tree_impl(
                         child,
                         &mut child_ht,
                         NodeId::empty(),
-                        par_strategy,
+                        parallelism_strategy,
                         recursion_depth + 1,
                         None,
                     )?;
@@ -1099,7 +1107,7 @@ fn hash_lazy_tree_impl(
             child,
             ht,
             parent,
-            par_strategy,
+            parallelism_strategy,
             recursion_depth + 1,
             baseline,
         )?;
@@ -1114,7 +1122,7 @@ fn hash_lazy_tree_impl(
         t: &LazyTree<'_>,
         ht: &mut HashTree,
         parent: NodeId,
-        par_strategy: &mut ParStrategy,
+        parallelism_strategy: &mut ParallelismStrategy,
         recursion_depth: u32,
         baseline: Option<BaselineCursor<'_>>,
     ) -> Result<NodeId, HashTreeError> {
@@ -1167,10 +1175,10 @@ fn hash_lazy_tree_impl(
                 // (where reuse keeps the rate low) and regular forks (where every child is
                 // materialized; so a large fork always parallelizes).
                 //
-                // We only materialize the unprocessed tail into a `Vec` if and when we
-                // switch; the common, all-sequential path stays fully lazy.
+                // We only collect the unprocessed tail into a `Vec` if and when we switch; the
+                // common, all-sequential path uses the `joined` iterator directly.
                 let may_parallelize =
-                    num_children >= PARALLEL_MIN_CHILDREN && par_strategy.is_concurrent();
+                    num_children >= PARALLEL_MIN_CHILDREN && parallelism_strategy.is_concurrent();
                 let mut do_parallelize = may_parallelize && baseline.is_none();
                 let mut num_processed = 0_usize;
                 let mut num_built = 0_usize;
@@ -1187,7 +1195,7 @@ fn hash_lazy_tree_impl(
                         &child,
                         ht,
                         NodeId::node(bucket, i)?,
-                        par_strategy,
+                        parallelism_strategy,
                         recursion_depth,
                         base,
                     )?;
@@ -1214,7 +1222,7 @@ fn hash_lazy_tree_impl(
                 // Build whatever is left of the children in parallel.
                 if do_parallelize {
                     build_fork_parallel(
-                        par_strategy.pool().unwrap(),
+                        parallelism_strategy.pool().unwrap(),
                         ht,
                         &mut nodes,
                         recursion_depth,
@@ -1312,8 +1320,10 @@ fn hash_lazy_tree_impl(
                             child,
                             &mut ht,
                             NodeId::empty(),
-                            // Run with `ParStrategy::Sequential`, so thread pools are never nested.
-                            &mut ParStrategy::Sequential,
+                            // Run with `ParallelismStrategy::Sequential`: besides avoiding nested thread
+                            // pools, this limits each worker's tree to a single bucket, which
+                            // `splice_subtree` relies on to place worker `i` at bucket `bucket_offset + i`.
+                            &mut ParallelismStrategy::Sequential,
                             depth,
                             *base,
                         ) {
@@ -1365,7 +1375,7 @@ fn hash_lazy_tree_impl(
     });
 
     let mut ht = HashTree::new();
-    let strategy = &mut ParStrategy::Concurrent;
+    let strategy = &mut ParallelismStrategy::Concurrent;
     // The root is always materialized; only *descendants* that carry a
     // `subtree_source` are collapsed into stubs (see `build_child`). Building a
     // stand-alone subtree is just `hash_lazy_tree` on that subtree's root, which
