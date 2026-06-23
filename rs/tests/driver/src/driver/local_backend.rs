@@ -1,23 +1,18 @@
 //! Local (libvirt + QEMU) system-test backend.
 //!
-//! This module is the counterpart to [`crate::driver::farm::Farm`] for tests
-//! that are run on a developer or CI host instead of being shipped to the Farm
-//! cluster. It is selected by setting the environment variable:
-//! `SYSTEM_TEST_INFRA=local`.
+//! Counterpart to [`crate::driver::farm::Farm`] for tests run on a developer or
+//! CI host instead of the Farm cluster. Selected via `SYSTEM_TEST_INFRA=local`.
 //!
-//! The backend spawns a *per-test* libvirtd daemon on a unix socket under the
-//! test's `working_dir`, then drives the daemon through the `virt` crate to
-//! create libvirt networks (for groups), domains (for VMs) and to extract and
-//! mount disk images.
+//! Spawns a per-test libvirtd daemon on a unix socket, then drives it through
+//! the `virt` crate to create networks (for groups), domains (for VMs) and to
+//! extract disk images.
 //!
-//! Many Farm features have no equivalent locally (managed playnet DNS, TLS
-//! certificate issuance, HTTP file upload, multi-tenant scheduling). Those
-//! operations log a warning and either return dummy values or are explicit
-//! `bail!`s; the test author is expected to mark a test as `backend = "local"`
-//! or `backend = None` (default)` only after auditing those code paths.
+//! Many Farm features have no local equivalent (managed playnet DNS, TLS
+//! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
+//! and return dummy values or `bail!`.
 //!
-//! See `rs/tests/driver/templates/guestos_vm_template.xml` for the libvirt
-//! domain XML template used to launch VMs.
+//! See `rs/tests/driver/templates/guestos_vm_template.xml` for the domain XML
+//! template used to launch VMs.
 
 use crate::driver::farm::{VMCreateResponse, VmSpec};
 use crate::driver::resource::DiskImage;
@@ -39,21 +34,19 @@ use std::time::{Duration, Instant};
 use virt::connect::Connect;
 use virt::domain::Domain;
 
-/// Persistent record (in the root TestEnv) of the libvirtd unix socket so that
-/// forked task subprocesses can connect to the daemon spawned by the setup
-/// task instead of trying to spawn their own.
+/// Persistent record (in the root TestEnv) of the libvirtd socket and working
+/// dir, so forked task subprocesses can connect to the daemon spawned by the
+/// setup task instead of spawning their own.
 #[derive(Serialize, Deserialize, Clone)]
 struct ActiveLocalBackend {
-    /// Path of the libvirtd unix socket the spawning process bound. Forked task
+    /// Path of the libvirtd unix socket the spawning process bound. Forked
     /// subprocesses open a connect-only handle to it (see
     /// [`LocalBackend::connect_only`]).
     socket_path: PathBuf,
-    /// Working directory under which VM disks and the per-VM metadata
-    /// (`meta.json`) are materialized. It resolves to the same
-    /// `<group_dir>/local_backend` path in every process, so a `connect_only`
-    /// handle in a forked task subprocess (e.g. a test calling `vm.start()`)
-    /// reads back the metadata that the setup process persisted in
-    /// [`LocalBackend::create_vm`] / [`LocalBackend::attach_disk_images`].
+    /// Working dir where VM disks and per-VM metadata (`meta.json`) live.
+    /// Resolves to the same `<group_dir>/local_backend` path in every process,
+    /// so a `connect_only` handle reads back the metadata the setup process
+    /// persisted.
     working_dir: PathBuf,
 }
 
@@ -63,28 +56,22 @@ impl TestEnvAttribute for ActiveLocalBackend {
     }
 }
 
-/// Process-wide cache of the single `LocalBackend`. There is exactly one
-/// libvirtd (and therefore one socket) per `bazel test` invocation, and the
-/// registry is a process-local `static`, so a single slot suffices: every
+/// Process-wide cache of the single `LocalBackend`. One libvirtd (hence one
+/// socket) per `bazel test` invocation, so a single slot suffices: every
 /// `from_test_env` call in a process resolves to the same backend.
 static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 
 /// Per-test handle that owns a libvirtd subprocess (in the setup process only)
 /// and a `virt::Connect`.
 pub struct LocalBackend {
-    /// The libvirtd socket path and backend working directory. Persisted (in
-    /// the setup process) as a `TestEnvAttribute` so forked task subprocesses
-    /// can reconstruct a connect-only handle from the same values; see
+    /// Socket path and working dir.
     /// [`from_test_env`](Self::from_test_env).
     active_local_backend: ActiveLocalBackend,
-    /// `Some(child)` only in the process that spawned libvirtd; `None` in
-    /// forked tasks that merely connect to an already-running daemon. `Drop`
-    /// only kills the child if we own it.
+    /// `Some(child)` only in the process that spawned libvirtd; `None` in forked
+    /// tasks that merely connect. `Drop` kills the child only if we own it.
     libvirtd: Option<Child>,
-    /// Path to the libvirtd pid-file. `Some` only in the spawning process.
-    /// libvirtd runs as the current (unprivileged) user in session mode, so it
-    /// is a direct child we can signal; the pid-file is used as a fallback for
-    /// teardown from a connect-only handle in the finalize task.
+    /// Path to the libvirtd pid-file; `Some` only in the spawning process. Used
+    /// as a teardown fallback from a connect-only handle in the finalize task.
     pid_path: Option<PathBuf>,
     /// libvirt connection.
     connect: Connect,
@@ -93,26 +80,24 @@ pub struct LocalBackend {
     vm_ipv6: Mutex<HashMap<String, Ipv6Addr>>,
 }
 
-/// Per-VM configuration persisted to disk (as `meta.json` under the VM's
-/// working directory) by [`LocalBackend::create_vm`] and amended by
+/// Per-VM configuration persisted to disk (as `meta.json` under the VM's working
+/// dir) by [`LocalBackend::create_vm`] and amended by
 /// [`LocalBackend::attach_disk_images`].
 ///
-/// The per-VM state cannot live solely in the in-memory `LocalBackend`:
-/// `create_vm` / `attach_disk_images` run in the setup process, whereas
-/// [`LocalBackend::start_vm`] may run in a *forked task subprocess* (e.g. a
-/// test driving `vm.start()`), which holds a `connect_only` handle with no
-/// in-memory record of the VM. Persisting under `working_dir` — which resolves
-/// to the same `<group_dir>/local_backend` path in every process — lets
-/// `start_vm` recover everything it needs regardless of which process calls it.
+/// It cannot live solely in the in-memory `LocalBackend`: `create_vm` runs in
+/// the setup process, whereas [`LocalBackend::start_vm`] may run in a forked
+/// task subprocess (e.g. a test calling `vm.start()`) whose `connect_only`
+/// handle has no in-memory record of the VM. Persisting under `working_dir` lets
+/// `start_vm` recover it regardless of which process calls it.
 #[derive(Serialize, Deserialize, Clone)]
 struct PersistedVm {
-    /// Primary boot image. Must be a [`DiskImage::Local`] under the Local
-    /// backend (see [`LocalBackend::start_vm`]).
+    /// Primary boot image. Must be a [`DiskImage::Local`] (see
+    /// [`LocalBackend::start_vm`]).
     primary_image: DiskImage,
     /// vCPU / memory spec used to render the domain XML.
     spec: VmSpec,
-    /// Optional minimum boot-image size in gibibytes; the primary disk is grown
-    /// to at least this size before boot.
+    /// Optional minimum boot-image size in GiB; the primary disk is grown to at
+    /// least this size before boot.
     min_boot_image_size_gib: Option<u64>,
     /// Whether the VM requested a second (IPv4) NIC.
     has_ipv4: bool,
@@ -124,17 +109,15 @@ struct PersistedVm {
 impl LocalBackend {
     /// Return the LocalBackend for the libvirtd associated with `env`.
     ///
-    /// Behavior:
-    /// - If `env` already has an `ActiveLocalBackend` attribute (i.e. setup has
-    ///   run and persisted the socket path), open a connect-only handle to
-    ///   that socket. This is what forked task subprocesses get.
-    /// - Otherwise, spawn a new libvirtd in `env`'s working directory, persist
-    ///   the absolute socket path as a `TestEnvAttribute`, and return the
-    ///   spawning handle. This is what the setup task gets on first call from
-    ///   `create_group_setup`.
+    /// - If `env` already has an `ActiveLocalBackend` attribute (setup has run
+    ///   and persisted the socket path), open a connect-only handle to it. This
+    ///   is what forked task subprocesses get.
+    /// - Otherwise spawn a new libvirtd, persist the socket path as a
+    ///   `TestEnvAttribute`, and return the spawning handle. This is what the
+    ///   setup task gets on first call.
     ///
-    /// In both cases the returned `Arc` is cached in a single process-wide
-    /// slot, so repeated calls within the same process share state.
+    /// The returned `Arc` is cached in a process-wide slot, so repeated calls in
+    /// the same process share state.
     pub fn from_test_env(env: &TestEnv) -> Result<Arc<LocalBackend>> {
         let mut reg = REGISTRY.lock().unwrap();
         if let Some(b) = reg.as_ref() {
@@ -142,24 +125,20 @@ impl LocalBackend {
         }
 
         if let Ok(existing) = ActiveLocalBackend::try_read_attribute(env) {
-            // Setup has run and persisted the socket path: open a connect-only
-            // handle to the already-running daemon.
+            // Setup has run: open a connect-only handle to the running daemon.
             let backend = Arc::new(LocalBackend::connect_only(existing, env.logger())?);
             *reg = Some(backend.clone());
             return Ok(backend);
         }
 
-        // First call in this group: spawn libvirtd.
-        //
         // The working dir holds the live libvirtd socket/pid/log and the
-        // (potentially multi-gibibyte) VM disk images. It must live OUTSIDE the
-        // env directory: each `TestEnv` (`root_env`, `setup`, `tests/<name>`)
-        // is recursively `cp -R`'d when the setup artifacts are forked into the
-        // per-test directories. Copying the live unix socket hangs `cp` (it
-        // blocks in `D` state), and copying the disk images would duplicate
-        // gigabytes into every test directory. We therefore place the working
-        // dir as a sibling of the env directory (i.e. directly under the group
-        // directory), which is never copied.
+        // (potentially multi-gibibyte) VM disk images, so it must live OUTSIDE
+        // the env directory: each `TestEnv` is recursively `cp -R`'d when setup
+        // artifacts are forked into the per-test directories. Copying the live
+        // socket hangs `cp` (blocks in `D` state) and copying the disks would
+        // duplicate gigabytes per test. We therefore place it as a sibling of
+        // the env directory (directly under the group dir), which is never
+        // copied.
         let env_path = env.get_path("");
         let group_dir = env_path
             .parent()
@@ -171,8 +150,7 @@ impl LocalBackend {
             )
         })?;
         // Canonicalize so the socket path persisted for forked subprocesses is
-        // absolute; a failure here means the directory is missing/inaccessible
-        // and there is no sensible way to continue.
+        // absolute.
         let group_dir = group_dir
             .canonicalize()
             .with_context(|| format!("canonicalizing group dir {}", group_dir.display()))?;
@@ -190,31 +168,24 @@ impl LocalBackend {
         Ok(backend)
     }
 
-    /// Build a [`Command`] that runs a short shell `script` with
-    /// `CAP_NET_ADMIN` raised into the ambient set, so the program(s) it
-    /// `exec`s inherit that capability.
+    /// Build a [`Command`] that runs a short shell `script` with `CAP_NET_ADMIN`
+    /// (and `CAP_NET_RAW`/`CAP_NET_BIND_SERVICE`) raised into the ambient set,
+    /// so the program(s) it `exec`s inherit them.
     ///
-    /// This is the *only* privileged primitive the backend uses, and it grants
-    /// exactly one narrow capability — never root. It is needed for the few
-    /// operations the kernel gates behind `CAP_NET_ADMIN`: creating the
-    /// per-group bridge and TAP devices.
+    /// This is the *only* privileged primitive the backend uses — narrow
+    /// capabilities, never root — needed for the few operations the kernel gates
+    /// behind them: creating the per-group bridge and TAP devices, and letting
+    /// the group's `dnsmasq` bind UDP port 67 for DHCPv4.
     ///
-    /// The capability comes from the [`NET_ADMIN_LAUNCHER`] binary, a
-    /// file-capability-endowed `capsh` provisioned once in the container image
-    /// (`cap_net_admin,cap_net_raw,cap_net_bind_service+ep`; see
-    /// `ci/container/Dockerfile`). `capsh` raises the requested
-    /// caps into its inheritable+ambient sets and then `exec`s `/bin/sh -c
-    /// <script>`; ambient capabilities survive the `exec`, so the commands in
-    /// `script` (e.g. `ip link add ...`) run with the caps even though the
-    /// shell binary itself is not capability-endowed.
+    /// The capabilities come from the [`NET_ADMIN_LAUNCHER`] binary, a
+    /// file-capability-endowed `capsh` provisioned in the container image (see
+    /// `ci/container/Dockerfile`). `capsh` raises the caps into its
+    /// inheritable+ambient sets and `exec`s `/bin/sh -c <script>`; ambient caps
+    /// survive the `exec`, so the script's commands run with them even though the
+    /// shell binary is not capability-endowed.
     ///
-    /// `CAP_NET_BIND_SERVICE` is additionally needed by the group's `dnsmasq`
-    /// to bind the privileged UDP port 67 of its DHCPv4 server (see
-    /// [`start_ra_daemon`](Self::start_ra_daemon)).
-    ///
-    /// `script` must only ever interpolate sanitized, shell-safe tokens
-    /// (bridge/TAP interface names and IPv6 prefixes are restricted to
-    /// `[0-9a-f:.-]`).
+    /// `script` must only interpolate sanitized, shell-safe tokens (interface
+    /// names and IPv6 prefixes are restricted to `[0-9a-f:.-]`).
     fn net_admin(script: &str) -> Command {
         let net_admin_launcher = get_dependency_path_from_env("NET_ADMIN_LAUNCHER_PATH");
         let mut cmd = Command::new(net_admin_launcher);
@@ -250,9 +221,9 @@ impl LocalBackend {
 
     /// Short, host-global directory for this backend's libvirtd unix socket.
     ///
-    /// See the call site in [`spawn`] for why the socket cannot live under
-    /// `working_dir`. Keyed by a hash of `working_dir` so it is stable across
-    /// re-runs of the same group yet distinct between concurrent groups.
+    /// See [`spawn`] for why the socket cannot live under `working_dir`. Keyed by
+    /// a hash of `working_dir` so it is stable across re-runs of the same group
+    /// yet distinct between concurrent groups.
     fn socket_dir(working_dir: &Path) -> PathBuf {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(working_dir.to_string_lossy().as_bytes());
@@ -272,17 +243,15 @@ impl LocalBackend {
         let log_path = libvirt_dir.join("libvirtd.log");
 
         // libvirtd runs as the current (non-root) user in *session* mode
-        // (`qemu:///session`). A session-mode daemon ignores `unix_sock_dir`
-        // and always places its socket at `$XDG_RUNTIME_DIR/libvirt/libvirt-sock`.
-        // The default `$XDG_RUNTIME_DIR` (`/run/user/<uid>`) may be absent in
-        // the container, and in any case we want a deterministic, short path
-        // (the kernel caps unix socket paths, `sockaddr_un.sun_path`, at ~108
-        // bytes, and the working dir resolves to a deep Bazel cache path that
-        // already exceeds that limit). We therefore point `$XDG_RUNTIME_DIR` at
-        // a short `/tmp` directory keyed by a hash of the working dir, so
-        // concurrent test targets on the same host do not collide while a given
-        // group stays stable across re-runs. The pid/log/conf files stay in
-        // `libvirt_dir`.
+        // (`qemu:///session`), which ignores `unix_sock_dir` and always places
+        // its socket at `$XDG_RUNTIME_DIR/libvirt/libvirt-sock`. The default
+        // `$XDG_RUNTIME_DIR` (`/run/user/<uid>`) may be absent in the container,
+        // and we want a deterministic, short path anyway: the kernel caps unix
+        // socket paths (`sun_path`) at ~108 bytes, and the working dir resolves
+        // to a deep Bazel cache path already past that limit. So we point
+        // `$XDG_RUNTIME_DIR` at a short `/tmp` dir keyed by a hash of the working
+        // dir (distinct per concurrent group, stable across re-runs). The
+        // pid/log/conf files stay in `libvirt_dir`.
         let xdg_runtime_dir = Self::socket_dir(&working_dir);
         std::fs::create_dir_all(&xdg_runtime_dir).with_context(|| {
             format!(
@@ -291,42 +260,27 @@ impl LocalBackend {
             )
         })?;
         let socket_path = xdg_runtime_dir.join("libvirt").join("libvirt-sock");
-        // A previous run with the same working dir leaves the socket behind at
-        // this fixed path; remove it so libvirtd can bind cleanly.
+        // Although not necessary in the bazel sandbox a `bazel run` might have left a socket behind at this fixed path; remove it
+        // so libvirtd can bind cleanly.
         let _ = std::fs::remove_file(&socket_path);
 
-        // Minimal libvirtd configuration: log to a file. Session-mode libvirtd
-        // needs no auth/TLS settings and derives its socket path from
-        // `$XDG_RUNTIME_DIR` (see above), so no `unix_sock_dir` is configured.
+        // Minimal libvirtd config: log to a file.
         std::fs::write(
             &conf_path,
             format!("log_outputs = \"1:file:{log}\"\n", log = log_path.display(),),
         )?;
 
-        // Session-mode libvirtd initializes per-user *state drivers* on
-        // startup, which create config/cache/data directories derived from
-        // `$HOME` (`~/.config/libvirt`, `~/.cache/libvirt`,
-        // `~/.local/share/libvirt`). If those directories cannot be created the
-        // daemon aborts in `daemonRunStateInit` *before* binding its socket,
-        // and the caller below times out waiting for the socket.
-        //
-        // Under the Bazel `linux-sandbox` the real `$HOME` is bind-mounted
-        // read-only (only the exec root, `$TEST_TMPDIR`, the hermetic `/tmp`
-        // and any `--sandbox_writable_path`s are writable), so libvirtd's
-        // attempt to create `~/.config/libvirt/...` fails with `Permission
-        // denied` and no socket ever appears. (Run unsandboxed the same code
-        // works because `$HOME` is then writable.) To make the backend
-        // sandbox-friendly we point `$HOME` and the XDG base-directory vars at
+        // Session-mode libvirtd initializes per-user state drivers on startup,
+        // creating config/cache/data dirs derived from `$HOME`. If they cannot be
+        // created the daemon aborts in `daemonRunStateInit` *before* binding its
+        // socket, and the caller below times out. Under the Bazel `linux-sandbox`
+        // the real `$HOME` is read-only, so we point `$HOME` and the XDG vars at
         // a writable directory we control.
         //
-        // The state dir lives under `xdg_runtime_dir` (the short `/tmp` path
-        // above), NOT under `libvirt_dir`: libvirtd's QEMU driver opens a QMP
-        // monitor unix socket at
-        // `$XDG_CONFIG_HOME/libvirt/qemu/lib/qmp-XXXXXX/qmp.monitor`, and
-        // rooting `$HOME` at the deep Bazel working dir pushes that path past
-        // the ~108-byte `sun_path` limit (`QEMU ... UNIX socket path ... is too
-        // long`). The short `/tmp` base keeps every derived socket path within
-        // the limit, for the same reason `$XDG_RUNTIME_DIR` is placed there.
+        // The state dir lives under `xdg_runtime_dir` (the short `/tmp` path),
+        // NOT `libvirt_dir`: libvirtd's QEMU driver opens a QMP monitor socket
+        // under `$XDG_CONFIG_HOME`, and rooting `$HOME` at the deep Bazel working
+        // dir would push that path past the ~108-byte `sun_path` limit.
         let state_home = xdg_runtime_dir.join("home");
         for sub in [".config", ".cache", ".local/share"] {
             std::fs::create_dir_all(state_home.join(sub)).with_context(|| {
@@ -337,20 +291,13 @@ impl LocalBackend {
             })?;
         }
 
-        // Pin the QEMU driver's core-dump limit. In session mode the QEMU
-        // driver reads its config from `$XDG_CONFIG_HOME/libvirt/qemu.conf`,
-        // and libvirt *unconditionally* sets the QEMU process's `RLIMIT_CORE`
-        // to `max_core` (whose built-in default is "unlimited", i.e.
-        // `RLIM_INFINITY` == `18446744073709551615`). Under the Bazel
-        // `linux-sandbox` QEMU runs in an unprivileged user namespace and thus
-        // lacks `CAP_SYS_RESOURCE` in the *initial* user namespace, so *raising*
-        // the hard `RLIMIT_CORE` to unlimited is rejected by the kernel with
-        // `EPERM` and the domain never starts (libvirt reports "cannot limit
-        // core file size of process ... to 18446744073709551615: Operation not
-        // permitted"). Setting `max_core = 0` makes libvirt *lower* the limit
-        // to 0 instead (disabling core dumps), which is always permitted
-        // regardless of capabilities or the inherited hard limit. Core dumps of
-        // the test QEMU are not needed.
+        // Pin the QEMU driver's core-dump limit. libvirt *unconditionally* sets
+        // QEMU's `RLIMIT_CORE` to `max_core` (default "unlimited"). Under the
+        // Bazel `linux-sandbox` QEMU runs in an unprivileged user namespace
+        // lacking `CAP_SYS_RESOURCE`, so *raising* the hard limit to unlimited is
+        // rejected with `EPERM` and the domain never starts. Setting
+        // `max_core = 0` makes libvirt *lower* the limit instead (always
+        // permitted); core dumps of the test QEMU are not needed.
         let qemu_conf_dir = state_home.join(".config").join("libvirt");
         std::fs::create_dir_all(&qemu_conf_dir).with_context(|| {
             format!(
@@ -358,18 +305,13 @@ impl LocalBackend {
                 qemu_conf_dir.display()
             )
         })?;
-        // Also route QEMU's stdout/stderr (and file-backed character devices
-        // such as the VM's serial console) directly to plain files instead of
-        // through the `virtlogd` daemon. libvirt's QEMU driver defaults
-        // `stdio_handler` to `"logd"`, which makes libvirtd spawn `virtlogd`,
-        // whose sole added value is rolling the log files over at a size limit
-        // to bound a runaway guest's on-disk log growth. Bounded test runs do
-        // not need that, and the extra double-forked daemon would just be one
-        // more process the teardown reaper has to track. Setting
-        // `stdio_handler = "file"` (libvirt's historical backend) makes QEMU
-        // write the console log straight to `console.log`, so no `virtlogd` is
-        // started. The domain XML's `append='on'` is honoured natively by
-        // QEMU's file chardev, so console output is still preserved across
+        // Also route QEMU's stdout/stderr and file-backed chardevs (the VM's
+        // serial console) straight to plain files instead of through `virtlogd`.
+        // The QEMU driver defaults `stdio_handler` to `"logd"` (spawns
+        // `virtlogd`, whose only value is size-limited log rolling we don't need
+        // for bounded test runs). `stdio_handler = "file"` makes QEMU write the
+        // console log straight to `console.log` with no `virtlogd`; the domain
+        // XML's `append='on'` is honoured natively, so console output survives
         // domain restarts (guest reboots and `vm().kill()` + `vm().start()`).
         std::fs::write(
             qemu_conf_dir.join("qemu.conf"),
@@ -378,12 +320,9 @@ impl LocalBackend {
         .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
 
         // The backend is fully unprivileged: libvirtd runs as the current user
-        // in session mode and connects to a per-user QEMU driver. There is no
-        // `sudo`, no system-wide bridge, and no `virtlogd` (the `qemu.conf`
-        // `stdio_handler = "file"` set above makes QEMU write the domain serial
-        // and console output directly to files instead). The few operations
-        // that need elevated networking capabilities (creating the bridge and
-        // TAPs) go through the narrow [`net_admin`] capability launcher instead.
+        // in session mode with a per-user QEMU driver. No `sudo`, no system-wide
+        // bridge, no `virtlogd`. The few operations needing elevated networking
+        // caps (bridge and TAPs) go through the narrow [`net_admin`] launcher.
         info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
         let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
@@ -432,16 +371,6 @@ impl LocalBackend {
 
     /// Open a connection-only handle to an already-running libvirtd. Used by
     /// forked task subprocesses.
-    ///
-    /// The [`ActiveLocalBackend`] (socket path + working dir) is passed in
-    /// (persisted as a `TestEnvAttribute` by the spawning process) rather than
-    /// derived from the socket path, because the socket lives at a short
-    /// `/tmp` path (see `spawn`) and no longer sits under `working_dir`. The
-    /// working dir resolves to the SAME `<group_dir>/local_backend` directory
-    /// the spawning process used, regardless of which env (`root_env`, `setup`,
-    /// `tests/<name>`) this handle was constructed from. This keeps VM disks
-    /// out of the env tree that gets recursively `cp -R`'d into every per-test
-    /// directory.
     fn connect_only(active_local_backend: ActiveLocalBackend, logger: Logger) -> Result<Self> {
         let connect = open_connect(&active_local_backend.socket_path, &logger)?;
         Ok(LocalBackend {
@@ -477,43 +406,33 @@ impl LocalBackend {
         )
     }
 
-    /// Returns the per-group IPv6 gateway address (`<prefix>1`). The Local
-    /// backend assigns this address to the group's bridge in
-    /// [`create_group`](Self::create_group), which both puts the node `/64`
-    /// on-link there and creates the bridge's connected route for it (whose
-    /// preferred source `create_group` then overrides to the management
-    /// address, [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)).
+    /// Returns the per-group IPv6 gateway address (`<prefix>1`). Assigned to the
+    /// group's bridge in [`create_group`](Self::create_group).
     pub fn group_gateway_ipv6(group_name: &str) -> String {
         format!("{}1", Self::group_ipv6_prefix(group_name))
     }
 
-    /// Returns the per-group IPv6 *management* address: the source the test
-    /// driver originates its host→node traffic from.
+    /// Returns the per-group IPv6 *management* address (`<prefix>:1::1`), the
+    /// source the test driver originates its host→node traffic from.
     ///
-    /// It is `<prefix>:1::1`, sharing the group hash with
-    /// [`group_ipv6_prefix`](Self::group_ipv6_prefix): the node `/64`
-    /// `fd00:AABB:CCDD::/64` yields the management address `fd00:AABB:CCDD:1::1`
-    /// (subnet-id `1` instead of the nodes' subnet-id `0`). It therefore lies
-    /// *outside* every node `/64` — so the GuestOS firewall's hard-coded accept
-    /// for a node's own prefix does not match the driver, letting
-    /// registry-derived deny rules actually be exercised on the Local backend —
-    /// while staying within the ULA range `fd00::/8` that the Local backend
-    /// whitelists at bootstrap. Reusing the group hash keeps it per-group
-    /// unique, introducing no new collision class beyond the node `/64`'s
-    /// existing per-group uniqueness.
+    /// It shares the group hash with
+    /// [`group_ipv6_prefix`](Self::group_ipv6_prefix) but uses subnet-id `1`
+    /// (vs the nodes' `0`), so it lies *outside* every node `/64` — meaning the
+    /// GuestOS firewall's hard-coded accept for a node's own prefix does not
+    /// match the driver, letting registry-derived deny rules actually be
+    /// exercised — while staying in the ULA range `fd00::/8` the backend
+    /// whitelists at bootstrap.
     ///
-    /// It is reserved for the test driver's *own* host→node traffic: the
-    /// driver's other long-lived connections each use their own dedicated
-    /// sibling address ([`group_logs_ipv6`](Self::group_logs_ipv6) for journald
-    /// streaming), and the per-group file server listens on yet another
-    /// ([`group_files_ipv6`](Self::group_files_ipv6)), so nothing else competes
-    /// with the management address' per-source firewall connection budget —
-    /// which matters for tests that deliberately saturate it (the firewall
-    /// `connection_count_test`).
+    /// It is reserved for the driver's *own* host→node traffic; journald
+    /// streaming ([`group_logs_ipv6`](Self::group_logs_ipv6)) and the file
+    /// server ([`group_files_ipv6`](Self::group_files_ipv6)) use dedicated
+    /// sibling addresses, so nothing else competes for this address' per-source
+    /// firewall connection budget (which matters for the firewall
+    /// `connection_count_test` that saturates it).
     ///
-    /// The address is assigned to `lo` (not the bridge) so `dnsmasq` does not
-    /// advertise it for SLAAC; [`create_group`](Self::create_group) overrides
-    /// the node `/64`'s connected-route source to it.
+    /// Assigned to `lo` (not the bridge) so `dnsmasq` does not advertise it for
+    /// SLAAC; [`create_group`](Self::create_group) overrides the node `/64`'s
+    /// connected-route source to it.
     pub fn group_mgmt_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
@@ -523,25 +442,17 @@ impl LocalBackend {
         )
     }
 
-    /// Returns the per-group IPv6 address the test driver streams the IC nodes'
-    /// journald logs from (see
-    /// [`logs_stream_task`](crate::driver::logs_stream_task)).
+    /// Returns the per-group IPv6 address the driver streams the nodes' journald
+    /// logs from (see [`logs_stream_task`](crate::driver::logs_stream_task)).
     ///
-    /// It is constructed exactly like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)
-    /// but with subnet-id `2` (`<prefix>:2::1`), so it shares all of that
-    /// address' properties — per-group unique, inside the whitelisted ULA range
-    /// `fd00::/8`, and *outside* every node `/64` so nodes reach it via their
-    /// default route — while being a *distinct* source address.
-    ///
-    /// The driver sources all other host→node traffic from
-    /// [`group_mgmt_ipv6`](Self::group_mgmt_ipv6). The GuestOS firewall caps the
-    /// number of simultaneous connections *per source address*
-    /// (`max_simultaneous_connections_per_ip_address`); streaming the long-lived
-    /// journald connection from this dedicated address keeps it from consuming a
-    /// slot in the management address' budget. Otherwise a test that
-    /// deliberately saturates that budget (the firewall `connection_count_test`)
-    /// would race the journald stream for the last slot and flake. Like
-    /// [`group_mgmt_ipv6`](Self::group_mgmt_ipv6) it is assigned to `lo` in
+    /// Constructed like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6) but with
+    /// subnet-id `2` (`<prefix>:2::1`), so it shares all that address' properties
+    /// while being distinct. The GuestOS firewall caps simultaneous connections
+    /// *per source address*, so streaming the long-lived journald connection from
+    /// a dedicated address keeps it from consuming a slot in the management
+    /// address' budget — otherwise the firewall `connection_count_test` (which
+    /// saturates that budget) would race the stream for the last slot and flake.
+    /// Like the management address it is assigned to `lo` in
     /// [`create_group`](Self::create_group).
     pub fn group_logs_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
@@ -552,27 +463,20 @@ impl LocalBackend {
         )
     }
 
-    /// Returns the per-group IPv6 address the Local backend's per-group file
-    /// server ([`serve_files_task`](crate::driver::serve_files_task)) listens
-    /// on, and that node image-download URLs point at (see
+    /// Returns the per-group IPv6 address the file server
+    /// ([`serve_files_task`](crate::driver::serve_files_task)) listens on, and
+    /// that node image-download URLs point at (see
     /// [`ic_images`](crate::driver::ic_images)).
     ///
-    /// It is constructed exactly like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)
-    /// but with subnet-id `3` (`<prefix>:3::1`), so it shares all of that
-    /// address' properties — per-group unique, inside the whitelisted ULA range
-    /// `fd00::/8`, and *outside* every node `/64` — while being a *distinct*
-    /// address. Serving images from an off-`/64` address mirrors production,
-    /// where the web server hosting GuestOS/HostOS images is not on the IC
-    /// nodes' `/64`; nodes still reach it because the RA installs the host as
-    /// their default router (see [`create_group`](Self::create_group)) and their
-    /// download replies are accepted by the GuestOS firewall's stateful
-    /// `established,related` rule.
-    ///
-    /// Listening here rather than on [`group_mgmt_ipv6`](Self::group_mgmt_ipv6)
-    /// keeps the management address reserved for the test driver's own host→node
-    /// traffic, so the per-source firewall connection budget stays easy to
-    /// reason about. Like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6) it is
-    /// assigned to `lo` in [`create_group`](Self::create_group).
+    /// Constructed like [`group_mgmt_ipv6`](Self::group_mgmt_ipv6) but with
+    /// subnet-id `3` (`<prefix>:3::1`). Serving images from an off-`/64` address
+    /// mirrors production (the image web server is not on the nodes' `/64`);
+    /// nodes still reach it because the host is their default router (their
+    /// static gateway; see [`create_group`](Self::create_group)) and their
+    /// replies match the firewall's stateful `established,related` rule. Using a
+    /// dedicated address keeps the management address reserved for the driver's
+    /// own traffic. Like it, this is assigned to `lo` in
+    /// [`create_group`](Self::create_group).
     pub fn group_files_ipv6(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
@@ -582,15 +486,13 @@ impl LocalBackend {
         )
     }
 
-    /// Returns the per-group private IPv4 `/24` (a deterministic subnet in the
-    /// RFC 1918 `10.0.0.0/8` range). Derived from a hash of the group name —
-    /// like [`group_ipv6_prefix`](Self::group_ipv6_prefix) — so concurrently
-    /// running groups get distinct subnets (and therefore distinct host
-    /// connected routes), with the `.0` network and `.1` gateway reserved.
+    /// Returns the per-group private IPv4 `/24` (a deterministic subnet in
+    /// `10.0.0.0/8`). Hashed from the group name so concurrent groups get
+    /// distinct subnets, with the `.0` network and `.1` gateway reserved.
     ///
-    /// This network is only used to hand the guest an IPv4 address on its
-    /// second NIC (the guest's `enp2s0`) via DHCP; the driver reaches VMs over
-    /// IPv6, so the IPv4 subnet needs no routing or NAT.
+    /// Only used to hand the guest an IPv4 address on its second NIC (`enp2s0`)
+    /// via DHCP; the driver reaches VMs over IPv6, so this subnet needs no
+    /// routing or NAT.
     fn group_ipv4_prefix(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(format!("ipv4/{group_name}").as_bytes());
@@ -599,16 +501,13 @@ impl LocalBackend {
 
     /// Returns the Linux bridge interface name for `group_name`.
     ///
-    /// Bridge (interface) names are limited to `IFNAMSIZ - 1` = 15 characters
-    /// by the kernel, so we cannot embed the full (timestamped, therefore
-    /// unique) network name. Instead we hash the group name and use a short
-    /// hex digest, which keeps the name both unique per group and within the
-    /// length limit (`vbr-` + 10 hex chars = 14 chars).
+    /// Interface names are limited to `IFNAMSIZ - 1` = 15 chars, so we hash the
+    /// group name into a short digest (`vbr-` + 10 hex chars = 14) that stays
+    /// unique per group within the limit.
     ///
-    /// Note that tests are executed under bazel's linux-sandbox which introduces a networking namespace,
-    /// so the hashing is not strictly necessary to avoid collisions with other groups on the host.
-    /// However, it's done for extra safety and to make accidental `bazel run //rs/tests/<test>_local` invocations
-    /// not catastrophic for the host.
+    /// Tests run under bazel's linux-sandbox (a network namespace), so hashing is
+    /// not strictly needed to avoid host collisions, but it adds safety and keeps
+    /// accidental `bazel run //rs/tests/<test>_local` from clobbering the host.
     fn bridge_name(group_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(group_name.as_bytes());
@@ -617,10 +516,9 @@ impl LocalBackend {
 
     /// Returns the TAP interface name for `(group_name, vm_name)`.
     ///
-    /// Like [`bridge_name`], TAP names are bounded by `IFNAMSIZ - 1` = 15
-    /// characters, so we use a short hash digest (`tap-` + 10 hex chars = 14
-    /// chars). The digest covers both the group and VM name so TAPs are unique
-    /// per VM and stable across re-runs.
+    /// Like [`bridge_name`], bounded by `IFNAMSIZ - 1` = 15 chars, so a short
+    /// digest of the group and VM name (`tap-` + 10 hex chars = 14) keeps it
+    /// unique per VM and stable across re-runs.
     fn tap_name(group_name: &str, vm_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(format!("{group_name}/{vm_name}").as_bytes());
@@ -629,10 +527,9 @@ impl LocalBackend {
 
     /// Returns the TAP interface name for the VM's *second* (IPv4) NIC.
     ///
-    /// Same length constraints as [`tap_name`](Self::tap_name); a distinct
-    /// digest seed (`ipv4/...`) keeps it from colliding with the primary TAP
-    /// while remaining unique per VM and stable across re-runs (`ta4-` + 10 hex
-    /// chars = 14 chars).
+    /// Same constraints as [`tap_name`](Self::tap_name); a distinct digest seed
+    /// (`ipv4/...`) avoids colliding with the primary TAP (`ta4-` + 10 hex
+    /// chars = 14).
     fn tap_name_ipv4(group_name: &str, vm_name: &str) -> String {
         use ic_crypto_sha2::Sha256;
         let hash = Sha256::hash(format!("ipv4/{group_name}/{vm_name}").as_bytes());
@@ -641,49 +538,34 @@ impl LocalBackend {
 
     /// Create the per-group Linux bridge that hosts the group's `/64`.
     ///
-    /// Instead of a libvirt-managed (system-mode) network — which would require
-    /// `libvirtd` to run as root — we manage the network ourselves with the
-    /// narrow [`net_admin`] capability launcher: a Linux bridge holds the
-    /// group's `/64` and per-VM TAPs are attached to it in [`start_vm`].
+    /// Instead of a libvirt-managed (system-mode) network — which needs
+    /// `libvirtd` as root — we manage the network ourselves via the narrow
+    /// [`net_admin`] launcher: a bridge holds the group's `/64` and per-VM TAPs
+    /// are attached to it in [`start_vm`].
     ///
-    /// The IC GuestOS does not statically configure its global IPv6 address; it
-    /// only brings up a link-local address and then derives its deterministic
-    /// global address via SLAAC from a Router Advertisement (the global address
-    /// is the group `/64` prefix plus the EUI-64 of the deterministic MAC). We
-    /// therefore run a minimal `dnsmasq` purely as an RA daemon on the bridge.
-    /// The RA advertises the on-link, autonomous prefix (so guests perform
-    /// SLAAC) *and* a non-zero router lifetime (`--ra-param=<bridge>,10,1800`),
-    /// which installs the bridge — i.e. the host — as the guests' default
-    /// router.
+    /// IC GuestOS nodes statically configure their global IPv6: the test driver
+    /// hands each node a fixed address plus the `<prefix>::1` gateway (which
+    /// lives on the bridge), so they need neither RA nor SLAAC. We still run a
+    /// minimal `dnsmasq` as an RA daemon on the bridge for non-IC-node VMs (e.g.
+    /// universal VMs), which bring up only a link-local address and derive their
+    /// global one via SLAAC from the RA; the RA's non-zero router lifetime also
+    /// installs the bridge (the host) as their default router.
     ///
-    /// The default route is what lets a guest reply to the driver's per-group
-    /// *management* address ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)), which
-    /// lives in a second `/64` *outside* the node `/64`. The driver uses that
-    /// off-`/64` source so the GuestOS firewall's built-in accept for the
-    /// node's own prefix does not shadow the registry rules under test. No IP
-    /// forwarding is involved — the management address is assigned to `lo`, so
-    /// traffic to it terminates on the host and is delivered locally rather
-    /// than forwarded.
+    /// Either way the host is each guest's default router, which lets a guest
+    /// reply to the driver's off-`/64` management address
+    /// ([`group_mgmt_ipv6`](Self::group_mgmt_ipv6)). No IP forwarding is
+    /// involved — the management address is on `lo`, so traffic to it terminates
+    /// on the host.
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
         let gateway = Self::group_gateway_ipv6(group_name);
-        // The driver's per-group management address (`<mgmt-prefix>:1::1`, a
-        // second `/64` outside the node `/64`) is assigned to `lo` and used as
-        // the source for host→node traffic; see `group_mgmt_ipv6`.
+        // Driver addresses, all assigned to `lo`: the management source for
+        // host→node traffic, the dedicated journald-streaming source, and the
+        // file server's listen address. See the respective `group_*_ipv6`.
         let mgmt = Self::group_mgmt_ipv6(group_name);
-        // The driver's per-group journald-streaming source address
-        // (`<prefix>:2::1`, also assigned to `lo`). The IC node journald stream
-        // is sourced from this dedicated address rather than `mgmt` so the
-        // long-lived stream does not occupy one of the node firewall's
-        // per-source-address connection slots that tests saturating that budget
-        // rely on; see `group_logs_ipv6`.
         let logs = Self::group_logs_ipv6(group_name);
-        // The per-group file server's listen address (`<prefix>:3::1`, also
-        // assigned to `lo`). Serving images from a dedicated address rather than
-        // `mgmt` keeps the management address reserved for the test driver's own
-        // host→node traffic; see `group_files_ipv6`.
         let files = Self::group_files_ipv6(group_name);
         // The IPv4 gateway (`<ipv4_prefix>.1`) also lives on the bridge so
         // `dnsmasq` can serve DHCPv4 to VMs that requested a second NIC.
@@ -694,29 +576,20 @@ impl LocalBackend {
             "Creating local bridge {bridge} for group {group_name} ({prefix}/64, {ipv4_prefix}.0/24)"
         );
 
-        // (Re)create the bridge, assign the gateway address, and bring it up.
-        // Deleting first makes this idempotent across an interrupted previous
-        // run that leaked the bridge.
+        // (Re)create the bridge, assign the gateway, and bring it up. Deleting
+        // first makes this idempotent across an interrupted run that leaked the
+        // bridge. The IPv4 `/24` gateway is always assigned (harmless if no VM
+        // requests IPv4) so `dnsmasq` can answer DHCPv4.
         //
-        // The IPv4 `/24` gateway is always assigned (harmless when no VM in the
-        // group requests IPv4); it is what lets `dnsmasq` answer DHCPv4
-        // requests from the guests' second NIC.
-        //
-        // Finally, assign the per-group management address to `lo` (idempotent
-        // via `replace`, since `lo` is shared across groups and survives the
-        // bridge delete above), assign the dedicated journald-streaming source
-        // address (`logs`) and file-server address (`files`) to `lo` the same
-        // way, and override the preferred source of the node `/64`'s connected
-        // route to the management address, so host→node traffic is sourced from
-        // the off-`/64` management address rather than the on-bridge gateway.
-        // (The journald stream binds to `logs` and the file server to `files`
-        // explicitly; everything else uses the route's preferred source.)
-        // The override must target the *kernel* connected route that
-        // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric
-        // 256`): replacing it in place sets its preferred source. Adding a
-        // separate route instead would land at a higher metric (1024) and lose
-        // to the still-present metric-256 kernel route, leaving source
-        // selection on the on-`/64` gateway.
+        // Then assign `mgmt`/`logs`/`files` to `lo` (idempotent `replace`, since
+        // `lo` is shared across groups and survives the bridge delete) and
+        // override the node `/64`'s connected-route source to `mgmt`, so
+        // host→node traffic uses the off-`/64` management address rather than the
+        // on-bridge gateway. (`logs` and `files` are bound explicitly by their
+        // consumers.) The override must target the *kernel* connected route that
+        // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric 256`):
+        // replacing it in place sets its source. A separate route would land at
+        // metric 1024 and lose to the metric-256 kernel route.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
              ip link add name {bridge} type bridge && \
@@ -730,9 +603,10 @@ impl LocalBackend {
         );
         Self::run_net_admin(&create_script, "create group bridge")?;
 
-        // Start the RA daemon so guests can SLAAC their global address. The
-        // same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for VMs
-        // that requested a second NIC.
+        // Start the RA daemon. Non-IC-node VMs (e.g. universal VMs) SLAAC their
+        // global address from it; IC GuestOS nodes use a static config instead.
+        // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
+        // VMs that requested a second NIC.
         self.start_ra_daemon(group_name, &bridge, &prefix, &ipv4_prefix)?;
 
         Ok(())
@@ -748,11 +622,10 @@ impl LocalBackend {
 
     /// Spawn a minimal `dnsmasq` as an IPv6 Router Advertisement daemon on
     /// `bridge`, advertising the group's `/64` for SLAAC with a non-zero router
-    /// lifetime (so the bridge — i.e. the host — is installed as the guests'
-    /// default router, letting them reply to the driver's off-`/64` management
-    /// address). The same daemon also serves DHCPv4 on the group's IPv4 `/24`
-    /// (`ipv4_prefix`) so VMs that requested a second NIC obtain an IPv4
-    /// address. See [`create_group`](Self::create_group) for the rationale.
+    /// lifetime (installing the host as the default router for VMs that use the
+    /// RA; IC GuestOS nodes use a static config instead). The same daemon serves
+    /// DHCPv4 on the group's IPv4 `/24` for VMs with a second NIC. See
+    /// [`create_group`](Self::create_group) for the rationale.
     fn start_ra_daemon(
         &self,
         group_name: &str,
@@ -776,18 +649,13 @@ impl LocalBackend {
         );
 
         // `dnsmasq` needs `CAP_NET_RAW`/`CAP_NET_ADMIN` to open the ICMPv6 raw
-        // socket and send Router Advertisements, so it runs through the
-        // capability launcher. `--ra-param=<bridge>,10,1800` sends an RA every
-        // 10s with a router lifetime of 1800s, installing the bridge (the host)
-        // as the guests' default router; `--dhcp-range=<prefix>,ra-only`
-        // advertises the on-link, autonomous prefix for SLAAC without handing
-        // out stateful leases.
-        // A second `--dhcp-range=<ipv4_prefix>.2,<ipv4_prefix>.254,...` enables
-        // stateful DHCPv4 on the group's IPv4 `/24` (the `.1` gateway lives on
-        // the bridge), which is what gives a VM's second NIC (the guest's
-        // `enp2s0`) an IPv4 address. `--port=0` disables the DNS service
-        // entirely. `dnsmasq` daemonizes (writing its pid-file) and is later
-        // signalled via that pid-file in teardown.
+        // socket and send RAs, so it runs through the capability launcher.
+        // `--ra-param=<bridge>,10,1800` sends an RA every 10s with a 1800s router
+        // lifetime; `--dhcp-range=<prefix>,ra-only` advertises the autonomous
+        // prefix for SLAAC without stateful leases. The second `--dhcp-range`
+        // enables stateful DHCPv4 on the IPv4 `/24` for the guest's second NIC
+        // (`enp2s0`). `--port=0` disables DNS. `dnsmasq` daemonizes (writing its
+        // pid-file) and is signalled via it in teardown.
         let user = current_username();
         let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
         let dnsmasq_script = format!(
@@ -814,9 +682,9 @@ impl LocalBackend {
         Ok(())
     }
 
-    /// Stop the group's `dnsmasq` RA daemon, if running. The daemon runs as the
-    /// current (unprivileged) user, so it can be signalled directly via the pid
-    /// recorded in its pid-file. Best-effort and idempotent.
+    /// Stop the group's `dnsmasq` RA daemon, if running. It runs as the current
+    /// user, so it is signalled directly via its pid-file. Best-effort and
+    /// idempotent.
     fn stop_ra_daemon(&self, bridge: &str) {
         let pid_path = self.dnsmasq_pid_path(bridge);
         if let Ok(contents) = std::fs::read_to_string(&pid_path)
@@ -858,10 +726,9 @@ impl LocalBackend {
             }
         }
 
-        // Delete every TAP enslaved to the bridge, then the bridge itself. The
-        // TAPs persist (they were created persistent in `start_vm`) until
-        // explicitly removed, so enumerate the bridge's slave interfaces via
-        // sysfs and delete each one before removing the bridge.
+        // Delete every TAP enslaved to the bridge, then the bridge itself. TAPs
+        // are persistent (created so in `start_vm`), so enumerate the bridge's
+        // slaves via sysfs and delete each before removing the bridge.
         let delete_script = format!(
             "for tap in $(ls /sys/class/net/{bridge}/brif 2>/dev/null); do \
                  ip link del \"$tap\" 2>/dev/null; \
@@ -901,9 +768,9 @@ impl LocalBackend {
             memory_ki_b: memory_kib,
         };
         // Cache the IPv6 in-process (currently write-only) and persist
-        // everything `start_vm` needs to disk, so a forked task subprocess —
-        // which holds a `connect_only` handle with empty in-memory state — can
-        // still start the VM (e.g. a test calling `vm.start()`).
+        // everything `start_vm` needs to disk, so a forked task subprocess
+        // (whose `connect_only` handle has empty in-memory state) can still start
+        // the VM.
         self.vm_ipv6
             .lock()
             .unwrap()
@@ -941,13 +808,11 @@ impl LocalBackend {
             let dst_name = format!("extra-{i}.img");
             let dst = vm_dir.join(&dst_name);
             extract_image(src, &dst, &self.logger)?;
-            // chmod 0600
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o600))?;
             paths.push(dst);
         }
         // Record the extra disks in the metadata persisted by `create_vm` so
-        // `start_vm` attaches them, including when it runs in a forked task
-        // subprocess.
+        // `start_vm` attaches them, even from a forked task subprocess.
         let mut meta = self.read_vm_meta(vm_name)?;
         meta.extra_disks = paths;
         self.write_vm_meta(vm_name, &meta)?;
@@ -957,10 +822,9 @@ impl LocalBackend {
     /// Build the libvirt domain XML for `vm_name` and start it.
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
         // Recover the per-VM state persisted by `create_vm` /
-        // `attach_disk_images`. Reading it from disk (instead of an in-memory
-        // cache) is what lets `start_vm` run from a forked task subprocess —
-        // e.g. a test calling `vm.start()` — whose `connect_only` handle has no
-        // in-memory record of the VM.
+        // `attach_disk_images`. Reading from disk (not an in-memory cache) lets
+        // `start_vm` run from a forked task subprocess whose `connect_only`
+        // handle has no in-memory record of the VM.
         let PersistedVm {
             primary_image,
             spec,
@@ -972,17 +836,12 @@ impl LocalBackend {
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)?;
         let primary_disk = vm_dir.join("primary.img");
-        // Only materialize the primary disk on first boot. On a subsequent
-        // `start_vm` — e.g. a test that stopped the VM via `vm().kill()`
-        // (`destroy_vm`) and restarted it via `vm().start()` — the extracted
-        // `primary.img` already exists and holds the node's persisted disk
-        // state: its data partition (crypto keys, registry local store,
-        // replicated/consensus state) and, crucially for upgrade tests, any
-        // GuestOS upgrade written to the previously-inactive root partition.
-        // Re-extracting the pristine image here would wipe all of that, so the
-        // node would come back as if freshly provisioned and never rejoin the
-        // subnet or become healthy again. Reuse the existing disk instead,
-        // mirroring how a real VM reboot preserves its disks.
+        // Only materialize the primary disk on first boot. On a later `start_vm`
+        // (e.g. a test that did `vm().kill()` then `vm().start()`) the extracted
+        // `primary.img` already exists and holds the node's persisted state.
+        // Re-extracting the pristine image would wipe it,
+        // so the node would come back as freshly provisioned and never rejoin.
+        // Reuse the existing disk, mirroring a real VM reboot.
         if !primary_disk.exists() {
             let local_src = match &primary_image {
                 DiskImage::Local { path, .. } => path.clone(),
@@ -1012,14 +871,12 @@ impl LocalBackend {
         let console_log = vm_dir.join("console.log");
         let uuid = vm_uuid(group_name, vm_name);
 
-        // Create the per-VM TAP, attach it to the group bridge, and bring it
-        // up — all via the [`net_admin`] capability launcher. `user ubuntu`
-        // (the current user) tags the TAP as owned by us, which is what lets
-        // an unprivileged QEMU (driven by session-mode libvirtd) open it. The
-        // domain XML references the TAP with `managed='no'`, so libvirt uses
-        // the existing device instead of trying to create one (which would
-        // require root). Creating it fresh each time (delete first) keeps this
-        // idempotent across a re-used domain name.
+        // Create the per-VM TAP, attach it to the group bridge, and bring it up
+        // via the [`net_admin`] launcher. `user <current>` tags the TAP as ours,
+        // letting an unprivileged QEMU (session-mode libvirtd) open it; the
+        // domain XML references it with `managed='no'` so libvirt uses the
+        // existing device instead of creating one (which needs root). Recreating
+        // it fresh (delete first) keeps this idempotent across a re-used domain.
         let tap = Self::tap_name(group_name, vm_name);
         let bridge = Self::bridge_name(group_name);
         let user = current_username();
@@ -1141,9 +998,8 @@ impl LocalBackend {
 
 impl Drop for LocalBackend {
     fn drop(&mut self) {
-        // libvirtd runs as the current user in session mode (no `sudo`
-        // wrapper), so the `Child` handle refers to the daemon itself and we
-        // can signal it directly.
+        // libvirtd runs as the current user in session mode (no `sudo`), so the
+        // `Child` handle refers to the daemon itself and we can signal it.
         if let Some(mut child) = self.libvirtd.take() {
             let _ = child.kill();
             let _ = child.wait();
