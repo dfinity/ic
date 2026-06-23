@@ -43,8 +43,8 @@ struct Args {
 
     /// How to deploy the GuestOS image (via full image or upgrade image).
     /// Upgrade image replaces just the root+boot partitions appointed by
-    /// guestos_target_boot_alternative and optionally wipes the corresponding var partition
-    /// (with --guestos_wipe_var_partition).
+    /// `--guestos-target-boot-alternative` and optionally wipes the corresponding var partition
+    /// (with `--guestos-wipe-var-partition`).
     #[arg(long, value_enum, requires = "guestos")]
     guestos_mode: Option<ImageType>,
 
