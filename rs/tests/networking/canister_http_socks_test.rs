@@ -8,7 +8,7 @@ cloud engine subnets).
 Runbook::
 1. Instantiate an IC with one application, one cloud engine and one system subnet with the HTTP feature enabled.
 2. Install NNS canisters
-3. Install the proxy canister on both subnets.
+3. Install the proxy canister on all subnets.
 4. Make a http outcall request to the IPv4 interface of the http server from the system subnet.
 5. Make a http outcall request to the IPv4 interface of the http server from the application subnet.
 6. Make a http outcall request to the IPv4 interface of the http server from the cloud engine.
