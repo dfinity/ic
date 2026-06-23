@@ -86,9 +86,7 @@ pub struct LocalBackend {
     /// is a direct child we can signal; the pid-file is used as a fallback for
     /// teardown from a connect-only handle in the finalize task.
     pid_path: Option<PathBuf>,
-    /// libvirt connection. `virt::Connect` is `Send + Sync` and all its
-    /// methods take `&self` (the underlying libvirt C API is thread-safe), so
-    /// no interior mutex is needed.
+    /// libvirt connection.
     connect: Connect,
     logger: Logger,
     /// Per-VM allocated IPv6, keyed by `vm_name`.
