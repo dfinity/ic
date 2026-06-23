@@ -398,10 +398,11 @@ pub trait HasPrometheus {
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
     ///
-    /// Return early if no prometheus_vm has been setup.
-    /// This allows this function to be used in a finalizer where no prometheus
-    /// server has been setup.
-    fn download_prometheus_data_dir_if_exists(&self);
+    /// Returns `true` if the data directory was downloaded and `false` if no
+    /// `PrometheusVm` has been setup. Returning early in the latter case allows
+    /// this function to be used in a finalizer where no prometheus server has
+    /// been setup.
+    fn download_prometheus_data_dir_if_exists(&self) -> bool;
 }
 
 impl HasPrometheus for TestEnv {
@@ -507,12 +508,12 @@ impl HasPrometheus for TestEnv {
         Ok(())
     }
 
-    fn download_prometheus_data_dir_if_exists(&self) {
+    fn download_prometheus_data_dir_if_exists(&self) -> bool {
         // Return early without failing if no prometheus VM has been deployed.
         // This allows this function to be called unconditionally when finalizing.
         let vm_name = String::from(PROMETHEUS_VM_NAME);
         let deployed_prometheus_vm = match self.get_deployed_universal_vm(&vm_name) {
-            Err(_) => return,
+            Err(_) => return false,
             Ok(deployed_prometheus_vm) => deployed_prometheus_vm,
         };
 
@@ -554,6 +555,7 @@ sudo systemctl start prometheus.service
 
         // scp the tarball to the local test environment.
         scp_recv_from(log, &session, &tarball_full_path, &destination);
+        true
     }
 }
 

@@ -95,6 +95,45 @@ if [ -n "$DC" ]; then
     export DC
 fi
 
+# Optionally sync Grafana dashboards from the dfinity-ops/k8s repo so they can be
+# provisioned on the Prometheus VM (see prometheus_vm.rs). This is enabled by setting
+# IC_DASHBOARDS_BRANCH to the desired branch of the k8s repo. The resulting directory is
+# exported as IC_DASHBOARDS_DIR which is read by the test driver (and forwarded to the
+# colocated UVM by colocate_test.rs). If IC_DASHBOARDS_DIR is already set (e.g. pointing
+# at a local clone) we use that directly and skip the checkout.
+if [ -n "${IC_DASHBOARDS_DIR:-}" ]; then
+    # A dashboards directory was provided directly. The driver is later executed with
+    # `env -C "$TEST_TMPDIR"`, so normalize a relative path to an absolute one now;
+    # otherwise it would be resolved against $TEST_TMPDIR and the dashboards wouldn't
+    # be found. Keep the original value if realpath fails (best-effort, non-fatal).
+    export IC_DASHBOARDS_DIR="$(realpath "$IC_DASHBOARDS_DIR" 2>/dev/null || echo "$IC_DASHBOARDS_DIR")"
+elif [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
+    dashboards_repo="$TEST_TMPDIR/k8s_dashboards"
+    rm -rf "$dashboards_repo" || true
+    echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
+    # Keep the clone fully non-interactive so it can't hang a Bazel run:
+    # - BatchMode disables password/passphrase prompts.
+    # - StrictHostKeyChecking=accept-new auto-accepts the host key on first contact
+    #   (but still rejects a changed key) instead of prompting to confirm it.
+    # - An isolated UserKnownHostsFile under $TEST_TMPDIR avoids touching or locking
+    #   the user's ~/.ssh/known_hosts. Its value is single-quoted because git runs
+    #   GIT_SSH_COMMAND through a shell, so a $TEST_TMPDIR containing spaces would
+    #   otherwise be split into multiple arguments.
+    # - ConnectTimeout + a single ConnectionAttempt bound how long we wait on
+    #   network/DNS issues so this best-effort sync fails fast instead of stalling.
+    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile='$TEST_TMPDIR/k8s_known_hosts' -oConnectTimeout=15 -oConnectionAttempts=1" \
+        git clone --depth 1 --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
+        git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
+        && git -C "$dashboards_repo" config core.sparseCheckout true \
+        && echo "bases/apps/ic-dashboards" >>"$dashboards_repo/.git/info/sparse-checkout" \
+        && git -C "$dashboards_repo" checkout HEAD; then
+        export IC_DASHBOARDS_DIR="$dashboards_repo/bases/apps/ic-dashboards"
+        echo "Synced Grafana dashboards to $IC_DASHBOARDS_DIR" >&2
+    else
+        echo "WARNING: failed to sync Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH'; continuing without them" >&2
+    fi
+fi
+
 exec \
     env -C "$TEST_TMPDIR" \
     "$(realpath $RUN_SCRIPT_TEST_EXECUTABLE)" \

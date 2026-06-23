@@ -34,8 +34,6 @@ iasl # to build OVMF
 ipmitool # to connect to baremetal test instances
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
- # Linked in by IC-OS binaries for creating mapped devices.
-libdevmapper-dev
 libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.

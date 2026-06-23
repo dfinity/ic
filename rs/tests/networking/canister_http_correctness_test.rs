@@ -44,6 +44,7 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    RegistryVersion,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
@@ -2718,6 +2719,7 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
+        RegistryVersion::from(1),
         &mut rand::thread_rng(),
     )
     .unwrap();

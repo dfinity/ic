@@ -365,6 +365,9 @@ system_test_nns(
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + (1 + 13) * 16 + 1 * 16,  # 14 IC Node VMs (1 system + 13 app) + 1 Jaeger UVM, 16 vCPUs each (resource override).
     enable_metrics = True,
+    env = {
+        "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "3600",
+    },
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
