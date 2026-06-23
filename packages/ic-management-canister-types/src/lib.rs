@@ -127,9 +127,10 @@ pub struct CanisterSettings {
     /// Default value: `5_000_000_000_000` (5 trillion cycles).
     pub reserved_cycles_limit: Option<Nat>,
     /// Indicates the minimum number of cycles required for an incoming call
-    /// from another canister. Calls with fewer cycles are rejected with a
-    /// `CanisterError` at no cycles cost to the callee. Ingress messages are not affected
-    /// (`canister_inspect_message` hook can be used to filter them, albeit only via non-replicated execution).
+    /// from a different canister. Calls from a different canister with fewer
+    /// cycles are rejected with a `CanisterError` at no cycles cost to the callee.
+    /// Self-calls (from the canister itself) and ingress messages are not affected
+    /// (`canister_inspect_message` hook can be used to filter ingress messages, albeit only via non-replicated execution).
     ///
     /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
     ///
@@ -191,7 +192,7 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Upper limit on [`CanisterStatusResult::reserved_cycles`] of the canister.
     pub reserved_cycles_limit: Nat,
-    /// Minimum number of cycles required for an incoming call from another canister.
+    /// Minimum number of cycles required for an incoming call from a different canister.
     pub minimum_incoming_canister_call_cycles: Nat,
     /// Visibility of canister logs.
     pub log_visibility: LogVisibility,

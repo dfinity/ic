@@ -557,10 +557,9 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
-    /// Minimum number of cycles required for an incoming call from another canister.
-    /// Calls with fewer cycles are rejected with a CanisterError at no cycles cost to the callee.
-    /// Ingress messages are not affected
-    /// (`canister_inspect_message` hook can be used to filter them, albeit only via non-replicated execution).
+    /// Minimum number of cycles required for an incoming call from a different canister.
+    /// Calls from a different canister with fewer cycles are rejected with a CanisterError at no cycles cost to the callee.
+    /// Self-calls (from the canister itself) and ingress messages are not affected.
     /// A value of 0 means no minimum is enforced.
     pub minimum_incoming_canister_call_cycles: Cycles,
 
