@@ -3,7 +3,7 @@ use crate::message_routing::{
     MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
-use ic_logger::{ReplicaLogger, error, warn};
+use ic_logger::{ReplicaLogger, debug, error, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::{
@@ -652,15 +652,25 @@ impl StreamBuilderImpl {
                         }
                         RequestOrResponse::Response(rep) => {
                             // A Response: discard it.
-                            error!(
-                                self.log,
-                                "{}: Discarding response, destination not found: {:?}",
-                                CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
-                                rep
-                            );
-                            self.metrics
-                                .critical_error_response_destination_not_found
-                                .inc();
+                            if rep.is_best_effort() && rep.refund.is_zero() {
+                                // Expected when the destination subnet has been deleted: bounded-wait
+                                // responses with no cycles refund can be safely discarded.
+                                debug!(
+                                    self.log,
+                                    "Discarding bounded-wait response, destination not found: {:?}",
+                                    rep
+                                );
+                            } else {
+                                error!(
+                                    self.log,
+                                    "{}: Discarding response, destination not found: {:?}",
+                                    CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
+                                    rep
+                                );
+                                self.metrics
+                                    .critical_error_response_destination_not_found
+                                    .inc();
+                            }
                         }
                     }
                 }

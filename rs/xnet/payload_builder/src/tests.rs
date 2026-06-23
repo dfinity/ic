@@ -27,6 +27,7 @@ use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNE
 use ic_types::state_manager::StateManagerError;
 use maplit::btreemap;
 use mockall::predicate::eq;
+use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn build_payload_no_subnets() {
@@ -530,6 +531,159 @@ impl PayloadBuilderTestFixture {
     pub fn slice_payload_size_stats(&self) -> HistogramStats {
         fetch_histogram_stats(&self.metrics, METRIC_SLICE_PAYLOAD_SIZE).unwrap()
     }
+}
+
+/// A minimal `XNetSlicePool` for testing: stores one slice per subnet and
+/// never garbage collects (neither `garbage_collect` nor `garbage_collect_slice`
+/// removes or trims slices).
+struct TestSlicePool(Mutex<BTreeMap<SubnetId, CertifiedStreamSlice>>);
+
+impl XNetSlicePool for TestSlicePool {
+    fn take_slice(
+        &self,
+        subnet_id: SubnetId,
+        _begin: Option<&ExpectedIndices>,
+        _msg_limit: Option<usize>,
+        _byte_limit: Option<usize>,
+    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
+        Ok(self.0.lock().unwrap().remove(&subnet_id).map(|s| (s, 1)))
+    }
+
+    fn observe_pool_size_bytes(&self) {}
+
+    fn garbage_collect(&self, _: BTreeMap<SubnetId, ExpectedIndices>) {}
+
+    fn garbage_collect_slice(&self, _: SubnetId, _: ExpectedIndices) {}
+}
+
+/// `get_xnet_payload` must not include a slice from a deleted subnet even if
+/// the pool contains one (e.g., populated just before deletion). The deleted
+/// subnet is absent from `expected_stream_indices`, so it is never iterated
+/// over during payload assembly and never appears in the result.
+#[tokio::test]
+async fn get_xnet_payload_excludes_deleted_subnet_slice() {
+    with_test_replica_logger(|log| {
+        // State with an outgoing stream to SUBNET_2 committed at CERTIFIED_HEIGHT.
+        let state_manager = Arc::new(FakeStateManager::new());
+        put_replicated_state_for_testing(
+            state_manager.as_ref(),
+            btreemap! {
+                SUBNET_2 => generate_stream(&StreamConfig {
+                    message_begin: 0,
+                    message_end: 5,
+                    signal_end: 3,
+                }),
+            },
+        );
+
+        // Seed the pool with SUBNET_2's slice, simulating a pool populated just
+        // before SUBNET_2 was deleted from the registry.
+        let slice = make_certified_stream_slice(
+            SUBNET_2,
+            StreamConfig {
+                message_begin: 3,
+                message_end: 5,
+                signal_end: 3,
+            },
+        );
+        let slice_pool = Box::new(TestSlicePool(Mutex::new(btreemap! { SUBNET_2 => slice })));
+
+        // Registry with only SUBNET_1; SUBNET_2 is absent (deleted).
+        let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+
+        let metrics_registry = MetricsRegistry::new();
+        let (refill_trigger, _refill_receiver) = tokio::sync::mpsc::channel(1);
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            registry as Arc<_>,
+            Arc::new(None),
+            None,
+            slice_pool,
+            RefillTaskHandle(Mutex::new(refill_trigger)),
+            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            log,
+        )
+        .with_count_bytes_fn(|_| Ok(1));
+
+        let validation_context = get_validation_context_for_test();
+        let (payload, _) =
+            xnet_payload_builder.get_xnet_payload(&validation_context, &[], PAYLOAD_BYTES_LIMIT);
+
+        assert!(
+            !payload.stream_slices.contains_key(&SUBNET_2),
+            "deleted SUBNET_2's slice must not appear in the payload"
+        );
+    });
+}
+
+/// A payload containing a certified stream slice from a deleted subnet (absent
+/// from the registry at the block's registry version) must be rejected by
+/// `validate_xnet_payload`, even if the deleted subnet still had a non-empty
+/// stream of messages to deliver.
+///
+/// This is the key invariant that makes `discard_streams_for_deleted_subnets`
+/// safe: no block can carry a certified slice from the deleted subnet after
+/// deletion takes effect, so after the outgoing stream is discarded, no new
+/// certified stream slices from the deleted subnet can be pulled and refer to
+/// the deleted outgoing stream.
+#[tokio::test]
+async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
+    with_test_replica_logger(|log| {
+        // State with an outgoing stream to SUBNET_2 (prior communication before
+        // its deletion) committed at CERTIFIED_HEIGHT.
+        let state_manager = FakeStateManager::new();
+        put_replicated_state_for_testing(
+            &state_manager,
+            btreemap! {
+                SUBNET_2 => generate_stream(&StreamConfig {
+                    message_begin: 0,
+                    message_end: 5,
+                    signal_end: 3,
+                }),
+            },
+        );
+
+        // Registry with only SUBNET_1; SUBNET_2 is absent (deleted).
+        let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+        let state_manager = Arc::new(state_manager);
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new(
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::new(MockTlsConfig::new()) as Arc<_>,
+            registry,
+            tokio::runtime::Handle::current(),
+            LOCAL_NODE,
+            LOCAL_SUBNET,
+            &MetricsRegistry::new(),
+            log,
+        )
+        .with_count_bytes_fn(|_| Ok(1));
+
+        let validation_context = get_validation_context_for_test();
+
+        // Payload with SUBNET_2's certified slice: messages 3..5 still to deliver
+        // (it GCed 0..3 after A sent signals), signals_end = 3.
+        let payload = XNetPayload {
+            stream_slices: btreemap! {
+                SUBNET_2 => make_certified_stream_slice(
+                    SUBNET_2,
+                    StreamConfig {
+                        message_begin: 3,
+                        message_end: 5,
+                        signal_end: 3,
+                    },
+                ),
+            },
+        };
+
+        assert_matches!(
+            xnet_payload_builder.validate_xnet_payload(&payload, &validation_context, &[]),
+            Err(ValidationError::InvalidArtifact(
+                InvalidXNetPayload::InvalidSlice(_)
+            ))
+        );
+    });
 }
 
 /// CloudEngine subnets now participate in XNet. At the unit level this checks

@@ -876,6 +876,27 @@ impl ReplicatedState {
         self.metadata.streams.get(destination_subnet_id)
     }
 
+    /// Discards streams to subnets no longer present in the network topology.
+    ///
+    /// Safe to call because the XNet payload builder excludes deleted subnets
+    /// from the set of subnets it pulls slices for, and XNet payload validation
+    /// verifies certified stream slices against the block's registry version:
+    /// a slice from a deleted subnet fails validation so no slice from the
+    /// deleted subnet can appear in a block at a registry version where the
+    /// subnet is deleted. After the outgoing stream is dropped, no new
+    /// certified stream slices from the deleted subnet can be pulled and refer
+    /// to the deleted outgoing stream.
+    pub fn discard_streams_for_deleted_subnets(&mut self) {
+        let mut streams = self.take_streams();
+        streams.retain(|subnet_id, _| {
+            self.metadata
+                .network_topology
+                .subnets()
+                .contains_key(subnet_id)
+        });
+        self.put_streams(streams);
+    }
+
     /// Returns the sum of reserved compute allocations of all currently
     /// available canisters.
     ///
