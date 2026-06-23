@@ -1187,6 +1187,3 @@ struct GuestVmTemplate {
     mac_address_ipv4: String,
     tap_name_ipv4: String,
 }
-
-// `vm_ipv6` is currently a write-only cache; future operations (e.g. ARP
-// pre-population) will read it.
