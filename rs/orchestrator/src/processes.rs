@@ -362,9 +362,11 @@ impl IcBoundaryManager {
                         IcBoundaryProcess::NAME,
                         err
                     );
+                } else {
+                    // Only update the current domain name if we successfully started ic-boundary,
+                    // so that we can retry on the next call.
+                    self.current_domain_name = Some(domain_name);
                 }
-
-                self.current_domain_name = Some(domain_name);
             }
             // ic-boundary should not start when the node doesn't have a domain name
             Ok(None) => {
@@ -380,8 +382,12 @@ impl IcBoundaryManager {
                         IcBoundaryProcess::NAME,
                         err
                     );
+                } else {
+                    // Only clear the current domain name if we successfully stopped ic-boundary,
+                    // so that we correctly detect we should first retry to stop it in case we get
+                    // a new domain name in a next call.
+                    self.current_domain_name = None;
                 }
-                self.current_domain_name = None;
             }
             // Failing to read the registry
             Err(err) => warn!(self.logger, "Failed to fetch domain name: {}", err),
