@@ -2,10 +2,10 @@
 Utilities for building IC replica and canisters.
 """
 
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
 _COMPRESS_CONCURRENCY = 16

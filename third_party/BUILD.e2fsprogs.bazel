@@ -40,9 +40,6 @@ configure_make(
         "LDFLAGS": "-static -L$$EXT_BUILD_DEPS/lib",
     },
     lib_source = ":all_srcs",
-    deps = [
-        "@libfuse//:libfuse",
-    ],
     out_binaries = [
         "fuse2fs",
         "mke2fs",
@@ -68,6 +65,9 @@ configure_make(
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
+    ],
+    deps = [
+        "@libfuse",
     ],
 )
 
