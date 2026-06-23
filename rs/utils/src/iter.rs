@@ -1,5 +1,6 @@
 //! Iterator helpers.
 
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 
 /// Performs a left outer join of two key-value iterators.
@@ -26,12 +27,16 @@ use std::cmp::Ordering;
 ///     ]
 /// );
 /// ```
-pub fn left_outer_join<'l, 'r, L, R, K, LV, RV>(left: L, right: R) -> LeftOuterJoin<L, R, K, LV, RV>
+pub fn left_outer_join<'l, 'r, L, R, K, LV, RK, RV>(
+    left: L,
+    right: R,
+) -> LeftOuterJoin<L, R, K, LV, RK, RV>
 where
     L: Iterator<Item = (K, LV)>,
-    R: Iterator<Item = (K, RV)>,
+    R: Iterator<Item = (RK, RV)>,
     K: Ord + 'l + 'r,
     LV: 'l,
+    RK: Borrow<K>,
     RV: 'r,
 {
     let mut right_iter = right;
@@ -44,22 +49,24 @@ where
 }
 
 /// Iterator produced by `left_outer_join`.
-pub struct LeftOuterJoin<L, R, K, LV, RV>
+pub struct LeftOuterJoin<L, R, K, LV, RK, RV>
 where
     L: Iterator<Item = (K, LV)>,
-    R: Iterator<Item = (K, RV)>,
+    R: Iterator<Item = (RK, RV)>,
     K: Ord,
+    RK: Borrow<K>,
 {
     left: L,
     right: R,
-    right_peek: Option<(K, RV)>,
+    right_peek: Option<(RK, RV)>,
 }
 
-impl<L, R, K, LV, RV> Iterator for LeftOuterJoin<L, R, K, LV, RV>
+impl<L, R, K, LV, RK, RV> Iterator for LeftOuterJoin<L, R, K, LV, RK, RV>
 where
     L: Iterator<Item = (K, LV)>,
-    R: Iterator<Item = (K, RV)>,
+    R: Iterator<Item = (RK, RV)>,
     K: Ord,
+    RK: Borrow<K>,
 {
     type Item = (K, LV, Option<RV>);
 
@@ -70,7 +77,7 @@ where
             let right_cmp = self
                 .right_peek
                 .as_ref()
-                .map(|(right_key, _)| right_key.cmp(&left_key));
+                .map(|(right_key, _)| right_key.borrow().cmp(&left_key));
 
             match right_cmp {
                 None => {

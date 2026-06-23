@@ -280,8 +280,7 @@ impl InternalHttpQueryHandler {
                     let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
-                        state.get_ref().get_own_subnet_size(),
-                        state.get_ref().get_own_cost_schedule(),
+                        state.get_ref().get_own_subnet_cycles_config(),
                         ready_for_migration,
                         state.get_ref().get_own_subnet_admins(),
                     )?;
