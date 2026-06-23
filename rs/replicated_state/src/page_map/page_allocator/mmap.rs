@@ -19,13 +19,17 @@ use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+// TODO(EXC-XXXX): MADV_HUGEPAGE disabled; these are temporarily unused.
 #[cfg(target_os = "linux")]
+#[allow(unused_imports)]
 use ic_sys::HUGE_PAGE_SIZE;
 #[cfg(target_os = "linux")]
+#[allow(unused_imports)]
 use ic_types::NumOsPages;
 /// The minimum number of huge pages where the actual huge page optimization
 /// will kick in. This corresponds to 64 MiB of memory (because the huge page size is 2 MiB)
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
 const MIN_PAGES_TO_FREE: usize = 10000;
@@ -622,28 +626,33 @@ impl MmapBasedPageAllocatorCore {
             )
         }) as *mut u8;
 
+        // TODO(EXC-XXXX): Disabled MADV_HUGEPAGE to work around a suspected
+        // kernel 6.17 regression where MADV_REMOVE (hole-punching) on large
+        // folios in shmem-backed memfd mappings can silently zero adjacent
+        // pages, causing PageValidation assertion failures and replica crashes.
+        //
         // Do madvise transparent huge page performance optimization only on Linux.
-        #[cfg(target_os = "linux")]
-        {
-            // Huge pages are 2MiB on x86_64. We only use huge pages for
-            // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION huge pages (i.e., 64 MiB).
-            if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
-                unsafe {
-                    madvise(
-                        mmap_ptr as *mut c_void,
-                        mmap_size,
-                        MmapAdvise::MADV_HUGEPAGE,
-                    )
-                }.unwrap_or_else(|err| {
-                    // We don't need to panic, madvise failing is not a problem,
-                    // it will only mean that we are not using huge pages.
-                    println!(
-                    "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",
-                    mmap_size, mmap_ptr, self.file_descriptor, err
-                    )
-                });
-            }
-        }
+        // #[cfg(target_os = "linux")]
+        // {
+        //     // Huge pages are 2MiB on x86_64. We only use huge pages for
+        //     // memory allocations that are at least MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION huge pages (i.e., 64 MiB).
+        //     if mmap_size >= MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION.get() as usize * HUGE_PAGE_SIZE {
+        //         unsafe {
+        //             madvise(
+        //                 mmap_ptr as *mut c_void,
+        //                 mmap_size,
+        //                 MmapAdvise::MADV_HUGEPAGE,
+        //             )
+        //         }.unwrap_or_else(|err| {
+        //             // We don't need to panic, madvise failing is not a problem,
+        //             // it will only mean that we are not using huge pages.
+        //             println!(
+        //             "MmapPageAllocator failed to madvise {} bytes at address {:?} for memory file #{}: {}",
+        //             mmap_size, mmap_ptr, self.file_descriptor, err
+        //             )
+        //         });
+        //     }
+        // }
 
         self.chunks.push(Chunk {
             ptr: mmap_ptr,
