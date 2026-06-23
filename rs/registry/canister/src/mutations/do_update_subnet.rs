@@ -406,7 +406,7 @@ pub struct UpdateSubnetPayload {
 /// Input type for `update_subnet` canister method.
 /// Same as `UpdateSubnetPayload` but with `SubnetFeaturesV2` (all `Option<bool>`) for `features`.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct UpdateSubnetArg {
+pub struct UpdateSubnetPayloadV2 {
     pub subnet_id: SubnetId,
 
     pub max_ingress_bytes_per_message: Option<u64>,
@@ -451,8 +451,8 @@ pub struct UpdateSubnetArg {
     pub set_gossip_config_to_default: bool,
 }
 
-impl From<UpdateSubnetArg> for UpdateSubnetPayload {
-    fn from(arg: UpdateSubnetArg) -> Self {
+impl From<UpdateSubnetPayloadV2> for UpdateSubnetPayload {
+    fn from(arg: UpdateSubnetPayloadV2) -> Self {
         Self {
             subnet_id: arg.subnet_id,
             max_ingress_bytes_per_message: arg.max_ingress_bytes_per_message,

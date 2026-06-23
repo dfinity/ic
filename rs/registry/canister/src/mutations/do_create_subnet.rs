@@ -330,7 +330,7 @@ pub struct CreateSubnetPayload {
 /// Input type for `create_subnet` canister method.
 /// Same as `CreateSubnetPayload` but with `SubnetFeaturesV2` (all `Option<bool>`) for `features`.
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct CreateSubnetArg {
+pub struct CreateSubnetPayloadV2 {
     pub node_ids: Vec<NodeId>,
 
     pub subnet_id_override: Option<PrincipalId>,
@@ -378,8 +378,8 @@ pub struct CreateSubnetArg {
     pub gossip_retransmission_request_ms: u32,
 }
 
-impl From<CreateSubnetArg> for CreateSubnetPayload {
-    fn from(arg: CreateSubnetArg) -> Self {
+impl From<CreateSubnetPayloadV2> for CreateSubnetPayload {
+    fn from(arg: CreateSubnetPayloadV2) -> Self {
         Self {
             node_ids: arg.node_ids,
             subnet_id_override: arg.subnet_id_override,

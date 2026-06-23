@@ -92,7 +92,7 @@ type SubnetFeaturesV2 = record {
   sev_enabled : opt bool;
 };
 
-type CreateSubnetPayload = record {
+type CreateSubnetPayloadV2 = record {
   unit_delay_millis : nat64;
   features : SubnetFeaturesV2;
   max_ingress_bytes_per_message : nat64;
@@ -500,7 +500,7 @@ type UpdateSshReadOnlyAccessForAllUnassignedNodesPayload = record {
   ssh_readonly_keys : vec text;
 };
 
-type UpdateSubnetPayload = record {
+type UpdateSubnetPayloadV2 = record {
   unit_delay_millis : opt nat64;
   max_duplicity : opt nat32;
   features : opt SubnetFeaturesV2;
@@ -625,7 +625,7 @@ service : {
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> ();
-  create_subnet : (CreateSubnetPayload) -> (CreateSubnetResponse);
+  create_subnet : (CreateSubnetPayloadV2) -> (CreateSubnetResponse);
   delete_subnet : (DeleteSubnetPayload) -> (DeleteSubnetResponse);
   deploy_guestos_to_all_subnet_nodes : (
     DeployGuestosToAllSubnetNodesPayload
@@ -676,7 +676,7 @@ service : {
   update_ssh_readonly_access_for_all_unassigned_nodes : (
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
-  update_subnet : (UpdateSubnetPayload) -> ();
+  update_subnet : (UpdateSubnetPayloadV2) -> ();
   update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
   swap_node_in_subnet_directly : (SwapNodeInSubnetDirectlyPayload) -> ();
