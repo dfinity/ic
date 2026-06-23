@@ -1028,10 +1028,15 @@ fn vm_mac_ipv4(group_name: &str, vm_name: &str) -> MacAddr6 {
     [0x6a, 0x01, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
-/// Deterministic UUID for a `(group, vm)` pair.
+/// Deterministic, RFC 9562 name-based UUIDv8 for a `(group, vm)` pair.
 fn vm_uuid(group_name: &str, vm_name: &str) -> String {
     use ic_crypto_sha2::Sha256;
-    let hash = Sha256::hash(format!("uuid/{group_name}/{vm_name}").as_bytes());
+    let mut hash = Sha256::hash(format!("uuid/{group_name}/{vm_name}").as_bytes());
+    // Overwrite the only bits RFC 9562 fixes for UUIDv8: the version in the high
+    // nibble of octet 6 (-> 0x8) and the variant in the top two bits of octet 8
+    // (-> 0b10). The remaining 122 bits stay as SHA-256 output.
+    hash[6] = (hash[6] & 0x0f) | 0x80;
+    hash[8] = (hash[8] & 0x3f) | 0x80;
     format!(
         "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
         hash[0],
