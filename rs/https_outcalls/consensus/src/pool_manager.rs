@@ -3674,7 +3674,7 @@ pub mod test {
                     })
                     .collect::<Vec<_>>();
 
-                for (subnet_type, expected) in cases {
+                for (subnet_type, mut expected) in cases {
                     let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                         Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::<
                             CanisterHttpRequest,
@@ -3694,7 +3694,6 @@ pub mod test {
 
                     let mut actual = pool_manager.get_socks_proxy_addrs();
                     actual.sort();
-                    let mut expected = expected.clone();
                     expected.sort();
 
                     assert_eq!(
