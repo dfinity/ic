@@ -34,7 +34,7 @@ use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use virt::connect::Connect;
 use virt::domain::Domain;
@@ -64,10 +64,7 @@ impl TestEnvAttribute for LocalBackendSocket {
 /// libvirtd (and therefore one socket) per `bazel test` invocation, and the
 /// registry is a process-local `static`, so a single slot suffices: every
 /// `from_test_env` call in a process resolves to the same backend.
-fn registry() -> &'static Mutex<Option<Arc<LocalBackend>>> {
-    static REG: OnceLock<Mutex<Option<Arc<LocalBackend>>>> = OnceLock::new();
-    REG.get_or_init(|| Mutex::new(None))
-}
+static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 
 /// Per-test handle that owns a libvirtd subprocess (in the setup process only)
 /// and a `virt::Connect`.
@@ -142,7 +139,7 @@ impl LocalBackend {
     /// In both cases the returned `Arc` is cached in a single process-wide
     /// slot, so repeated calls within the same process share state.
     pub fn from_test_env(env: &TestEnv) -> Result<Arc<LocalBackend>> {
-        let mut reg = registry().lock().unwrap();
+        let mut reg = REGISTRY.lock().unwrap();
         if let Some(b) = reg.as_ref() {
             return Ok(b.clone());
         }
