@@ -108,6 +108,16 @@ pub fn construction_combine(
         .map_err(|err| Error::processing_construction_failed(&err))
 }
 
+/// Validate the caller-provided ingress window before it is expanded into a
+/// list of ingress expiries.
+///
+/// NOTE: currently a no-op (see DEFI-2902). The 24-hour bound is enforced in a
+/// follow-up commit; this seam exists so the reported (unbounded) behavior can
+/// be characterized by a regression test first.
+fn validate_ingress_window(_now: u64, _ingress_start: u64, _ingress_end: u64) -> Result<(), Error> {
+    Ok(())
+}
+
 pub fn construction_payloads(
     operations: Vec<Operation>,
     metadata: Option<ConstructionPayloadsRequestMetadata>,
@@ -156,6 +166,8 @@ pub fn construction_payloads(
             "Ingress end should be at least one interval from the current time: Current time: {now}, End: {ingress_end}"
         )));
     }
+
+    validate_ingress_window(now, ingress_start, ingress_end)?;
 
     // Every ingress message sent to the IC has an expiry timestamp until which the signature associated with that message is valid
     // To support a longer overall timeframe than one interval, we can send multiple ingress messages with two signable contents each
@@ -260,6 +272,32 @@ mod tests {
 
     const NUM_TEST_CASES: u32 = 100;
     const NUM_BLOCKS: usize = 1;
+
+    const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
+    // A realistic "now" (~2023) that is well away from the u64 boundary.
+    const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
+
+    // Vector A (ICPBB-134): a window far larger than the documented 24h bound is
+    // currently accepted, because no bound is enforced before the loop.
+    #[test]
+    fn oversized_ingress_window_is_currently_accepted() {
+        assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + 48 * HOUR_NANOS).is_ok());
+    }
+
+    // Vector A' (ICPBB-134): a tiny start with a near-`u64::MAX` end (an enormous
+    // span) is currently accepted.
+    #[test]
+    fn unbounded_ingress_span_is_currently_accepted() {
+        assert!(validate_ingress_window(NOW_NANOS, 0, u64::MAX).is_ok());
+    }
+
+    // Vector B (ICPBB-134): the near-`u64::MAX` wrap payload is currently accepted.
+    #[test]
+    fn near_u64_max_ingress_window_is_currently_accepted() {
+        assert!(
+            validate_ingress_window(NOW_NANOS, u64::MAX - 50 * 1_000_000_000, u64::MAX).is_ok()
+        );
+    }
 
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {
         let principal_id = key_pair.generate_principal_id().unwrap();
