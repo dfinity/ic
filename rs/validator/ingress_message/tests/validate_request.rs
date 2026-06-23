@@ -2240,10 +2240,14 @@ mod delegation_permissions {
     fn should_reject_all_request_types_when_delegation_permissions_unsupported() {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        // Note that "updates" is deliberately unsupported: the supported
-        // vocabulary is "queries" (queries only) and "all" (queries,
-        // replicated queries, and updates).
-        for unsupported in ["writes", "updates", ""] {
+        // The only supported values are "queries" (queries only) and "all"
+        // (queries, replicated queries, and updates). Everything else is
+        // rejected, including "updates" (a plausible-looking value), the
+        // empty string, and case/whitespace variants of the supported
+        // values (matching is exact).
+        for unsupported in [
+            "writes", "updates", "", "QUERIES", "queries ", " queries", "All", "all ",
+        ] {
             let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
                 .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, unsupported)
                 .build();
@@ -2308,6 +2312,57 @@ mod delegation_permissions {
             .with_authentication(AuthenticationScheme::Delegation(chain))
             .build();
         assert_eq!(verifier.validate_request(&query), Ok(()));
+    }
+
+    #[test]
+    fn should_apply_both_targets_and_permissions_restrictions_in_a_chain() {
+        let rng = &mut reproducible_rng();
+        let verifier = verifier_at_time(CURRENT_TIME).build();
+        let requested_canister_id = CanisterId::from(42);
+        // A chain that restricts the targets in one delegation and the
+        // permissions in another: both restrictions must apply.
+        let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_targets(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                vec![requested_canister_id, CanisterId::from(43)],
+            )
+            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "queries")
+            .build();
+
+        // Update call to an in-target canister: rejected by the queries-only
+        // restriction (the target is satisfied, so it is the permissions
+        // restriction firing, not the target one).
+        let update = HttpRequestBuilder::new_update_call()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&update),
+            Err(RequestValidationError::UpdateCallNotPermittedByDelegation)
+        );
+
+        // Query to an in-target canister: permitted (queries are allowed and
+        // the target matches).
+        let query_in_targets = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+            .build();
+        assert_eq!(verifier.validate_request(&query_in_targets), Ok(()));
+
+        // Query to an out-of-target canister: rejected by the targets
+        // restriction, which applies alongside the permissions restriction.
+        let query_out_of_targets = HttpRequestBuilder::new_query()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_canister_id(Blob(CanisterId::from(44).get().to_vec()))
+            .with_authentication(AuthenticationScheme::Delegation(chain))
+            .build();
+        assert_matches!(
+            verifier.validate_request(&query_out_of_targets),
+            Err(RequestValidationError::CanisterNotInDelegationTargets(_))
+        );
     }
 }
 

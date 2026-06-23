@@ -705,7 +705,7 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
             enum Outcome {
                 /// Query and read_state succeed; update calls are rejected
                 /// with an error whose text contains the given substring.
-                QueriesOnly { update_err: &'static str },
+                QueriesOnly { err: &'static str },
                 /// All request kinds succeed.
                 All,
                 /// All request kinds are rejected with an error whose text
@@ -729,7 +729,7 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                     note: "single delegation restricted to queries",
                     permissions: vec![Some("queries")],
                     outcome: Outcome::QueriesOnly {
-                        update_err: update_not_permitted,
+                        err: update_not_permitted,
                     },
                 },
                 PermissionsTest {
@@ -741,14 +741,14 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                     note: "queries restriction in the first of two delegations",
                     permissions: vec![Some("queries"), None],
                     outcome: Outcome::QueriesOnly {
-                        update_err: update_not_permitted,
+                        err: update_not_permitted,
                     },
                 },
                 PermissionsTest {
                     note: "queries restriction in the second of two delegations",
                     permissions: vec![Some("all"), Some("queries")],
                     outcome: Outcome::QueriesOnly {
-                        update_err: update_not_permitted,
+                        err: update_not_permitted,
                     },
                 },
                 PermissionsTest {
@@ -837,16 +837,7 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                     .await;
                     match scenario.outcome {
                         Outcome::All => response.expect_update_ok(api_ver),
-                        Outcome::QueriesOnly { update_err } => {
-                            assert_eq!(
-                                response.status(),
-                                400,
-                                "Scenario {} (update) using v{api_ver} unexpectedly succeeded",
-                                scenario.note
-                            );
-                            response.expect_text_error(update_err);
-                        }
-                        Outcome::Invalid { err } => {
+                        Outcome::QueriesOnly { err } | Outcome::Invalid { err } => {
                             assert_eq!(
                                 response.status(),
                                 400,
@@ -1748,11 +1739,8 @@ fn create_delegations_with_targets(
             let delegation = if targets[i - 1].is_empty() {
                 Delegation::new(identities[i].public_key_der(), delegation_expiry)
             } else {
-                Delegation::new_with_targets(
-                    identities[i].public_key_der(),
-                    delegation_expiry,
-                    targets[i - 1].clone(),
-                )
+                Delegation::new(identities[i].public_key_der(), delegation_expiry)
+                    .with_targets(targets[i - 1].clone())
             };
 
             let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
@@ -1775,11 +1763,8 @@ fn create_delegations_with_permissions(
 
     for i in 1..=delegation_count {
         let delegation = match permissions[i - 1] {
-            Some(permissions) => Delegation::new_with_permissions(
-                identities[i].public_key_der(),
-                delegation_expiry,
-                permissions.to_string(),
-            ),
+            Some(permissions) => Delegation::new(identities[i].public_key_der(), delegation_expiry)
+                .with_permissions(permissions.to_string()),
             None => Delegation::new(identities[i].public_key_der(), delegation_expiry),
         };
 

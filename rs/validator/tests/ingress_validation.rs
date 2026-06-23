@@ -37,7 +37,7 @@ fn delegation_signed_bytes() {
 
 #[test]
 fn delegation_with_targets_signed_bytes() {
-    let d = Delegation::new_with_targets(vec![1, 2, 3], UNIX_EPOCH, vec![canister_test_id(1)]);
+    let d = Delegation::new(vec![1, 2, 3], UNIX_EPOCH).with_targets(vec![canister_test_id(1)]);
 
     let mut expected_signed_bytes = Vec::new();
     expected_signed_bytes.extend_from_slice(b"\x1Aic-request-auth-delegation");
@@ -73,7 +73,7 @@ fn delegation_with_targets_signed_bytes() {
 
 #[test]
 fn delegation_with_permissions_signed_bytes() {
-    let d = Delegation::new_with_permissions(vec![1, 2, 3], UNIX_EPOCH, "queries".to_string());
+    let d = Delegation::new(vec![1, 2, 3], UNIX_EPOCH).with_permissions("queries".to_string());
 
     let mut expected_signed_bytes = Vec::new();
     expected_signed_bytes.extend_from_slice(b"\x1Aic-request-auth-delegation");

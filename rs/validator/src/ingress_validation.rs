@@ -106,8 +106,9 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
     /// * If the request specifies a `CanisterId` (see `HasCanisterId`),
     ///   then it must be among the set of canister IDs that are common to all delegations.
     /// * Every delegation's `permissions` field (if any) holds a supported value
-    ///   (`"queries"` or `"all"`). If the request is an update call, no delegation
-    ///   restricts the sender to query calls (`permissions = "queries"`).
+    ///   (`"queries"` or `"all"`). If the request is submitted to `/call` (an update
+    ///   call or replicated query), no delegation restricts the sender to query calls
+    ///   (`permissions = "queries"`).
     ///
     /// The following signatures (for signing the request or any delegation) are supported
     /// (see the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures)):
@@ -147,27 +148,18 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_ingress_expiry(request, current_time)?;
-        validate_nonce(request)?;
-        let restrictions = validate_user_id_and_signature(
+        let restrictions = validate_request_content(
+            request,
             self.validator.as_ref(),
-            &request.sender(),
-            &request.id(),
-            match request.authentication() {
-                Authentication::Anonymous => None,
-                Authentication::Authenticated(signature) => Some(signature),
-            },
             current_time,
             root_of_trust_provider,
         )?;
-        // Reject update calls that a delegation restricts to query calls
-        // before performing potentially expensive canister signature
-        // verification of the sender info: such calls are rejected either
-        // way, so the delegation-based rejection takes precedence over an
-        // invalid sender info.
+        // A request to a `/call` endpoint (an update call or a replicated
+        // query) is rejected if a delegation in the chain restricts the
+        // sender to query calls.
         if restrictions.queries_only {
             return Err(UpdateCallNotPermittedByDelegation);
         }
-        validate_sender_info(request, self.validator.as_ref(), root_of_trust_provider)?;
         validate_request_target(request, &restrictions.targets)?;
         Ok(restrictions.targets)
     }

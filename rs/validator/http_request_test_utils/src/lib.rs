@@ -527,7 +527,7 @@ impl DirectAuthenticationScheme {
         expiration: Time,
         targets: Vec<CanisterId>,
     ) -> SignedDelegation {
-        let delegation = Delegation::new_with_targets(other.public_key_der(), expiration, targets);
+        let delegation = Delegation::new(other.public_key_der(), expiration).with_targets(targets);
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
@@ -540,11 +540,8 @@ impl DirectAuthenticationScheme {
         expiration: Time,
         permissions: &str,
     ) -> SignedDelegation {
-        let delegation = Delegation::new_with_permissions(
-            other.public_key_der(),
-            expiration,
-            permissions.to_string(),
-        );
+        let delegation = Delegation::new(other.public_key_der(), expiration)
+            .with_permissions(permissions.to_string());
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
@@ -714,7 +711,7 @@ impl SignedDelegationBuilder {
     pub fn build(self) -> SignedDelegation {
         let delegation = match self.targets {
             Some(canister_ids) => {
-                Delegation::new_with_targets(self.pubkey, self.expiration, canister_ids)
+                Delegation::new(self.pubkey, self.expiration).with_targets(canister_ids)
             }
             None => Delegation::new(self.pubkey, self.expiration),
         };

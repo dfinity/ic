@@ -557,22 +557,18 @@ impl Delegation {
         }
     }
 
-    pub fn new_with_targets(pubkey: Vec<u8>, expiration: Time, targets: Vec<CanisterId>) -> Self {
-        Self {
-            pubkey: Blob(pubkey),
-            expiration,
-            targets: Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect()),
-            permissions: None,
-        }
+    /// Restricts the delegation to the given canister targets. Chainable
+    /// with [`Self::with_permissions`] to build a delegation carrying both.
+    pub fn with_targets(mut self, targets: Vec<CanisterId>) -> Self {
+        self.targets = Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect());
+        self
     }
 
-    pub fn new_with_permissions(pubkey: Vec<u8>, expiration: Time, permissions: String) -> Self {
-        Self {
-            pubkey: Blob(pubkey),
-            expiration,
-            targets: None,
-            permissions: Some(permissions),
-        }
+    /// Restricts the kinds of calls the delegation permits. Chainable with
+    /// [`Self::with_targets`] to build a delegation carrying both.
+    pub fn with_permissions(mut self, permissions: String) -> Self {
+        self.permissions = Some(permissions);
+        self
     }
 
     pub fn pubkey(&self) -> &Vec<u8> {

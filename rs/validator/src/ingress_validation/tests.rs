@@ -179,7 +179,7 @@ fn plain_authentication_with_one_scoped_delegation() {
         base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
     )
     .unwrap();
-    let delegation = Delegation::new_with_targets(pk2, UNIX_EPOCH, vec![canister_test_id(1)]);
+    let delegation = Delegation::new(pk2, UNIX_EPOCH).with_targets(vec![canister_test_id(1)]);
 
     // Signature of sk1 for the delegation above.
     let delegation_signature = base64::decode(
@@ -234,7 +234,7 @@ mod delegation_permissions {
 
         let delegation = match permissions {
             Some(permissions) => {
-                Delegation::new_with_permissions(session_pk, UNIX_EPOCH, permissions.to_string())
+                Delegation::new(session_pk, UNIX_EPOCH).with_permissions(permissions.to_string())
             }
             None => Delegation::new(session_pk, UNIX_EPOCH),
         };
@@ -290,7 +290,8 @@ mod delegation_permissions {
             validate_single_delegation(Some("writes")),
             Err(InvalidDelegation(UnsupportedDelegationPermissions(value))) if value == "writes"
         );
-        // The previously-used "updates" value is now unsupported.
+        // "updates" is a plausible-looking value but is nevertheless
+        // unsupported: the only supported values are "queries" and "all".
         assert_matches!(
             validate_single_delegation(Some("updates")),
             Err(InvalidDelegation(UnsupportedDelegationPermissions(value))) if value == "updates"
@@ -336,11 +337,8 @@ fn plain_authentication_with_multiple_delegations() {
     .unwrap();
 
     // KP1 delegating to KP2.
-    let delegation = Delegation::new_with_targets(
-        pk2,
-        UNIX_EPOCH + Duration::new(4, 0),
-        vec![canister_test_id(1), canister_test_id(2)],
-    );
+    let delegation = Delegation::new(pk2, UNIX_EPOCH + Duration::new(4, 0))
+        .with_targets(vec![canister_test_id(1), canister_test_id(2)]);
 
     // Signature of SK1 for `delegation` above.
     let delegation_signature = base64::decode(
@@ -357,11 +355,8 @@ fn plain_authentication_with_multiple_delegations() {
     .unwrap();
 
     // KP3 delegating to KP4.
-    let delegation_3 = Delegation::new_with_targets(
-        pk4,
-        UNIX_EPOCH + Duration::new(3, 0),
-        vec![canister_test_id(1)],
-    );
+    let delegation_3 = Delegation::new(pk4, UNIX_EPOCH + Duration::new(3, 0))
+        .with_targets(vec![canister_test_id(1)]);
     // Signature of SK3 for delegation_3
     let delegation_3_signature = base64::decode(
         "a/hTCL8yOijzFIcHdcE0uvt2dj3WQdTiMLPX+xI8mWC0wRt+CYlMoFTc6JlfBopEJDrDwdEBz1n6/S8R2A/CCQ==",
