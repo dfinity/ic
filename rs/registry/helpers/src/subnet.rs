@@ -508,6 +508,7 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             key: record.key,
             version: record.version,
             value,
+            timestamp_nanoseconds: record.timestamp_nanoseconds,
         })
     }
 

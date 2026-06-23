@@ -21,6 +21,9 @@ message KeyMutation {
 
   // If this is `UNSET`, `value` must assume the default value.
   MutationType mutation_type = 3;
+
+  // If this is not 0, represents the timestamp of the entry.
+  uint64 timestamp_nanoseconds = 5; 
 }
 
 enum MutationType {
