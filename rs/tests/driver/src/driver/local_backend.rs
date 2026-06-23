@@ -835,7 +835,7 @@ impl LocalBackend {
             let local_src = match &primary_image {
                 DiskImage::Local { path, .. } => path.clone(),
                 DiskImage::Url { .. } => {
-                    bail!(
+                    panic!(
                         "LocalBackend cannot fetch URL-based primary image for {vm_name}; \
                          a `DiskImage::Local` was expected. \
                          Did the bazel `system_test` macro set `local = True`?"
