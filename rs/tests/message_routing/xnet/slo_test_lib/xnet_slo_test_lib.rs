@@ -168,7 +168,7 @@ impl Config {
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
     let ic = InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance])
+        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .with_resource_overrides(config.vm_resource_overrides);
     (0..config.subnets)
         .fold(ic, |ic, _idx| {

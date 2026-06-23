@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::ic::{NrOfVCPUs, VmResourceOverrides};
 use ic_system_test_driver::systest;
 use std::time::Duration;
 use xnet_slo_test_lib::Config;
@@ -14,6 +15,10 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(1400);
 
 fn main() -> Result<()> {
     let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE)
+        .with_resource_overrides(VmResourceOverrides {
+            vcpus: Some(NrOfVCPUs::new(12)),
+            ..VmResourceOverrides::default()
+        })
         // Only best-effort calls with 30 seconds timeout, so the test doesn't hang for
         // minutes in case we can't connect to some replica/subnet to pull.
         .with_call_timeouts(&[Some(30)]);
