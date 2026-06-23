@@ -543,10 +543,7 @@ mod tests {
                         let eff_end = payloads_metadata
                             .ingress_end
                             .unwrap_or(eff_start + ingress_interval);
-                        let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
-                        if eff_end.saturating_sub(eff_start) > max_window
-                            || eff_end.saturating_sub(now) > max_window
-                        {
+                        if validate_ingress_window(now, eff_start, eff_end).is_err() {
                             assert!(construction_payloads_response.is_err());
                             continue;
                         }

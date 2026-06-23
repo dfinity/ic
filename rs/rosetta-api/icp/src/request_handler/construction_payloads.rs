@@ -43,7 +43,9 @@ const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 ///
 /// Rejects windows that would make the expiry loop iterate an excessive (or, on
 /// arithmetic wraparound, unbounded) number of times (see ICPBB-134 /
-/// DEFI-2902). Two independent bounds are enforced:
+/// DEFI-2902). It enforces that:
+/// - `ingress_start` is strictly before `ingress_end` (an empty or reversed
+///   window would otherwise produce an empty/degenerate set of payloads),
 /// - the span `ingress_end - ingress_start` must not exceed 24h, and
 /// - `ingress_end` must not be more than 24h in the future, which also rejects
 ///   the near-`u64::MAX` payloads that would otherwise wrap the loop counter.
@@ -57,6 +59,11 @@ fn validate_ingress_window(
     let start = ingress_start.as_nanos_since_unix_epoch();
     let end = ingress_end.as_nanos_since_unix_epoch();
 
+    if start >= end {
+        return Err(ApiError::invalid_request(
+            "ingress_start must be strictly before ingress_end.",
+        ));
+    }
     if end.saturating_sub(start) > max_window {
         return Err(ApiError::invalid_request(format!(
             "The ingress window (ingress_end - ingress_start) must not exceed {} hours.",
@@ -1187,6 +1194,14 @@ mod tests {
     fn near_u64_max_ingress_window_is_rejected() {
         let start = t(u64::MAX - 50 * 1_000_000_000);
         assert!(validate_ingress_window(t(NOW_NANOS), start, t(u64::MAX)).is_err());
+    }
+
+    // A reversed or empty window (ingress_end <= ingress_start) is rejected
+    // rather than silently producing an empty set of payloads.
+    #[test]
+    fn reversed_ingress_window_is_rejected() {
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS + 1), t(NOW_NANOS)).is_err());
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS)).is_err());
     }
 
     // Negative control: a realistic window (5 minutes ahead of now) is accepted.
