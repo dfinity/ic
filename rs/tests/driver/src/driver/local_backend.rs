@@ -274,22 +274,14 @@ impl LocalBackend {
         // creating config/cache/data dirs derived from `$HOME`. If they cannot be
         // created the daemon aborts in `daemonRunStateInit` *before* binding its
         // socket, and the caller below times out. Under the Bazel `linux-sandbox`
-        // the real `$HOME` is read-only, so we point `$HOME` and the XDG vars at
-        // a writable directory we control.
+        // the real `$HOME` is read-only, so we point `$HOME` at a writable
+        // directory we control.
         //
         // The state dir lives under `xdg_runtime_dir` (the short `/tmp` path),
         // NOT `libvirt_dir`: libvirtd's QEMU driver opens a QMP monitor socket
         // under `$XDG_CONFIG_HOME`, and rooting `$HOME` at the deep Bazel working
         // dir would push that path past the ~108-byte `sun_path` limit.
         let state_home = xdg_runtime_dir.join("home");
-        for sub in [".config", ".cache", ".local/share"] {
-            std::fs::create_dir_all(state_home.join(sub)).with_context(|| {
-                format!(
-                    "creating libvirt state dir {}",
-                    state_home.join(sub).display()
-                )
-            })?;
-        }
 
         // Pin the QEMU driver's core-dump limit. libvirt *unconditionally* sets
         // QEMU's `RLIMIT_CORE` to `max_core` (default "unlimited"). Under the
@@ -331,11 +323,8 @@ impl LocalBackend {
             .arg(&conf_path)
             .arg("--pid-file")
             .arg(&pid_path)
-            .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
             .env("HOME", &state_home)
-            .env("XDG_CONFIG_HOME", state_home.join(".config"))
-            .env("XDG_CACHE_HOME", state_home.join(".cache"))
-            .env("XDG_DATA_HOME", state_home.join(".local/share"))
+            .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
