@@ -261,8 +261,12 @@ pub fn test(env: TestEnv) {
         let final_subnet_set = set(&final_subnets);
         // check that there are exactly NEW_SUBNETS added subnets
         assert_eq!(
+            final_subnet_set.len(),
             original_subnet_set.len() + NEW_SUBNETS,
-            final_subnet_set.len()
+            "Expected {} new subnets in addition to the original {:?} subnets, but found {:?}",
+            NEW_SUBNETS,
+            original_subnet_set,
+            final_subnet_set
         );
         assert!(original_subnet_set.is_subset(&final_subnet_set));
 
