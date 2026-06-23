@@ -16,10 +16,12 @@ Runbook::
   should be routed to the configured default
 . submit two create-subnet proposals with `initial_dkg_subnet_id` set to the
   third original subnet
+. starting from a zero baseline, after each proposal verify that the
+  `consensus_dkg_remote_transcripts_delivered_total` metric incremented by
+  exactly one (per tag) on the expected dealing subnet and on no other, so
+  each increment is attributed to a single `SetupInitialDKG` call
 . validate that all create-subnet proposals were executed and the subnets are
   operational
-. validate that the `consensus_dkg_remote_transcripts_delivered_total` metric
-  on each of the three original subnets were incremented correctly
 
 Success::
 . all create-subnet proposals are adopted and executed
@@ -27,8 +29,8 @@ Success::
   ones
 . universal canisters can be installed onto all new subnets and are
   responsive
-. each of the three original subnets has handled exactly two
-  `SetupInitialDKG` calls
+. each `SetupInitialDKG` call is dealt by the expected subnet, so each of the
+  three original subnets ends up having handled exactly two such calls
 
 end::catalog[] */
 
@@ -60,7 +62,7 @@ use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use registry_canister::mutations::do_set_default_initial_dkg_subnet::SetDefaultInitialDkgSubnetPayload;
 use slog::{Logger, info};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::time::Duration;
 
@@ -73,10 +75,6 @@ const NODES_PER_SUBNET: usize = 4;
 const ORIGINAL_SUBNETS: usize = 3;
 const NEW_SUBNETS: usize = 6;
 const PROPOSALS_PER_BATCH: usize = NEW_SUBNETS / ORIGINAL_SUBNETS;
-/// Expected per-tag value of `REMOTE_TRANSCRIPTS_METRIC` on each original
-/// subnet at the end of the test (one transcript per `SetupInitialDKG` call
-/// per tag).
-const EXPECTED_TRANSCRIPTS_PER_TAG: u64 = PROPOSALS_PER_BATCH as u64;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -112,19 +110,34 @@ pub fn test(env: TestEnv) {
     install_nns_canisters(&env);
     let topology_snapshot = &env.topology_snapshot();
     let nns_subnet = topology_snapshot.root_subnet();
-    let other_original_subnets: Vec<SubnetSnapshot> = topology_snapshot
+    let nns_subnet_id = nns_subnet.subnet_id;
+    let mut other_original_subnets = topology_snapshot
         .subnets()
-        .filter(|s| s.subnet_id != nns_subnet.subnet_id)
-        .collect();
-    assert_eq!(other_original_subnets.len(), ORIGINAL_SUBNETS - 1);
-    let default_initial_dkg_subnet_id = other_original_subnets[0].subnet_id;
-    let third_subnet_id = other_original_subnets[1].subnet_id;
-    let original_subnet_ids = [
-        nns_subnet.subnet_id,
-        default_initial_dkg_subnet_id,
-        third_subnet_id,
-    ];
+        .filter(|s| s.subnet_id != nns_subnet_id);
+    let default_subnet = other_original_subnets
+        .next()
+        .expect("missing second original subnet for setup_initial_dkg");
+    let third_subnet = other_original_subnets
+        .next()
+        .expect("missing third original subnet for setup_initial_dkg");
+    assert!(
+        other_original_subnets.next().is_none(),
+        "expected exactly {ORIGINAL_SUBNETS} original subnets"
+    );
+    let default_initial_dkg_subnet_id = default_subnet.subnet_id;
+    let third_subnet_id = third_subnet.subnet_id;
     let nns_endpoint = nns_subnet.nodes().next().unwrap();
+
+    // The three original subnets, each of which acts as the DKG dealing subnet
+    // for exactly one of the three proposal batches below.
+    let original_subnets = vec![nns_subnet, default_subnet, third_subnet];
+    let original_subnet_ids: Vec<SubnetId> = original_subnets.iter().map(|s| s.subnet_id).collect();
+    // Per-subnet count of delivered remote DKG transcripts (per tag), starting
+    // from zero and updated after every proposal so that each increment can be
+    // attributed to a single `SetupInitialDKG` call.
+    let mut expected_transcripts: HashMap<SubnetId, u64> =
+        original_subnet_ids.iter().map(|id| (*id, 0)).collect();
+
     let mut unassigned_nodes = topology_snapshot
         .unassigned_nodes()
         .map(|node| node.node_id);
@@ -136,9 +149,9 @@ pub fn test(env: TestEnv) {
     );
 
     let topology_snapshot_after_proposals = block_on(async move {
-        let original_subnets = get_subnet_list_from_registry(&client).await;
-        assert_eq!(original_subnets.len(), ORIGINAL_SUBNETS);
-        info!(log, "original subnets: {:?}", original_subnets);
+        let original_subnet_list = get_subnet_list_from_registry(&client).await;
+        assert_eq!(original_subnet_list.len(), ORIGINAL_SUBNETS);
+        info!(log, "original subnets: {:?}", original_subnet_list);
 
         let version = get_software_version_from_snapshot(&nns_endpoint)
             .await
@@ -149,19 +162,26 @@ pub fn test(env: TestEnv) {
         );
         let governance = nns::get_governance_canister(&nns);
 
+        // Baseline: before any proposal, no remote DKG transcripts have been
+        // delivered on any original subnet.
+        wait_for_expected_transcripts(log, &original_subnets, &expected_transcripts).await;
+
         // Batch 1: explicit `initial_dkg_subnet_id = None`, no default
         // configured yet. Routed to the NNS subnet.
         info!(
             log,
             "Batch 1: {PROPOSALS_PER_BATCH} create-subnet proposals, explicit initial_dkg_subnet_id = None",
         );
-        submit_and_wait_for_create_subnet_proposals(
+        submit_create_subnet_proposals_and_check(
             log,
             &governance,
             &mut unassigned_nodes,
             version.clone(),
             None,
+            nns_subnet_id,
             PROPOSALS_PER_BATCH,
+            &original_subnets,
+            &mut expected_transcripts,
         )
         .await;
 
@@ -187,7 +207,7 @@ pub fn test(env: TestEnv) {
             .get_latest_version()
             .await
             .expect("failed to read latest registry version");
-        wait_until_subnet_mr_version(log, &nns_subnet, target_version).await;
+        wait_until_subnet_mr_version(log, &original_subnets[0], target_version).await;
 
         // Batch 2: no explicit `initial_dkg_subnet_id`. Routed to the configured default.
         info!(
@@ -195,13 +215,16 @@ pub fn test(env: TestEnv) {
             "Batch 2: {PROPOSALS_PER_BATCH} create-subnet proposals, explicit \
              initial_dkg_subnet_id = None (routed to default {default_initial_dkg_subnet_id})"
         );
-        submit_and_wait_for_create_subnet_proposals(
+        submit_create_subnet_proposals_and_check(
             log,
             &governance,
             &mut unassigned_nodes,
             version.clone(),
             None,
+            default_initial_dkg_subnet_id,
             PROPOSALS_PER_BATCH,
+            &original_subnets,
+            &mut expected_transcripts,
         )
         .await;
 
@@ -211,13 +234,16 @@ pub fn test(env: TestEnv) {
             "Batch 3: {PROPOSALS_PER_BATCH} create-subnet proposals, explicit \
              initial_dkg_subnet_id = {third_subnet_id} (third original subnet)"
         );
-        submit_and_wait_for_create_subnet_proposals(
+        submit_create_subnet_proposals_and_check(
             log,
             &governance,
             &mut unassigned_nodes,
             version,
             Some(third_subnet_id),
+            third_subnet_id,
             PROPOSALS_PER_BATCH,
+            &original_subnets,
+            &mut expected_transcripts,
         )
         .await;
 
@@ -232,12 +258,12 @@ pub fn test(env: TestEnv) {
         let final_subnets = get_subnet_list_from_registry(&client).await;
         info!(log, "final subnets: {:?}", final_subnets);
 
-        let original_subnet_set = set(&original_subnets);
+        let original_subnet_set = set(&original_subnet_list);
         let final_subnet_set = set(&final_subnets);
-        // check that there are exactly APP_SUBNETS added subnets
+        // check that there are exactly NEW_SUBNETS added subnets
         assert_eq!(
             original_subnet_set.len() + NEW_SUBNETS,
-            final_subnet_set.len(),
+            final_subnet_set.len()
         );
         assert!(original_subnet_set.is_subset(&final_subnet_set));
 
@@ -294,38 +320,32 @@ pub fn test(env: TestEnv) {
             );
         });
     }
-
-    // [Phase IV] Verify each original subnet handled the expected number of
-    // SetupInitialDKG calls.
-    for subnet in topology_snapshot_after_proposals.subnets() {
-        if !original_subnet_ids.contains(&subnet.subnet_id) {
-            continue;
-        }
-        block_on(assert_remote_transcripts_delivered_per_tag(
-            log,
-            &subnet,
-            EXPECTED_TRANSCRIPTS_PER_TAG,
-        ));
-    }
 }
 
-/// Submits `count` create-application-subnet proposals (each consuming
-/// `NODES_PER_SUBNET` unassigned nodes) and waits for all of them to execute.
-async fn submit_and_wait_for_create_subnet_proposals(
+/// Submits `count` create-application-subnet proposals one at a time (each
+/// consuming `NODES_PER_SUBNET` unassigned nodes). After each proposal has
+/// executed, verifies that the delivered-remote-transcripts counter on
+/// `target_subnet_id` increased by exactly one per tag while all other
+/// original subnets stayed unchanged.
+#[allow(clippy::too_many_arguments)]
+async fn submit_create_subnet_proposals_and_check(
     log: &Logger,
     governance: &Canister<'_>,
     unassigned_nodes: &mut impl Iterator<Item = NodeId>,
     version: ReplicaVersion,
     initial_dkg_subnet_id: Option<SubnetId>,
+    target_subnet_id: SubnetId,
     count: usize,
+    original_subnets: &[SubnetSnapshot],
+    expected_transcripts: &mut HashMap<SubnetId, u64>,
 ) {
-    let mut proposal_ids = Vec::with_capacity(count);
     for _ in 0..count {
         let nodes = unassigned_nodes.by_ref().take(NODES_PER_SUBNET).collect();
         info!(
             log,
             "Submitting proposal to create subnet with nodes: {nodes:?}, \
-             initial_dkg_subnet_id: {initial_dkg_subnet_id:?}"
+             initial_dkg_subnet_id: {initial_dkg_subnet_id:?} \
+             (expecting transcripts to be dealt by {target_subnet_id})"
         );
         let proposal_id = submit_create_application_subnet_proposal_with_initial_dkg_subnet(
             governance,
@@ -336,9 +356,6 @@ async fn submit_and_wait_for_create_subnet_proposals(
             initial_dkg_subnet_id,
         )
         .await;
-        proposal_ids.push(proposal_id);
-    }
-    for proposal_id in proposal_ids {
         info!(log, "Waiting on proposal {proposal_id}");
         let proposal_info = wait_for_final_state(governance, proposal_id).await;
         assert_eq!(
@@ -346,54 +363,77 @@ async fn submit_and_wait_for_create_subnet_proposals(
             ProposalStatus::Executed as i32,
             "proposal {proposal_id} did not execute: {proposal_info:?}"
         );
+
+        // This proposal triggers a single `SetupInitialDKG` call, dealt by
+        // `target_subnet_id`, which delivers one remote transcript per tag
+        // there and none on any other subnet.
+        *expected_transcripts.entry(target_subnet_id).or_insert(0) += 1;
+        wait_for_expected_transcripts(log, original_subnets, expected_transcripts).await;
     }
 }
 
-/// Retries until every node of `subnet` reports `expected_per_tag` for
-/// `REMOTE_TRANSCRIPTS_METRIC` on both the `LowThreshold` and
-/// `HighThreshold` tags.
-async fn assert_remote_transcripts_delivered_per_tag(
+/// Retries until, for every subnet in `subnets`, all of its nodes report the
+/// per-tag delivered-remote-transcripts count given in `expected` (keyed by
+/// subnet id, defaulting to zero) on both the `LowThreshold` and
+/// `HighThreshold` tags. A subnet expected to be at zero must not expose the
+/// counter series yet.
+async fn wait_for_expected_transcripts(
     log: &Logger,
-    subnet: &SubnetSnapshot,
-    expected_per_tag: u64,
+    subnets: &[SubnetSnapshot],
+    expected: &HashMap<SubnetId, u64>,
 ) {
-    let metric_keys: Vec<String> = ["LowThreshold", "HighThreshold"]
+    let tag_keys: Vec<String> = ["LowThreshold", "HighThreshold"]
         .iter()
         .map(|tag| format!("{REMOTE_TRANSCRIPTS_METRIC}{{tag=\"{tag}\"}}"))
         .collect();
-    let expected_node_count = subnet.nodes().count();
-    let metrics = MetricsFetcher::new(subnet.nodes(), metric_keys.clone());
-    let subnet_id = subnet.subnet_id;
+    let fetchers: Vec<(SubnetId, usize, MetricsFetcher)> = subnets
+        .iter()
+        .map(|s| {
+            (
+                s.subnet_id,
+                s.nodes().count(),
+                MetricsFetcher::new(s.nodes(), tag_keys.clone()),
+            )
+        })
+        .collect();
 
     retry_with_msg_async!(
-        format!(
-            "Waiting until subnet {subnet_id} reports {expected_per_tag} delivered remote DKG \
-             transcripts per tag on all {expected_node_count} nodes"
-        ),
+        format!("Waiting until delivered remote DKG transcript counters reach {expected:?}"),
         log,
         METRIC_TIMEOUT,
         METRIC_BACKOFF,
         || async {
-            let values = match metrics.fetch::<u64>().await {
-                Ok(values) => values,
-                Err(err) => bail!("Failed to fetch metrics from subnet {subnet_id}: {err}"),
-            };
-            for key in &metric_keys {
-                let Some(per_node) = values.get(key) else {
-                    bail!("Metric {key} not yet exposed on subnet {subnet_id}");
+            for (subnet_id, node_count, fetcher) in &fetchers {
+                let want = expected.get(subnet_id).copied().unwrap_or(0);
+                let values = match fetcher.fetch::<u64>().await {
+                    Ok(values) => values,
+                    Err(err) => bail!("Failed to fetch metrics from subnet {subnet_id}: {err}"),
                 };
-                if per_node.len() != expected_node_count {
-                    bail!(
-                        "Subnet {subnet_id}: metric {key} reported by {} out of {} nodes",
-                        per_node.len(),
-                        expected_node_count,
-                    );
-                }
-                if per_node.iter().any(|v| *v != expected_per_tag) {
-                    bail!(
-                        "Subnet {subnet_id}: metric {key} reports {per_node:?}, \
-                         expected all values to be {expected_per_tag}"
-                    );
+                for key in &tag_keys {
+                    let per_node = values.get(key).map(Vec::as_slice).unwrap_or(&[]);
+                    if want == 0 {
+                        // No delivery expected yet: the series must be absent or zero.
+                        if per_node.iter().any(|v| *v != 0) {
+                            bail!(
+                                "Subnet {subnet_id}: metric {key} reports {per_node:?}, \
+                                 expected no deliveries yet"
+                            );
+                        }
+                    } else {
+                        if per_node.len() != *node_count {
+                            bail!(
+                                "Subnet {subnet_id}: metric {key} reported by {} out of {} nodes",
+                                per_node.len(),
+                                node_count,
+                            );
+                        }
+                        if per_node.iter().any(|v| *v != want) {
+                            bail!(
+                                "Subnet {subnet_id}: metric {key} reports {per_node:?}, \
+                                 expected all values to be {want}"
+                            );
+                        }
+                    }
                 }
             }
             Ok(())
@@ -401,10 +441,7 @@ async fn assert_remote_transcripts_delivered_per_tag(
     )
     .await
     .unwrap_or_else(|err| {
-        panic!(
-            "Subnet {subnet_id} did not deliver the expected number of remote DKG transcripts: \
-             {err}"
-        )
+        panic!("Delivered remote DKG transcript counters did not reach {expected:?}: {err}")
     });
 }
 
