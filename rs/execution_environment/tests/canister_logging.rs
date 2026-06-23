@@ -4,7 +4,7 @@ use ic_config::execution_environment::{
     TEST_DEFAULT_LOG_MEMORY_USAGE,
 };
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_execution_environment::units::{KIB, MIB};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_management_canister_types_private::{
@@ -94,7 +94,7 @@ fn readable_logs_without_backtraces(
 
 fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
-    let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
@@ -149,7 +149,7 @@ fn setup_with_controller(controller: PrincipalId, wasm: Vec<u8>) -> (StateMachin
 
 fn restart_node(env: StateMachine) -> StateMachine {
     env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
+        SubnetConfig::new(SubnetType::Application),
         ExecutionConfig::default(),
     ))
 }
@@ -2768,7 +2768,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // and produce log entries that land in canister_log (legacy storage).
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type, SubnetSecurity::None),
+            SubnetConfig::new(subnet_type),
             ExecutionConfig {
                 log_memory_store_feature: FlagStatus::Disabled,
                 ..Default::default()
@@ -2855,7 +2855,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // executes, migration has not run yet: is_migrated=false, is_allocated=false,
     // but fetch_canister_logs still works via the canister_log fallback.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        SubnetConfig::new(subnet_type),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()
@@ -2970,7 +2970,7 @@ fn test_log_memory_store_upgrade_downgrade() {
     // Step 5: Downgrade — restart with log_memory_store feature disabled.
     // The checkpoint still has migrated=true since it was saved after step 3.
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        SubnetConfig::new(subnet_type),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Disabled,
             ..Default::default()
@@ -3078,7 +3078,7 @@ fn test_log_memory_store_upgrade_downgrade() {
 fn test_canister_log_with_zero_log_memory_limit() {
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        SubnetConfig::new(subnet_type),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()
@@ -3179,10 +3179,9 @@ fn test_log_memory_store_deallocated_when_canister_out_of_cycles() {
     drop(state);
 
     // Advance time enough to drain the cycle balance given compute_allocation=1.
-    let compute_percent_allocated_per_second_fee =
-        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None)
-            .cycles_account_manager_config
-            .compute_percent_allocated_per_second_fee;
+    let compute_percent_allocated_per_second_fee = SubnetConfig::new(SubnetType::Application)
+        .cycles_account_manager_config
+        .compute_percent_allocated_per_second_fee;
     let seconds_to_burn = env.cycle_balance(canister_id) as u64
         / compute_percent_allocated_per_second_fee.get() as u64;
     env.advance_time(Duration::from_secs(seconds_to_burn + 1));
@@ -3214,7 +3213,7 @@ fn test_log_memory_store_migration_filters_gap_records() {
 
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type, SubnetSecurity::None),
+            SubnetConfig::new(subnet_type),
             ExecutionConfig {
                 log_memory_store_feature: FlagStatus::Disabled,
                 ..Default::default()
@@ -3275,7 +3274,7 @@ fn test_log_memory_store_migration_filters_gap_records() {
     }
 
     let env = env.restart_node_with_config(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        SubnetConfig::new(subnet_type),
         ExecutionConfig {
             log_memory_store_feature: FlagStatus::Enabled,
             ..Default::default()

@@ -770,11 +770,21 @@ impl ReplicatedState {
         self.metadata.own_cost_schedule().unwrap_or_default()
     }
 
+    /// Returns the reference subnet size of this subnet, derived from its SEV status.
+    /// Defaults to `DEFAULT_REFERENCE_SUBNET_SIZE` if the network topology is not populated.
+    pub fn get_own_reference_subnet_size(&self) -> usize {
+        use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+        self.metadata
+            .own_reference_subnet_size()
+            .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE)
+    }
+
     /// Returns the cycles account manager subnet config for this subnet.
     pub fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
         CyclesAccountManagerSubnetConfig::new(
             self.get_own_subnet_size(),
             self.get_own_cost_schedule(),
+            self.get_own_reference_subnet_size(),
         )
     }
 

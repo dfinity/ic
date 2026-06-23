@@ -7,7 +7,7 @@ use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
     SUBNET_MEMORY_RESERVATION,
 };
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
@@ -279,7 +279,7 @@ where
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
-    let subnet_configs = SubnetConfig::new(own_subnet_type, SubnetSecurity::None);
+    let subnet_configs = SubnetConfig::new(own_subnet_type);
 
     let embedders_config = EmbeddersConfig {
         // Set up larger heap, of 8GB for the Wasm64 feature.
