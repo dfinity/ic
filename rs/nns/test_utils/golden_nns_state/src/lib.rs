@@ -1,8 +1,5 @@
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_config::{
-    execution_environment::Config,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 
@@ -100,7 +97,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         .with_routing_table(routing_table);
 
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
-        SubnetConfig::new(subnet_type, SubnetSecurity::None),
+        SubnetConfig::new(subnet_type),
         hypervisor_config.unwrap_or_default(),
     )));
 

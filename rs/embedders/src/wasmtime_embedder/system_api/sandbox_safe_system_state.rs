@@ -1424,10 +1424,14 @@ impl SandboxSafeSystemState {
                     .subnets()
                     .get(subnet_id)?
                     .cost_schedule;
-                Some((size, cost_schedule))
+                let reference_subnet_size =
+                    self.network_topology.get_reference_subnet_size(subnet_id)?;
+                Some((size, cost_schedule, reference_subnet_size))
             })
-            .max()
-            .map(|(size, cost_schedule)| CyclesAccountManagerSubnetConfig::new(size, cost_schedule))
+            .max_by_key(|&(size, cost_schedule, _)| (size, cost_schedule))
+            .map(|(size, cost_schedule, reference_subnet_size)| {
+                CyclesAccountManagerSubnetConfig::new(size, cost_schedule, reference_subnet_size)
+            })
     }
 }
 
@@ -1447,7 +1451,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -1576,7 +1580,7 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
+                CyclesAccountManagerConfig::application_subnet(),
             ),
             0,
             BTreeMap::new(),
@@ -1585,6 +1589,7 @@ mod tests {
             CyclesAccountManagerSubnetConfig::new(
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,

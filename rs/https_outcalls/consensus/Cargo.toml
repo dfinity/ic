@@ -36,6 +36,7 @@ ic-consensus-mocks = { path = "../../consensus/mocks" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
+ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
@@ -50,6 +51,7 @@ criterion = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
 rand_chacha = { workspace = true }
+strum = { workspace = true }
 
 [features]
 proptest = []

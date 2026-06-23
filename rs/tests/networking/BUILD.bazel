@@ -141,6 +141,7 @@ system_test_nns(
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
     deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
