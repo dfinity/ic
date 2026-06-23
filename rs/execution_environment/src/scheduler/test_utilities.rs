@@ -10,7 +10,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig, SubnetSecurity},
 };
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
     wasm_executor::{
@@ -256,8 +256,7 @@ impl SchedulerTest {
             .cycles_account_manager
             .execution_cost(
                 num_instructions,
-                self.subnet_size(),
-                self.state.as_ref().unwrap().get_own_cost_schedule(),
+                self.get_own_subnet_cycles_config(),
                 WasmExecutionMode::Wasm32,
             )
             .real()
@@ -666,11 +665,9 @@ impl SchedulerTest {
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
-        let subnet_size = self.subnet_size();
         self.scheduler
             .charge_canisters_for_resource_allocation_and_usage(
                 self.state.as_mut().unwrap(),
-                subnet_size,
                 ExecutionRound::from(0),
                 ExecutionRoundType::CheckpointRound,
             )
@@ -707,24 +704,20 @@ impl SchedulerTest {
         self.state_mut().metadata.batch_time += duration;
     }
 
-    pub fn subnet_size(&self) -> usize {
-        self.registry_settings.subnet_size
+    pub(crate) fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.state().get_own_subnet_cycles_config()
     }
 
     pub fn ecdsa_signature_fee(&self) -> CompoundCycles<ECDSAOutcalls> {
-        self.scheduler.cycles_account_manager.ecdsa_signature_fee(
-            self.registry_settings.subnet_size,
-            self.state().get_own_cost_schedule(),
-        )
+        self.scheduler
+            .cycles_account_manager
+            .ecdsa_signature_fee(self.get_own_subnet_cycles_config())
     }
 
     pub fn schnorr_signature_fee(&self) -> Cycles {
         self.scheduler
             .cycles_account_manager
-            .schnorr_signature_fee(
-                self.registry_settings.subnet_size,
-                self.state().get_own_cost_schedule(),
-            )
+            .schnorr_signature_fee(self.get_own_subnet_cycles_config())
             .real()
     }
 
@@ -736,8 +729,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.http_request_fee(
             request_size,
             response_size_limit,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -749,8 +741,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.memory_cost(
             bytes,
             duration,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -762,8 +753,7 @@ impl SchedulerTest {
         self.scheduler.cycles_account_manager.canister_base_cost(
             bytes,
             duration,
-            self.subnet_size(),
-            self.state.as_ref().unwrap().get_own_cost_schedule(),
+            self.get_own_subnet_cycles_config(),
         )
     }
 
@@ -777,8 +767,7 @@ impl SchedulerTest {
             .compute_allocation_cost(
                 compute_allocation,
                 duration,
-                self.subnet_size(),
-                self.state.as_ref().unwrap().get_own_cost_schedule(),
+                self.get_own_subnet_cycles_config(),
             )
     }
 
@@ -1518,24 +1507,22 @@ impl TestWasmExecutorCore {
         let call_message_id = self.next_message_id();
         let response_message_id = self.next_message_id();
         let closure = WasmClosure::new(0, response_message_id.into());
+        let subnet_cycles_config =
+            CyclesAccountManagerSubnetConfig::new(self.subnet_size, system_state.cost_schedule());
         let prepayment_for_response_execution = self
             .cycles_account_manager
             .prepayment_for_response_execution(
-                self.subnet_size,
-                system_state.cost_schedule(),
+                subnet_cycles_config,
                 WasmExecutionMode::from_is_wasm64(system_state.is_wasm64_execution),
             );
         let prepayment_for_response_transmission = self
             .cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size, system_state.cost_schedule());
+            .prepayment_for_response_transmission(subnet_cycles_config);
         // Scheduler uses `TestCall` requests which have zero payload.
         let payload_size = NumBytes::from(0);
-        let prepayment_for_call_transmission =
-            self.cycles_account_manager.xnet_total_transmission_fee(
-                payload_size,
-                self.subnet_size,
-                system_state.cost_schedule(),
-            );
+        let prepayment_for_call_transmission = self
+            .cycles_account_manager
+            .xnet_total_transmission_fee(payload_size, subnet_cycles_config);
         let deadline = NO_DEADLINE;
         let request = OutputRequest {
             receiver,

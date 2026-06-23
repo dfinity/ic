@@ -27,6 +27,7 @@ use ic_agent::{
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
     HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
@@ -43,6 +44,7 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    RegistryVersion,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
@@ -128,7 +130,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_put_without_non_replicated_rejected))
                 .add_test(systest!(test_delete_call))
                 .add_test(systest!(test_delete_without_non_replicated_rejected))
-                .add_test(systest!(test_patch_rejected))
+                .add_test(systest!(test_patch_call))
+                .add_test(systest!(test_patch_without_non_replicated_rejected))
                 .add_test(systest!(test_max_possible_request_size))
                 .add_test(systest!(test_max_possible_request_size_exceeded))
                 // This section tests the request headers limits scenarios
@@ -1941,11 +1944,7 @@ fn test_delete_without_non_replicated_rejected(env: TestEnv) {
     });
 }
 
-// PATCH is plumbed through the types but not yet enabled on replicated subnets:
-// the execution layer rejects it so no PATCH context enters the replicated
-// state until support has rolled out to all replicas. This holds even for a
-// non-replicated request.
-fn test_patch_rejected(env: TestEnv) {
+fn test_patch_call(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
@@ -1975,8 +1974,39 @@ fn test_patch_rejected(env: TestEnv) {
         },
     ));
 
+    assert_matches!(response, Ok(response) => {
+        assert_matches!(response, RemoteHttpResponse { status: 200, .. });
+        assert_distinct_headers(&response);
+        assert_http_json_response(&request, &response);
+    });
+}
+
+fn test_patch_without_non_replicated_rejected(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let url = format!("https://[{}]/{}", webserver_ipv6, "anything");
+    let request = UnvalidatedCanisterHttpRequestArgs {
+        url,
+        headers: vec![],
+        method: HttpMethod::PATCH,
+        body: Some(vec![]),
+        transform: None,
+        max_response_bytes: Some(1024),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request,
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
     assert_matches!(response, Err(RejectResponse { reject_message, .. }) => {
-        assert!(reject_message.contains("PATCH HTTP method is not yet supported"));
+        assert!(reject_message.contains("only allowed for non-replicated requests"));
     });
 }
 
@@ -2689,6 +2719,7 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
+        RegistryVersion::from(1),
         &mut rand::thread_rng(),
     )
     .unwrap();
@@ -2696,8 +2727,7 @@ fn expected_cycle_cost(
     let cycle_fee = cm.http_request_fee(
         req_size,
         Some(NumBytes::from(response_size)),
-        subnet_size,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(subnet_size, CanisterCyclesCostSchedule::Normal),
     );
     cycle_fee.real().get().try_into().unwrap()
 }
