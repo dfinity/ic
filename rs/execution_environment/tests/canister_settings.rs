@@ -483,6 +483,30 @@ fn inter_canister_call_rejected_when_cycles_insufficient() {
     assert_eq!(env.cycle_balance(callee_id), callee_balance_before);
 }
 
+// Self-calls (same canister calling itself) must bypass minimum_incoming_canister_call_cycles,
+// even when the attached cycles are below the minimum.
+#[test]
+fn self_call_bypasses_minimum_incoming_canister_call_cycles() {
+    let min_cycles: u128 = 1_000_000;
+    let (env, callee_id, _caller_id) = setup_two_canisters(min_cycles);
+
+    // The callee calls itself with 0 cycles (below min_cycles); should succeed.
+    let call_args = CallArgs::default()
+        .other_side(wasm().reply_data(b"ok").build())
+        .on_reply(wasm().reply_data(b"got reply").build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            callee_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, 0_u128)
+                .build(),
+        )
+        .unwrap();
+    assert_matches!(res, WasmResult::Reply(_));
+}
+
 // Verifies that attached cycles can be partially consumed before a downstream call
 // and the rest consumed in the reply callback, even though the remaining amount is
 // below minimum_incoming_canister_call_cycles (which only gates incoming call admission).
