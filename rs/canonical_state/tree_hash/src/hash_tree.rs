@@ -990,8 +990,8 @@ impl<'a> BaselineCursor<'a> {
 /// Materializes the provided lazy tree and builds its hash tree that can be
 /// used to produce witnesses.
 ///
-/// Subtrees that carry a
-/// [`LazyFork::subtree_source`](crate::lazy_tree::LazyFork::subtree_source)
+/// The children of a fork that declares
+/// [`LazyFork::stub_sources`](crate::lazy_tree::LazyFork::stub_sources)
 /// (e.g. canisters) are collapsed to digest-only [`NodeKind::Stub`] nodes.
 /// The resulting tree has the exact same root hash as a fully materialized
 /// build; witnesses that descend into a stubbed subtree rebuild it on demand
@@ -1029,6 +1029,17 @@ fn hash_lazy_tree_impl(
         root: NodeId,
     }
 
+    /// One child of a fork, to be turned into a labeled node in the hash tree.
+    #[derive(Clone)]
+    enum Child<'a> {
+        /// A regular subtree, materialized inline via [`build_tree`].
+        Tree(LazyTree<'a>),
+        /// A reusable subtree collapsed to a [`NodeKind::Stub`], identified by its
+        /// [`SubtreeSource`]. The subtree itself is materialized on demand (via the
+        /// parent fork's [`LazyFork::edge`]) only when it has to be rebuilt.
+        Stub(SubtreeSource),
+    }
+
     // We only initialize thread pools lazily the first time we need them
     enum ParallelismStrategy {
         Sequential,
@@ -1055,69 +1066,62 @@ fn hash_lazy_tree_impl(
         }
     }
 
-    /// Builds one labeled `child` of a fork (linked under `parent`), returning its
+    /// Builds one labeled `child` (linked under `parent`), returning its
     /// [`NodeId`] and whether it was expensively (re)built — i.e. materialized —
     /// rather than cheaply reused from `baseline`.
     ///
-    /// A `child` that carries a
-    /// [`LazyFork::subtree_source`](crate::lazy_tree::LazyFork::subtree_source) is
-    /// collapsed to a digest-only [`NodeKind::Stub`] — its digest reused from
-    /// `baseline` when the sources are equal (cheap), else rebuilt (expensive).
-    /// Any other `child` is materialized normally via [`build_tree`] (expensive).
+    /// A [`Child::Stub`] is collapsed to a digest-only [`NodeKind::Stub`]: its
+    /// digest is reused from `baseline` when the sources are equal (cheap, without
+    /// materializing the child at all), else the subtree is rebuilt from its
+    /// [`SubtreeSource`] (expensive). A [`Child::Tree`] is materialized normally
+    /// via [`build_tree`] (expensive).
     fn build_child(
-        child: &LazyTree<'_>,
+        child: Child<'_>,
         ht: &mut HashTree,
         parent: NodeId,
         parallelism_strategy: &mut ParallelismStrategy,
         recursion_depth: u32,
         baseline: Option<BaselineCursor<'_>>,
     ) -> Result<(NodeId, bool), HashTreeError> {
-        if let LazyTree::LazyFork(f) = child
-            && let Some(source) = f.subtree_source()
-        {
-            // This subtree should be stubbed: store a digest-only [`NodeKind::Stub`].
-            let (digest, was_built) = match baseline.and_then(|b| b.stub()) {
-                // Unchanged: the baseline carries an equal `SubtreeSource` — same source
-                // allocation *and* same expander (hence same certification version) — so its
-                // digest is reused (cheap).
-                Some(stub) if stub.source == source => (stub.digest.clone(), false),
+        match child {
+            Child::Stub(source) => {
+                let (digest, was_built) = match baseline.and_then(|b| b.stub()) {
+                    // Unchanged: the baseline carries an equal `SubtreeSource` — same source
+                    // allocation *and* same expander (hence same certification version) — so its
+                    // digest is reused without materializing the child.
+                    Some(stub) if stub.source == source => (stub.digest.clone(), false),
 
-                // New, changed, or built under a different version: build the subtree only to
-                // capture its root digest; if later needed for a witness, it will be rebuilt on
-                // demand from `source`.
-                _ => {
-                    let mut child_ht = HashTree::new();
-                    child_ht.root = build_tree(
-                        child,
-                        &mut child_ht,
-                        NodeId::empty(),
-                        parallelism_strategy,
-                        recursion_depth + 1,
-                        None,
-                    )?;
-                    child_ht.check_invariants();
-                    (child_ht.root_hash().clone(), true)
-                }
-            };
-            return Ok((ht.new_stub(digest, source)?, was_built));
+                    // New, changed, or built under a different version: rebuild the subtree from
+                    // its (current) `source` only to capture its root digest; if later needed for
+                    // a witness, it is rebuilt on demand the same way.
+                    _ => {
+                        let child_ht = source.expand().expect("failed to expand stub");
+                        (child_ht.root_hash().clone(), true)
+                    }
+                };
+                Ok((ht.new_stub(digest, source)?, was_built))
+            }
+
+            // Materialize non-stubbed child: expensive.
+            Child::Tree(t) => {
+                let id = build_tree(
+                    &t,
+                    ht,
+                    parent,
+                    parallelism_strategy,
+                    recursion_depth + 1,
+                    baseline,
+                )?;
+                Ok((id, true))
+            }
         }
-
-        // Materialize non-stubbed child: expensive.
-        let id = build_tree(
-            child,
-            ht,
-            parent,
-            parallelism_strategy,
-            recursion_depth + 1,
-            baseline,
-        )?;
-        Ok((id, true))
     }
 
     /// Builds the hash tree for `t`, returning the [`NodeId`] of its root.
     ///
-    /// The hash tree is always materialized; collapsing a subtree fork into a
-    /// digest-only [`NodeKind::Stub`] happens one level up, in [`build_child`].
+    /// The hash tree is always materialized; collapsing a fork's children into
+    /// digest-only [`NodeKind::Stub`] nodes happens here, driven by the parent
+    /// fork's [`LazyFork::stub_sources`], via [`build_child`].
     fn build_tree(
         t: &LazyTree<'_>,
         ht: &mut HashTree,
@@ -1171,7 +1175,7 @@ fn hash_lazy_tree_impl(
                 // Build the children sequentially, but watch how many have to be actually built
                 // (hashed) rather than cheaply reused from the baseline. After a warmup,
                 // extrapolate that rate over the whole fork; if it projects too much work, hand
-                // the *remaining* children to the thread pool. This covers both stubbed forks
+                // the *remaining* children to the thread pool. This covers both stubbing forks
                 // (where reuse keeps the rate low) and regular forks (where every child is
                 // materialized; so a large fork always parallelizes).
                 //
@@ -1183,16 +1187,31 @@ fn hash_lazy_tree_impl(
                 let mut num_processed = 0_usize;
                 let mut num_built = 0_usize;
 
+                // If the fork declares its children reusable (a stubbing fork), iterate
+                // `(label, source)` so unchanged children are reused from the baseline without
+                // being materialized at all; the rest are rebuilt from their source. Otherwise
+                // materialize every child inline.
+                let children: Box<dyn Iterator<Item = (Label, Child<'_>)> + '_> =
+                    match f.stub_sources() {
+                        Some(sources) => {
+                            Box::new(sources.map(|(label, source)| (label, Child::Stub(source))))
+                        }
+                        None => Box::new(
+                            f.children()
+                                .map(|(label, child)| (label, Child::Tree(child))),
+                        ),
+                    };
+
                 // Merge-join the children with the baseline children (a missing baseline child
                 // is `None`); each tagged with its preallocated node index.
                 let mut joined = range.zip(left_outer_join(
-                    f.children(),
+                    children,
                     baseline.into_iter().flat_map(BaselineCursor::children),
                 ));
 
                 while !do_parallelize && let Some((i, (label, child, base))) = joined.next() {
                     let (child, was_built) = build_child(
-                        &child,
+                        child,
                         ht,
                         NodeId::node(bucket, i)?,
                         parallelism_strategy,
@@ -1274,7 +1293,7 @@ fn hash_lazy_tree_impl(
         nodes: &mut Vec<NodeId>,
         depth: u32,
         bucket: usize,
-        tail: Vec<(usize, (Label, LazyTree<'_>, Option<BaselineCursor<'_>>))>,
+        tail: Vec<(usize, (Label, Child<'_>, Option<BaselineCursor<'_>>))>,
     ) -> Result<(), HashTreeError> {
         let bucket_offset = ht.node_children.len();
         let threads = thread_pool.thread_count() as usize;
@@ -1310,14 +1329,14 @@ fn hash_lazy_tree_impl(
                     let mut error: Option<HashTreeError> = None;
                     for (_i, (_label, child, base)) in children {
                         // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
-                        // and fix the link from `root` to the parent later. A child that carries a
-                        // `subtree_source` is collapsed to a stub here.
+                        // and fix the link from `root` to the parent later. A `Child::Stub` is
+                        // collapsed to a stub here.
                         //
                         // A stub has no materialized labeled children of its own, so its
                         // `children_range` is empty (and is never consulted: stubs are descended into
                         // via their source during witness generation).
                         match build_child(
-                            child,
+                            child.clone(),
                             &mut ht,
                             NodeId::empty(),
                             // Run with `ParallelismStrategy::Sequential`: besides avoiding nested thread
@@ -1376,10 +1395,10 @@ fn hash_lazy_tree_impl(
 
     let mut ht = HashTree::new();
     let strategy = &mut ParallelismStrategy::Concurrent;
-    // The root is always materialized; only *descendants* that carry a
-    // `subtree_source` are collapsed into stubs (see `build_child`). Building a
-    // stand-alone subtree is just `build_tree` on that subtree's root, which is in
-    // turn materialized for the same reason.
+    // The root is always materialized; only the children of a fork that declares
+    // `stub_sources` are collapsed into stubs (see `build_child`). Building a
+    // stand-alone subtree is just `hash_lazy_tree` on that subtree's root, which
+    // is in turn materialized for the same reason.
     ht.root = build_tree(t, &mut ht, NodeId::empty(), strategy, 0, baseline)?;
     ht.check_invariants();
 

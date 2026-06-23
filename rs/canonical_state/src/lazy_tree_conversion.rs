@@ -787,7 +787,7 @@ const CANISTER_NO_MODULE_LABELS: [&[u8]; 1] = [CONTROLLERS_LABEL];
 
 #[derive(Clone)]
 struct CanisterFork<'a> {
-    canister: &'a Arc<CanisterState>,
+    canister: &'a CanisterState,
     version: CertificationVersion,
 }
 
@@ -850,23 +850,10 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
     fn len(&self) -> usize {
         self.valid_labels().len()
     }
-
-    /// A canister's certified subtree is stored as a reusable stub identified by
-    /// the backing `Arc<CanisterState>` and the version-specific expander. An
-    /// unchanged canister keeps the same `Arc` (copy-on-write) and the same
-    /// expander, so its precomputed digest is reused from the baseline; any
-    /// mutation or version change yields a mismatched [`SubtreeSource`] and a
-    /// rebuild.
-    fn subtree_source(&self) -> Option<SubtreeSource> {
-        Some(SubtreeSource::new(
-            self.canister,
-            select_canister_expander(self.version),
-        ))
-    }
 }
 
 /// Rebuilds a canister's stubbed [subtree](`NodeKind::Stub`) for witness
-/// generation, by recovering the `Arc<CanisterState>` from the stub's
+/// generation, by recovering the `&CanisterState` from the stub's
 /// [`SubtreeSource`] and traversing its [`CanisterFork`].
 ///
 /// The certification version (which the canonical encoding depends on) is baked
@@ -876,12 +863,7 @@ fn expand_canister<const V: u32>(source: &SubtreeSource) -> Result<HashTree, Has
     let canister = source.downcast::<CanisterState>();
     let version = CertificationVersion::try_from(V)
         .expect("const version parameter is a valid certification version");
-    // `canister` (and thus the borrow below) outlives `hash_lazy_tree`, which
-    // returns an owned `HashTree`; no borrow escapes.
-    hash_lazy_tree(&fork(CanisterFork {
-        canister: &canister,
-        version,
-    }))
+    hash_lazy_tree(&fork(CanisterFork { canister, version }))
 }
 
 /// Selects the [`expand_canister`] monomorphization for `version`, so the
@@ -969,6 +951,19 @@ impl<'a> LazyFork<'a> for CanisterStatesFork<'a> {
 
     fn len(&self) -> usize {
         self.canisters.len()
+    }
+
+    /// Every canister's certified subtree is stored as a reusable stub identified
+    /// by the backing `Arc<CanisterState>` and the version-specific expander. An
+    /// unchanged canister keeps the same `Arc` (copy-on-write) and the same
+    /// expander, so its precomputed digest is reused from the baseline; any
+    /// mutation or version change yields a mismatched [`SubtreeSource`] and a
+    /// rebuild.
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        let expander = select_canister_expander(self.certification_version);
+        Some(Box::new(self.canisters.all_iter().map(
+            move |(k, canister)| (k.to_label(), SubtreeSource::new(canister, expander)),
+        )))
     }
 }
 

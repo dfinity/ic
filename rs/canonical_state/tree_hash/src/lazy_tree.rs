@@ -57,19 +57,20 @@ pub trait LazyFork<'a>: Send + Sync {
         self.len() == 0
     }
 
-    /// The source that the subtree rooted at this fork is derived from, including
-    /// the [`SubtreeExpander`] that rebuilds it; produced iff the subtree should
-    /// be collapsed to a digest-only, reusable subtree node in the
-    /// [`HashTree`](crate::hash_tree::HashTree).
+    /// If the children of this fork are reusable subtrees (e.g. canisters, ingress
+    /// messages, stream messages), returns a boxed iterator over each child's label
+    /// and [`SubtreeSource`] — the type-erased identity of the child's, together
+    /// with the  [`SubtreeExpander`] that rebuilds it. The labels must be yielded
+    /// in lexicographic order.
     ///
-    /// Defaults to `None` (materialize the subtree inline). Forks that wrap shared,
-    /// copy-on-write state (e.g. an `Arc<CanisterState>`) should override this to
-    /// return that `Arc`, together with an expander that bakes in the certification
-    /// version, as a [`SubtreeSource`]. Such subtrees are hashed once and, when an
-    /// unchanged subtree (same source) is found in a baseline tree, its digest is
-    /// reused instead of being recomputed. See
-    /// [`hash_lazy_tree_with_baseline`](crate::hash_tree::hash_lazy_tree_with_baseline).
-    fn subtree_source(&self) -> Option<SubtreeSource> {
+    /// Returning `Some` collapses every child into a digest plus [`SubtreeSource`]
+    /// [`stub`](crate::hash_tree::HashTree): a child is hashed once and, when an
+    /// unchanged child is found in a baseline tree, the stub is reused instead of
+    /// being recomputed. A new or changed child is materialized on demand from
+    /// its [`SubtreeSource`] and rebuilt.
+    ///
+    /// Defaults to `None` (children are materialized inline).
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
         None
     }
 }
@@ -187,19 +188,17 @@ impl SubtreeSource {
         Arc::as_ptr(&self.source) as *const ()
     }
 
-    /// Recovers shared ownership of the source as an `Arc<T>`. Used by a
-    /// [`SubtreeExpander`] to rebuild the subtree from its source.
+    /// Borrows the source as a `&T`, for a [`SubtreeExpander`] to rebuild the
+    /// subtree from its source without bumping the `Arc`'s refcount.
     ///
     /// Panics if this handle was not created from an `Arc<T>`.
-    pub fn downcast<T: Any + Send + Sync>(&self) -> Arc<T> {
-        Arc::clone(&self.source)
-            .downcast::<T>()
-            .unwrap_or_else(|_| {
-                panic!(
-                    "subtree source is not an Arc<{}>",
-                    std::any::type_name::<T>()
-                )
-            })
+    pub fn downcast<T: Any + Send + Sync>(&self) -> &T {
+        self.source.downcast_ref::<T>().unwrap_or_else(|| {
+            panic!(
+                "subtree source is not an Arc<{}>",
+                std::any::type_name::<T>()
+            )
+        })
     }
 
     /// Rebuilds the subtree's [`HashTree`](crate::hash_tree::HashTree) from this

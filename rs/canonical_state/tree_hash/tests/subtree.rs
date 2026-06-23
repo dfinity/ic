@@ -1,8 +1,9 @@
 //! Tests for reusable subtree (stub) nodes.
 //!
-//! When building a [`HashTree`] from a [`LazyTree`], every subtree that carries
-//! a [`LazyFork::subtree_source`] (here a per-canister fork, mirroring `CanisterFork`
-//! in production) is collapsed to a digest-only [`NodeKind::Stub`].
+//! When building a [`HashTree`] from a [`LazyTree`], the children of a fork that
+//! declares [`LazyFork::stub_sources`] (here the canisters fork, mirroring
+//! `CanisterStatesFork` in production) are each collapsed to a digest-only
+//! [`NodeKind::Stub`].
 //! Such a tree:
 //!
 //!   * has the exact same root hash as a fully materialized build,
@@ -69,24 +70,20 @@ fn canisters() -> Canisters {
 }
 
 /// A `LazyFork` over the certified subtree of a single canister.
-///
-/// `subtree_source` mirrors `CanisterFork::subtree_source` in production: it
-/// returns the backing `Arc`, so each canister is stored as a self-contained,
-/// reusable subtree node.
-struct CanisterArcFork<'a> {
-    canister: &'a Arc<LabeledTree<Vec<u8>>>,
+struct CanisterFork<'a> {
+    canister: &'a LabeledTree<Vec<u8>>,
 }
 
-impl<'a> CanisterArcFork<'a> {
+impl<'a> CanisterFork<'a> {
     fn children_map(&self) -> &'a FlatMap<Label, LabeledTree<Vec<u8>>> {
-        match &**self.canister {
+        match &*self.canister {
             LabeledTree::SubTree(cs) => cs,
             LabeledTree::Leaf(_) => panic!("a canister must be a subtree"),
         }
     }
 }
 
-impl<'a> LazyFork<'a> for CanisterArcFork<'a> {
+impl<'a> LazyFork<'a> for CanisterFork<'a> {
     fn edge(&self, l: &Label) -> Option<LazyTree<'a>> {
         self.children_map().get(l).map(as_lazy)
     }
@@ -106,17 +103,13 @@ impl<'a> LazyFork<'a> for CanisterArcFork<'a> {
     fn len(&self) -> usize {
         self.children_map().len()
     }
-
-    fn subtree_source(&self) -> Option<SubtreeSource> {
-        Some(SubtreeSource::new(self.canister, expand_test_canister))
-    }
 }
 
 /// Rebuilds a test canister's stubbed subtree from its `SubtreeSource` (mirrors
 /// `expand_canister` in production, minus the certification version).
 fn expand_test_canister(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
     let canister = source.downcast::<LabeledTree<Vec<u8>>>();
-    hash_lazy_tree(&canister_fork(&canister))
+    hash_lazy_tree(&canister_fork(canister))
 }
 
 /// A `LazyFork` over the `/canister` subtree.
@@ -124,13 +117,15 @@ struct CanistersFork<'a> {
     canisters: &'a Canisters,
 }
 
-fn canister_fork(arc: &Arc<LabeledTree<Vec<u8>>>) -> LazyTree<'_> {
-    fork(CanisterArcFork { canister: arc })
+fn canister_fork(canister: &LabeledTree<Vec<u8>>) -> LazyTree<'_> {
+    fork(CanisterFork { canister })
 }
 
 impl<'a> LazyFork<'a> for CanistersFork<'a> {
     fn edge(&self, l: &Label) -> Option<LazyTree<'a>> {
-        self.canisters.get(l).map(canister_fork)
+        self.canisters
+            .get(l)
+            .map(|canister| canister_fork(canister))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
@@ -147,6 +142,15 @@ impl<'a> LazyFork<'a> for CanistersFork<'a> {
 
     fn len(&self) -> usize {
         self.canisters.len()
+    }
+
+    /// Mirrors `CanisterStatesFork::stub_sources` in production: each canister is
+    /// stored as a self-contained, reusable subtree node keyed by its backing
+    /// `Arc` (and the version-independent test expander).
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        Some(Box::new(self.canisters.iter().map(|(l, arc)| {
+            (l.clone(), SubtreeSource::new(arc, expand_test_canister))
+        })))
     }
 }
 
