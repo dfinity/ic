@@ -430,7 +430,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 68
+// Next ID: 69
 message CanisterStateBits {
   reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
 
@@ -488,6 +488,8 @@ message CanisterStateBits {
   state.queues.v1.Cycles reserved_balance = 38;
   // The user-specified upper limit on `reserved_balance`.
   state.queues.v1.Cycles reserved_balance_limit = 39;
+  // The minimum number of cycles required for an incoming call from a different canister.
+  state.queues.v1.Cycles minimum_incoming_canister_call_cycles = 68;
   // Maps tracking chunks in the Wasm chunk store.
   WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
   // Statistics on query execution for entire lifetime of canister.

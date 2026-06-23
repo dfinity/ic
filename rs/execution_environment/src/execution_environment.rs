@@ -64,7 +64,10 @@ use ic_replicated_state::{
     CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::batch::ChainKeyData;
-use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::canister_http::{
+    CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus,
+    Replication,
+};
 use ic_types::consensus::idkg::IDkgMasterPublicKeyId;
 use ic_types::crypto::{
     ExtendedDerivationPath,
@@ -1214,25 +1217,55 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
-                CanisterCall::Request(_) => {
-                    match FlexibleCanisterHttpRequestArgs::decode(payload) {
-                        Err(err) => ExecuteSubnetMessageResult::Finished {
-                            response: Err(err),
-                            refund: msg.take_cycles(),
-                        },
-                        Ok(_) => ExecuteSubnetMessageResult::Finished {
-                            response: Err(UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                "FlexibleHttpRequest is not yet implemented".to_string(),
-                            )),
-                            refund: msg.take_cycles(),
-                        },
+            Ok(Ic00Method::FlexibleHttpRequest) => match self.config.flexible_http_requests {
+                FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                    response: Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    )),
+                    refund: msg.take_cycles(),
+                },
+                FlagStatus::Enabled => match &msg {
+                    CanisterCall::Request(request) => {
+                        match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: msg.take_cycles(),
+                            },
+                            Ok(args) => {
+                                match CanisterHttpRequestContext::generate_from_flexible_args(
+                                    state.time(),
+                                    request.as_ref(),
+                                    args,
+                                    &registry_settings.node_ids,
+                                    registry_settings.registry_version,
+                                    rng,
+                                ) {
+                                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                                        response: Err(err.into()),
+                                        refund: msg.take_cycles(),
+                                    },
+                                    Ok(canister_http_request_context) => match self
+                                        .try_add_http_context_to_replicated_state(
+                                            canister_http_request_context,
+                                            &mut state,
+                                            request.as_ref(),
+                                            since,
+                                        ) {
+                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                                            response: Err(err),
+                                            refund: msg.take_cycles(),
+                                        },
+                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                    },
+                                }
+                            }
+                        }
                     }
-                }
-                CanisterCall::Ingress(_) => {
-                    self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
-                }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                    }
+                },
             },
 
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
@@ -1249,6 +1282,7 @@ impl ExecutionEnvironment {
                                     request.as_ref(),
                                     args,
                                     &registry_settings.node_ids,
+                                    registry_settings.registry_version,
                                     rng,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -2087,13 +2121,24 @@ impl ExecutionEnvironment {
         request: &Request,
         since: Instant,
     ) -> Result<(), UserError> {
-        let http_request_fee = self.cycles_account_manager.http_request_fee(
-            canister_http_request_context.variable_parts_size(),
+        let variable_parts_size = canister_http_request_context.variable_parts_size();
+        let cycles_config = state.get_own_subnet_cycles_config();
+        let cost_schedule = cycles_config.cost_schedule;
+        let legacy_fee = self.cycles_account_manager.http_request_fee(
+            variable_parts_size,
             canister_http_request_context.max_response_bytes,
-            state.get_own_subnet_cycles_config(),
+            cycles_config,
         );
-        let real_http_request_fee = http_request_fee.real();
-        let nominal_http_request_fee = http_request_fee.nominal();
+
+        // The base fee is the non-refundable part of the payment under
+        // pay-as-you-go pricing; under legacy pricing the full legacy fee is
+        // charged instead.
+        let base_fee = self.cycles_account_manager.http_request_base_fee(
+            variable_parts_size,
+            &canister_http_request_context.replication,
+            cycles_config,
+        );
+
         // Here we make sure that we do not let upper layers open new
         // http calls while the maximum number of calls is in-flight.
         // Later, in the http adapter we also have a bounded queue of
@@ -2109,57 +2154,109 @@ impl ExecutionEnvironment {
             .len()
             >= self.config.max_canister_http_requests_in_flight
         {
-            Err(UserError::new(
+            return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "max number ({}) of http requests in-flight reached.",
                     self.config.max_canister_http_requests_in_flight
                 ),
-            ))
-        } else if request.payment < real_http_request_fee {
-            Err(UserError::new(
+            ));
+        }
+
+        // The cycles charged upfront depend on the pricing version: legacy
+        // charges the full request fee, whereas pay-as-you-go charges the base
+        // fee and refunds the remainder based on the resources actually
+        // consumed.
+        let charged_fee = match canister_http_request_context.pricing_version {
+            PricingVersion::Legacy => legacy_fee,
+            PricingVersion::PayAsYouGo => base_fee,
+        };
+        if request.payment < charged_fee.real() {
+            return Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "{} request sent with {} cycles, but {} cycles are required.",
-                    Ic00Method::HttpRequest,
+                    request.method_name,
                     request.payment,
-                    real_http_request_fee
+                    charged_fee.real()
                 ),
-            ))
-        } else {
-            canister_http_request_context.request.payment -= real_http_request_fee;
-            state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_http_outcalls(nominal_http_request_fee);
-            state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(
-                    CyclesUseCase::HTTPOutcalls,
-                    nominal_http_request_fee,
-                );
-            state.metadata.subnet_call_context_manager.push_context(
-                SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
-            );
-            if let Some(canister_state) = state.canister_state_make_mut(&request.sender) {
-                canister_state
-                    .system_state
-                    .observe_consumed_cycles_for_https_outcall(nominal_http_request_fee);
-                canister_state
-                    .system_state
-                    .canister_metrics_mut()
-                    .load_metrics_mut()
-                    .observe_http_outcall();
-            }
-            self.metrics.observe_message_with_label(
-                &request.method_name,
-                since.elapsed().as_secs_f64(),
-                SUBMITTED_OUTCOME_LABEL.into(),
-                SUCCESS_STATUS_LABEL.into(),
-            );
-            Ok(())
+            ));
         }
+
+        // The refundable cycles are everything the payment covers beyond the
+        // base fee; on a free cost schedule nothing is charged, so nothing is
+        // refundable. We set the refund status even for legacy pricing in order
+        // to enable observability during the dark launch. However, nothing will
+        // actually be refunded for legacy pricing.
+        let refundable_cycles = if cost_schedule == CanisterCyclesCostSchedule::Free {
+            Cycles::new(0)
+        } else {
+            canister_http_request_context.request.payment - base_fee.real()
+        };
+        let node_count = match &canister_http_request_context.replication {
+            Replication::Flexible { committee, .. } => committee.len().max(1),
+            Replication::NonReplicated(_) => 1,
+            Replication::FullyReplicated => cycles_config.subnet_size.max(1),
+        };
+        canister_http_request_context.refund_status = RefundStatus {
+            refundable_cycles,
+            per_replica_allowance: refundable_cycles / node_count,
+            refunded_cycles: Cycles::new(0),
+            refunding_nodes: BTreeSet::new(),
+        };
+
+        // The payment deduction differs per pricing version.
+        match canister_http_request_context.pricing_version {
+            PricingVersion::Legacy => {
+                // Legacy pricing deducts the full request fee from the payment.
+                // The remaining payment is refunded when the response is delivered.
+                canister_http_request_context.request.payment -= legacy_fee.real();
+            }
+            PricingVersion::PayAsYouGo => {
+                // Take out the entire payment upfront; the refundable portion is
+                // returned later via the refund mechanism. On a free cost
+                // schedule there is nothing to charge.
+                if cost_schedule != CanisterCyclesCostSchedule::Free {
+                    canister_http_request_context.request.payment.take();
+                }
+            }
+        }
+
+        // Observe the nominal cycles charged for this outcall, based on what was
+        // actually charged (regardless of whether a real charge happens, e.g. on
+        // a free cost schedule).
+        let nominal_consumed_cycles = charged_fee.nominal();
+        state
+            .metadata
+            .subnet_metrics
+            .observe_consumed_cycles_http_outcalls(nominal_consumed_cycles);
+        state
+            .metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(
+                CyclesUseCase::HTTPOutcalls,
+                nominal_consumed_cycles,
+            );
+        state.metadata.subnet_call_context_manager.push_context(
+            SubnetCallContext::CanisterHttpRequest(canister_http_request_context),
+        );
+        if let Some(canister_state) = state.canister_state_make_mut(&request.sender) {
+            canister_state
+                .system_state
+                .observe_consumed_cycles_for_https_outcall(nominal_consumed_cycles);
+            canister_state
+                .system_state
+                .canister_metrics_mut()
+                .load_metrics_mut()
+                .observe_http_outcall();
+        }
+        self.metrics.observe_message_with_label(
+            &request.method_name,
+            since.elapsed().as_secs_f64(),
+            SUBMITTED_OUTCOME_LABEL.into(),
+            SUCCESS_STATUS_LABEL.into(),
+        );
+        Ok(())
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
@@ -2269,6 +2366,34 @@ impl ExecutionEnvironment {
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+                let min_cycles = canister.system_state.minimum_incoming_canister_call_cycles;
+                if request.payment < min_cycles && request.sender != canister.canister_id() {
+                    let canister_id = canister.canister_id();
+                    let payment = request.payment;
+                    let originator = request.sender;
+                    let originator_reply_callback = request.sender_reply_callback;
+                    let deadline = request.deadline;
+                    return ExecuteMessageResult::Finished {
+                        canister,
+                        response: ExecutionResponse::Request(Response {
+                            originator,
+                            respondent: canister_id,
+                            originator_reply_callback,
+                            refund: payment,
+                            response_payload: Payload::Reject(RejectContext::new(
+                                RejectCode::CanisterError,
+                                format!(
+                                    "Canister {} requires at least {} transferred cycles for incoming calls from a different canister, but the call only has {} cycles.",
+                                    canister_id, min_cycles, payment,
+                                ),
+                            )),
+                            deadline,
+                        }),
+                        instructions_used: NumInstructions::from(0),
+                        heap_delta: NumBytes::from(0),
+                        call_duration: None,
+                    };
+                }
                 CanisterCall::Request(request)
             }
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {

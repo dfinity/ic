@@ -318,7 +318,7 @@ mod tests {
     use std::time::Duration;
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
     use ic_cycles_account_manager::{
         CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
     };
@@ -492,7 +492,7 @@ mod tests {
                         NumInstructions::new(10),
                         SubnetType::Application,
                         SubnetId::new(canister_test_id(1).get()),
-                        CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
+                        CyclesAccountManagerConfig::application_subnet(),
                     ),
                     &NetworkTopology::default(),
                     NumInstructions::new(42),
@@ -505,6 +505,7 @@ mod tests {
                     CyclesAccountManagerSubnetConfig::new(
                         SMALL_APP_SUBNET_MAX_SIZE,
                         CanisterCyclesCostSchedule::Normal,
+                        DEFAULT_REFERENCE_SUBNET_SIZE,
                     ),
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),

@@ -126,7 +126,9 @@ mod tests {
     };
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
+    use ic_config::subnet_config::{
+        CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig,
+    };
     use ic_cycles_account_manager::{
         CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
     };
@@ -209,7 +211,7 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
+                CyclesAccountManagerConfig::application_subnet(),
             ),
             0,
             BTreeMap::new(),
@@ -218,6 +220,7 @@ mod tests {
             CyclesAccountManagerSubnetConfig::new(
                 SMALL_APP_SUBNET_MAX_SIZE,
                 CanisterCyclesCostSchedule::Normal,
+                DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,

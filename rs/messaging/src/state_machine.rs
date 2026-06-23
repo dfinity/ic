@@ -235,7 +235,7 @@ impl StateMachine for StateMachineImpl {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
             current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
         });
-        let state_after_execution = self.scheduler.execute_round(
+        let mut state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
             chain_key_data,
@@ -256,6 +256,8 @@ impl StateMachine for StateMachineImpl {
 
         // Postprocess the state: route messages into streams.
         let message_routing_timer = self.metrics.start_phase_timer(PHASE_MESSAGE_ROUTING);
+        // Discard streams to subnets no longer present in the network topology.
+        state_after_execution.discard_streams_for_deleted_subnets();
         #[cfg(debug_assertions)]
         let balance_before_routing = state_after_execution.balance_with_messages();
         let mut state_after_stream_builder =
