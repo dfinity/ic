@@ -29,6 +29,5 @@ meson(
         " && test -n \"$$libfuse_archive\"" +
         " && cp \"$$libfuse_archive\" $$INSTALLDIR/lib/libfuse3.a"
     ),
-    #visibility = ["//visibility:private"],
     visibility = ["//visibility:public"],
 )
