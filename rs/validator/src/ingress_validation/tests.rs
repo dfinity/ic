@@ -211,6 +211,93 @@ fn plain_authentication_with_one_scoped_delegation() {
     );
 }
 
+mod delegation_permissions {
+    use super::*;
+    use ic_types::crypto::Signable;
+
+    /// Signs `delegation` with `signer` and the message id with `sender_sk`,
+    /// then validates the single-delegation chain `signer -> sender_sk`.
+    /// Uses ECDSA secp256r1 identities (supported by the validator and
+    /// signable in-process, unlike the hard-coded ed25519 signatures used by
+    /// the surrounding tests).
+    fn validate_single_delegation(
+        permissions: Option<&str>,
+    ) -> Result<DelegationRestrictions, RequestValidationError> {
+        let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+        let message_id = message_test_id(1);
+        let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+
+        let signer_sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+        let session_sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+        let signer_pk = signer_sk.public_key().serialize_der();
+        let session_pk = session_sk.public_key().serialize_der();
+
+        let delegation = match permissions {
+            Some(permissions) => {
+                Delegation::new_with_permissions(session_pk, UNIX_EPOCH, permissions.to_string())
+            }
+            None => Delegation::new(session_pk, UNIX_EPOCH),
+        };
+        let delegation_sig = signer_sk
+            .sign_message(&delegation.as_signed_bytes())
+            .to_vec();
+        let signed_delegation = SignedDelegation::new(delegation, delegation_sig);
+
+        let user_signature = UserSignature {
+            signature: session_sk
+                .sign_message(&message_id.as_signed_bytes())
+                .to_vec(),
+            signer_pubkey: signer_pk,
+            sender_delegation: Some(vec![signed_delegation]),
+        };
+
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new(),
+        )
+    }
+
+    #[test]
+    fn queries_permission_sets_queries_only() {
+        assert_matches!(
+            validate_single_delegation(Some("queries")),
+            Ok(restrictions) if restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn all_permission_does_not_set_queries_only() {
+        assert_matches!(
+            validate_single_delegation(Some("all")),
+            Ok(restrictions) if !restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn absent_permission_does_not_set_queries_only() {
+        assert_matches!(
+            validate_single_delegation(None),
+            Ok(restrictions) if !restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn unsupported_permission_is_rejected() {
+        assert_matches!(
+            validate_single_delegation(Some("writes")),
+            Err(InvalidDelegation(UnsupportedDelegationPermissions(value))) if value == "writes"
+        );
+        // The previously-used "updates" value is now unsupported.
+        assert_matches!(
+            validate_single_delegation(Some("updates")),
+            Err(InvalidDelegation(UnsupportedDelegationPermissions(value))) if value == "updates"
+        );
+    }
+}
+
 #[test]
 fn plain_authentication_with_multiple_delegations() {
     let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));

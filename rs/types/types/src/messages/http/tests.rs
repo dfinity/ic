@@ -955,6 +955,57 @@ mod cbor_serialization {
                 text("permissions") => text("queries"),
             }),
         );
+
+        // A delegation may carry both `targets` and `permissions`.
+        assert_cbor_ser_equal(
+            &Delegation {
+                pubkey: Blob(vec![1, 2, 3]),
+                expiration: UNIX_EPOCH,
+                targets: Some(vec![Blob(vec![4, 5, 6])]),
+                permissions: Some("queries".to_string()),
+            },
+            Value::Map(btreemap! {
+                text("pubkey") => bytes(&[1, 2, 3]),
+                text("expiration") => int(0),
+                text("targets") => Value::Array(vec![bytes(&[4, 5, 6])]),
+                text("permissions") => text("queries"),
+            }),
+        );
+    }
+
+    /// Verifies that the optional `permissions` field survives a full CBOR
+    /// wire round-trip (serialize to bytes, deserialize back), since
+    /// requests carry delegations as CBOR on the wire. An absent field must
+    /// deserialize to `None` so that delegations predating this field remain
+    /// parseable.
+    #[test]
+    fn delegation_permissions_cbor_round_trip() {
+        use crate::crypto::Signable;
+
+        for permissions in [None, Some("queries".to_string()), Some("all".to_string())] {
+            let delegation = Delegation {
+                pubkey: Blob(vec![1, 2, 3]),
+                expiration: UNIX_EPOCH,
+                targets: None,
+                permissions: permissions.clone(),
+            };
+            let bytes = serde_cbor::to_vec(&delegation).unwrap();
+            let decoded: Delegation = serde_cbor::from_slice(&bytes).unwrap();
+            assert_eq!(decoded.permissions, permissions);
+            // The signed bytes (which include the permissions field) must
+            // also match, i.e. the round-trip preserves what gets signed.
+            assert_eq!(decoded.as_signed_bytes(), delegation.as_signed_bytes());
+        }
+
+        // A delegation encoded without the `permissions` key (as produced by
+        // implementations predating the field) deserializes to `None`.
+        let without_permissions = Value::Map(btreemap! {
+            text("pubkey") => bytes(&[1, 2, 3]),
+            text("expiration") => int(0),
+        });
+        let decoded: Delegation = serde_cbor::value::from_value(without_permissions).unwrap();
+        assert_eq!(decoded.permissions, None);
+        assert_eq!(decoded.targets, None);
     }
 
     #[test]
