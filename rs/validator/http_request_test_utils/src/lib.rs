@@ -7,9 +7,9 @@ use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
-    RawSignedSenderInfo, ReadState, SignedDelegation, SignedIngressContent,
+    Blob, Delegation, DelegationPermissions, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
+    HttpReadState, HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery,
+    MessageId, Query, RawSignedSenderInfo, ReadState, SignedDelegation, SignedIngressContent,
 };
 use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -533,15 +533,15 @@ impl DirectAuthenticationScheme {
     }
 
     /// Creates a delegation that restricts the kinds of calls the delegate
-    /// may make (e.g., `"queries"`).
+    /// may make.
     fn delegate_to_with_permissions(
         &self,
         other: &DirectAuthenticationScheme,
         expiration: Time,
-        permissions: &str,
+        permissions: DelegationPermissions,
     ) -> SignedDelegation {
-        let delegation = Delegation::new(other.public_key_der(), expiration)
-            .with_permissions(permissions.to_string());
+        let delegation =
+            Delegation::new(other.public_key_der(), expiration).with_permissions(permissions);
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
@@ -613,7 +613,7 @@ impl DelegationChainBuilder {
         mut self,
         new_end: DirectAuthenticationScheme,
         expiration: Time,
-        permissions: &str,
+        permissions: DelegationPermissions,
     ) -> Self {
         let current_end = self.end.unwrap_or_else(|| self.start.clone());
         self.signed_delegations

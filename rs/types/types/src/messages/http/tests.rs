@@ -720,8 +720,8 @@ mod cbor_serialization {
     use crate::{
         AmountOf, Time,
         messages::{
-            Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
-            ReplicaHealthStatus, SignedDelegation,
+            Blob, Delegation, DelegationPermissions, HttpQueryResponse, HttpQueryResponseReply,
+            HttpStatusResponse, ReplicaHealthStatus, SignedDelegation,
             http::{HttpSignedQueryResponse, NodeSignature, btreemap},
         },
         time::UNIX_EPOCH,
@@ -946,7 +946,7 @@ mod cbor_serialization {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: None,
-                permissions: Some("queries".to_string()),
+                permissions: Some(DelegationPermissions::Queries),
             },
             Value::Map(btreemap! {
                 text("pubkey") => bytes(&[1, 2, 3]),
@@ -962,7 +962,7 @@ mod cbor_serialization {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: Some(vec![Blob(vec![4, 5, 6])]),
-                permissions: Some("queries".to_string()),
+                permissions: Some(DelegationPermissions::Queries),
             },
             Value::Map(btreemap! {
                 text("pubkey") => bytes(&[1, 2, 3]),
@@ -982,12 +982,16 @@ mod cbor_serialization {
     fn delegation_permissions_cbor_round_trip() {
         use crate::crypto::Signable;
 
-        for permissions in [None, Some("queries".to_string()), Some("all".to_string())] {
+        for permissions in [
+            None,
+            Some(DelegationPermissions::Queries),
+            Some(DelegationPermissions::All),
+        ] {
             let delegation = Delegation {
                 pubkey: Blob(vec![1, 2, 3]),
                 expiration: UNIX_EPOCH,
                 targets: None,
-                permissions: permissions.clone(),
+                permissions,
             };
             let bytes = serde_cbor::to_vec(&delegation).unwrap();
             let decoded: Delegation = serde_cbor::from_slice(&bytes).unwrap();
@@ -1006,6 +1010,27 @@ mod cbor_serialization {
         let decoded: Delegation = serde_cbor::value::from_value(without_permissions).unwrap();
         assert_eq!(decoded.permissions, None);
         assert_eq!(decoded.targets, None);
+    }
+
+    /// A delegation whose `permissions` field carries an unsupported value
+    /// (anything other than `"queries"`/`"all"`, including case and
+    /// whitespace variants of them) must fail to deserialize, so requests
+    /// carrying such a delegation are rejected when decoded.
+    #[test]
+    fn delegation_permissions_rejects_unsupported_value() {
+        for unsupported in [
+            "writes", "updates", "", "QUERIES", "queries ", " queries", "All", "all ",
+        ] {
+            let encoded = Value::Map(btreemap! {
+                text("pubkey") => bytes(&[1, 2, 3]),
+                text("expiration") => int(0),
+                text("permissions") => text(unsupported),
+            });
+            assert!(
+                serde_cbor::value::from_value::<Delegation>(encoded).is_err(),
+                "permissions value {unsupported:?} unexpectedly deserialized"
+            );
+        }
     }
 
     #[test]

@@ -19,9 +19,10 @@ use ic_system_test_driver::util::{
 };
 use ic_types::crypto::Signable;
 use ic_types::messages::{
-    Blob, Certificate, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
-    HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery,
-    MessageId, RawSignedSenderInfo, SenderInfoContent, SignedDelegation,
+    Blob, Certificate, Delegation, DelegationPermissions, HttpCallContent, HttpCanisterUpdate,
+    HttpQueryContent, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+    HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo, SenderInfoContent,
+    SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -708,58 +709,50 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                 QueriesOnly { err: &'static str },
                 /// All request kinds succeed.
                 All,
-                /// All request kinds are rejected with an error whose text
-                /// contains the given substring.
-                Invalid { err: &'static str },
             }
 
             struct PermissionsTest {
                 note: &'static str,
                 // The `permissions` value of each delegation in the chain
                 // (`None` means the field is omitted for that delegation).
-                permissions: Vec<Option<&'static str>>,
+                // Unsupported values cannot be represented (the field is a
+                // closed enum) and are rejected when the request is decoded;
+                // that path is covered by ic-types CBOR-decoding tests.
+                permissions: Vec<Option<DelegationPermissions>>,
                 outcome: Outcome,
             }
 
             let update_not_permitted = "Update calls are not permitted";
-            let unsupported = "Unsupported delegation permissions";
 
             let scenarios = [
                 PermissionsTest {
                     note: "single delegation restricted to queries",
-                    permissions: vec![Some("queries")],
+                    permissions: vec![Some(DelegationPermissions::Queries)],
                     outcome: Outcome::QueriesOnly {
                         err: update_not_permitted,
                     },
                 },
                 PermissionsTest {
                     note: "single delegation permitting all",
-                    permissions: vec![Some("all")],
+                    permissions: vec![Some(DelegationPermissions::All)],
                     outcome: Outcome::All,
                 },
                 PermissionsTest {
                     note: "queries restriction in the first of two delegations",
-                    permissions: vec![Some("queries"), None],
+                    permissions: vec![Some(DelegationPermissions::Queries), None],
                     outcome: Outcome::QueriesOnly {
                         err: update_not_permitted,
                     },
                 },
                 PermissionsTest {
                     note: "queries restriction in the second of two delegations",
-                    permissions: vec![Some("all"), Some("queries")],
+                    permissions: vec![
+                        Some(DelegationPermissions::All),
+                        Some(DelegationPermissions::Queries),
+                    ],
                     outcome: Outcome::QueriesOnly {
                         err: update_not_permitted,
                     },
-                },
-                PermissionsTest {
-                    note: "unsupported value \"writes\"",
-                    permissions: vec![Some("writes")],
-                    outcome: Outcome::Invalid { err: unsupported },
-                },
-                PermissionsTest {
-                    note: "unsupported value \"updates\"",
-                    permissions: vec![Some("updates")],
-                    outcome: Outcome::Invalid { err: unsupported },
                 },
             ];
 
@@ -785,20 +778,8 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                         &delegations,
                     )
                     .await;
-                    match scenario.outcome {
-                        Outcome::QueriesOnly { .. } | Outcome::All => {
-                            response.expect_query_ok(api_ver)
-                        }
-                        Outcome::Invalid { err } => {
-                            assert_eq!(
-                                response.status(),
-                                400,
-                                "Scenario {} (query) using v{api_ver} unexpectedly succeeded",
-                                scenario.note
-                            );
-                            response.expect_text_error(err);
-                        }
-                    }
+                    // Both remaining outcomes permit query calls.
+                    response.expect_query_ok(api_ver);
                 }
 
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
@@ -810,20 +791,8 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                         &delegations,
                     )
                     .await;
-                    match scenario.outcome {
-                        Outcome::QueriesOnly { .. } | Outcome::All => {
-                            response.expect_read_state_ok(api_ver)
-                        }
-                        Outcome::Invalid { err } => {
-                            assert_eq!(
-                                response.status(),
-                                400,
-                                "Scenario {} (read_state) using v{api_ver} unexpectedly succeeded",
-                                scenario.note
-                            );
-                            response.expect_text_error(err);
-                        }
-                    }
+                    // Both remaining outcomes permit read_state requests.
+                    response.expect_read_state_ok(api_ver);
                 }
 
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
@@ -837,7 +806,7 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                     .await;
                     match scenario.outcome {
                         Outcome::All => response.expect_update_ok(api_ver),
-                        Outcome::QueriesOnly { err } | Outcome::Invalid { err } => {
+                        Outcome::QueriesOnly { err } => {
                             assert_eq!(
                                 response.status(),
                                 400,
@@ -1754,7 +1723,7 @@ fn create_delegations_with_targets(
 
 fn create_delegations_with_permissions(
     identities: &[GenericIdentity],
-    permissions: &[Option<&str>],
+    permissions: &[Option<DelegationPermissions>],
 ) -> Vec<SignedDelegation> {
     let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
 
@@ -1764,7 +1733,7 @@ fn create_delegations_with_permissions(
     for i in 1..=delegation_count {
         let delegation = match permissions[i - 1] {
             Some(permissions) => Delegation::new(identities[i].public_key_der(), delegation_expiry)
-                .with_permissions(permissions.to_string()),
+                .with_permissions(permissions),
             None => Delegation::new(identities[i].public_key_der(), delegation_expiry),
         };
 

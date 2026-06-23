@@ -2177,15 +2177,19 @@ mod sender_info {
 
 mod delegation_permissions {
     use super::*;
+    use ic_types::messages::DelegationPermissions;
     use ic_validator_http_request_test_utils::DelegationChain;
-    use ic_validator_ingress_message::AuthenticationError::UnsupportedDelegationPermissions;
 
     #[test]
     fn should_reject_update_call_when_delegation_restricts_to_queries() {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "queries")
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
             .build();
 
         let request = HttpRequestBuilder::new_update_call()
@@ -2204,7 +2208,11 @@ mod delegation_permissions {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "queries")
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
             .build();
 
         let query = HttpRequestBuilder::new_query()
@@ -2225,7 +2233,11 @@ mod delegation_permissions {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "all")
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::All,
+            )
             .build();
 
         let request = HttpRequestBuilder::new_update_call()
@@ -2237,64 +2249,17 @@ mod delegation_permissions {
     }
 
     #[test]
-    fn should_reject_all_request_types_when_delegation_permissions_unsupported() {
-        let rng = &mut reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME).build();
-        // The only supported values are "queries" (queries only) and "all"
-        // (queries, replicated queries, and updates). Everything else is
-        // rejected, including "updates" (a plausible-looking value), the
-        // empty string, and case/whitespace variants of the supported
-        // values (matching is exact).
-        for unsupported in [
-            "writes", "updates", "", "QUERIES", "queries ", " queries", "All", "all ",
-        ] {
-            let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-                .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, unsupported)
-                .build();
-
-            let update = HttpRequestBuilder::new_update_call()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
-                .build();
-            assert_matches!(
-                verifier.validate_request(&update),
-                Err(RequestValidationError::InvalidDelegation(
-                    UnsupportedDelegationPermissions(permissions)
-                )) if permissions == unsupported
-            );
-
-            let query = HttpRequestBuilder::new_query()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
-                .build();
-            assert_matches!(
-                verifier.validate_request(&query),
-                Err(RequestValidationError::InvalidDelegation(
-                    UnsupportedDelegationPermissions(_)
-                ))
-            );
-
-            let read_state = HttpRequestBuilder::new_read_state()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(chain))
-                .build();
-            assert_matches!(
-                verifier.validate_request(&read_state),
-                Err(RequestValidationError::InvalidDelegation(
-                    UnsupportedDelegationPermissions(_)
-                ))
-            );
-        }
-    }
-
-    #[test]
     fn should_reject_update_call_when_any_delegation_in_chain_restricts_to_queries() {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         // The restriction sits in the middle of the chain; subsequent
         // unrestricted delegations must not lift it.
         let chain = DelegationChain::rooted_at(random_user_key_pair(rng))
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "queries")
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
             .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
             .build();
 
@@ -2327,7 +2292,11 @@ mod delegation_permissions {
                 CURRENT_TIME,
                 vec![requested_canister_id, CanisterId::from(43)],
             )
-            .delegate_to_with_permissions(random_user_key_pair(rng), CURRENT_TIME, "queries")
+            .delegate_to_with_permissions(
+                random_user_key_pair(rng),
+                CURRENT_TIME,
+                DelegationPermissions::Queries,
+            )
             .build();
 
         // Update call to an in-target canister: rejected by the queries-only

@@ -5,7 +5,7 @@ use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
 use ic_types::{
-    messages::{Delegation, SignedDelegation, UserSignature},
+    messages::{Delegation, DelegationPermissions, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
 };
 use std::time::Duration;
@@ -221,7 +221,7 @@ mod delegation_permissions {
     /// signable in-process, unlike the hard-coded ed25519 signatures used by
     /// the surrounding tests).
     fn validate_single_delegation(
-        permissions: Option<&str>,
+        permissions: Option<DelegationPermissions>,
     ) -> Result<DelegationRestrictions, RequestValidationError> {
         let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
         let message_id = message_test_id(1);
@@ -234,7 +234,7 @@ mod delegation_permissions {
 
         let delegation = match permissions {
             Some(permissions) => {
-                Delegation::new(session_pk, UNIX_EPOCH).with_permissions(permissions.to_string())
+                Delegation::new(session_pk, UNIX_EPOCH).with_permissions(permissions)
             }
             None => Delegation::new(session_pk, UNIX_EPOCH),
         };
@@ -263,7 +263,7 @@ mod delegation_permissions {
     #[test]
     fn queries_permission_sets_queries_only() {
         assert_matches!(
-            validate_single_delegation(Some("queries")),
+            validate_single_delegation(Some(DelegationPermissions::Queries)),
             Ok(restrictions) if restrictions.queries_only
         );
     }
@@ -271,7 +271,7 @@ mod delegation_permissions {
     #[test]
     fn all_permission_does_not_set_queries_only() {
         assert_matches!(
-            validate_single_delegation(Some("all")),
+            validate_single_delegation(Some(DelegationPermissions::All)),
             Ok(restrictions) if !restrictions.queries_only
         );
     }
@@ -284,19 +284,10 @@ mod delegation_permissions {
         );
     }
 
-    #[test]
-    fn unsupported_permission_is_rejected() {
-        assert_matches!(
-            validate_single_delegation(Some("writes")),
-            Err(InvalidDelegation(UnsupportedDelegationPermissions(value))) if value == "writes"
-        );
-        // "updates" is a plausible-looking value but is nevertheless
-        // unsupported: the only supported values are "queries" and "all".
-        assert_matches!(
-            validate_single_delegation(Some("updates")),
-            Err(InvalidDelegation(UnsupportedDelegationPermissions(value))) if value == "updates"
-        );
-    }
+    // Unsupported `permissions` values cannot reach the validator: the field
+    // is a closed enum, so unknown values are rejected when the request is
+    // decoded. That rejection is covered by a CBOR-decoding test in ic-types
+    // (`delegation_permissions_rejects_unsupported_value`).
 }
 
 #[test]

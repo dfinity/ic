@@ -236,9 +236,6 @@ fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> Auth
         ic_validator::AuthenticationError::DelegationContainsCyclesError { public_key } => {
             AuthenticationError::DelegationContainsCyclesError { public_key }
         }
-        ic_validator::AuthenticationError::UnsupportedDelegationPermissions(permissions) => {
-            AuthenticationError::UnsupportedDelegationPermissions(permissions)
-        }
     }
 }
 

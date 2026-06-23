@@ -13,9 +13,9 @@ use ic_types::{
         threshold_sig::RootOfTrustProvider,
     },
     messages::{
-        Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
-        Query, ReadState, SenderInfoContent, SignedDelegation, SignedIngressContent,
-        SignedSenderInfo, UserSignature, WebAuthnSignature,
+        Authentication, Delegation, DelegationPermissions, HasCanisterId, HttpRequest,
+        HttpRequestContent, MessageId, Query, ReadState, SenderInfoContent, SignedDelegation,
+        SignedIngressContent, SignedSenderInfo, UserSignature, WebAuthnSignature,
     },
 };
 use std::{
@@ -59,16 +59,6 @@ const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
 /// **Note**: this limit is part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
-
-/// Value of a delegation's `permissions` field that restricts the sender
-/// to query calls: requests to `/call` endpoints (i.e., updates and
-/// replicated queries) are rejected.
-const DELEGATION_PERMISSIONS_QUERIES: &str = "queries";
-
-/// Value of a delegation's `permissions` field that explicitly permits all
-/// kinds of calls — queries, replicated queries, and updates (same as an
-/// absent `permissions` field).
-const DELEGATION_PERMISSIONS_ALL: &str = "all";
 
 /// Restrictions that a chain of delegations places on the sender.
 #[derive(Debug)]
@@ -334,8 +324,6 @@ pub enum AuthenticationError {
     DelegationTooLongError { length: usize, maximum: usize },
     #[error("Chain of delegations contains at least one cycle: first repeating public key encountered {}", hex::encode(.public_key))]
     DelegationContainsCyclesError { public_key: Vec<u8> },
-    #[error("Unsupported delegation permissions: {0}")]
-    UnsupportedDelegationPermissions(String),
 }
 
 /// Set of canister IDs.
@@ -801,17 +789,11 @@ where
         // Restrict the canister targets to the ones specified in the delegation.
         restrictions.targets = restrictions.targets.intersect(new_targets);
         // Restrict the kinds of calls to the ones permitted by the delegation.
-        // Unsupported values are rejected (fail-closed): no delegations with a
-        // `permissions` field exist that predate this validation, so there is
-        // no backward compatibility concern.
+        // Unsupported `permissions` values are rejected earlier, when the
+        // request is decoded, since the field is a closed enum.
         match delegation.permissions() {
-            None | Some(DELEGATION_PERMISSIONS_ALL) => {}
-            Some(DELEGATION_PERMISSIONS_QUERIES) => restrictions.queries_only = true,
-            Some(unsupported) => {
-                return Err(InvalidDelegation(UnsupportedDelegationPermissions(
-                    unsupported.to_string(),
-                )));
-            }
+            None | Some(DelegationPermissions::All) => {}
+            Some(DelegationPermissions::Queries) => restrictions.queries_only = true,
         }
         pubkey = delegation.pubkey().to_vec();
     }

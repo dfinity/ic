@@ -152,9 +152,6 @@ pub enum AuthenticationError {
     /// which was already encountered before in the chain of delegations.
     /// Note that if both keys are equal, then this delegation is self-signed, which is also forbidden.
     DelegationContainsCyclesError { public_key: Vec<u8> },
-
-    /// A delegation's `permissions` field holds an unsupported value.
-    UnsupportedDelegationPermissions(String),
 }
 
 impl Display for AuthenticationError {
@@ -178,9 +175,6 @@ impl Display for AuthenticationError {
                 "Chain of delegations contains at least one cycle: first repeating public key encountered {}",
                 hex::encode(public_key)
             ),
-            AuthenticationError::UnsupportedDelegationPermissions(permissions) => {
-                write!(f, "Unsupported delegation permissions: {permissions}")
-            }
         }
     }
 }

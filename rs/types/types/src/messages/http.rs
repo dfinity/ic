@@ -536,6 +536,35 @@ impl From<CanisterIdError> for HttpRequestError {
     }
 }
 
+/// The kinds of calls a delegation permits, as defined in
+/// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication>`.
+/// An absent field on the [`Delegation`] is unrestricted, equivalent to
+/// [`DelegationPermissions::All`]. Unsupported values are rejected when
+/// decoding the request.
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(Arbitrary))]
+pub enum DelegationPermissions {
+    /// The sender may only perform query calls and `read_state` requests;
+    /// requests to `/call` endpoints are rejected.
+    #[serde(rename = "queries")]
+    Queries,
+    /// The sender may perform all kinds of calls (queries, replicated
+    /// queries, and updates). Same as omitting the field.
+    #[serde(rename = "all")]
+    All,
+}
+
+impl DelegationPermissions {
+    /// The textual value as it appears on the wire and in the
+    /// representation-independent hash.
+    fn as_str(&self) -> &'static str {
+        match self {
+            DelegationPermissions::Queries => "queries",
+            DelegationPermissions::All => "all",
+        }
+    }
+}
+
 /// Describes a delegation map as defined in
 /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -544,7 +573,7 @@ pub struct Delegation {
     pubkey: Blob,
     expiration: Time,
     targets: Option<Vec<Blob>>,
-    permissions: Option<String>,
+    permissions: Option<DelegationPermissions>,
 }
 
 impl Delegation {
@@ -566,7 +595,7 @@ impl Delegation {
 
     /// Restricts the kinds of calls the delegation permits. Chainable with
     /// [`Self::with_targets`] to build a delegation carrying both.
-    pub fn with_permissions(mut self, permissions: String) -> Self {
+    pub fn with_permissions(mut self, permissions: DelegationPermissions) -> Self {
         self.permissions = Some(permissions);
         self
     }
@@ -601,8 +630,8 @@ impl Delegation {
 
     /// The kinds of calls the delegation permits, if restricted.
     /// `None` means the delegation is unrestricted.
-    pub fn permissions(&self) -> Option<&str> {
-        self.permissions.as_deref()
+    pub fn permissions(&self) -> Option<DelegationPermissions> {
+        self.permissions
     }
 }
 
@@ -620,8 +649,8 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
                 Array(targets.iter().map(|t| Bytes(t.0.as_slice())).collect()),
             );
         }
-        if let Some(permissions) = &self.permissions {
-            map.insert("permissions", String(permissions));
+        if let Some(permissions) = self.permissions {
+            map.insert("permissions", String(permissions.as_str()));
         }
 
         bytes.extend_from_slice(&hash_of_map(&map, |key, value| hash_key_val(key, value)));
