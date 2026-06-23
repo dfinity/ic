@@ -283,11 +283,6 @@ mod delegation_permissions {
             Ok(restrictions) if !restrictions.queries_only
         );
     }
-
-    // Unsupported `permissions` values cannot reach the validator: the field
-    // is a closed enum, so unknown values are rejected when the request is
-    // decoded. That rejection is covered by a CBOR-decoding test in ic-types
-    // (`delegation_permissions_rejects_unsupported_value`).
 }
 
 #[test]
