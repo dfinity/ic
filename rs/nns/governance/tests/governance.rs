@@ -92,7 +92,7 @@ use ic_nns_governance::{
     proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance::{
-    canister_state::{governance_mut, set_governance_for_tests},
+    canister_state::{legacy_governance_mut, set_governance_for_tests},
     pb::v1::{Account, Subaccount as GovernanceSubaccount, manage_neuron::DisburseMaturity},
 };
 use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
@@ -2626,7 +2626,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     let expected_initial_event = RewardEvent {
@@ -2849,7 +2849,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     run_pending_timers().await;
@@ -3205,7 +3205,7 @@ async fn test_reward_distribution_skips_deleted_neurons() {
     );
 
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     // Make sure that the fixture function indeed did not create a neuron 999.
@@ -3285,7 +3285,7 @@ async fn test_genesis_in_the_future_is_supported() {
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     gov.run_periodic_tasks().now_or_never();
@@ -3520,7 +3520,7 @@ fn compute_maturities(
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     let expected_initial_event = RewardEvent {
@@ -6370,7 +6370,7 @@ async fn test_staked_maturity() {
     );
 
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     gov.neuron_store
@@ -8019,7 +8019,7 @@ async fn test_max_number_of_proposals_with_ballots() {
         fake_driver.get_fake_randomness_generator(),
     );
     set_governance_for_tests(gov);
-    let gov = governance_mut();
+    let gov = legacy_governance_mut();
     schedule_tasks(None);
 
     // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
@@ -12897,7 +12897,7 @@ async fn distribute_rewards_test() {
         .collect();
 
     set_governance_for_tests(governance);
-    let governance = governance_mut();
+    let governance = legacy_governance_mut();
     schedule_tasks(None);
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
