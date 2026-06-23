@@ -215,6 +215,7 @@ type FirewallRule = record {
 type FirewallRulesScope = variant {
   Node : principal;
   ReplicaNodes;
+  CloudEngines;
   ApiBoundaryNodes;
   Subnet : principal;
   Global;
