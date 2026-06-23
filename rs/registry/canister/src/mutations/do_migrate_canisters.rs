@@ -39,11 +39,16 @@ impl Registry {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Intentionally do not validate that the target subnet exists: the migration orchestrator
-        // may still attempt to migrate canisters to a subnet that has been deleted.
-        // In this case, the outcome should be as if the migration completed before the subnet
-        // got deleted, i.e., the canister should be removed from the source subnet's canister
-        // ranges and not added to the (deleted) target subnet's canister ranges.
+        // Subnet deletion is (currently) a manual process and we don't expect to actually delete
+        // a subnet while a canister migration is ongoing (instead we expect to disable the
+        // canister migration API first and only delete a subnet once there's no ongoing canister
+        // migration). However, e.g., if a subnet is permanently stuck, it might be impossible to
+        // successfully complete an ongoing canister migration and in this case, we'd like to still
+        // be able to delete such a subnet. In this case, the outcome should be as if the migration
+        // completed before the subnet got deleted, i.e., the canister should be removed from the
+        // source subnet's canister ranges and not added to the (deleted) target subnet's canister
+        // ranges.
+        // Hence, we intentionally do not validate that the target subnet exists here.
         let target_subnet_id = SubnetId::new(target_subnet_id);
 
         Ok((canister_ids, target_subnet_id))
@@ -79,7 +84,8 @@ mod test {
     #[test]
     fn test_basic_migrate_canisters() {
         // We create an invariant compliant registry, then we migrate a single canister
-        // to a new subnet, and we check that the Routing table has the correct ranges at that point.
+        // to a new subnet, and we check that the Routing table has the correct ranges
+        // at that point.
 
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
@@ -92,8 +98,9 @@ mod test {
         let target_subnet_id =
             registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0, 1, 2, 3]);
 
-        // The target subnet must already appear in the routing table for the migration to keep it assigned;
-        // give it a dedicated range (256–256) in addition to the system subnet's range.
+        // The target subnet must already appear in the routing table for the migration to keep
+        // it assigned; give it a dedicated range (256–256) in addition to the system subnet's
+        // range.
         let mut initial_routing_table = RoutingTable::new();
         initial_routing_table
             .insert(
