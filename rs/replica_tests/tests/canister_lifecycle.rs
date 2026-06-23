@@ -4,7 +4,7 @@ use ic_config::Config;
 use ic_config::execution_environment::{
     DEFAULT_WASM_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_LIMIT, TEST_DEFAULT_LOG_MEMORY_USAGE,
 };
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
@@ -502,7 +502,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
             test.canister_state(&canister_id).system_state.balance();
 
         // Create another canister with some cycles.
-        let config = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
+        let config = CyclesAccountManagerConfig::application_subnet();
         let cycles_for_new_canister = config.canister_creation_fee + Cycles::new(100_000_000);
         let new_canister_id_payload = test
             .ingress(

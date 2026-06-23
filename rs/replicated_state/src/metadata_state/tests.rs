@@ -2917,3 +2917,96 @@ fn blockmaker_metrics_check_soft_invariants(
 
     prop_assert!(metrics.check_soft_invariants().is_ok());
 }
+
+fn make_network_topology_with_subnet(
+    subnet_id: SubnetId,
+    subnet_type: SubnetType,
+    sev_enabled: bool,
+) -> NetworkTopology {
+    let subnet_topology = SubnetTopology {
+        subnet_type,
+        subnet_features: SubnetFeatures {
+            sev_enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    NetworkTopology {
+        subnets: btreemap! { subnet_id => subnet_topology },
+        ..Default::default()
+    }
+}
+
+#[test]
+fn network_topology_application_sev_disabled_uses_default_reference_subnet_size() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology = make_network_topology_with_subnet(subnet_id, SubnetType::Application, false);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_application_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology = make_network_topology_with_subnet(subnet_id, SubnetType::Application, true);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(SEV_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_verified_application_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology =
+        make_network_topology_with_subnet(subnet_id, SubnetType::VerifiedApplication, true);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(SEV_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_system_ignores_sev_flag() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology_sev = make_network_topology_with_subnet(subnet_id, SubnetType::System, true);
+    let topology_no_sev = make_network_topology_with_subnet(subnet_id, SubnetType::System, false);
+    assert_eq!(
+        topology_sev.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+    assert_eq!(
+        topology_no_sev.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_reference_subnet_size_is_never_zero() {
+    use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE};
+    // reference_subnet_size is used as a divisor in scale_cost; it must never be zero.
+    assert_ne!(DEFAULT_REFERENCE_SUBNET_SIZE, 0);
+    assert_ne!(SEV_REFERENCE_SUBNET_SIZE, 0);
+
+    let subnet_id = subnet_test_id(1);
+    for subnet_type in [
+        SubnetType::Application,
+        SubnetType::VerifiedApplication,
+        SubnetType::System,
+    ] {
+        for sev_enabled in [false, true] {
+            let topology = make_network_topology_with_subnet(subnet_id, subnet_type, sev_enabled);
+            assert_ne!(
+                topology.get_reference_subnet_size(&subnet_id).unwrap(),
+                0,
+                "reference_subnet_size must not be zero for {subnet_type:?} sev={sev_enabled}"
+            );
+        }
+    }
+}
