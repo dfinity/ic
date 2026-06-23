@@ -42,7 +42,7 @@ const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 338;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 352;
 
 struct CyclesBurnedRate {
     memory: CompoundCycles<Memory>,
@@ -109,11 +109,11 @@ impl CyclesAccountManager {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<T> {
         debug_assert_ne!(
-            self.config.reference_subnet_size, 0,
+            subnet_cycles_config.reference_subnet_size, 0,
             "prevent divide by zero panic"
         );
-        let real =
-            (cycles * subnet_cycles_config.subnet_size) / self.config.reference_subnet_size.max(1);
+        let real = (cycles * subnet_cycles_config.subnet_size)
+            / subnet_cycles_config.reference_subnet_size.max(1);
         CompoundCycles::<T>::new(real, subnet_cycles_config.cost_schedule)
     }
 

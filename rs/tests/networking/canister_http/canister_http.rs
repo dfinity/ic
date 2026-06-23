@@ -312,6 +312,14 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
         .nodes()
 }
 
+pub fn get_cloud_engine_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+    env.topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::CloudEngine)
+        .expect("there is no cloud engine")
+        .nodes()
+}
+
 pub fn get_all_application_subnets(env: &TestEnv) -> Vec<SubnetSnapshot> {
     env.topology_snapshot()
         .subnets()

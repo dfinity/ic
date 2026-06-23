@@ -1,8 +1,5 @@
 use ic_base_types::{EnvironmentVariables, PrincipalId};
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
@@ -99,7 +96,7 @@ fn test_setup(
     let test_canister_sha256 = hasher.finish();
 
     // set up StateMachine
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -630,7 +627,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     ));
 
     // drain cycle balance of test_canister to trigger code uninstall from system
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let compute_percent_allocated_per_second_fee = subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee;
@@ -1204,7 +1201,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
 
 fn setup_with_application_subnet() -> StateMachine {
     StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
+        SubnetConfig::new(SubnetType::Application),
         HypervisorConfig::default(),
     ))
 }
