@@ -1414,7 +1414,7 @@ mod tests {
 
         // Method with is_replicated None -> rejected.
         let args = dummy_args(method, None);
-        let result = generate_args_context(&node_ids, args);
+        let result = generate_context(&node_ids, args);
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired)
@@ -1422,7 +1422,7 @@ mod tests {
 
         // Method with is_replicated Some(true) -> rejected.
         let args = dummy_args(method, Some(true));
-        let result = generate_args_context(&node_ids, args);
+        let result = generate_context(&node_ids, args);
         assert_matches!(
             result,
             Err(CanisterHttpRequestContextError::DeterministicResponseCountRequired)
@@ -1430,7 +1430,7 @@ mod tests {
 
         // Method with is_replicated Some(false) -> accepted.
         let args = dummy_args(method, Some(false));
-        let result = generate_args_context(&node_ids, args);
+        let result = generate_context(&node_ids, args);
         assert_matches!(
             result,
             Ok(ctx) => {
@@ -1454,7 +1454,7 @@ mod tests {
             context: vec![],
         });
 
-        let result = generate_args_context(&node_ids, args);
+        let result = generate_context(&node_ids, args);
 
         assert_matches!(
             result,
@@ -1467,7 +1467,7 @@ mod tests {
         let node_ids = BTreeSet::new();
         let args = dummy_args(HttpMethod::GET, None);
 
-        let result = generate_args_context(&node_ids, args);
+        let result = generate_context(&node_ids, args);
 
         assert_matches!(
             result,
@@ -1864,7 +1864,7 @@ mod tests {
 
     /// Generates a context from `args` and `node_ids`, filling in dummy values
     /// for the time, request, registry version, and rng.
-    fn generate_args_context(
+    fn generate_context(
         node_ids: &BTreeSet<NodeId>,
         args: CanisterHttpRequestArgs,
     ) -> Result<CanisterHttpRequestContext, CanisterHttpRequestContextError> {
