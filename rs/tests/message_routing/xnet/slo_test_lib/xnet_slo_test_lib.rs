@@ -135,10 +135,9 @@ impl Config {
         config
     }
 
-    pub fn with_send_rate_threshold(self, send_rate_threshold: f64) -> Self {
-        let mut config = self.clone();
-        config.send_rate_threshold = send_rate_threshold;
-        config
+    pub fn with_send_rate_threshold(mut self, send_rate_threshold: f64) -> Self {
+        self.send_rate_threshold = send_rate_threshold;
+        self
     }
 
     pub fn with_payload_bytes(self, payload_size_bytes: u64) -> Self {
