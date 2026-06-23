@@ -1,7 +1,9 @@
 /* tag::catalog[]
 Title:: HTTP requests from canisters to remote IPv4 service through socks proxy on API boundary node.
 
-Goal:: Ensure that only system subnets with the feature enabled can access IPv4 endpoints.
+Goal:: Ensure that HTTP requests from canisters to a remote IPv4 service are routed through the
+correct API boundary node (system API BN for system subnet, application API BN for application and
+cloud engine subnets).
 
 Runbook::
 1. Instantiate an IC with one application, one cloud engine and one system subnet with the HTTP feature enabled.
@@ -12,8 +14,7 @@ Runbook::
 6. Make a http outcall request to the IPv4 interface of the http server from the cloud engine.
 
 Success::
-1. Received http response with status 200 that is routed through the correct API boundary node (system
-   API BN for system subnet, application API BN for application and cloud engine subnets).
+1. Received http response with status 200 that is routed through the correct API boundary node.
 
 end::catalog[] */
 #![allow(deprecated)]
