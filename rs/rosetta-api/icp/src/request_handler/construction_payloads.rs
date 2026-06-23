@@ -1165,26 +1165,45 @@ mod tests {
     }
 
     // Vector A (ICPBB-134): a window far larger than the documented 24h bound is
-    // currently accepted, because no bound is enforced before the loop.
+    // rejected before the loop.
     #[test]
-    fn oversized_ingress_window_is_currently_accepted() {
+    fn oversized_ingress_window_is_rejected() {
         assert!(
             validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + 48 * HOUR_NANOS))
-                .is_ok()
+                .is_err()
         );
     }
 
     // Vector A' (ICPBB-134): a tiny start with a near-`u64::MAX` end (an enormous
-    // span) is currently accepted.
+    // span) is rejected.
     #[test]
-    fn unbounded_ingress_span_is_currently_accepted() {
-        assert!(validate_ingress_window(t(NOW_NANOS), t(0), t(u64::MAX)).is_ok());
+    fn unbounded_ingress_span_is_rejected() {
+        assert!(validate_ingress_window(t(NOW_NANOS), t(0), t(u64::MAX)).is_err());
     }
 
-    // Vector B (ICPBB-134): the near-`u64::MAX` wrap payload is currently accepted.
+    // Vector B (ICPBB-134): the near-`u64::MAX` wrap payload has a tiny span but a
+    // far-future end, so it is rejected by the future bound.
     #[test]
-    fn near_u64_max_ingress_window_is_currently_accepted() {
+    fn near_u64_max_ingress_window_is_rejected() {
         let start = t(u64::MAX - 50 * 1_000_000_000);
-        assert!(validate_ingress_window(t(NOW_NANOS), start, t(u64::MAX)).is_ok());
+        assert!(validate_ingress_window(t(NOW_NANOS), start, t(u64::MAX)).is_err());
+    }
+
+    // Negative control: a realistic window (5 minutes ahead of now) is accepted.
+    #[test]
+    fn valid_ingress_window_is_accepted() {
+        let end = t(NOW_NANOS + 5 * 60 * 1_000_000_000);
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), end).is_ok());
+    }
+
+    // Boundary: a window of exactly 24h ending exactly 24h from now is accepted,
+    // one nanosecond more is rejected.
+    #[test]
+    fn ingress_window_boundary_is_inclusive() {
+        let max = MAX_INGRESS_WINDOW.as_nanos() as u64;
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max)).is_ok());
+        assert!(
+            validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max + 1)).is_err()
+        );
     }
 }
