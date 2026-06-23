@@ -3,6 +3,7 @@ e2fsprogs, built from source. The bundled libuuid/libblkid are enabled so we
 don't link against system copies.
 """
 
+load("@//bazel:defs.bzl", "disable_hermetic_cc_target")
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 filegroup(
@@ -11,7 +12,7 @@ filegroup(
 )
 
 configure_make(
-    name = "mke2fs",
+    name = "e2fsprogs_impl",
     args = ["-j"],
     configure_in_place = True,
     configure_options = [
@@ -19,8 +20,8 @@ configure_make(
         # stays self-contained.
         "--enable-libuuid",
         "--enable-libblkid",
+        "--enable-fuse2fs",
         # Trim optional features that would pull in extra deps or shared libs.
-        "--disable-fuse2fs",
         "--disable-uuidd",
         "--disable-nls",
         "--disable-tls",
@@ -35,13 +36,19 @@ configure_make(
         "--with-systemd-unit-dir=no",
     ],
     env = {
-        "CFLAGS": "-g -O2 -static",
-        "LDFLAGS": "-static",
+        "CFLAGS": "-g -O2 -static -I$$EXT_BUILD_DEPS/include",
+        "LDFLAGS": "-static -L$$EXT_BUILD_DEPS/lib",
     },
     lib_source = ":all_srcs",
-    out_binaries = ["mke2fs"],
+    deps = [
+        "@libfuse//:libfuse",
+    ],
+    out_binaries = [
+        "fuse2fs",
+        "mke2fs",
+    ],
     # We don't ship any libs out of this build; everything is folded into the
-    # mke2fs binary.
+    # exported binaries.
     out_shared_libs = [],
     out_static_libs = [],
     # mke2fs is installed under sbin/ by autotools (it's a sysadmin tool);
@@ -54,7 +61,7 @@ configure_make(
         "mkdir -p $$INSTALLDIR/bin" +
         " && cp $$INSTALLDIR/sbin/mke2fs $$INSTALLDIR/bin/mke2fs" +
         " && find $$INSTALLDIR -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} +" +
-        " && find $$INSTALLDIR/bin -mindepth 1 ! -name mke2fs -delete"
+        " && find $$INSTALLDIR/bin -mindepth 1 ! -name fuse2fs ! -name mke2fs -delete"
     ),
     # Static glibc linking is a Linux/glibc thing; this isn't expected to work
     # elsewhere.
@@ -62,5 +69,26 @@ configure_make(
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
+)
+
+# e2fsprogs' dependency, libfuse does not build with hermetic toolchains (meson is not happy with the zig linker),
+# and building libfuse without the hermetic and e2fsprogs with the hermetic toolchain causes linking issues because of
+# glibc version mismatch. So just disable the hermetic toolchain for e2fsprogs.
+disable_hermetic_cc_target(
+    name = "e2fsprogs",
+    target = ":e2fsprogs_impl",
+)
+
+filegroup(
+    name = "fuse2fs",
+    srcs = [":e2fsprogs"],
+    output_group = "fuse2fs",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mke2fs",
+    srcs = [":e2fsprogs"],
+    output_group = "mke2fs",
     visibility = ["//visibility:public"],
 )
