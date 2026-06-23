@@ -281,14 +281,16 @@ def system_test(
     for image_name, image_path in icos_config.local_only_icos_images.items():
         _local_only_deps[image_name + "_PATH"] = image_path
 
-    # The Local backend boots Universal-VMs and the Prometheus-VM from
-    # these locally-vendored images instead of fetching them from Farm.
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+    _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()
+    } | {
+        "NET_ADMIN_LAUNCHER_PATH": "/usr/local/bin/ic-net-admin",
     }
 
     # The local backend runs in a sandbox without external network access, so it

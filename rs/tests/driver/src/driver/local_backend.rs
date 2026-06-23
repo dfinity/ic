@@ -2,9 +2,8 @@
 //!
 //! This module is the counterpart to [`crate::driver::farm::Farm`] for tests
 //! that are run on a developer or CI host instead of being shipped to the Farm
-//! cluster. It is selected by setting `SYSTEM_TEST_INFRA=local` in the test
-//! environment, which is done by the `system_test(local = True, ...)` Bazel
-//! macro in `rs/tests/system_tests.bzl`.
+//! cluster. It is selected by setting the environment variable:
+//! `SYSTEM_TEST_INFRA=local`.
 //!
 //! The backend spawns a *per-test* libvirtd daemon on a unix socket under the
 //! test's `working_dir`, then drives the daemon through the `virt` crate to
@@ -23,6 +22,7 @@
 use crate::driver::farm::{VMCreateResponse, VmSpec};
 use crate::driver::resource::DiskImage;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env_api::get_dependency_path_from_env;
 use anyhow::{Context, Result, anyhow, bail};
 use askama::Template;
 use deterministic_ips::MacAddr6Ext;
@@ -38,38 +38,6 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use virt::connect::Connect;
 use virt::domain::Domain;
-
-/// Absolute path to the `libvirtd` binary.
-///
-/// `libvirtd` is installed in `/usr/sbin`, which is absent from `PATH` inside
-/// the Bazel test sandbox, so we reference it by absolute path rather than
-/// relying on a `PATH` lookup.
-///
-/// TODO: provide libvirt via a bazel dependency and replace this with an environment variable.
-const LIBVIRTD_BIN: &str = "/usr/sbin/libvirtd";
-
-/// Absolute path to the `dnsmasq` binary, used purely as an IPv6 Router
-/// Advertisement daemon so the GuestOS can derive its global SLAAC address (see
-/// [`LocalBackend::create_group`]). Like [`LIBVIRTD_BIN`], it lives in
-/// `/usr/sbin`, which is not on `PATH` in the Bazel test sandbox, so we
-/// reference it by absolute path.
-///
-/// TODO: provide dnsmasq via a bazel dependency and replace this with an environment variable.
-const DNSMASQ_BIN: &str = "/usr/sbin/dnsmasq";
-
-/// Absolute path to the capability launcher used for the few networking
-/// operations that require `CAP_NET_ADMIN` (creating the per-group bridge and
-/// attaching TAP devices). See [`LocalBackend::net_admin`] for the rationale
-/// and `ci/container/Dockerfile` for how the launcher is provisioned (a
-/// file-capability-endowed `capsh` baked into the container image).
-///
-/// The backend is otherwise fully unprivileged: `libvirtd` runs as the
-/// current (non-root) user in session mode (`qemu:///session`), and QEMU opens
-/// the pre-created, user-owned TAPs directly. No `sudo` is used anywhere.
-///
-/// TODO: provide the launcher via a bazel dependency and replace this with an
-/// environment variable.
-const NET_ADMIN_LAUNCHER: &str = "/usr/local/bin/ic-net-admin";
 
 /// Persistent record (in the root TestEnv) of the libvirtd unix socket so that
 /// forked task subprocesses can connect to the daemon spawned by the setup
@@ -262,7 +230,8 @@ impl LocalBackend {
     /// (bridge/TAP interface names and IPv6 prefixes are restricted to
     /// `[0-9a-f:.-]`).
     fn net_admin(script: &str) -> Command {
-        let mut cmd = Command::new(NET_ADMIN_LAUNCHER);
+        let net_admin_launcher = get_dependency_path_from_env("NET_ADMIN_LAUNCHER_PATH");
+        let mut cmd = Command::new(net_admin_launcher);
         cmd.arg("--inh=cap_net_admin,cap_net_raw,cap_net_bind_service")
             .arg("--addamb=cap_net_admin")
             .arg("--addamb=cap_net_raw")
@@ -311,35 +280,6 @@ impl LocalBackend {
         std::fs::create_dir_all(&libvirt_dir).with_context(|| {
             format!("creating libvirt working dir at {}", libvirt_dir.display())
         })?;
-
-        // Run libvirtd from a private copy rather than directly from
-        // `LIBVIRTD_BIN`.
-        //
-        // The host's `libvirtd` AppArmor profile attaches *by executable path*
-        // (it is defined for `/usr/sbin/libvirtd`) and, in enforce mode, only
-        // permits peers in the same profile to signal the daemon. Our teardown
-        // (`kill_all_descendants`) runs unconfined, so signalling the confined
-        // daemon is denied by the kernel and surfaces as `EACCES`; the daemon
-        // then survives teardown until its PID namespace is torn down, stalling
-        // the reaper and spamming the log.
-        //
-        // AppArmor matches the profile against the exec'd path, so a copy at any
-        // other path does not match and runs *unconfined* — exactly like the
-        // QEMU and dnsmasq processes we already spawn (in session mode libvirt's
-        // AppArmor security driver does not confine QEMU, so dropping the
-        // daemon's own confinement changes nothing for the guests). The copy is
-        // therefore signalable and reaped normally at teardown.
-        //
-        // TODO: this is no longer necessary when we provide libvirtd as a bazel dependency.
-        let libvirtd_bin = libvirt_dir.join("libvirtd");
-        std::fs::copy(LIBVIRTD_BIN, &libvirtd_bin).with_context(|| {
-            format!(
-                "copying {LIBVIRTD_BIN} to {} to escape its path-attached AppArmor profile",
-                libvirtd_bin.display()
-            )
-        })?;
-        std::fs::set_permissions(&libvirtd_bin, std::fs::Permissions::from_mode(0o755))
-            .with_context(|| format!("making {} executable", libvirtd_bin.display()))?;
 
         let conf_path = libvirt_dir.join("libvirtd.conf");
         let pid_path = libvirt_dir.join("libvirtd.pid");
@@ -458,9 +398,10 @@ impl LocalBackend {
         // and console output directly to files instead). The few operations
         // that need elevated networking capabilities (creating the bridge and
         // TAPs) go through the narrow [`net_admin`] capability launcher instead.
-        info!(logger, "Spawning libvirtd (session mode)"; "bin" => %libvirtd_bin.display(), "conf" => %conf_path.display(), "socket" => %socket_path.display());
+        info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
-        let child = Command::new(&libvirtd_bin)
+        let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
+        let child = Command::new(&libvirtd_path)
             .arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
@@ -860,8 +801,9 @@ impl LocalBackend {
         // entirely. `dnsmasq` daemonizes (writing its pid-file) and is later
         // signalled via that pid-file in teardown.
         let user = current_username();
+        let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
         let dnsmasq_script = format!(
-            "exec {DNSMASQ_BIN} \
+            "exec {dnsmasq_path:?} \
                  --conf-file=/dev/null \
                  --pid-file={pid} \
                  --dhcp-leasefile={lease} \

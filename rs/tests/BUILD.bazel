@@ -263,3 +263,21 @@ genrule(
     outs = ["version-test.txt"],
     cmd = "sed < $< 's/$$/-test/' > $@",
 )
+
+genrule(
+    name = "libvirtd",
+    outs = ["libvirtd.bin"],
+    cmd = "cp -L /usr/sbin/libvirtd $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+genrule(
+    name = "dnsmasq",
+    outs = ["dnsmasq.bin"],
+    cmd = "cp -L /usr/sbin/dnsmasq $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
