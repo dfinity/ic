@@ -47,6 +47,7 @@ on the process that this file is part of, see
 ## Deprecated
 
 ## Removed
+* The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
 
 ## Fixed
 
