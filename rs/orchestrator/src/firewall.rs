@@ -429,7 +429,11 @@ impl Firewall {
             .is_system_api_boundary_node(self.node_id, registry_version)
         {
             Ok(true) => vec![SubnetType::System],
-            Ok(false) => vec![SubnetType::Application, SubnetType::VerifiedApplication],
+            Ok(false) => vec![
+                SubnetType::Application,
+                SubnetType::VerifiedApplication,
+                SubnetType::CloudEngine,
+            ],
             Err(err) => {
                 warn!(
                     every_n_seconds => 30,
