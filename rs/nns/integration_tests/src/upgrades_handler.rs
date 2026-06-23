@@ -12,10 +12,10 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
     itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
-    registry::get_value_or_panic,
+    registry::get_value,
 };
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
-use ic_registry_keys::make_blessed_replica_versions_key;
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
+use ic_registry_keys::make_replica_version_key;
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
@@ -48,6 +48,15 @@ async fn assert_failed_with_reason(gov: &Canister<'_>, proposal_id: ProposalId, 
     );
 }
 
+async fn is_elected_version(registry: &Canister<'_>, replica_version_id: &str) -> bool {
+    get_value::<ReplicaVersionRecord>(
+        registry,
+        make_replica_version_key(replica_version_id).as_bytes(),
+    )
+    .await
+    .is_some()
+}
+
 #[test]
 fn test_submit_and_accept_update_elected_replica_versions_proposal() {
     state_machine_test_on_nns_subnet(|runtime| async move {
@@ -72,7 +81,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 guest_launch_measurements: None,
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
             };
-        let bless_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
+        let elect_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
             update_versions_payload(Some(version_id.into()), vec![])
         };
         let retire_version_payload = |ids: Vec<&str>| -> ReviseElectedGuestosVersionsPayload {
@@ -89,11 +98,11 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         let version_to_elect_and_unelect2 = "version_to_elect_and_unelect2";
         let version_to_elect = "version_to_elect";
 
-        // bless three versions
+        // elect three versions
         let setup = vec![
-            bless_version_payload(version_to_elect_and_unelect1),
-            bless_version_payload(version_to_elect_and_unelect2),
-            bless_version_payload(unassigned_nodes_version),
+            elect_version_payload(version_to_elect_and_unelect1),
+            elect_version_payload(version_to_elect_and_unelect2),
+            elect_version_payload(unassigned_nodes_version),
         ];
 
         for payload in setup {
@@ -105,21 +114,16 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             );
         }
 
-        assert_eq!(
-            get_value_or_panic::<BlessedReplicaVersions>(
-                &nns_canisters.registry,
-                make_blessed_replica_versions_key().as_bytes()
-            )
-            .await,
-            BlessedReplicaVersions {
-                blessed_version_ids: vec![
-                    default_version.to_string(),
-                    version_to_elect_and_unelect1.to_string(),
-                    version_to_elect_and_unelect2.to_string(),
-                    unassigned_nodes_version.to_string(),
-                ]
-            }
-        );
+        // Check state of elected versions
+        for version in [
+            default_version,
+            version_to_elect_and_unelect1,
+            version_to_elect_and_unelect2,
+            unassigned_nodes_version,
+        ] {
+            assert!(is_elected_version(&nns_canisters.registry, version).await);
+        }
+        assert!(!is_elected_version(&nns_canisters.registry, version_to_elect).await);
 
         // update unassigned version
         let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
@@ -148,14 +152,14 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             ),
             (
                 retire_version_payload(vec![version_to_elect_and_unelect1, default_version]),
-                Some("currently deployed to a subnet"),
+                Some("Using a version that isn't elected"),
             ),
             (
                 update_versions_payload(
                     Some(version_to_elect.into()),
                     vec![version_to_elect_and_unelect1, unassigned_nodes_version],
                 ),
-                Some("currently deployed to unassigned nodes"),
+                Some("Using a version that isn't elected"),
             ),
             (
                 ReviseElectedGuestosVersionsPayload {
@@ -165,7 +169,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 Some("All parameters to elect a version have to be either set or unset"),
             ),
             (
-                bless_version_payload(""),
+                elect_version_payload(""),
                 Some("Elected an empty version ID"),
             ),
             (
@@ -198,20 +202,13 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
             }
         }
 
-        assert_eq!(
-            get_value_or_panic::<BlessedReplicaVersions>(
-                &nns_canisters.registry,
-                make_blessed_replica_versions_key().as_bytes()
-            )
-            .await,
-            BlessedReplicaVersions {
-                blessed_version_ids: vec![
-                    default_version.to_string(),
-                    unassigned_nodes_version.to_string(),
-                    version_to_elect.to_string()
-                ]
-            }
-        );
+        // Check state of elected versions
+        for version in [default_version, unassigned_nodes_version, version_to_elect] {
+            assert!(is_elected_version(&nns_canisters.registry, version).await);
+        }
+        for version in [version_to_elect_and_unelect1, version_to_elect_and_unelect2] {
+            assert!(!is_elected_version(&nns_canisters.registry, version).await);
+        }
 
         // No proposals should be pending now.
         let pending_proposals = get_pending_proposals(gov).await;

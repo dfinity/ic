@@ -43,11 +43,12 @@ def _zstd_compress(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     ctx.actions.run(
-        executable = "zstd",
+        executable = ctx.file._zstd,
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
+        tools = [ctx.file._zstd],
         resource_set = _compress_resources,
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -56,6 +57,7 @@ zstd_compress = rule(
     implementation = _zstd_compress,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "_zstd": attr.label(allow_single_file = True, default = "@zstd//:zstd_cli"),
     },
 )
 
@@ -84,6 +86,16 @@ def _mcopy(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
+    # //:mtools resolves to the mtools bundle (the mtools binary + an include
+    # dir); pick out the binary, which we drive as `mtools -c mcopy ...`.
+    mtools = None
+    for f in ctx.files._mtools:
+        if f.basename == "mtools":
+            mtools = f
+            break
+    if not mtools:
+        fail("could not locate mtools binary among //:mtools outputs")
+
     command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
     inputs = []
     for srcs, dest in ctx.attr.srcmap.items():
@@ -94,7 +106,8 @@ def _mcopy(ctx):
                 dest_path = dest + src_file.basename
             else:
                 dest_path = dest
-            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+            command += "&& {mtools} -c mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+                mtools = mtools.path,
                 output = out.path,
                 src_path = src_file.path,
                 dest = dest_path.removeprefix("/"),
@@ -102,7 +115,7 @@ def _mcopy(ctx):
 
     ctx.actions.run_shell(
         command = command,
-        inputs = inputs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs] + ctx.files._mtools,
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -112,6 +125,7 @@ mcopy = rule(
     attrs = {
         "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
+        "_mtools": attr.label(default = "//:mtools", cfg = "exec", allow_files = True),
     },
 )
 
@@ -348,8 +362,8 @@ def rust_test_with_binary(name, binary_name, **kwargs):
         test_target = name,
     )
 
-def _write_info_file_var_impl(ctx):
-    """Helper rule that creates a file with the content of the provided var from the info file."""
+def _write_stable_status_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file (bazel-out/stable-status.txt)."""
 
     output = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run_shell(
@@ -361,11 +375,21 @@ def _write_info_file_var_impl(ctx):
     )
     return [DefaultInfo(files = depset([output]))]
 
-write_info_file_var = rule(
-    implementation = _write_info_file_var_impl,
+write_stable_status_file_var = rule(
+    implementation = _write_stable_status_file_var_impl,
     attrs = {
         "varname": attr.string(mandatory = True),
     },
+)
+
+def _volatile_status_impl(ctx):
+    return [DefaultInfo(
+        files = depset([ctx.version_file]),
+        runfiles = ctx.runfiles(files = [ctx.version_file]),
+    )]
+
+volatile_status = rule(
+    implementation = _volatile_status_impl,
 )
 
 def file_size_check(

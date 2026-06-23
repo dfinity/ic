@@ -32,7 +32,6 @@ rust_library(
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/state_layout",
         "//rs/sys",
         "//rs/types/base_types",
         "//rs/types/cycles",
@@ -92,6 +91,7 @@ rust_ic_test(
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/execution_environment",
+        "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/state",
         "//rs/test_utilities/types",
@@ -326,7 +326,10 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":execution_environment",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/test_utilities/types",
@@ -343,8 +346,11 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":execution_environment",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
@@ -359,6 +365,8 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/limits",
         "//rs/types/cycles",
@@ -376,6 +384,8 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/limits",
         "//rs/types/cycles",

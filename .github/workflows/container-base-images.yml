@@ -10,6 +10,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/container-base-images.yml'
+      - 'toolchains/sysimage/build_container_base_image.py'
       - '**/Dockerfile.base'
       - '**/packages.common'
       - '**/packages.dev'
@@ -53,6 +54,10 @@ jobs:
             CONTEXT: "ic-os/setupos/context"
             REFFILE: "ic-os/setupos/context/docker-base.dev"
             BUILD_ARGS: "PACKAGE_FILES=packages.common packages.dev"
+          - IMAGE: "bootloader-base"
+            CONTEXT: "ic-os/bootloader/context"
+            REFFILE: "ic-os/bootloader/context/docker-base"
+            BUILD_ARGS: ""
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

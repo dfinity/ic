@@ -141,6 +141,7 @@ members = [
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/embedders/fuzz",
+    "rs/engine_controller",
     "rs/ethereum/cketh/minter",
     "rs/ethereum/cketh/test_utils",
     "rs/ethereum/ledger-suite-orchestrator",
@@ -494,6 +495,7 @@ members = [
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
+    "rs/tests/networking/firewall",
     "rs/tests/networking/subnet_update_workload",
     "rs/tests/nns",
     "rs/tests/nns/cycles_minting",
@@ -790,13 +792,13 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
-quinn = { version = "0.11.9", default-features = false, features = [
+quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
     "runtime-tokio",
     "rustls",
 ] }
-quinn-udp = "0.5.14"
+quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
@@ -915,11 +917,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.248.0", features = ["wasmparser"] }
-wasmparser = "0.248.0"
-wasmprinter = "0.248.0"
-wast = "248.0.0"
-wat = "~1.248.0"
+wasm-encoder = { version = "0.251.0", features = ["wasmparser"] }
+wasmparser = "0.251.0"
+wasmprinter = "0.251.0"
+wast = "251.0.0"
+wat = "~1.251.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
 wirm = { version = "4.0.4", features = ["parallel"] }

@@ -14,14 +14,16 @@ use url::Url;
 
 use crate::{
     driver::{
-        farm::{DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate},
+        farm::{
+            Certificate, DemoCertificate, DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate,
+        },
         log_events,
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv,
-            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
-            get_dependency_path_from_env,
+            AcquireDemoCertificate, AcquirePlaynetCertificate, CreateDnsRecords,
+            CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot,
+            IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path_from_env,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -161,12 +163,33 @@ sudo networkctl reconfigure enp2s0
             None
         };
 
-        let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
-        let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
-        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
+        let demo_domain_env = std::env::var("DEMO_DOMAIN").ok().filter(|s| !s.is_empty());
+
+        let (ic_gateway_fqdn, cert, aaaa_records, a_records) =
+            if let Some(demo_domain) = demo_domain_env {
+                let demo = self.load_or_create_demo_domain(env, &demo_domain, vm_ipv6, vm_ipv4)?;
+                let fqdn = demo.demo_cert.domain.clone();
+                self.configure_demo_domain_dns_records(env, &demo, &fqdn)?;
+                (
+                    fqdn,
+                    demo.demo_cert.cert.clone(),
+                    demo.aaaa_records.clone(),
+                    demo.a_records.clone(),
+                )
+            } else {
+                let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
+                let fqdn = playnet.playnet_cert.playnet.clone();
+                self.configure_dns_records(env, &playnet, &fqdn)?;
+                (
+                    fqdn,
+                    playnet.playnet_cert.cert.clone(),
+                    playnet.aaaa_records.clone(),
+                    playnet.a_records.clone(),
+                )
+            };
 
         // Emit log events for A and AAAA records
-        emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
+        emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &aaaa_records, &a_records);
 
         // Save playnet configuration and start the gateway
         let playnet_url = Url::parse(&format!("https://{ic_gateway_fqdn}"))?;
@@ -185,7 +208,7 @@ sudo networkctl reconfigure enp2s0
                 url
             })
             .collect();
-        self.start_gateway_container(&deployed_vm, &playnet, api_nodes_urls)?;
+        self.start_gateway_container(&deployed_vm, &ic_gateway_fqdn, &cert, api_nodes_urls)?;
 
         // Wait for the service to become ready.
         // Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
@@ -283,7 +306,8 @@ sudo networkctl reconfigure enp2s0
     fn start_gateway_container(
         &self,
         deployed_universal_vm: &DeployedUniversalVm,
-        playnet: &Playnet,
+        domain: &str,
+        cert: &Certificate,
         api_nodes_urls: Vec<String>,
     ) -> Result<()> {
         let api_nodes_urls = (!api_nodes_urls.is_empty())
@@ -326,14 +350,98 @@ docker run --name=ic-gateway -d \
   --log-driver=journald \
   ic_gatewayd:image
 "#,
-            key = playnet.playnet_cert.cert.priv_key_pem,
-            cert = playnet.playnet_cert.cert.cert_pem,
-            cert_chain = playnet.playnet_cert.cert.chain_pem,
+            key = cert.priv_key_pem,
+            cert = cert.cert_pem,
+            cert_chain = cert.chain_pem,
             ic_url = api_nodes_urls,
-            domain = playnet.playnet_cert.playnet
+            domain = domain,
         );
 
         deployed_universal_vm.block_on_bash_script(&bash_script)?;
+        Ok(())
+    }
+
+    /// Loads existing demo-domain configuration or creates a new one by acquiring a
+    /// demo certificate for the given `domain`.
+    fn load_or_create_demo_domain(
+        &self,
+        env: &TestEnv,
+        domain: &str,
+        uvm_ipv6: Ipv6Addr,
+        uvm_ipv4: Option<Ipv4Addr>,
+    ) -> Result<DemoDomain> {
+        let logger = env.logger();
+        let mut demo = if DemoDomain::attribute_exists(env) {
+            let demo: DemoDomain = DemoDomain::read_attribute(env);
+            info!(
+                logger,
+                "Using existing demo domain: {}", demo.demo_cert.domain
+            );
+            demo
+        } else {
+            let demo_cert = env.acquire_demo_certificate(domain);
+            info!(logger, "Acquired new demo domain: {}", demo_cert.domain);
+            DemoDomain {
+                domain: domain.to_string(),
+                demo_cert,
+                aaaa_records: vec![],
+                a_records: vec![],
+            }
+        };
+
+        demo.aaaa_records.push(uvm_ipv6);
+        if let Some(ipv4) = uvm_ipv4 {
+            demo.a_records.push(ipv4);
+        }
+
+        // Write/overwrite file
+        demo.write_attribute(env);
+
+        Ok(demo)
+    }
+
+    /// Configures DNS records for the demo-domain flow based on infrastructure provider.
+    fn configure_demo_domain_dns_records(
+        &self,
+        env: &TestEnv,
+        demo: &DemoDomain,
+        ic_gateway_fqdn: &str,
+    ) -> Result<()> {
+        let mut records = match InfraProvider::read_attribute(env) {
+            InfraProvider::Farm => {
+                vec![
+                    DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: demo.aaaa_records.iter().map(|r| r.to_string()).collect(),
+                    },
+                    DnsRecord {
+                        name: "*".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                    DnsRecord {
+                        name: "*.raw".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                ]
+            }
+        };
+
+        if !demo.a_records.is_empty() {
+            records.push(DnsRecord {
+                name: "".to_string(),
+                record_type: DnsRecordType::A,
+                records: demo.a_records.iter().map(|r| r.to_string()).collect(),
+            })
+        }
+
+        let base_domain = env.create_demo_dns_records(&demo.domain, records);
+
+        // Wait for DNS propagation by checking a random subdomain
+        block_on(await_dns_propagation(&env.logger(), &base_domain))?;
+
         Ok(())
     }
 }
@@ -352,8 +460,29 @@ impl TestEnvAttribute for Playnet {
     }
 }
 
+/// Demo-domain configuration structure, analogous to [`Playnet`] but backed by a
+/// [`DemoCertificate`] for a caller-supplied domain.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DemoDomain {
+    pub domain: String,
+    pub demo_cert: DemoCertificate,
+    pub aaaa_records: Vec<Ipv6Addr>,
+    pub a_records: Vec<Ipv4Addr>,
+}
+
+impl TestEnvAttribute for DemoDomain {
+    fn attribute_name() -> String {
+        String::from("demo_domain")
+    }
+}
+
 /// Emits log events for IC gateway A and AAAA records.
-fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, playnet: &Playnet) {
+fn emit_ic_gateway_records_event(
+    log: &slog::Logger,
+    ic_gateway_fqdn: &str,
+    aaaa_records: &[Ipv6Addr],
+    a_records: &[Ipv4Addr],
+) {
     #[derive(Deserialize, Serialize)]
     struct IcGatewayARecords {
         url: String,
@@ -370,7 +499,7 @@ fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, play
         IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME.to_string(),
         IcGatewayARecords {
             url: ic_gateway_fqdn.to_string(),
-            a_records: playnet.a_records.clone(),
+            a_records: a_records.to_vec(),
         },
     );
     event_a_record.emit_log(log);
@@ -379,7 +508,7 @@ fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, play
         IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
         IcGatewayAAAARecords {
             url: ic_gateway_fqdn.to_string(),
-            aaaa_records: playnet.aaaa_records.clone(),
+            aaaa_records: aaaa_records.to_vec(),
         },
     );
     event_aaaa_record.emit_log(log);

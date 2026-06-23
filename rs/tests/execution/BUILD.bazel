@@ -202,11 +202,15 @@ system_test(
 system_test(
     name = "fill_execution_rounds_workload",
     enable_metrics = True,
+    env = {
+        "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "100",
+    },
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },

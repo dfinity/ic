@@ -22,7 +22,7 @@ use itertools::Itertools;
 use maplit::btreeset;
 use more_asserts::{assert_gt, assert_le};
 use proptest::prelude::*;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 /// Fixture for testing `RoundSchedule` in isolation: a `RoundSchedule` and a
@@ -148,7 +148,7 @@ impl RoundScheduleFixture {
                 core.into_iter()
                     .map(|cs| {
                         let id = cs.canister_id();
-                        all_canisters.insert(id, cs);
+                        all_canisters.insert(cs);
                         id
                     })
                     .collect()
@@ -298,7 +298,6 @@ impl RoundScheduleFixture {
             SystemMethod::CanisterHeartbeat,
         )]));
         self.canister_state(&canister_id).execution_state = Some(ExecutionState::new(
-            "NOT_USED".into(),
             WasmBinary::new(CanisterModule::new(vec![])),
             exports,
             Memory::new_for_testing(),
@@ -1261,15 +1260,50 @@ fn finish_round_burns_down_idle_canister_accumulated_priority() {
 
     // Nothing changes for canisters with AP <= 0.
     assert_eq!(fixture.canister_priority(&ap_minus_1), &priority(-1));
-    assert!(
-        fixture.has_canister_priority(&ap_0) && fixture.canister_priority(&ap_0) == &priority(0)
-    );
+    assert!(fixture.has_canister_priority(&ap_0));
+    assert_eq!(fixture.canister_priority(&ap_0), &priority(0));
     // Canisters with 0 < AP < 100 have their AP burned down to 0.
-    assert!(
-        fixture.has_canister_priority(&ap_99) && fixture.canister_priority(&ap_99) == &priority(0)
-    );
+    assert!(fixture.has_canister_priority(&ap_99));
+    assert_eq!(fixture.canister_priority(&ap_99), &priority(0));
     // Canisters with AP >= 100 have 100 AP burned.
     assert_eq!(fixture.canister_priority(&ap_101), &priority(1));
+}
+
+/// On a mostly idle subnet, idle canisters with positive AP must not capture
+/// the free compute that should go to actively executing canisters: otherwise,
+/// the active canister can never burn its negative AP back to zero, and the
+/// idle canister never drops out of the subnet schedule.
+///
+/// Starts from a steady state (`sum(AP) == 0`) with one canister executing
+/// every round and one strictly idle canister, and checks that within a small
+/// number of rounds the idle canister's AP burns down enough for it to be
+/// dropped from the subnet schedule.
+#[test]
+fn finish_round_idle_positive_ap_does_not_capture_free_compute() {
+    let mut fixture = RoundScheduleFixture::new();
+
+    // A canister that executes every round and starts with a negative AP.
+    let active = fixture.canister();
+    fixture.push_input(active);
+    *fixture.canister_priority_mut(active) = priority(-300);
+
+    // An idle canister with a matching positive AP, so that `sum(AP) == 0`.
+    let idle = fixture.canister();
+    *fixture.canister_priority_mut(idle) = priority(300);
+
+    for round in 1..=5 {
+        fixture.round_schedule = RoundScheduleBuilder::new().build();
+        fixture.current_round = ExecutionRound::new(round);
+
+        fixture.start_iteration(true);
+        fixture.end_iteration(&btreeset! {active}, &btreeset! {active}, &btreeset! {});
+        fixture.finish_round();
+    }
+
+    // `idle`'s AP got burned down and it was dropped from the subnet schedule.
+    assert!(!fixture.has_canister_priority(&idle));
+    // `active` is still scheduled.
+    assert!(fixture.has_canister_priority(&active));
 }
 
 /// finish_round applies an exponential decay to AP values outside the

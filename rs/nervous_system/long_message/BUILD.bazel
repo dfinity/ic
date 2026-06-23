@@ -4,35 +4,6 @@ load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
-DEPENDENCIES = [
-    "@crate_index//:ic-cdk",
-    "@crate_index//:candid",
-    "@crate_index//:serde",
-    # Keep sorted.
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        # Keep sorted.
-        "//rs/nervous_system/temporary",
-    ],
-})
-
-DEV_DEPENDENCIES = DEPENDENCIES + [
-    # Keep sorted.
-    "//rs/registry/subnet_type",
-    "//rs/types/types",
-    "@crate_index//:ic-cdk-timers",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-    "//conditions:default": [
-        # Keep sorted.
-        "//rs/config",
-        "//rs/nns/test_utils",
-        "//rs/rust_canisters/canister_test",
-        "//rs/state_machine_tests",
-    ],
-})
-
 LIB_SRCS = glob(
     ["src/**"],
     exclude = ["src/**/*tests.rs"],
@@ -51,7 +22,18 @@ rust_library(
     srcs = LIB_SRCS,
     crate_name = "ic_nervous_system_long_message",
     version = "0.0.1",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ] + select({
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "//conditions:default": [
+            # Keep sorted.
+            "//rs/nervous_system/temporary",
+        ],
+    }),
 )
 
 rust_ic_test_suite(
@@ -62,14 +44,35 @@ rust_ic_test_suite(
     ),
     data = DEV_DATA,
     env = DEV_ENV,
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/nervous_system/temporary",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_canister(
     name = "long-message-canister",
     testonly = True,
     srcs = ["tests/test_canisters/long_message_canister.rs"],
-    proc_macro_deps = [],
     service_file = ":tests/test_canisters/empty.did",
-    deps = DEV_DEPENDENCIES + [":long_message"],
+    deps = [
+        # Keep sorted.
+        ":long_message",
+        "//rs/registry/subnet_type",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:serde",
+    ],
 )

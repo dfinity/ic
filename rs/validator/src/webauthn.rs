@@ -15,7 +15,7 @@ pub(crate) fn validate_webauthn_sig(
     signable: &impl Signable,
     public_key: &UserPublicKey,
 ) -> Result<(), String> {
-    let basic_sig = basic_sig_from_webauthn_sig(&webauthn_sig, public_key.algorithm_id)?;
+    let basic_sig = basic_sig_from_webauthn_sig(webauthn_sig, public_key.algorithm_id)?;
 
     let envelope = match WebAuthnEnvelope::try_from(webauthn_sig) {
         Ok(envelope) => envelope,
@@ -36,7 +36,7 @@ pub(crate) fn validate_webauthn_sig(
 
     // The challenge in the webauthn envelope must match signed bytes.
     let signed_bytes = signable.as_signed_bytes();
-    if envelope.challenge() != signed_bytes {
+    if envelope.challenge() != signed_bytes.as_slice() {
         Err(format!(
             "Challenge in webauthn is {:?} while it is expected to be {:?}",
             envelope.challenge(),
@@ -48,7 +48,7 @@ pub(crate) fn validate_webauthn_sig(
 }
 
 fn basic_sig_from_webauthn_sig(
-    webauthn_sig: &&WebAuthnSignature,
+    webauthn_sig: &WebAuthnSignature,
     algorithm_id: AlgorithmId,
 ) -> Result<BasicSig, String> {
     match algorithm_id {
@@ -57,12 +57,25 @@ fn basic_sig_from_webauthn_sig(
             ecdsa_p256_signature_from_der_bytes(&webauthn_sig.signature().0)
                 .map_err(|e| format!("Failed to parse EcdsaP256 signature: {e}"))
         }
+        AlgorithmId::Ed25519 => {
+            // EdDSA signatures are exactly 64 raw bytes (not DER wrapped).
+            // See https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
+            const ED25519_SIGNATURE_LEN: usize = 64;
+            let sig = webauthn_sig.signature().0;
+            if sig.len() != ED25519_SIGNATURE_LEN {
+                return Err(format!(
+                    "Invalid Ed25519 signature length: expected {ED25519_SIGNATURE_LEN} bytes, got {}",
+                    sig.len()
+                ));
+            }
+            Ok(BasicSig(sig))
+        }
         AlgorithmId::RsaSha256 => {
             // RSA signatures are not DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             Ok(rsa_signature_from_bytes(&webauthn_sig.signature()))
         }
         _ => Err(format!(
-            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {algorithm_id:?}"
+            "Only ECDSA on curve P-256, EdDSA on curve Ed25519, and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {algorithm_id:?}"
         )),
     }
 }
@@ -284,6 +297,159 @@ mod tests {
         }
     }
 
+    mod ed25519 {
+        use super::*;
+
+        /// An Ed25519 public key in COSE format, DER wrapped, derived from the
+        /// RFC 8032 TEST 1 keypair. The COSE map is
+        /// `{1: 1 (kty=OKP), 3: -8 (alg=EdDSA), -1: 6 (crv=Ed25519), -2: <pk>}`,
+        /// wrapped with the IC's COSE OID 1.3.6.1.4.1.56387.1.1.
+        pub const ED25519_PK_COSE_DER_WRAPPED_HEX: &str = "303b300c060a2b0601040183b8430101032b00a4010103272006215820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+        /// A WebAuthn signature CBOR envelope (with the self-describing tag
+        /// `d9d9f7`) signing a 32-byte challenge with the RFC 8032 TEST 1
+        /// secret key. The challenge in `clientDataJSON` (base64url-encoded)
+        /// matches the bytes
+        /// `9bc7b89a00c2aa9105a648bf57d85b5b3c669fd1e4b9ebafcdf525b35ea5a645`.
+        pub const ED25519_WEBAUTHN_SIG_HEX: &str = "d9d9f7a3697369676e61747572655840c75d28322702e0b762a5a6e2b2ebbe35575effa6df89132826ffa9e7ff7db3ab98017f1f162acfcffaca2e10fbec029b9578088607912200627742e82bd78b0d70636c69656e745f646174615f6a736f6e58757b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a226d3865346d67444371704546706b695f56396862577a786d6e39486b756575767a66556c7331366c706b55222c226f726967696e223a2268747470733a2f2f6964656e746974792e6963302e617070227d7261757468656e74696361746f725f64617461582588e87051ccf36e3be572ef2b097e80abcb1cbc8332a6af5f9512661f3fece38e0500000000";
+
+        const CHALLENGE_HEX: &str =
+            "9bc7b89a00c2aa9105a648bf57d85b5b3c669fd1e4b9ebafcdf525b35ea5a645";
+
+        #[test]
+        fn should_verify_valid_ed25519_webauthn_signature() {
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (pk, sig) = load_pk_and_sig(
+                ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            assert_eq!(pk.algorithm_id, AlgorithmId::Ed25519);
+
+            let challenge = hex::decode(CHALLENGE_HEX).unwrap();
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: challenge,
+            };
+
+            assert_eq!(
+                validate_webauthn_sig(&verifier, &sig, &message, &pk),
+                Ok(())
+            );
+        }
+
+        #[test]
+        fn should_return_error_on_valid_ed25519_signature_but_wrong_message() {
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (pk, sig) = load_pk_and_sig(
+                ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            let wrong_message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: vec![1, 2, 3],
+            };
+
+            let result = validate_webauthn_sig(&verifier, &sig, &wrong_message, &pk);
+
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .starts_with("Challenge in webauthn is")
+            );
+        }
+
+        #[test]
+        fn should_return_error_on_incorrect_public_key() {
+            // A different valid Ed25519 COSE-DER-wrapped key (RFC 8032 TEST 2
+            // public key). The signature does not verify under it.
+            const WRONG_ED25519_PK_COSE_DER_WRAPPED_HEX: &str = "303b300c060a2b0601040183b8430101032b00a40101032720062158203d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c";
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (wrong_pk, sig) = load_pk_and_sig(
+                WRONG_ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            assert_eq!(wrong_pk.algorithm_id, AlgorithmId::Ed25519);
+
+            let challenge = hex::decode(CHALLENGE_HEX).unwrap();
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: challenge,
+            };
+
+            let result = validate_webauthn_sig(&verifier, &sig, &message, &wrong_pk);
+            assert!(
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|e| e.contains("Verifying signature failed.")),
+                "expected verification failure, got: {result:?}"
+            );
+        }
+
+        #[test]
+        fn should_return_error_on_correct_length_but_invalid_ed25519_signature() {
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (pk, sig) = load_pk_and_sig(
+                ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            // Replace the 64-byte signature with 64 zero bytes: the length
+            // check in basic_sig_from_webauthn_sig passes, but the underlying
+            // Ed25519 verification rejects it.
+            let bad_sig = WebAuthnSignature::new(
+                Blob(sig.authenticator_data().0),
+                Blob(sig.client_data_json().0),
+                Blob(vec![0_u8; 64]),
+            );
+
+            let challenge = hex::decode(CHALLENGE_HEX).unwrap();
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: challenge,
+            };
+
+            let result = validate_webauthn_sig(&verifier, &bad_sig, &message, &pk);
+            assert!(
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|e| e.contains("Verifying signature failed.")),
+                "expected verification failure, got: {result:?}"
+            );
+        }
+
+        #[test]
+        fn should_return_error_on_malformed_ed25519_signature() {
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+            let (pk, sig) = load_pk_and_sig(
+                ED25519_PK_COSE_DER_WRAPPED_HEX.as_ref(),
+                ED25519_WEBAUTHN_SIG_HEX.as_bytes(),
+            );
+            // Replace the 64-byte signature with garbage of the wrong length.
+            let bad_sig = WebAuthnSignature::new(
+                Blob(sig.authenticator_data().0),
+                Blob(sig.client_data_json().0),
+                Blob(b"too short".to_vec()),
+            );
+
+            let challenge = hex::decode(CHALLENGE_HEX).unwrap();
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: challenge,
+            };
+
+            let result = validate_webauthn_sig(&verifier, &bad_sig, &message, &pk);
+            assert!(
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|e| e.contains("Invalid Ed25519 signature length")),
+                "expected length error, got: {result:?}"
+            );
+        }
+    }
+
     mod rsa {
         use super::*;
 
@@ -389,14 +555,14 @@ mod tests {
             ECDSA_P256_PK_COSE_DER_WRAPPED_HEX.as_ref(),
             ECDSA_WEBAUTHN_SIG_HELLO_HEX.as_ref(),
         );
-        let unsupported_algorithm_id = AlgorithmId::Ed25519;
+        let unsupported_algorithm_id = AlgorithmId::EcdsaSecp256k1;
         pk.algorithm_id = unsupported_algorithm_id;
 
         let result = validate_webauthn_sig(&verifier, &sig, &delegation, &pk);
 
-        assert!(
-            result.err().unwrap().contains("Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: Ed25519")
-        );
+        assert!(result.err().unwrap().contains(
+            "Only ECDSA on curve P-256, EdDSA on curve Ed25519, and RSA PKCS #1 v1.5 are supported for WebAuthn, given: EcdsaSecp256k1"
+        ));
     }
 
     #[test]

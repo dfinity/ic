@@ -26,6 +26,8 @@ ic-http-endpoints-public = { path = "../../http_endpoints/public" }
 ic-http-endpoints-test-agent = { path = "../../http_endpoints/test_agent" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../consensus/tecdsa/utils" }
+ic-config = { path = "../../config" }
+ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
@@ -102,14 +104,6 @@ path = "canister_http_time_out_test.rs"
 [[bin]]
 name = "ic-systest-read-state-test"
 path = "read_state_test.rs"
-
-[[bin]]
-name = "ic-systest-firewall-max-connections-test"
-path = "firewall_max_connections_test.rs"
-
-[[bin]]
-name = "ic-systest-firewall-priority-test"
-path = "firewall_priority_test.rs"
 
 [[bin]]
 name = "ic-systest-http-endpoints-public-spec-test"

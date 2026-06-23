@@ -2,14 +2,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
-LIB_SRCS = glob(
-    ["src/**/*.rs"],
-    exclude = ["src/**/*tests*"],
-)
-
 rust_library(
     name = "initial_supply",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/**/*tests*"],
+    ),
     crate_name = "ic_nervous_system_initial_supply",
     proc_macro_deps = [
         # Keep sorted.

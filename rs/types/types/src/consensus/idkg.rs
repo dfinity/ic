@@ -44,7 +44,6 @@ use ic_protobuf::{
 };
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
-use std::hash::Hasher;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
@@ -163,11 +162,8 @@ impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
 /// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
-    /// Flag indicating if the deprecated signature agreements hash should be ignored.
-    pub empty_signature_agreements_flag: bool,
-
     /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
 
@@ -190,22 +186,6 @@ pub struct IDkgPayload {
     pub key_transcripts: BTreeMap<IDkgMasterPublicKeyId, MasterKeyTranscript>,
 }
 
-impl Hash for IDkgPayload {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        if !self.empty_signature_agreements_flag {
-            BTreeMap::<PseudoRandomId, CompletedSignature>::new().hash(state);
-        }
-        // empty_signature_agreements_flag is ignored
-        self.available_pre_signatures.hash(state);
-        self.pre_signatures_in_creation.hash(state);
-        self.uid_generator.hash(state);
-        self.idkg_transcripts.hash(state);
-        self.ongoing_xnet_reshares.hash(state);
-        self.xnet_reshare_agreements.hash(state);
-        self.key_transcripts.hash(state);
-    }
-}
-
 impl IDkgPayload {
     /// Creates an empty IDkg payload.
     pub fn empty(
@@ -219,7 +199,6 @@ impl IDkgPayload {
                 .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
-            empty_signature_agreements_flag: false,
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
@@ -1688,14 +1667,14 @@ impl Display for SignedIDkgComplaint {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgComplaintContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgComplaint {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -1765,14 +1744,14 @@ impl Display for SignedIDkgOpening {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgOpeningContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -1910,7 +1889,6 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             .collect();
 
         Self {
-            empty_signature_agreements_flag: payload.empty_signature_agreements_flag,
             available_pre_signatures,
             pre_signatures_in_creation,
             next_unused_transcript_id,
@@ -2010,7 +1988,6 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         }
 
         Ok(Self {
-            empty_signature_agreements_flag: payload.empty_signature_agreements_flag,
             available_pre_signatures,
             pre_signatures_in_creation,
             idkg_transcripts,

@@ -221,7 +221,15 @@ pub fn initialize_governance(
         neuron_id_to_pre_clamp_dissolve_state: HashMap::new(),
         relaxed_eight_year_gang_bonus_migration_done: false,
         icp_price_history: None,
-        maturity_modulation: None,
+        // Default to a neutral 0 permyriad so that spawning and maturity disbursement keep
+        // working immediately after init, before `update_icp_xdr_rate_related_data` accumulates
+        // enough price history to compute a real one. `updated_at_days_since_epoch` is left
+        // `None` so the task treats this as "no prior measurement" rather than "already updated
+        // today".
+        maturity_modulation: Some(MaturityModulation {
+            current_value_permyriad: Some(0),
+            updated_at_days_since_epoch: None,
+        }),
     };
 
     // Finally, return the result.

@@ -5,14 +5,12 @@ package(default_visibility = [
     "//rs/replay:__pkg__",
 ])
 
-LIB_SRCS = glob(
-    ["src/**/*.rs"],
-    exclude = ["**/*tests.rs"],
-)
-
 rust_library(
     name = "chunks",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
     crate_name = "ic_nervous_system_chunks",
     version = "0.0.1",
     deps = [

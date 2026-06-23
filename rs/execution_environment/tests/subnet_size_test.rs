@@ -27,6 +27,7 @@ use wirm::wasmparser;
 const B: u64 = 1_000_000_000;
 
 const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
+const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 const TEST_SUBNET_SIZES: [usize; 3] = [4, 13, 34];
 
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
@@ -304,7 +305,8 @@ fn simulate_one_gib_per_second_cost(
     env.advance_time(duration_between_allocation_charges);
 
     let balance_before = env.cycle_balance(canister_id);
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
     let balance_after = env.cycle_balance(canister_id);
 
     // Scale the cost from a defined in config value to a 1 second duration.
@@ -675,7 +677,7 @@ fn calculate_create_canister_cost(
     config: &CyclesAccountManagerConfig,
     subnet_size: usize,
 ) -> Cycles {
-    scale_cost(config, config.canister_creation_fee, subnet_size)
+    scale_cost(config.canister_creation_fee, subnet_size)
 }
 
 fn calculate_xnet_call_cost(
@@ -686,13 +688,11 @@ fn calculate_xnet_call_cost(
 ) -> Cycles {
     // Prepayed cost.
     let prepayment_for_response_transmission = scale_cost(
-        config,
         config.xnet_byte_transmission_fee * MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get(),
         subnet_size,
     );
     let prepayment_for_response_execution = Cycles::new(0);
     let prepayed = scale_cost(
-        config,
         config.xnet_call_fee + config.xnet_byte_transmission_fee * request_size.get(),
         subnet_size,
     ) + prepayment_for_response_transmission
@@ -700,7 +700,6 @@ fn calculate_xnet_call_cost(
 
     // Actually transmitted cost and refund.
     let transmission_cost = scale_cost(
-        config,
         config.xnet_byte_transmission_fee * response_size.get(),
         subnet_size,
     );
@@ -732,7 +731,7 @@ fn calculate_sign_with_ecdsa_cost(
     config: &CyclesAccountManagerConfig,
     subnet_size: usize,
 ) -> Cycles {
-    scale_cost(config, config.ecdsa_signature_fee, subnet_size)
+    scale_cost(config.ecdsa_signature_fee, subnet_size)
 }
 
 fn trillion_cycles(value: f64) -> Cycles {
@@ -757,7 +756,6 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
     const WASM64_INSTRUCTION_COST_MULTIPLIER: u128 = 2;
     match subnet_type {
         SubnetType::System => CyclesAccountManagerConfig {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(0),
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
@@ -768,6 +766,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
+            base_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
             // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
@@ -789,7 +788,6 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
         },
         SubnetType::Application | SubnetType::VerifiedApplication | SubnetType::CloudEngine => {
             CyclesAccountManagerConfig {
-                reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
                 canister_creation_fee: Cycles::new(500_000_000_000),
                 compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
@@ -810,6 +808,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
                 ingress_byte_reception_fee: Cycles::new(2_000),
                 // 10 SDR per GiB per year => 10e12 Cycles per year
                 gib_storage_per_second_fee: Cycles::new(317_500),
+                base_per_second_fee: Cycles::new(10_000),
                 duration_between_allocation_charges: Duration::from_secs(10),
                 ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
                 schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -828,8 +827,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
     }
 }
 
-fn scale_cost(config: &CyclesAccountManagerConfig, cycles: Cycles, subnet_size: usize) -> Cycles {
-    (cycles * subnet_size) / config.reference_subnet_size
+fn scale_cost(cycles: Cycles, subnet_size: usize) -> Cycles {
+    (cycles * subnet_size) / DEFAULT_REFERENCE_SUBNET_SIZE
 }
 
 fn memory_cost(
@@ -845,7 +844,7 @@ fn memory_cost(
             * duration.as_secs() as u128)
             / one_gib,
     );
-    scale_cost(config, cycles, subnet_size)
+    scale_cost(cycles, subnet_size)
 }
 
 fn compute_allocation_cost(
@@ -857,7 +856,21 @@ fn compute_allocation_cost(
     let cycles = config.compute_percent_allocated_per_second_fee
         * duration.as_secs()
         * compute_allocation.as_percent();
-    scale_cost(config, cycles, subnet_size)
+    scale_cost(cycles, subnet_size)
+}
+
+fn canister_base_cost(
+    config: &CyclesAccountManagerConfig,
+    bytes: NumBytes,
+    duration: Duration,
+    subnet_size: usize,
+) -> Cycles {
+    if bytes.get() > 0 {
+        let cycles = config.base_per_second_fee * duration.as_secs() as u128;
+        scale_cost(cycles, subnet_size)
+    } else {
+        Cycles::zero()
+    }
 }
 
 fn calculate_one_gib_per_second_cost(
@@ -868,6 +881,7 @@ fn calculate_one_gib_per_second_cost(
     let one_gib = NumBytes::from(1 << 30);
     let duration = Duration::from_secs(1);
     memory_cost(config, one_gib, duration, subnet_size)
+        + canister_base_cost(config, one_gib, duration, subnet_size)
         + compute_allocation_cost(config, compute_allocation, duration, subnet_size)
 }
 
@@ -905,7 +919,6 @@ fn prepay_execution_cycles(
     subnet_size: usize,
 ) -> Cycles {
     scale_cost(
-        config,
         config.update_message_execution_fee
             + convert_instructions_to_cycles(config, num_instructions),
         subnet_size,
@@ -923,7 +936,7 @@ fn refund_unused_execution_cycles(
         std::cmp::min(num_instructions, num_instructions_initially_charged);
     let cycles = convert_instructions_to_cycles(config, num_instructions_to_refund);
 
-    scale_cost(config, cycles, subnet_size).min(prepaid_execution_cycles)
+    scale_cost(cycles, subnet_size).min(prepaid_execution_cycles)
 }
 
 fn calculate_execution_cost(
@@ -952,7 +965,6 @@ fn ingress_induction_cost_from_bytes(
     subnet_size: usize,
 ) -> Cycles {
     scale_cost(
-        config,
         config.ingress_message_reception_fee + config.ingress_byte_reception_fee * bytes.get(),
         subnet_size,
     )
@@ -980,15 +992,15 @@ fn test_subnet_size_one_gib_storage_default_cost() {
 
     // Assert small subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_lo, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(10.012_680_000));
+    assert_eq!(cost * per_year, trillion_cycles(10.328_040_000));
 
     // Assert big subnet size cost per year.
     let cost = simulate_one_gib_per_second_cost(subnet_type, subnet_size_hi, compute_allocation);
-    assert_eq!(cost * per_year, trillion_cycles(26.186_989_824));
+    assert_eq!(cost * per_year, trillion_cycles(27.011_782_368));
 
     // Assert big subnet size cost per year scaled to a small size.
     let adjusted_cost = (cost * subnet_size_lo) / subnet_size_hi;
-    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.012_648_464));
+    assert_eq!(adjusted_cost * per_year, trillion_cycles(10.328_008_464));
 }
 
 // Storage cost tests split into 2: zero and non-zero compute allocation.
@@ -1004,7 +1016,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation_cost() {
     let compute_allocation = ComputeAllocation::zero();
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let reference_cost =
         calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation);
 
@@ -1035,7 +1047,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation_cost() {
     ] {
         let subnet_type = SubnetType::Application;
         let config = get_cycles_account_manager_config(subnet_type);
-        let reference_subnet_size = config.reference_subnet_size;
+        let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
         let reference_cost =
             calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation);
 
@@ -1066,7 +1078,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation_cost() {
 fn test_subnet_size_execute_install_code_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS),
@@ -1094,7 +1106,7 @@ fn test_subnet_size_execute_install_code_cost() {
 fn test_subnet_size_ingress_induction_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let signed_ingress = SignedIngressBuilder::new()
         .method_name("inc")
         .nonce(3)
@@ -1122,7 +1134,7 @@ fn test_subnet_size_ingress_induction_cost() {
 fn test_subnet_size_execute_message_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     // The `inc` method writes to the heap (first access), so the deterministic
     // memory tracker charges an extra 32 instructions in-band (accessed + dirty
     // for 1 Wasm page) when enabled.
@@ -1160,7 +1172,7 @@ fn test_subnet_size_execute_message_cost() {
 fn test_subnet_size_execute_heartbeat_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(TEST_HEARTBEAT_CANISTER_EXECUTE_HEARTBEAT_INSTRUCTIONS),
@@ -1221,7 +1233,7 @@ fn test_subnet_size_sign_with_ecdsa_non_zero_cost() {
 
     for subnet_type in [SubnetType::Application, SubnetType::System] {
         let config = get_cycles_account_manager_config(subnet_type);
-        let reference_subnet_size = config.reference_subnet_size;
+        let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
         let reference_cost = calculate_sign_with_ecdsa_cost(&config, reference_subnet_size);
 
         // Check default cost.
@@ -1269,7 +1281,7 @@ fn test_subnet_size_sign_with_ecdsa_zero_cost() {
 fn test_subnet_size_http_request_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let reference_cost =
         calculate_http_request_cost(&config, NumBytes::new(17), None, reference_subnet_size);
 
@@ -1294,7 +1306,7 @@ fn test_subnet_size_http_request_cost() {
 fn test_subnet_size_xnet_call_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let reference_cost = calculate_xnet_call_cost(
         &config,
         NumBytes::new(25),
@@ -1323,7 +1335,7 @@ fn test_subnet_size_xnet_call_cost() {
 fn test_subnet_size_create_canister_cost() {
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
+    let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     let reference_cost = calculate_create_canister_cost(&config, reference_subnet_size);
 
     // Check default cost.
@@ -1405,4 +1417,77 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
             "subnet_size={subnet_size}"
         );
     }
+}
+
+/// Simulates an ingress message execution on an Application subnet with the
+/// given `SubnetFeatures` and measures the execution cost.
+///
+/// The `features` parameter sets `sev_enabled` in the registry subnet record;
+/// the reference subnet size is then derived via `NetworkTopology`.
+fn simulate_execute_message_cost_with_registry_features(
+    subnet_size: usize,
+    features: SubnetFeatures,
+) -> Cycles {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_subnet_size(subnet_size)
+        .with_features(features)
+        .with_config(Some(StateMachineConfig::new(
+            filtered_subnet_config(SubnetType::Application, KeepFeesFilter::Execution),
+            HypervisorConfig::default(),
+        )))
+        .build();
+    let canister_id = create_canister_with_cycles_install_wasm(
+        &env,
+        DEFAULT_CYCLES_PER_NODE * subnet_size,
+        wat::parse_str(TEST_CANISTER).expect("invalid WAT"),
+    );
+
+    let balance_before = env.cycle_balance(canister_id);
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    let balance_after = env.cycle_balance(canister_id);
+
+    Cycles::from(balance_before - balance_after)
+}
+
+/// Tests that the reference subnet size derived from the registry via `NetworkTopology`
+/// is correctly reflected in the execution cycle costs.
+///
+/// For an Application subnet with `DEFAULT_REFERENCE_SUBNET_SIZE` nodes (13):
+/// * without SEV: cost = base × 13 / 13 = base
+/// * with SEV:    cost = base × 13 / 7  (SEV lowers the reference size to 7,
+///   making costs higher for the same actual subnet)
+///
+/// Only the registry-driven `sev_enabled` flag differentiates the two cases,
+/// confirming the runtime update path through `NetworkTopology`.
+#[test]
+fn test_sev_reference_subnet_size_reflected_in_execution_costs() {
+    let subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
+
+    // Non-SEV: reference_subnet_size = DEFAULT = 13, cost = base * 13 / 13 = base.
+    let cost_non_sev = simulate_execute_message_cost_with_registry_features(
+        subnet_size,
+        SubnetFeatures {
+            sev_enabled: false,
+            ..Default::default()
+        },
+    );
+
+    // SEV: reference_subnet_size = SEV = 7, cost = base * 13 / 7 > cost_non_sev.
+    let cost_sev = simulate_execute_message_cost_with_registry_features(
+        subnet_size,
+        SubnetFeatures {
+            sev_enabled: true,
+            ..Default::default()
+        },
+    );
+
+    let expected = cost_non_sev.get() * DEFAULT_REFERENCE_SUBNET_SIZE as u128
+        / SEV_REFERENCE_SUBNET_SIZE as u128;
+    assert!(
+        cost_sev.get().abs_diff(expected) <= 1,
+        "SEV cost ({}) should be ~DEFAULT_REFERENCE_SUBNET_SIZE/SEV_REFERENCE_SUBNET_SIZE times non-SEV cost ({}), i.e. expected ~{expected}, but differs by more than 1 (integer rounding)",
+        cost_sev.get(),
+        cost_non_sev.get(),
+    );
 }

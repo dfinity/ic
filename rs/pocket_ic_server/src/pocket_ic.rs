@@ -107,7 +107,8 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsW
 use ic_state_machine_tests::{
     FakeVerifier, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
     SubmitIngressError, Subnets, WasmResult, add_global_registry_records,
-    add_initial_registry_records,
+    add_initial_registry_records, remove_chain_key_registry_records,
+    remove_subnet_local_registry_records, update_global_registry_records,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
@@ -119,9 +120,9 @@ use ic_types::{
     CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
-        CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
-        CanisterHttpRequestId, CanisterHttpResponse as AdapterCanisterHttpResponse,
-        CanisterHttpResponseContent,
+        CanisterHttpPaymentReceipt, CanisterHttpReject,
+        CanisterHttpRequest as AdapterCanisterHttpRequest, CanisterHttpRequestId,
+        CanisterHttpResponse as AdapterCanisterHttpResponse, CanisterHttpResponseContent,
     },
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable, threshold_sig::IcRootOfTrust},
     malicious_flags::MaliciousFlags,
@@ -456,7 +457,7 @@ pub(crate) type CanisterHttpClient = Arc<
         Box<
             dyn NonBlockingChannel<
                     AdapterCanisterHttpRequest,
-                    Response = AdapterCanisterHttpResponse,
+                    Response = (AdapterCanisterHttpResponse, CanisterHttpPaymentReceipt),
                 > + Send,
         >,
     >,
@@ -529,6 +530,9 @@ impl SubnetsImpl {
     }
     pub(crate) fn get_all(&self) -> Vec<Arc<Subnet>> {
         self.subnets.read().unwrap().values().cloned().collect()
+    }
+    fn remove(&self, subnet_id: SubnetId) -> Option<Arc<Subnet>> {
+        self.subnets.write().unwrap().remove(&subnet_id)
     }
     fn clear(&self) {
         self.subnets.write().unwrap().clear();
@@ -1173,6 +1177,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(REGISTRY_CANISTER_ID.get()),
@@ -1257,6 +1262,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_MINTING_CANISTER_ID.get()),
@@ -1428,6 +1434,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(LEDGER_CANISTER_ID.get()),
@@ -1510,6 +1517,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(LEDGER_INDEX_CANISTER_ID.get()),
@@ -1590,6 +1598,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_CANISTER_ID.get()),
@@ -1655,6 +1664,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_INDEX_CANISTER_ID.get()),
@@ -1726,6 +1736,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(GOVERNANCE_CANISTER_ID.get()),
@@ -1804,6 +1815,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(ROOT_CANISTER_ID.get()),
@@ -1872,6 +1884,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_WASM_CANISTER_ID.get()),
@@ -1971,6 +1984,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_AGGREGATOR_CANISTER_ID.get()),
@@ -2045,6 +2059,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(IDENTITY_CANISTER_ID.get()),
@@ -2058,6 +2073,10 @@ impl PocketIcSubnets {
             // The initial values have been adapted from the mainnet values obtained by calling
             // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             //     record {
+            //       doh_config = opt opt record {
+            //         max_cache_age_secs = opt (3_600 : nat64);
+            //         allowed_domains = vec { "gmail.com"; "googlemail.com"; "outlook.com"; "hotmail.com"; "msn.com"; "live.com"; "icloud.com"; "me.com"; "mac.com"; "yahoo.com"; "ymail.com"; "aol.com"; "zoho.com"; "fastmail.com"; "fastmail.fm"; "hey.com"; "yandex.com"; "yandex.ru"; "mail.ru"; "qq.com"; "163.com"; "126.com"; "naver.com"; "daum.net";};
+            //       };
             //       is_production = opt true;
             //       backend_canister_id = opt principal "rdmx6-jaaaa-aaaaa-aaadq-cai";
             //       enable_dapps_explorer = opt false;
@@ -2066,10 +2085,28 @@ impl PocketIcSubnets {
             //         7_569_744 : nat64;
             //       };
             //       new_flow_origins = opt vec { "https://id.ai" };
+            //       dnssec_config = opt opt record {
+            //         root_anchors = vec {
+            //           record {
+            //             algorithm = 8 : nat8;
+            //             key_tag = 20_326 : nat16;
+            //             digest_type = 2 : nat8;
+            //             digest = blob "\e0\6d\44\b8\0b\8f\1d\39\a9\5c\0b\0d\7c\65\d0\84\58\e8\80\40\9b\bc\68\34\57\10\42\37\c7\f8\ec\8d";
+            //           };
+            //           record {
+            //             algorithm = 8 : nat8;
+            //             key_tag = 38_696 : nat16;
+            //             digest_type = 2 : nat8;
+            //             digest = blob "\68\3d\2d\0a\cb\8c\9b\71\2a\19\48\b2\7f\74\12\19\29\8d\0a\45\0d\61\2c\48\3a\f4\44\a4\c0\fb\2b\16";
+            //           };
+            //         };
+            //       };
+            //       sso_discoverable_domains = null;
+            //       sso_credential_migration = null;
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\97\44\02\c9\03\a7\ff\da\36\20\8b\cc\5e\05\9d\df\2a\b0\d0\fa\8b\ef\19\a3\1a\d8\c9\99\1f\5b\db\9a";
+            //         module_hash = blob "\fd\07\13\7c\a4\68\7d\a5\69\d7\66\a2\f1\e1\66\04\ff\d7\4e\52\7e\7b\6b\f4\3b\7b\dd\0f\8e\d9\2e\dc";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -2083,10 +2120,10 @@ impl PocketIcSubnets {
             //       };
             //       related_origins = opt vec {
             //         "https://id.ai";
-            //         "https://backend.id.ai";
             //         "https://identity.ic0.app";
             //         "https://identity.internetcomputer.org";
             //         "https://identity.icp0.io";
+            //         "https://identity.icp.net";
             //       };
             //       openid_configs = opt vec {
             //         record {
@@ -2098,6 +2135,7 @@ impl PocketIcSubnets {
             //           email_verification = opt variant { Google };
             //           issuer = "https://accounts.google.com";
             //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           seed_jwks = null;
             //           client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
             //         };
             //         record {
@@ -2109,6 +2147,7 @@ impl PocketIcSubnets {
             //           email_verification = opt variant { Unknown };
             //           issuer = "https://appleid.apple.com";
             //           auth_scope = vec { "openid" };
+            //           seed_jwks = null;
             //           client_id = "ai.id.auth";
             //         };
             //         record {
@@ -2120,10 +2159,20 @@ impl PocketIcSubnets {
             //           email_verification = opt variant { Microsoft };
             //           issuer = "https://login.microsoftonline.com/{tid}/v2.0";
             //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           seed_jwks = opt vec {
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "Xt-o7hDbpupAz-ZPm6HxCFWS3cI" }; record { "n"; "tNylHNFgnoQG0dYZd113g5t-NTvMow5yOeGfF60pRPtuXzhsPm6dOkvo8yEVGtED3xzlUpu6uwaMz9lHd_hILKI4PbGSXBR1A-DMrrZYmiO8YX5JC9Xaj2XF_Jc4QLgjTu9ocJzL-FMFFpgbkAv_PIgvQTAbTm7_rHLQWpeB5TvdgnMilmL1NmQHQjiWZKhw63HLhiuob1WhMQI0oFt0jui6gKaf2enk6_-z-BLWqbIqfOO9Y1rF7Zj-gNwDBrkjEDbs_hXn9nCujZwjouO8YBmcwgxsPjeeZk0heG6DtVDnsALevPTPJwPQB_w_ObXqeYDe8Ceu7jqAAMx1NDxBpw" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "cYovdPYWG6Wi4m9upkiJFv0-K_k" }; record { "n"; "oF7hyLvRZlWKRB9PRg8ZXZfs37XFsMQG30Ihv4uhC3GK3hBUHRbF9t46exQHronUMCGvO418qng5qXVP-mvfyAkzS-v_kgEix8Oq205h43gsSvk_YBCZBH1nxjT8GLcbRI4uXpzfopmuYXbYEXfFkKCh7TBz1oIjnP43nMqi8LHCzUUiHA9EWYLMGS8pu1iNjntW0dbd3R78ybBVfps-hwZNLWEQjxPI2lUy7fycAyafQQE1xvtF4Rf5m9D6pByQu3b-hudXhDcfR97ubix2trL8EUz5jqTs20PIQ8p-r5aVbsllfZENaXcQLGIgwIL_q76iACMgI-krJBCg8YXZ-w" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "wh06sEkzLHJ5sNNaUyRY2_6O8K0" }; record { "n"; "vOPjy3R_ACXnxYPAVvvQiXWl4Saa7fagNNf5q53Bb5Pj1o2TtY4cTiRooFDvpKeE-FVrC0ZclenTOiTPvgJqxHQnxCTBBZYRQ9UF7KDf3fFAAUnn4HsLQRir6dwb-E5GRG4T7i_y3pzAGun5QFsA9-eNLRucDfGpONcxhujoCTMnfqo6ac2h6BUQqlWza9Ko8wEeTHmzGlkr5bCqJXI4vtjcapQlCpvs5DSTpxWMwbHU-h-jIDsI97wIIlIn-jkmkbhUp7PZdlrot9-LBsVD3ZUyPD2poLmr161QW5i4lOEn4lhxfRtEmn9d6C0N0SQXCp5pk-kA15gyNZavP3n5sQ" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "6y1pWCGDr4fCwPR3-3fVE6m6KWA" }; record { "n"; "jXn6iT_1KGLa74gkm7qa6WKSC0L0ONKupZLJllGsthiA_JHyUeTTZt-hXH1pQ90qxCpAlCH0-msXbwryVa9rT-UYQeOXI5hTOWhu0ICbu8Kb6s5Nvue6V8ertXQA4AOTbaWH4ZS67hlVOWNalYeg0fSf0kxVrdlSOURlElzo6ZNehKJhH2OTAhYVGRKLdUHQYFGveJiyl6ZfxBH-ryXhPwmN_qcAv0viSCTJkCLUBSgMwiCq7hdPBeDLrcH84D1LZ9Ub8KX0xcdw07GLbKlE650_WmB9j5QAKfstGfyLesnj6eeV6z3RvN1YCn0vwS575iXyhwNZhDf_bfv5aTcQZQ" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "k2MRQ8fu3BbJrTPLnDOyWDq1m60" }; record { "n"; "kuZEJyH4lGC6nsedsIaeO4i1_-_Xv6aJU4uXVGzYhfwi1Cc0hKqdQ_ITktP6Cyfos-UPbXO6FEv6VwF2I88cnWrV1riiFIS9L99r8YuSh5z260hdJewk9wwtLlZ54RrfOoLqESgEiBSWVwHyCJEwV0kUSFsU1TEFOZPFYeHJBQXSASS6t4V2hPHgpKiQ-_3E7WS6XlPMQGXGcKa7P4Feo4yo5Ut6h4xKdGny5fFCvOQHjDbn4HGDa_Aup8435n6A9rlK_bsf_z-uirXOQX7-YTaLex5KrurGNJU6Yi3tC87-eziipo8H8D0hJW1yteHm7n5VdfOYUEMNI7zcSBLPnQ" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "WhbMkxZh2-Vh0hv5vl6Wo5XN-TQ" }; record { "n"; "rFR1drVxL2QTmxn2cRmOOudP-AqLKp4vlQrNu_dniLJyoo7Uw9fzFDkSckEmel7B7KT1ibl6NGuK94cPCT9Aqr0ztlC2sIPvkUTOKFM2MqckXDJCox4TcmhSNIt-vT7jYQSOrtdFF8M0S4E-WVUUhdGoQ9xAfEmofmISh01x4wkTDzreENjHBJI0O4JFl96z56S0LLsR-yBlgtFidu33tkRKt1joiLxv7yHwODg0HZeXp3t5DPwqPjfQB8YKf5I2-gWcdo3ZPbADCtkRAYWl13DEPxu8Xzpmi-DhXzHUUD-j7EKTBLZ5EWFfODi3NvG9ei7mX3N-iqqoe_JFYmPpcw" }; record { "e"; "AQAB" }; };
+            //             vec { record { "kty"; "RSA" }; record { "use"; "sig" }; record { "kid"; "q-rwfBcgFoOzOr5Pa3fE1ivrIGk" }; record { "n"; "mjrQv4gEYpZoyT6Llz6lIMNsET8VWACV9jFDci_0HHUB8TebRSe1g9bXL29GUBCrWXNY3NXJtD_rE5SNjV0WNK-cPC81LqZS11xoHjfBJc-c6zgBf0mAVpZcYFNxyomF5BX5PWRUj8hEPOMth5Hjx_KlLU6G02rmqYJTA7o4cXLfkXzaQN2OjVh2WNFl4ScjyAIt2xRwrWzLtj3dyNL4JnkBNQ933rEM6eIlewOyGn3rocmtXk4nGvyXMBHNDinHyM4BMmMuWpND-mJiJtnQWwziPpp6ImuukIRNLkj0_t-RLvDLSmpmugGGPgJlQLF39EU-ib-C7Po_1eGxvn8J7Q" }; record { "e"; "AQAB" }; };
+            //           };
             //           client_id = "80d5203e-9ba2-4acf-97a1-88d926a0bbbf";
             //         };
             //       };
             //       backend_origin = null;
+            //       enable_dnssec_email_recovery = null;
             //       captcha_config = opt record {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
@@ -2151,6 +2200,7 @@ impl PocketIcSubnets {
                   auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
                   fedcm_uri: Some("".to_string()),
                   email_verification: Some(OpenIdEmailVerification::Google),
+                  seed_jwks: None,
                 }])
             } else {
                 None
@@ -2173,13 +2223,17 @@ impl PocketIcSubnets {
                 related_origins: None,         // DIFFERENT FROM ICP MAINNET
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
-                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
+                sso_discoverable_domains: None,
+                sso_credential_migration: None,
+                analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(Some(dummy_auth_config)), // DIFFERENT FROM ICP MAINNET
                 backend_canister_id: Some(IDENTITY_CANISTER_ID.get().0),
                 backend_origin: None,
-                sso_discoverable_domains: None,
+                enable_dnssec_email_recovery: None,
+                dnssec_config: None, // DIFFERENT FROM ICP MAINNET
+                doh_config: None,    // DIFFERENT FROM ICP MAINNET
             });
             ii_subnet
                 .state_machine
@@ -2248,6 +2302,7 @@ impl PocketIcSubnets {
             wasm_memory_threshold: Some(0_u64.into()),
             environment_variables: None,
             snapshot_visibility: Some(SnapshotVisibility::Controllers),
+            minimum_incoming_canister_call_cycles: None,
         });
 
         let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
@@ -2326,6 +2381,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(NNS_UI_CANISTER_ID.get()),
@@ -2424,6 +2480,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
                 Some(BITCOIN_TESTNET_CANISTER_ID.get()),
@@ -2499,6 +2556,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
                 Some(DOGECOIN_CANISTER_ID.get()),
@@ -2566,6 +2624,7 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
                 snapshot_visibility: Some(SnapshotVisibility::Controllers),
+                minimum_incoming_canister_call_cycles: None,
             };
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(MIGRATION_CANISTER_ID.get()),
@@ -2702,6 +2761,126 @@ impl PocketIcSubnets {
             subnet.state_machine.reload_registry();
         }
     }
+
+    fn delete_subnet(
+        &mut self,
+        subnet_id: SubnetId,
+        default_effective_canister_id: Principal,
+    ) -> Result<(), PocketIcError> {
+        let config_pos = self
+            .subnet_configs
+            .iter()
+            .position(|c| c.subnet_id == subnet_id)
+            .ok_or(PocketIcError::SubnetNotFound(subnet_id.get().0))?;
+
+        let subnet_kind = self.subnet_configs[config_pos].subnet_kind;
+        if subnet_kind.is_named() {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete named subnet {} (kind: {:?}).",
+                subnet_id, subnet_kind
+            )));
+        }
+
+        if let Some(root_subnet) = self.nns_subnet.as_ref()
+            && root_subnet.get_subnet_id() == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(
+                "Cannot delete the root subnet of the PocketIC instance.".to_string(),
+            ));
+        }
+
+        let default_canister_id: CanisterId = PrincipalId(default_effective_canister_id)
+            .try_into()
+            .unwrap();
+        // The default effective canister ID is used as the routing target for canister
+        // creation calls that don't specify an explicit subnet (provisional API with ic_00
+        // as effective ID, or no effective principal). Deleting its subnet would break
+        // all such calls.
+        if let Some((_, default_subnet_id)) = self.routing_table.lookup_entry(default_canister_id)
+            && default_subnet_id == subnet_id
+        {
+            return Err(PocketIcError::Forbidden(format!(
+                "Cannot delete subnet {} which contains the default effective canister ID.",
+                subnet_id
+            )));
+        }
+
+        let config = self.subnet_configs.remove(config_pos);
+
+        let subnet = self
+            .subnets
+            .remove(subnet_id)
+            .expect("subnet in subnet_configs must be in subnets");
+
+        subnet.state_machine.drop_payload_builder();
+
+        self.routing_table.remove_subnet(subnet_id);
+
+        for subnets in self.chain_keys.values_mut() {
+            subnets.retain(|&sid| sid != subnet_id);
+        }
+        let empty_chain_key_ids: Vec<MasterPublicKeyId> = self
+            .chain_keys
+            .iter()
+            .filter(|(_, subnets)| subnets.is_empty())
+            .map(|(key_id, _)| key_id.clone())
+            .collect();
+        self.chain_keys.retain(|_, subnets| !subnets.is_empty());
+
+        // Delete the subnet state directory from disk.
+        if let Some(state_dir) = self.state_dir.get() {
+            let subnet_seed = compute_subnet_seed(config.ranges.clone(), config.alloc_range);
+            let subnet_state_dir = state_dir.join(hex::encode(subnet_seed));
+            if subnet_state_dir.exists()
+                && let Err(e) = std::fs::remove_dir_all(&subnet_state_dir)
+            {
+                eprintln!(
+                    "Failed to delete subnet state directory {}: {}",
+                    subnet_state_dir.display(),
+                    e
+                );
+            }
+        }
+
+        // Update global registry records to reflect the removed subnet.
+        if self.nns_subnet.is_some() {
+            let next_version =
+                RegistryVersion::new(self.registry_data_provider.latest_version().get() + 1);
+            remove_chain_key_registry_records(
+                &empty_chain_key_ids,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
+            let subnet_list = self
+                .subnets
+                .get_all()
+                .into_iter()
+                .map(|s| s.get_subnet_id())
+                .collect();
+            update_global_registry_records(
+                next_version,
+                self.routing_table.clone(),
+                subnet_list,
+                self.chain_keys.clone(),
+                self.registry_data_provider.clone(),
+            );
+            remove_subnet_local_registry_records(
+                subnet_id,
+                &subnet.state_machine.nodes,
+                self.registry_data_provider.clone(),
+                next_version,
+            );
+            self.persist_registry_changes();
+        }
+
+        // Drop the StateMachine, waiting until no other Arc holders remain.
+        let state_machine = subnet.state_machine.clone();
+        drop(subnet);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
+        drop_state_machine(state_machine, deadline);
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -2738,6 +2917,25 @@ pub struct PocketIc {
     default_effective_canister_id: Principal,
 }
 
+fn drop_state_machine(state_machine: Arc<StateMachine>, deadline: std::time::Instant) {
+    let mut state_machine = Some(state_machine);
+    loop {
+        match Arc::try_unwrap(state_machine.take().unwrap()) {
+            Ok(sm) => {
+                sm.drop();
+                break;
+            }
+            Err(sm) => {
+                state_machine = Some(sm);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("Timed out while dropping StateMachine.");
+        }
+    }
+}
+
 impl Drop for PocketIc {
     fn drop(&mut self) {
         if self.subnets.state_dir.get().is_some() {
@@ -2762,24 +2960,10 @@ impl Drop for PocketIc {
             .collect();
         self.subnets.clear();
         // for every StateMachine, wait until nobody else has an Arc to that StateMachine
-        // and then drop that StateMachine
-        let start = std::time::Instant::now();
+        // and then drop that StateMachine; the deadline is shared across all StateMachines
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5 * 60);
         for state_machine in state_machines {
-            let mut state_machine = Some(state_machine);
-            while state_machine.is_some() {
-                match Arc::try_unwrap(state_machine.take().unwrap()) {
-                    Ok(sm) => {
-                        sm.drop();
-                        break;
-                    }
-                    Err(sm) => {
-                        state_machine = Some(sm);
-                    }
-                }
-                if start.elapsed() > std::time::Duration::from_secs(5 * 60) {
-                    panic!("Timed out while dropping PocketIC.");
-                }
-            }
+            drop_state_machine(state_machine, deadline);
         }
     }
 }
@@ -3032,18 +3216,20 @@ impl PocketIc {
                         let temp_state_dir = TempDir::new().unwrap();
                         copy_dir(subnet_state_dir, temp_state_dir.path())
                             .expect("Failed to copy state directory");
+                        let metrics_registry = MetricsRegistry::new();
                         let state_manager = StateManagerImpl::new(
                             Arc::new(FakeVerifier),
                             SubnetId::new(PrincipalId::default()),
                             conv_type(subnet_kind),
-                            no_op_logger(),
-                            &MetricsRegistry::new(),
                             &ic_config::state_manager::Config::new(
                                 temp_state_dir.path().to_path_buf(),
                             ),
                             None,
                             MaliciousFlags::default(),
                             tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+                            None,
+                            &metrics_registry,
+                            no_op_logger(),
                         );
                         let metadata = state_manager.get_latest_state().take().metadata.clone();
                         // Shut down the temporary state manager to avoid race conditions.
@@ -3368,10 +3554,15 @@ impl RangeGen {
         Ok(())
     }
 
-    /// Returns the next canister id range from the top
+    /// Returns the next canister id range from the middle of the canister ID space.
     pub fn next_range(&mut self) -> CanisterIdRange {
         loop {
-            let offset = (u64::MAX / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
+            // Use the midpoint instead of u64::MAX so that the upper half of the canister ID
+            // space remains available for subnets created via the registry canister's
+            // `create_subnet` endpoint, which allocates new ranges by appending directly after
+            // the last existing range in the routing table.
+            let midpoint = u64::MAX / 2;
+            let offset = (midpoint / CANISTER_IDS_PER_SUBNET) - 1 - self.range_offset;
             self.range_offset += 1;
             let start = offset * CANISTER_IDS_PER_SUBNET;
             let end = ((offset + 1) * CANISTER_IDS_PER_SUBNET) - 1;
@@ -3514,6 +3705,7 @@ fn http_method_from(
         ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
         ic_types::canister_http::CanisterHttpMethod::PUT => CanisterHttpMethod::PUT,
         ic_types::canister_http::CanisterHttpMethod::DELETE => CanisterHttpMethod::DELETE,
+        ic_types::canister_http::CanisterHttpMethod::PATCH => CanisterHttpMethod::PATCH,
     }
 }
 
@@ -3594,7 +3786,7 @@ impl Operation for ProcessCanisterHttpInternal {
                     Err(_) => {
                         break;
                     }
-                    Ok(response) => {
+                    Ok((response, _payment_receipt)) => {
                         canister_http.pending.remove(&response.id);
                         if let Some(context) = sm.canister_http_request_contexts().get(&response.id)
                         {
@@ -3764,7 +3956,7 @@ fn process_mock_canister_https_response(
             let response = loop {
                 match client.try_receive() {
                     Err(_) => std::thread::sleep(Duration::from_millis(10)),
-                    Ok(r) => {
+                    Ok((r, _payment_receipt)) => {
                         break r;
                     }
                 }
@@ -5416,6 +5608,28 @@ impl Operation for GetSubnet {
 
     fn id(&self) -> OpId {
         OpId(format!("get_subnet({})", self.canister_id))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct DeleteSubnet {
+    pub subnet_id: SubnetId,
+}
+
+impl Operation for DeleteSubnet {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let default_effective_canister_id = pic.default_effective_canister_id;
+        match pic
+            .subnets
+            .delete_subnet(self.subnet_id, default_effective_canister_id)
+        {
+            Ok(()) => OpOut::NoOutput,
+            Err(e) => OpOut::Error(e),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("delete_subnet({})", self.subnet_id))
     }
 }
 

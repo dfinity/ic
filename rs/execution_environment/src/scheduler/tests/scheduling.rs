@@ -5,13 +5,15 @@ use super::test_utilities::{
 };
 use super::*;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshot;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_types::ComputeAllocation;
 use ic_types::methods::SystemMethod;
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_ge, assert_gt, assert_le};
 use std::cmp::min;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::ops::Range;
 
@@ -794,7 +796,7 @@ fn scheduler_respects_compute_allocation(
     // for free, i.e. `number_of_canisters` rounds.
     let number_of_rounds = number_of_canisters;
 
-    let canister_ids: Vec<_> = test.state().canister_states().keys().cloned().collect();
+    let canister_ids: Vec<_> = test.state().canister_states().all_keys().cloned().collect();
 
     // Add one more round as we update the accumulated priorities at the end of the round now.
     for _ in 0..=number_of_rounds {
@@ -810,7 +812,7 @@ fn scheduler_respects_compute_allocation(
     }
 
     // Check that the compute allocations of the canisters are respected.
-    for (canister_id, canister) in test.state().canister_states().iter() {
+    for (canister_id, canister) in test.state().canister_states().all_iter() {
         let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
@@ -1200,4 +1202,95 @@ fn frozen_canisters_with_heartbeats_or_timers_are_not_scheduled() {
             0
         );
     }
+}
+
+/// Exercises the recovery path for an `OnLowWasmMemory` hook that could
+/// not run because the canister was frozen: the live status is dropped to
+/// `ConditionNotSatisfied` so the per-canister loop terminates immediately,
+/// snapshots taken in that transient state still report `Ready` (since the
+/// memory condition is genuinely satisfied), and the next call to
+/// `update_on_low_wasm_memory_hook_condition` re-arms the live status to
+/// `Ready` ahead of the next round.
+#[test]
+fn frozen_canister_with_on_low_wasm_memory_hook() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig::application_subnet())
+        .build();
+
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        Some(SystemMethod::CanisterOnLowWasmMemory),
+        None,
+        None,
+    );
+    // Make the hook condition genuinely satisfied.
+    let canister_state = test.canister_state_mut(canister);
+    canister_state.system_state.wasm_memory_limit = Some(NumBytes::new(4 * 1024 * 1024 * 1024));
+    canister_state.system_state.wasm_memory_threshold = NumBytes::new(4 * 1024 * 1024 * 1024 + 1);
+
+    canister_state
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::OnLowWasmMemory);
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // The frozen canister could not pay for the hook execution, so the hook
+    // was reset to `ConditionNotSatisfied` to break what would otherwise be
+    // an infinite loop in the scheduler's per-canister inner loop. The round
+    // therefore terminates without exhausting the round instruction budget.
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+    );
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .instructions_executed(),
+        NumInstructions::from(0)
+    );
+
+    // A snapshot taken while the canister is in the transient `(status =
+    // ConditionNotSatisfied, condition = true)` state must hide the
+    // inconsistency by lifting the recorded status to `Ready`. Otherwise a
+    // metadata round-trip via `upload_canister_snapshot_metadata` would be
+    // rejected by the `is_consistent_with` check.
+    let snapshot =
+        CanisterSnapshot::from_canister(test.canister_state(canister), test.state().time())
+            .unwrap();
+    assert_eq!(
+        snapshot.execution_snapshot().on_low_wasm_memory_hook_status,
+        Some(OnLowWasmMemoryHookStatus::Ready)
+    );
+
+    // Simulate the work done by `apply_canister_state_changes` /
+    // `finish_subnet_message_execution` after any completed execution / management
+    // call against this canister: re-evaluating the hook condition observes the
+    // live status as inconsistent with the actual memory condition and flips it
+    // back to `Ready`. The hook will then be re-enqueued and run in a subsequent
+    // round, once the canister is no longer frozen.
+    test.state_mut()
+        .canister_state_mut_arc(&canister)
+        .unwrap()
+        .update_on_low_wasm_memory_hook_condition();
+    assert_eq!(
+        test.canister_state(canister)
+            .system_state
+            .task_queue
+            .peek_hook_status(),
+        OnLowWasmMemoryHookStatus::Ready
+    );
 }

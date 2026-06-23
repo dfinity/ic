@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The endpoint `/instances/<instance_id>/update/delete_subnet` to delete a subnet (non-named subnets only: application, cloud engine, system, or verified application subnets).
+  If a state directory is configured for the instance, the deleted subnet's state directory is removed from disk.
+
+### Changed
+- Canister IDs allocated to newly created canisters without a specified canister ID.
+
+
+
+## 14.0.0 - 2026-05-26
+
+### Added
 - The endpoint `/instances/` takes an additional optional field `disable_ingress_validation` specifying that
   ingress validation is disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
 - Support for canister signatures produced by the ICP mainnet in mainnet-like endpoints `/instances/<instance_id>/api/...`.

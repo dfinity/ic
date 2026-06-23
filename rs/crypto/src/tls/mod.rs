@@ -9,9 +9,10 @@ mod rustls;
 #[cfg(test)]
 mod tests;
 
-impl<CSP> TlsConfig for CryptoComponentImpl<CSP>
+impl<CSP, R> TlsConfig for CryptoComponentImpl<CSP, R>
 where
     CSP: CryptoServiceProvider + Send + Sync,
+    R: CryptoComponentRng,
 {
     fn server_config(
         &self,

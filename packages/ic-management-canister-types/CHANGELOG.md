@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [Unreleased]
+
+### Added
+
+- Added the `PATCH` variant to the `HttpMethod` enum used by canister HTTPS outcalls (`http_request`). The variant is plumbed through the type but not yet enabled on replicated subnets.
+
+## [0.8.0] - 2026-05-13
 
 ### Added
 

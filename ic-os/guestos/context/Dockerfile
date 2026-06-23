@@ -39,7 +39,7 @@ RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.12 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.14 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \
     truncate --size 0 /etc/machine-id
@@ -65,7 +65,7 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
     chmod 0755 /etc/init.d/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
-    chmod 755 /etc/initramfs-tools/scripts/init-premount/verity-root && \
+    chmod 755 /etc/initramfs-tools/scripts/local-premount/verity-root && \
     chmod 755 /etc/initramfs-tools/hooks/veritysetup
 
 # Regenerate initramfs (config changed after copying in /etc)
@@ -144,14 +144,14 @@ RUN addgroup --system nonconfidential && \
 
 # The "ic-csp-vault" account. Used to run `ic-crypto-csp` binary and access the crypto key material.
 RUN addgroup ic-csp-vault && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC crypto CSP vault" ic-csp-vault && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin ic-csp-vault && \
     adduser ic-csp-vault ic-csp-vault && \
     adduser ic-csp-vault ic-csp-vault-socket
 
 # The "ic-http-adapter" account. Used to run `ic-https-outcalls-adapter` binary
 # to allow nodes to make HTTP calls.
 RUN addgroup ic-http-adapter && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Canister HTTP Adapter" ic-http-adapter && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin ic-http-adapter && \
     adduser ic-http-adapter ic-http-adapter
 
 # User which will run the replica service.
@@ -211,7 +211,7 @@ RUN adduser --system --disabled-password --home /var/lib/recovery --shell /bin/b
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Node Exporter" node_exporter && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin node_exporter && \
     adduser node_exporter node_exporter && \
     chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
@@ -228,7 +228,7 @@ RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group -
 
 # The user to run the SOCKS proxy
 RUN addgroup socks && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Dante SOCKS Proxy" socks && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin socks && \
     adduser socks socks && chmod +s /usr/sbin/danted
 
 # ------ INSTALL SCRIPTS -----------------------------------------

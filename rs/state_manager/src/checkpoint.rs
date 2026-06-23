@@ -9,7 +9,8 @@ use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
-    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    CanisterMetrics, CanisterState, CanisterStates, ExecutionState, ReplicatedState,
+    SchedulerState, SystemState,
     canister_state::execution_state::{WasmBinary, WasmExecutionMode},
     page_map::PageMap,
 };
@@ -70,10 +71,10 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
-            canister_ids: state.canister_states().keys().copied().collect(),
+            canister_ids: state.canister_states().all_keys().copied().collect(),
             snapshot_ids: state
                 .canister_states()
-                .values()
+                .all_values()
                 .flat_map(|canister| canister.canister_snapshots.iter().map(|x| *x.0))
                 .collect(),
         })
@@ -187,7 +188,7 @@ impl PageMapType {
     /// List all PageMaps contained in `state`.
     pub(crate) fn list_all(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
-        for (id, canister) in state.canister_states() {
+        for (id, canister) in state.canister_states().all_iter() {
             result.push(Self::WasmChunkStore(id.to_owned()));
             if canister.system_state.log_memory_store.is_allocated() {
                 result.push(Self::LogMemoryStore(id.to_owned()));
@@ -306,7 +307,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
         }
     };
 
-    for canister in tip_state.canisters_iter_mut() {
+    tip_state.canisters_for_each_mut(|_id, canister| {
         // Skip canisters with no page maps to flush.
         let needs_flush = canister
             .system_state
@@ -331,7 +332,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
                     || s.execution_snapshot().stable_memory.page_map.should_flush()
             });
         if !needs_flush {
-            continue;
+            return;
         }
 
         let canister = Arc::make_mut(canister);
@@ -369,7 +370,7 @@ pub(crate) fn flush_checkpoint_ops_and_page_maps(
                 &mut new_snapshot.execution_snapshot_mut().stable_memory.page_map,
             );
         }
-    }
+    });
 
     // Take all snapshot operations that happened since the last flush and clear the list stored in `tip_state`.
     // This way each operation is executed exactly once, independent of how many times `flush_checkpoint_ops_and_page_maps` is called.
@@ -510,13 +511,9 @@ impl CheckpointLoader {
             )
         });
 
-        for canister_state in results.into_iter() {
-            let (canister_state, durations) = canister_state?;
-            canister_states.insert(
-                canister_state.system_state.canister_id(),
-                Arc::new(canister_state),
-            );
-
+        for result in results.into_iter() {
+            let (canister_state, durations) = result?;
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
             durations.apply(&self.metrics);
         }
 
@@ -526,18 +523,24 @@ impl CheckpointLoader {
     fn validate_eq_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        ref_canister_states: &CanisterStates,
     ) -> Result<(), String> {
         let on_disk_canister_ids = self
             .checkpoint_layout
             .canister_ids()
             .map_err(|err| format!("Canister Validation: failed to load canister ids: {err}"))?;
-        let ref_canister_ids: Vec<_> = ref_canister_states.keys().copied().collect();
+        let ref_canister_ids: Vec<_> = ref_canister_states.all_keys().copied().collect();
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
         if on_disk_canister_ids != ref_canister_ids {
             return Err("Canister IDs mismatch".to_string());
         }
+        // A freshly loaded `CanisterStates` (built via `CanisterStates::new`
+        // during checkpoint loading) always has a strict hot/cold partition.
+        // Verify that the reference state already has that same split.
+        ref_canister_states.validate_strict_split().map_err(|err| {
+            format!("Canister Validation: reference state has stale hot/cold partition: {err}")
+        })?;
         let on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
             format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
@@ -689,7 +692,7 @@ fn validate_eq_checkpoint_internal(
     }
     let canister_snapshots = reference_state
         .canister_states()
-        .iter()
+        .all_iter()
         .map(|(canister_id, canister)| (*canister_id, &canister.canister_snapshots))
         .collect();
     checkpoint_loader.validate_eq_canister_snapshots_ids(canister_snapshots)
@@ -715,7 +718,6 @@ pub fn load_canister_state(
     canister_layout: &CanisterLayout<ReadOnly>,
     canister_id: &CanisterId,
     canister_snapshots: CanisterSnapshots,
-    height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     metrics: &dyn CheckpointLoadingMetrics,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
@@ -765,12 +767,7 @@ pub fn load_canister_state(
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
-            let canister_root =
-                CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
-                    .canister(canister_id)?
-                    .raw_path();
             Some(ExecutionState {
-                canister_root,
                 wasm_binary,
                 exports: execution_state_bits.exports,
                 wasm_memory,
@@ -855,6 +852,7 @@ pub fn load_canister_state(
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
         canister_state_bits.reserved_balance_limit,
+        canister_state_bits.minimum_incoming_canister_call_cycles,
         canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
@@ -864,13 +862,25 @@ pub fn load_canister_state(
         canister_state_bits.log_visibility,
         canister_state_bits.snapshot_visibility,
         canister_state_bits.canister_log,
-        canister_state_bits.next_canister_log_record_idx,
         log_memory_store_data,
+        canister_state_bits.log_memory_store_persistent_next_idx,
+        canister_state_bits.log_memory_store_migrated,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.environment_variables,
         metrics,
     );
+
+    if system_state.log_memory_store.is_migrated() {
+        let lms_next_idx = system_state.log_memory_store.next_idx();
+        let log_next_idx = system_state.canister_log.next_idx();
+        if lms_next_idx != log_next_idx {
+            metrics.observe_broken_soft_invariant(format!(
+                "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
+                 != canister_log.next_idx ({log_next_idx})",
+            ));
+        }
+    }
 
     let canister_state = CanisterState {
         system_state,
@@ -910,7 +920,6 @@ fn load_canister_state_from_checkpoint(
         &canister_layout,
         canister_id,
         canister_snapshots,
-        checkpoint_layout.height(),
         Arc::clone(&fd_factory),
         metrics,
     )

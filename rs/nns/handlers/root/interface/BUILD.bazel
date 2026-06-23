@@ -2,43 +2,44 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/nervous_system/clients",
-    "//rs/nervous_system/root",
-    "//rs/nns/constants",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "@crate_index//:candid",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:serde",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "interface",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_nns_handler_root_interface",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/root",
+        "//rs/nns/constants",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "root_interface_test",
-    aliases = ALIASES,
     crate = ":interface",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/clients",
+        "//rs/nervous_system/root",
+        "//rs/nns/constants",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
 )

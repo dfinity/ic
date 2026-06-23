@@ -119,21 +119,20 @@ fn test_retention_across_lifecycle() {
 }
 
 #[test]
-fn test_appending_to_uninitialized_store_is_no_op() {
+fn test_appending_to_uninitialized_store_updates_next_idx() {
     let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
     let mut delta = CanisterLog::default_delta();
     delta.add_record(1, b"data".to_vec());
 
-    // Append without setting limit
+    // Append without setting limit: no data stored, but next_idx advances.
     s.append_delta_log(&mut delta);
 
-    // Should still be empty
     assert!(s.is_empty());
     assert_eq!(s.memory_usage(), 0);
     assert_eq!(s.byte_capacity(), 0);
     assert_eq!(s.bytes_used(), 0);
     assert_eq!(s.records(None).len(), 0);
-    assert_eq!(s.next_idx(), 0);
+    assert_eq!(s.next_idx(), 1);
 }
 
 #[test]
@@ -756,21 +755,21 @@ fn test_resize_down_preserves_records_and_next_idx() {
 }
 
 #[test]
-fn test_from_checkpoint_feature_enabled() {
+fn test_from_checkpoint_migrated() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(FlagStatus::Enabled, some_page_map, TEST_NEXT_IDX);
+    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX, true);
     assert!(s.maybe_page_map().is_some());
     assert_eq!(s.next_idx(), TEST_NEXT_IDX);
 }
 
 #[test]
-fn test_from_checkpoint_feature_disabled() {
+fn test_from_checkpoint_not_migrated() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(FlagStatus::Disabled, some_page_map, TEST_NEXT_IDX);
+    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX, false);
     assert!(s.maybe_page_map().is_none());
-    // When feature is disabled, next_idx should be initialized to 0 regardless of the provided value.
+    // When not yet migrated, next_idx should be initialized to 0 regardless of the provided value.
     assert_eq!(s.next_idx(), 0);
 }
 
@@ -791,6 +790,27 @@ fn test_next_idx_preserved_after_deallocate() {
 
     // The next_idx should be preserved even if deallocated
     assert_eq!(store.next_idx(), TEST_NEXT_IDX + 2);
+}
+
+#[test]
+fn test_next_idx_preserved_when_appending_empty_delta_log() {
+    // Simulates migration from a canister_log that has no records but a
+    // non-zero next_idx (e.g. all records were evicted after uninstalling).
+    let log_size = 4096;
+    let next_idx = TEST_NEXT_IDX;
+
+    let mut store = LogMemoryStore::new(FlagStatus::Enabled);
+    store.resize_for_testing(log_size);
+    assert_eq!(store.next_idx(), 0);
+
+    // Delta log with no records but next_idx > 0, as produced by CanisterLog
+    // after uninstalling a canister (uninstall clears records but keeps next_idx).
+    let mut empty_delta = ic_types::CanisterLog::new_aggregate(next_idx, vec![]);
+    assert!(empty_delta.is_empty());
+
+    store.append_delta_log(&mut empty_delta);
+
+    assert_eq!(store.next_idx(), next_idx);
 }
 
 fn assert_memory_usage_for_limit(feature_flag: FlagStatus, limit: usize) {
@@ -825,4 +845,36 @@ fn memory_usage_for_limit_at_minimum() {
 #[test]
 fn memory_usage_for_limit_above_minimum() {
     assert_memory_usage_for_limit(TEST_LOG_MEMORY_STORE_FEATURE, TEST_LOG_MEMORY_LIMIT);
+}
+
+#[test]
+fn test_gap_in_delta_clears_store() {
+    // Simulate a delta that overflowed its capacity and evicted older records,
+    // creating a gap between the store's next_idx and the delta's first record.
+    //
+    // Setup: store has records idx 0 and 1 (next_idx == 2).
+    // Delta: starts at idx 5 (gap: 2, 3, 4 were evicted from the delta).
+    // Expected: store is cleared before appending, so only idx 5 remains.
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+
+    // Populate the store with records 0 and 1.
+    let mut initial = CanisterLog::new_delta_with_next_index(0, TEST_LOG_MEMORY_LIMIT);
+    initial.add_record(100, b"store #0".to_vec());
+    initial.add_record(101, b"store #1".to_vec());
+    s.append_delta_log(&mut initial);
+    assert_eq!(s.next_idx(), 2);
+    assert_eq!(s.records(None).len(), 2);
+
+    // Build a delta that starts at idx 5 (gap: 2, 3, 4 evicted).
+    let mut delta = CanisterLog::new_delta_with_next_index(5, TEST_LOG_MEMORY_LIMIT);
+    delta.add_record(202, b"delta #2".to_vec());
+    s.append_delta_log(&mut delta);
+
+    // The gap (5 > 2) triggers a clear; only the delta record survives.
+    let records = s.records(None);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].idx, 5);
+    assert_eq!(records[0].content, b"delta #2");
+    assert_eq!(s.next_idx(), 6);
 }

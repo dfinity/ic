@@ -2,7 +2,7 @@ ansible>=12.2.0
 cbor>=1.0.0
 cbor2>=5.9.0
 configargparse
-cryptography>=46.0.7
+cryptography>=48.0.1
 cvss>=2.5
 fabric
 GitPython>=3.1.50
@@ -20,7 +20,7 @@ node_semver>=0.9.0
 packaging>=21.3
 paramiko>=2.11.0
 parse>=1.19.0
-pyjwt>=2.6.0
+pyjwt>=2.13.0
 pynacl>=1.6.2
 pytest>=9.0.3
 pytest-cov
@@ -30,14 +30,17 @@ python_gitlab
 requests>=2.33.0
 # Transitive dependency — pinned for security
 Pygments>=2.20.0
-sev-snp-measure
+# Transitive dependency (via requests) — pinned for security
+idna>=3.15
+# TODO: Switch to a versioned release once available.
+sev-snp-measure @ https://github.com/virtee/sev-snp-measure/archive/00a7883fa.zip
 simple-parsing
 toml>=0.10.2
 tqdm
 uuid
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
 typing_extensions>=4.6.0
-urllib3>=2.6.3
+urllib3>=2.7.0
 
 # For ci/githubstats/query.py
 pandas

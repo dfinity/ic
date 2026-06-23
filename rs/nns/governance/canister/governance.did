@@ -1166,6 +1166,8 @@ type GuestLaunchMeasurement = record {
 type GuestLaunchMeasurementMetadata = record {
   // Kernel command line used for this measurement.
   kernel_cmdline : opt text;
+  // Virtual CPU type used for this measurement.
+  vcpu_type : opt text;
 };
 
 type TakeCanisterSnapshot = record {

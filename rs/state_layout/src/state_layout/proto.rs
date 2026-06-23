@@ -24,6 +24,9 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             cycles_debit: Some(item.cycles_debit.into()),
             reserved_balance: Some(item.reserved_balance.into()),
             reserved_balance_limit: item.reserved_balance_limit.map(|v| v.into()),
+            minimum_incoming_canister_call_cycles: Some(
+                item.minimum_incoming_canister_call_cycles.into(),
+            ),
             canister_status: Some((&item.status).into()),
             rounds_scheduled: item.rounds_scheduled,
             scheduled_as_first: item.scheduled_as_first,
@@ -74,6 +77,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .map(|record| record.into())
                 .collect(),
             next_canister_log_record_idx: item.next_canister_log_record_idx,
+            log_memory_store_migrated: item.log_memory_store_migrated,
+            log_memory_store_persistent_next_idx: item.log_memory_store_persistent_next_idx,
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             tasks: Some((&item.task_queue).into()),
@@ -169,6 +174,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
+            minimum_incoming_canister_call_cycles: value
+                .minimum_incoming_canister_call_cycles
+                .map(|v| v.into())
+                .unwrap_or_default(),
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",
@@ -226,6 +235,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     .collect(),
             ),
             next_canister_log_record_idx: value.next_canister_log_record_idx,
+            log_memory_store_migrated: value.log_memory_store_migrated,
+            log_memory_store_persistent_next_idx: value.log_memory_store_persistent_next_idx,
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             task_queue,

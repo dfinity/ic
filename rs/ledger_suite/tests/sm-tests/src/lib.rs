@@ -5077,7 +5077,23 @@ pub mod archiving {
         }
 
         // Install a ledger with a lot of initial balances
-        let env = StateMachine::new();
+        let mut subnet_config = SubnetConfig::new(SubnetType::System);
+        // Set max_instructions_per_round to max(max_instructions_per_slice, max_instructions_per_install_code_slice)
+        // to ensure that at most one canister message can be executed per round.
+        subnet_config.scheduler_config.max_instructions_per_round = subnet_config
+            .scheduler_config
+            .max_instructions_per_slice
+            .max(
+                subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
+            );
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config,
+                HypervisorConfig::default(),
+            )))
+            .build();
         let args = encode_init_args(InitArgs {
             archive_options: ArchiveOptions {
                 trigger_threshold: TRIGGER_THRESHOLD,
@@ -5117,7 +5133,22 @@ pub mod archiving {
             env.tick();
             archive_info = get_archives(&env, ledger_id);
         }
-        // Verify that the ledger reports block `0` to be present only in the ledger
+        // Keep retrieving the block `0` from the archive and calling env.tick()
+        // until the block is archived.
+        let archive_id = archive_info
+            .first()
+            .expect("should return one archive info");
+        let archive_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id));
+        let mut get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+        while get_blocks_res.blocks.is_empty() {
+            env.tick();
+            get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+        }
+        // Since the archiving is done in chunks, the archiving is not yet completed,
+        // so the ledger reports the block `0` to be present only
+        // in the ledger, even though it is also present in the archive by now.
+        // Verify that the ledger reports block `0` to be present only in the ledger.
         let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
         assert!(
             !ledger_reports_first_block_in_two_places(0, &get_blocks_res),
@@ -5125,22 +5156,6 @@ pub mod archiving {
         );
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
-        // Verify that the block was already archived. Since the archiving is done in chunks, the
-        // archiving is not yet completed, so the ledger reports the block `0` to be present only
-        // in the ledger, even though it is also present in the archive by now.
-        let archive_id = archive_info
-            .first()
-            .expect("should return one archive info");
-        let get_blocks_res = archive_get_blocks_fn(
-            &env,
-            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id)),
-            0,
-            1,
-        );
-        assert!(
-            !get_blocks_res.blocks.is_empty(),
-            "archive should contain at least one block"
-        );
 
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;

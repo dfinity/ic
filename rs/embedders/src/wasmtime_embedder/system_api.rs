@@ -18,24 +18,19 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
+    Memory, NumWasmPages, OutputRequest, canister_state::WASM_PAGE_SIZE_IN_BYTES,
 };
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
     NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
     ingress::WasmResult,
-    messages::{
-        CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request, SenderInfo,
-    },
+    messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, Instructions,
-    RequestAndResponseTransmission,
-};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
-use request_in_prep::{RequestInPrep, into_request};
+use request_in_prep::{RequestInPrep, into_output_request};
 use sandbox_safe_system_state::{
     ConsumedCyclesDuringExecution, SandboxSafeSystemState, SystemStateModifications,
 };
@@ -1082,11 +1077,6 @@ impl MemoryUsage {
 
         self.add_execution_memory(usage_growth_bytes, execution_memory_type)?;
 
-        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-            self.wasm_memory_limit,
-            self.wasm_memory_usage,
-        );
-
         Ok(())
     }
 
@@ -1294,7 +1284,7 @@ impl SystemApiImpl {
     }
 
     pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.sandbox_safe_system_state.cost_schedule
+        self.sandbox_safe_system_state.cost_schedule()
     }
 
     /// Note that this function is made public only for the tests
@@ -1721,7 +1711,6 @@ impl SystemApiImpl {
             ApiType::InspectMessage { .. } | ApiType::NonReplicatedQuery { .. } => {
                 SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1730,7 +1719,6 @@ impl SystemApiImpl {
                     requests: vec![],
                     new_global_timer: None,
                     canister_log: CanisterLog::default_delta(),
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 }
             }
@@ -1744,7 +1732,6 @@ impl SystemApiImpl {
             | ApiType::CompositeCleanup { .. } => match &self.execution_error {
                 Some(_) => SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: vec![],
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1753,12 +1740,10 @@ impl SystemApiImpl {
                     requests: vec![],
                     new_global_timer: None,
                     canister_log: CanisterLog::default_delta(),
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 },
                 None => SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: system_state_modifications.callback_updates,
                     cycles_balance_change: CyclesBalanceChange::zero(),
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1767,7 +1752,6 @@ impl SystemApiImpl {
                     requests: system_state_modifications.requests,
                     new_global_timer: None,
                     canister_log: CanisterLog::default_delta(),
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: false,
                 },
             },
@@ -1779,7 +1763,6 @@ impl SystemApiImpl {
                     self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
                     SystemStateModifications {
                         new_certified_data: None,
-                        callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
                         consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1788,13 +1771,11 @@ impl SystemApiImpl {
                         requests: vec![],
                         new_global_timer: None,
                         canister_log: system_state_modifications.canister_log,
-                        on_low_wasm_memory_hook_condition_check_result: None,
                         should_bump_canister_version: false,
                     }
                 }
                 None => SystemStateModifications {
                     new_certified_data: None,
-                    callback_updates: vec![],
                     cycles_balance_change: system_state_modifications.cycles_balance_change,
                     reserved_cycles: Cycles::zero(),
                     consumed_cycles_by_use_case: system_state_modifications
@@ -1805,7 +1786,6 @@ impl SystemApiImpl {
                     requests: vec![],
                     new_global_timer: None,
                     canister_log: system_state_modifications.canister_log,
-                    on_low_wasm_memory_hook_condition_check_result: None,
                     should_bump_canister_version: true,
                 },
             },
@@ -1821,7 +1801,6 @@ impl SystemApiImpl {
                     self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
                     SystemStateModifications {
                         new_certified_data: None,
-                        callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
                         consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1830,7 +1809,6 @@ impl SystemApiImpl {
                         requests: vec![],
                         new_global_timer: None,
                         canister_log: system_state_modifications.canister_log,
-                        on_low_wasm_memory_hook_condition_check_result: None,
                         should_bump_canister_version: false,
                     }
                 }
@@ -1852,7 +1830,6 @@ impl SystemApiImpl {
                     self.add_canister_log_for_trap(err, time, &mut system_state_modifications);
                     SystemStateModifications {
                         new_certified_data: None,
-                        callback_updates: vec![],
                         cycles_balance_change: CyclesBalanceChange::zero(),
                         reserved_cycles: Cycles::zero(),
                         consumed_cycles_by_use_case: ConsumedCyclesDuringExecution::default(),
@@ -1861,7 +1838,6 @@ impl SystemApiImpl {
                         requests: vec![],
                         new_global_timer: None,
                         canister_log: system_state_modifications.canister_log,
-                        on_low_wasm_memory_hook_condition_check_result: None,
                         should_bump_canister_version: false,
                     }
                 }
@@ -1878,30 +1854,20 @@ impl SystemApiImpl {
     ///
     /// Note that this function is made public only for the tests
     #[doc(hidden)]
-    pub fn push_output_request(
-        &mut self,
-        req: Request,
-        prepayment_for_response_execution: CompoundCycles<Instructions>,
-        prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
-    ) -> HypervisorResult<i32> {
-        let abort = |request: Request, sandbox_safe_system_state: &mut SandboxSafeSystemState| {
-            sandbox_safe_system_state.refund_cycles(request.payment);
-            sandbox_safe_system_state.unregister_callback(request.sender_reply_callback);
-        };
-
+    pub fn push_output_request(&mut self, req: OutputRequest) -> HypervisorResult<i32> {
         let memory_usage_of_request = if self.execution_parameters.subnet_type == SubnetType::System
         {
             // Effectively disable the memory limit checks on system subnets.
             MessageMemoryUsage::ZERO
         } else {
-            memory_usage_of_request(&req)
+            req.message_memory_usage()
         };
         if let Err(_err) = self.memory_usage.allocate_message_memory(
             memory_usage_of_request,
             &self.api_type,
             &self.sandbox_safe_system_state,
         ) {
-            abort(req, &mut self.sandbox_safe_system_state);
+            self.sandbox_safe_system_state.refund_cycles(req.payment);
             // Return an error code instead of trapping here in order to allow
             // the user code to handle the error gracefully.
             return Ok(RejectCode::SysTransient as i32);
@@ -1911,14 +1877,12 @@ impl SystemApiImpl {
             self.memory_usage.current_usage,
             self.memory_usage.current_message_usage,
             req,
-            prepayment_for_response_execution,
-            prepayment_for_call_transmission,
         ) {
             Ok(()) => Ok(0),
-            Err(request) => {
+            Err(req) => {
                 self.memory_usage
                     .deallocate_message_memory(memory_usage_of_request);
-                abort(request, &mut self.sandbox_safe_system_state);
+                self.sandbox_safe_system_state.refund_cycles(req.payment);
                 Ok(RejectCode::SysTransient as i32)
             }
         }
@@ -3299,19 +3263,14 @@ impl SystemApi for SystemApiImpl {
                                 .to_string(),
                         })?;
 
-                let req = into_request(
+                let req = into_output_request(
                     req_in_prep,
                     *call_context_id,
                     &mut self.sandbox_safe_system_state,
                     &self.log,
                     *time,
                 )?;
-
-                self.push_output_request(
-                    req.request,
-                    req.prepayment_for_response_execution,
-                    req.prepayment_for_call_transmission,
-                )
+                self.push_output_request(req)
             }
         };
         trace_syscall!(self, CallPerform, result);
@@ -4337,7 +4296,7 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let execution_mode =
             WasmExecutionMode::from_is_wasm64(self.sandbox_safe_system_state.is_wasm64_execution);
         let cost = self
@@ -4345,9 +4304,8 @@ impl SystemApi for SystemApiImpl {
             .get_cycles_account_manager()
             .xnet_call_total_fee(
                 (method_name_size.saturating_add(payload_size)).into(),
-                subnet_size,
+                subnet_cycles_config,
                 execution_mode,
-                self.get_cost_schedule(),
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_call")?;
         trace_syscall!(self, CostCall, cost);
@@ -4355,11 +4313,11 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()> {
-        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .canister_creation_fee(subnet_size, self.get_cost_schedule());
+            .canister_creation_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_create_canister")?;
         trace_syscall!(self, CostCreateCanister, cost);
         Ok(())
@@ -4372,15 +4330,14 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
             .http_request_fee(
                 request_size.into(),
                 Some(max_res_bytes.into()),
-                subnet_size,
-                self.get_cost_schedule(),
+                subnet_cycles_config,
             );
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
@@ -4422,7 +4379,7 @@ impl SystemApi for SystemApiImpl {
                 }
             })?;
 
-        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let subnet_cycles_config = self.sandbox_safe_system_state.subnet_cycles_config;
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
@@ -4432,8 +4389,7 @@ impl SystemApi for SystemApiImpl {
                 cost_params_v2.raw_response_bytes.into(),
                 cost_params_v2.transform_instructions.into(),
                 cost_params_v2.transformed_response_bytes.into(),
-                subnet_size,
-                self.get_cost_schedule(),
+                subnet_cycles_config,
             );
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_http_request_v2")?;
         trace_syscall!(self, CostHttpRequestV2, cost);
@@ -4466,15 +4422,14 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some(subnet_cycles_config) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .ecdsa_signature_fee(subnet_size, cost_schedule);
+            .ecdsa_signature_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4506,15 +4461,14 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some(subnet_cycles_config) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .schnorr_signature_fee(subnet_size, cost_schedule);
+            .schnorr_signature_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4546,15 +4500,14 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
-        let Some((subnet_size, cost_schedule, _)) =
-            self.sandbox_safe_system_state.get_key_subnet_details(key)
+        let Some(subnet_cycles_config) = self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .vetkd_fee(subnet_size, cost_schedule);
+            .vetkd_fee(subnet_cycles_config);
         copy_cycles_to_heap(cost.real(), dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)

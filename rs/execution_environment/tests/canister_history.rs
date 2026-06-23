@@ -635,7 +635,9 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
         / compute_percent_allocated_per_second_fee.get() as u64;
     now += Duration::from_secs(seconds_to_burn_balance + 1);
     env.set_time(now);
-    env.tick();
+    // canisters are always charged for storage on checkpoint rounds
+    env.checkpointed_tick();
+
     // check canister history
     let total_num_change_entries = reference_change_entries.len();
     reference_change_entries.clear();

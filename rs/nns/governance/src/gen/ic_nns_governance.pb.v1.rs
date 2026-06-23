@@ -5281,6 +5281,11 @@ pub enum NnsFunction {
     /// nodes become unassigned.
     /// Currently limited to CloudEngine subnets.
     DeleteSubnet = 57,
+    /// Set or unset the default subnet to which `SetupInitialDKG` management
+    /// canister calls are routed when no subnet is specified explicitly. If unset,
+    /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
+    /// calling subnet (NNS).
+    SetDefaultInitialDkgSubnet = 58,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5356,6 +5361,7 @@ impl NnsFunction {
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
+            Self::SetDefaultInitialDkgSubnet => "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5438,6 +5444,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
+            "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
             _ => None,
         }
     }

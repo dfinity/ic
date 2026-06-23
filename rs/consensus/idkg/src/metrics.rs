@@ -176,10 +176,6 @@ impl IDkgPayloadMetrics {
     pub(crate) fn report(&self, payload: &IDkgPayload) {
         let expected_keys = expected_keys(payload);
 
-        self.payload_metrics_set_without_key_id_label(
-            "signature_agreements_flag",
-            payload.empty_signature_agreements_flag as usize,
-        );
         self.payload_metrics_set(
             "available_pre_signatures",
             count_by_master_public_key_id(
@@ -228,7 +224,7 @@ impl IDkgPayloadMetrics {
             .inc();
     }
 
-    pub(crate) fn payload_errors_inc(&self, label: &str) {
+    pub fn payload_errors_inc(&self, label: &str) {
         self.payload_errors.with_label_values(&[label]).inc();
     }
 }

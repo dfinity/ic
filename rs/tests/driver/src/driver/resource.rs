@@ -3,11 +3,12 @@ use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
 use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
+use crate::driver::farm::VmAllocationMode;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResourceOverrides};
+use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
@@ -115,7 +116,7 @@ pub struct VmSpec {
     boot_image: BootImage,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
     has_ipv4: bool,
-    vm_allocation: Option<VmAllocationStrategy>,
+    vm_allocation_mode: Option<VmAllocationMode>,
     required_host_features: Vec<HostFeature>,
     alternate_template: Option<VmType>,
 }
@@ -243,7 +244,7 @@ pub fn get_resource_request_for_nested_nodes(
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "585f4cb5866a576a1ba85ffb2c4fbd1836c7e39a7e9a02b5be44bfb4820a1443";
+    "ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
@@ -274,7 +275,7 @@ pub fn get_resource_request_for_universal_vm(
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: universal_vm.has_ipv4,
-        vm_allocation: universal_vm.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: universal_vm.required_host_features.clone(),
         alternate_template: None,
     });
@@ -308,7 +309,7 @@ pub fn allocate_resources(
             },
             vm_config.boot_image_minimal_size_gibibytes,
             vm_config.has_ipv4,
-            vm_config.vm_allocation.clone(),
+            None,
             vm_config.required_host_features.clone(),
         );
         let group_name = group_name.clone();
@@ -373,7 +374,7 @@ fn vm_spec_from_node(
         boot_image: n.boot_image.clone(),
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: n.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: n.required_host_features.clone(),
         alternate_template: None,
     }
@@ -408,7 +409,7 @@ fn vm_spec_from_nested_node(
         boot_image: node.boot_image.clone(),
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: None,
+        vm_allocation_mode: None,
         required_host_features,
         alternate_template: None,
     })

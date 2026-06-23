@@ -171,7 +171,9 @@ fn test_update_rates_buffer_sorted() {
 }
 
 #[test]
-fn test_update_rates_buffer_caps_at_max() {
+fn test_update_rates_buffer_no_longer_caps_by_size() {
+    // update_rates_buffer no longer evicts: eviction is a separate, timestamp-anchored step.
+    // Confirm that inserting beyond MAX_RATES_BUFFER_SIZE grows the buffer (no size cap).
     let rates: Vec<SampledPrice> = (0..MAX_RATES_BUFFER_SIZE as u64)
         .map(|d| SampledPrice {
             timestamp_seconds: d * ONE_DAY_SECONDS,
@@ -188,12 +190,210 @@ fn test_update_rates_buffer_caps_at_max() {
             xdr_permyriad_per_icp: 55_000,
         },
     );
-    assert_eq!(history.icp_xdr_rates.len(), MAX_RATES_BUFFER_SIZE);
-    assert_eq!(history.icp_xdr_rates[0].timestamp_seconds, ONE_DAY_SECONDS);
+    assert_eq!(history.icp_xdr_rates.len(), MAX_RATES_BUFFER_SIZE + 1);
+    // First entry (day 0) still present, last entry is the newly inserted one.
+    assert_eq!(history.icp_xdr_rates[0].timestamp_seconds, 0);
     assert_eq!(
-        history.icp_xdr_rates[MAX_RATES_BUFFER_SIZE - 1].timestamp_seconds,
+        history.icp_xdr_rates[MAX_RATES_BUFFER_SIZE].timestamp_seconds,
         MAX_RATES_BUFFER_SIZE as u64 * ONE_DAY_SECONDS
     );
+}
+
+#[test]
+fn test_evict_stale_rates_keeps_one_seed_before_window() {
+    // Buffer has many entries before the window plus all entries within the window. Eviction
+    // must drop all the pre-window entries except the most recent one, which is kept as the
+    // LOCF seed for any leading missing days at the start of the window.
+    let current_day = 1_000_u64;
+    let oldest_kept_day = current_day - (MAX_RATES_BUFFER_SIZE as u64 - 1);
+    let last_pre_window_day = oldest_kept_day - 1;
+    let mut rates: Vec<SampledPrice> = (0..=last_pre_window_day)
+        .map(|d| SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        })
+        .collect();
+    // Plus one entry at the boundary inside the window.
+    rates.push(SampledPrice {
+        timestamp_seconds: oldest_kept_day * ONE_DAY_SECONDS,
+        xdr_permyriad_per_icp: 60_000,
+    });
+
+    let mut history = IcpPriceHistory {
+        icp_xdr_rates: rates,
+    };
+    evict_stale_rates(&mut history, current_day);
+    // Only the most recent pre-window entry survives, plus the in-window entry.
+    assert_eq!(history.icp_xdr_rates.len(), 2);
+    assert_eq!(
+        history.icp_xdr_rates[0].timestamp_seconds,
+        last_pre_window_day * ONE_DAY_SECONDS,
+        "the most recent pre-window entry must be retained as the LOCF seed"
+    );
+    assert_eq!(
+        history.icp_xdr_rates[1].timestamp_seconds,
+        oldest_kept_day * ONE_DAY_SECONDS
+    );
+}
+
+#[test]
+fn test_evict_stale_rates_keeps_lone_seed_when_window_is_empty() {
+    // Buffer has a single entry, far before the window. Eviction must keep it so it can serve
+    // as the LOCF seed for any day in the window with a successful fetch later.
+    let current_day = 1_000_u64;
+    let mut history = IcpPriceHistory {
+        icp_xdr_rates: vec![SampledPrice {
+            timestamp_seconds: 100 * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        }],
+    };
+    evict_stale_rates(&mut history, current_day);
+    assert_eq!(history.icp_xdr_rates.len(), 1);
+    assert_eq!(
+        history.icp_xdr_rates[0].timestamp_seconds,
+        100 * ONE_DAY_SECONDS
+    );
+}
+
+#[test]
+fn test_evict_stale_rates_keeps_sparse_buffer_within_window() {
+    // With gaps from failed fetches, the buffer may span the full window with fewer entries.
+    // Eviction must keep every entry whose day is within [current_day - 364, current_day].
+    let current_day = 1_000_u64;
+    let rates: Vec<SampledPrice> = vec![
+        // Just inside the window.
+        SampledPrice {
+            timestamp_seconds: (current_day - 364) * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        },
+        SampledPrice {
+            timestamp_seconds: (current_day - 100) * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 51_000,
+        },
+        SampledPrice {
+            timestamp_seconds: current_day * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 52_000,
+        },
+    ];
+    let mut history = IcpPriceHistory {
+        icp_xdr_rates: rates.clone(),
+    };
+    evict_stale_rates(&mut history, current_day);
+    assert_eq!(history.icp_xdr_rates, rates);
+}
+
+#[test]
+fn test_evict_stale_rates_only_seed_remains_when_window_has_no_in_window_entries() {
+    // Buffer holds two stale entries (both before the window). Eviction must drop the older
+    // one and keep the most recent as the LOCF seed.
+    let current_day = 1_000_u64;
+    let mut history = IcpPriceHistory {
+        icp_xdr_rates: vec![
+            SampledPrice {
+                timestamp_seconds: 0,
+                xdr_permyriad_per_icp: 1_000,
+            },
+            SampledPrice {
+                timestamp_seconds: 200 * ONE_DAY_SECONDS,
+                xdr_permyriad_per_icp: 2_000,
+            },
+        ],
+    };
+    evict_stale_rates(&mut history, current_day);
+    assert_eq!(history.icp_xdr_rates.len(), 1);
+    assert_eq!(
+        history.icp_xdr_rates[0].timestamp_seconds,
+        200 * ONE_DAY_SECONDS
+    );
+}
+
+#[test]
+fn test_evict_stale_rates_empty_buffer_is_noop() {
+    let mut history = IcpPriceHistory {
+        icp_xdr_rates: vec![],
+    };
+    evict_stale_rates(&mut history, 1_000);
+    assert!(history.icp_xdr_rates.is_empty());
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_no_data_returns_none() {
+    assert_eq!(compute_average_icp_xdr_rate(&[], 100, 7), None);
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_full_window_no_gaps() {
+    // 7 days at price 50_000 → average 50_000.
+    let rates: Vec<SampledPrice> = (94..=100)
+        .map(|d| SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        })
+        .collect();
+    assert_eq!(compute_average_icp_xdr_rate(&rates, 100, 7), Some(50_000));
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_locf_fills_trailing_gap() {
+    // 7-day window ending at day 100. Days 94-99 present (50_000), trailing day 100 missing.
+    // LOCF carries day 99's rate forward to day 100 → 7 contributions of 50_000 → avg 50_000.
+    let rates: Vec<SampledPrice> = (94..=99)
+        .map(|d| SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        })
+        .collect();
+    assert_eq!(compute_average_icp_xdr_rate(&rates, 100, 7), Some(50_000));
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_locf_carries_distinct_value_forward() {
+    // 7-day window ending at day 100. Days 94-98 at 50_000, day 99 at 70_000, day 100 missing.
+    // LOCF: day 100 carries day 99's value (70_000). Sum = 5*50_000 + 70_000 + 70_000 = 390_000.
+    // Average = 390_000 / 7 = 55_714 (integer division).
+    let mut rates: Vec<SampledPrice> = (94..=98)
+        .map(|d| SampledPrice {
+            timestamp_seconds: d * ONE_DAY_SECONDS,
+            xdr_permyriad_per_icp: 50_000,
+        })
+        .collect();
+    rates.push(SampledPrice {
+        timestamp_seconds: 99 * ONE_DAY_SECONDS,
+        xdr_permyriad_per_icp: 70_000,
+    });
+    assert_eq!(compute_average_icp_xdr_rate(&rates, 100, 7), Some(55_714));
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_locf_walks_back_through_multiple_gaps() {
+    // 7-day window ending at day 100. Only day 94 present (60_000). Days 95-100 all missing.
+    // LOCF carries day 94's value forward for all 7 days → average 60_000.
+    let rates = vec![SampledPrice {
+        timestamp_seconds: 94 * ONE_DAY_SECONDS,
+        xdr_permyriad_per_icp: 60_000,
+    }];
+    assert_eq!(compute_average_icp_xdr_rate(&rates, 100, 7), Some(60_000));
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_skips_days_with_no_prior_rate() {
+    // 7-day window ending at day 100 (days 94..=100). The earliest rate in the buffer is day 96.
+    // Days 94, 95 have no prior rate to carry forward → skipped. Days 96-100 all use day 96's
+    // rate via LOCF (the only rate). Average = 80_000 over 5 contributing days.
+    let rates = vec![SampledPrice {
+        timestamp_seconds: 96 * ONE_DAY_SECONDS,
+        xdr_permyriad_per_icp: 80_000,
+    }];
+    assert_eq!(compute_average_icp_xdr_rate(&rates, 100, 7), Some(80_000));
+}
+
+#[test]
+fn test_compute_average_icp_xdr_rate_zero_window_returns_none() {
+    let rates = vec![SampledPrice {
+        timestamp_seconds: 100 * ONE_DAY_SECONDS,
+        xdr_permyriad_per_icp: 50_000,
+    }];
+    assert_eq!(compute_average_icp_xdr_rate(&rates, 100, 0), None);
 }
 
 #[test]
@@ -201,7 +401,7 @@ fn test_compute_maturity_modulation_no_data_with_previous() {
     let result = compute_maturity_modulation_permyriad(&[], 100, Some((50, 99)));
     assert_eq!(
         result,
-        Err("insufficient recent price data despite full history".to_string())
+        Err("no rate available for the recent price window".to_string())
     );
 }
 
@@ -210,7 +410,7 @@ fn test_compute_maturity_modulation_no_data_no_previous() {
     let result = compute_maturity_modulation_permyriad(&[], 100, None);
     assert_eq!(
         result,
-        Err("insufficient recent price data despite full history".to_string())
+        Err("no rate available for the recent price window".to_string())
     );
 }
 
@@ -389,8 +589,15 @@ async fn test_execute_stores_rate_and_computes_modulation() {
                 }],
             }
         );
-        // The 365-day window is not yet full, so maturity modulation is not computed.
-        assert_eq!(gov.heap_data.maturity_modulation, None);
+        // The 365-day window is not yet full, so maturity modulation has not been recomputed
+        // from price history; it's still the neutral init default.
+        assert_eq!(
+            gov.heap_data.maturity_modulation,
+            Some(MaturityModulation {
+                current_value_permyriad: Some(0),
+                updated_at_days_since_epoch: None,
+            })
+        );
     });
 
     // With almost no history, the next delay should be short (backfill interval) so that
@@ -628,6 +835,136 @@ async fn test_execute_backfill_then_daily() {
 }
 
 #[tokio::test]
+async fn test_execute_advances_cursor_on_failure_and_succeeds_on_next_day() {
+    // Pre-populate 363 days of history, leaving gaps at current_day - 1 and current_day.
+    // The first execute() asks XRC for current_day - 1 and gets an error. With the new
+    // cursor-advancing behavior, the next execute() must move on to current_day (instead of
+    // re-attempting current_day - 1). After current_day is fetched, a third execute() finds no
+    // missing days above the cursor and computes maturity modulation.
+    let current_day = 20_500_u64;
+    let now = current_day * ONE_DAY_SECONDS;
+
+    thread_local! {
+        static GOV: RefCell<Governance> = RefCell::new(new_governance(20_500 * ONE_DAY_SECONDS));
+    }
+
+    let oldest_needed = current_day - (MAX_RATES_BUFFER_SIZE as u64 - 1);
+    GOV.with_borrow_mut(|gov| {
+        let rates: Vec<SampledPrice> = (oldest_needed..current_day - 1)
+            .map(|d| SampledPrice {
+                timestamp_seconds: d * ONE_DAY_SECONDS,
+                xdr_permyriad_per_icp: 50_000,
+            })
+            .collect();
+        gov.heap_data.icp_price_history = Some(IcpPriceHistory {
+            icp_xdr_rates: rates,
+        });
+        gov.heap_data.maturity_modulation = Some(MaturityModulation {
+            current_value_permyriad: Some(0),
+            updated_at_days_since_epoch: Some(current_day - 2),
+        });
+    });
+
+    let mut seq = mockall::Sequence::new();
+    let mut mock_client = MockXrcClient::new();
+    mock_client
+        .expect_get_icp_to_xdr_exchange_rate()
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(|_| {
+            Err(GetExchangeRateError::Call {
+                code: 1,
+                message: "XRC unavailable for this day".to_string(),
+            })
+        });
+    mock_client
+        .expect_get_icp_to_xdr_exchange_rate()
+        .times(1)
+        .in_sequence(&mut seq)
+        .returning(move |ts| Ok(make_valid_exchange_rate(ts.unwrap(), 50_000)));
+
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
+
+    // Tick 1: try current_day - 1 → FAIL.
+    let (delay_1, task) = task.execute().await;
+    assert_eq!(delay_1, Duration::from_secs(ERROR_RETRY_INTERVAL_SECONDS));
+    GOV.with_borrow(|gov| {
+        let history = gov.heap_data.icp_price_history.as_ref().unwrap();
+        assert_eq!(history.icp_xdr_rates.len(), 363);
+        assert!(
+            !history
+                .icp_xdr_rates
+                .iter()
+                .any(|r| r.timestamp_seconds == (current_day - 1) * ONE_DAY_SECONDS)
+        );
+    });
+
+    // Tick 2: cursor has advanced past current_day - 1, so this tick tries current_day. Succeeds.
+    let (delay_2, task) = task.execute().await;
+    assert_eq!(delay_2, Duration::from_secs(BACKFILL_INTERVAL_SECONDS));
+    GOV.with_borrow(|gov| {
+        let history = gov.heap_data.icp_price_history.as_ref().unwrap();
+        assert_eq!(history.icp_xdr_rates.len(), 364);
+        assert!(
+            history
+                .icp_xdr_rates
+                .iter()
+                .any(|r| r.timestamp_seconds == current_day * ONE_DAY_SECONDS)
+        );
+        assert!(
+            !history
+                .icp_xdr_rates
+                .iter()
+                .any(|r| r.timestamp_seconds == (current_day - 1) * ONE_DAY_SECONDS),
+            "the failed day must remain absent — fallback must not be persisted"
+        );
+    });
+
+    // Tick 3: no missing day above the cursor → compute modulation and sleep until midnight.
+    let (delay_3, _task) = task.execute().await;
+    assert_eq!(delay_3, duration_until_next_midnight_utc(now));
+    GOV.with_borrow(|gov| {
+        let mm = gov.heap_data.maturity_modulation.as_ref().unwrap();
+        assert_eq!(mm.updated_at_days_since_epoch, Some(current_day));
+        assert!(mm.current_value_permyriad.is_some());
+    });
+}
+
+#[tokio::test]
+async fn test_execute_resets_cursor_for_next_round() {
+    // After a round completes (modulation updated), the cursor must be reset to None so that the
+    // next round (next midnight) starts from oldest_needed and retries any still-missing days.
+    let current_day = 20_500_u64;
+
+    thread_local! {
+        static GOV: RefCell<Governance> = RefCell::new(new_governance(20_500 * ONE_DAY_SECONDS));
+    }
+
+    // Buffer is fully populated for the lookback window.
+    let oldest_needed = current_day - (MAX_RATES_BUFFER_SIZE as u64 - 1);
+    GOV.with_borrow_mut(|gov| {
+        let rates: Vec<SampledPrice> = (oldest_needed..=current_day)
+            .map(|d| SampledPrice {
+                timestamp_seconds: d * ONE_DAY_SECONDS,
+                xdr_permyriad_per_icp: 50_000,
+            })
+            .collect();
+        gov.heap_data.icp_price_history = Some(IcpPriceHistory {
+            icp_xdr_rates: rates,
+        });
+    });
+
+    // Tick 1: no missing days. Modulation computed. Cursor should be reset.
+    let mock_client = MockXrcClient::new();
+    let task = UpdateIcpXdrRateRelatedData::new(&GOV, Arc::new(mock_client));
+    let (_, task) = task.execute().await;
+    assert!(
+        task.last_attempted_day_in_round.is_none(),
+        "cursor must reset after a completed round"
+    );
+}
+
+#[tokio::test]
 async fn test_execute_repeated_calls_accumulate_rates() {
     let base_day = 20_500_u64;
 
@@ -682,7 +1019,14 @@ async fn test_execute_repeated_calls_accumulate_rates() {
                 ],
             }
         );
-        // The 365-day window is not yet full, so maturity modulation is not computed.
-        assert_eq!(gov.heap_data.maturity_modulation, None);
+        // The 365-day window is not yet full, so maturity modulation has not been recomputed
+        // from price history; it's still the neutral init default.
+        assert_eq!(
+            gov.heap_data.maturity_modulation,
+            Some(MaturityModulation {
+                current_value_permyriad: Some(0),
+                updated_at_days_since_epoch: None,
+            })
+        );
     });
 }

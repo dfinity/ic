@@ -116,6 +116,7 @@ go.sum                    @dfinity/idx
 /rs/dogecoin/                                           @dfinity/defi
 /rs/embedders/                                          @dfinity/core-protocol
 /rs/ethereum/                                           @dfinity/defi
+/rs/engine_controller/                                  @dfinity/dre
 /rs/execution_environment/                              @dfinity/core-protocol
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/core-protocol

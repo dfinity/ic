@@ -39,8 +39,7 @@ fn dts_long_execution_completes() {
         ErrorCode::CanisterDidNotReply,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         9.0
@@ -124,8 +123,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 1);
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         4.0
@@ -143,8 +141,7 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
         ErrorCode::CanisterDidNotReply,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         9.0
@@ -176,8 +173,7 @@ fn dts_long_execution_runs_out_of_instructions() {
         ErrorCode::CanisterInstructionLimitExceeded,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         9.0
@@ -300,7 +296,7 @@ fn respect_max_paused_executions(
     test.execute_all_with(|test| {
         let (canister_states, subnet_schedule) = test.state_mut().canisters_and_schedule_mut();
         let paused_executions = canister_states
-            .values()
+            .hot_values()
             .filter(|canister| {
                 let priority = subnet_schedule.get(&canister.canister_id());
                 if canister.has_paused_execution() {
@@ -509,7 +505,7 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
         0.0
     );
 
-    let state_metrics = &test.scheduler().state_metrics;
+    let state_metrics = test.state_metrics();
     // 2 rounds because the first canister was paused twice.
     assert_eq!(
         state_metrics
@@ -549,7 +545,7 @@ fn dts_allow_only_one_long_install_code_execution_at_a_time() {
     );
     // 3 slices for the first canister, 1 slice for the second.
     assert_eq!(metrics.round.slices.get_sample_sum(), 4.0);
-    let state_metrics = &test.scheduler().state_metrics;
+    let state_metrics = test.state_metrics();
     // Same 2 rounds of paused install code as above.
     assert_eq!(
         state_metrics
@@ -593,16 +589,14 @@ fn dts_resume_install_code_after_abort() {
 
     // After 1 + 9 rounds we had a paused install code.
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_install_code()
             .get_sample_sum(),
         10.0
     );
     // After the checkpoint round we had an aborted install code.
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_aborted_install_code()
             .get_sample_sum(),
         1.0
@@ -659,15 +653,13 @@ fn dts_resume_long_execution_after_abort() {
         ErrorCode::CanisterDidNotReply,
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_paused_execution()
             .get_sample_sum(),
         10.0
     );
     assert_eq!(
-        test.scheduler()
-            .state_metrics
+        test.state_metrics()
             .canister_aborted_execution()
             .get_sample_sum(),
         1.0

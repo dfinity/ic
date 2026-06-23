@@ -297,6 +297,7 @@ tecdsa_performance_test_template = system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -339,6 +340,7 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
         "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
+        "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "300",
     },
     prometheus_vm_required_host_features = [
         "performance",
@@ -350,6 +352,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = SIGNER_CANISTER_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
 )
 
@@ -373,6 +376,7 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
         "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
+        "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "300",
     },
     prometheus_vm_required_host_features = [
         "performance",
@@ -384,6 +388,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
@@ -407,6 +412,7 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
         "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
+        "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "300",
     },
     prometheus_vm_required_host_features = [
         "performance",
@@ -418,6 +424,7 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = SIGNER_CANISTER_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
 )
 
@@ -441,6 +448,7 @@ system_test_nns(
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "vetkd_bls12_381_g2",
         "BENCHMARK_NAME": "vetkd_performance_test",
         "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
+        "DOWNLOAD_P8S_DATA_COOLDOWN_SECS": "300",
     },
     prometheus_vm_required_host_features = [
         "performance",
@@ -452,5 +460,6 @@ system_test_nns(
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
+    vm_allocation_mode = "performanceOptimizedAllocation",
     runtime_deps = SIGNER_CANISTER_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
 )

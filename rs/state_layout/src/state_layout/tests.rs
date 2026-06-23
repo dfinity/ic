@@ -1,5 +1,6 @@
 use super::*;
 
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
@@ -37,6 +38,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         cycles_debit: Cycles::zero(),
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
+        minimum_incoming_canister_call_cycles: Cycles::zero(),
         status: CanisterStatus::Stopped,
         rounds_scheduled: 0,
         scheduled_as_first: 0,
@@ -70,6 +72,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         local_subnet_messages_executed: 0,
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
+        log_memory_store_migrated: LOG_MEMORY_STORE_FEATURE_ENABLED,
+        log_memory_store_persistent_next_idx: 0,
     }
 }
 

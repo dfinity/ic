@@ -11,7 +11,7 @@ use crate::driver::{
     task_scheduler::{TaskScheduler, TaskTable},
     test_env_api::{
         FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
-        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT,
+        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT, TopologySnapshot,
     },
 };
 use crate::driver::{
@@ -28,6 +28,7 @@ use crate::driver::{
 use crate::driver::{
     log_events,
     pot_dsl::{PotSetupFn, SysTestFn},
+    prometheus_vm::HasPrometheus,
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
@@ -647,6 +648,88 @@ impl SystemTestSubGroup {
     }
 }
 
+fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
+    BTreeMap::from([
+        ("critical_errors", 0),
+        ("consensus_invalidated_artifacts", 0),
+        ("dkg_invalidated_artifacts", 0),
+        ("idkg_invalidated_artifacts", 0),
+        ("certification_invalidated_artifacts", 0),
+        ("canister_http_invalidated_artifacts", 0),
+    ])
+}
+
+fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
+    BTreeMap::from([
+        ("orchestrator_cup_deserialization_failed_total", 0),
+        ("orchestrator_state_removal_failed_total", 0),
+        ("orchestrator_tasks_failed_total", 0),
+        ("orchestrator_replica_process_start_attempts_total", 1),
+    ])
+}
+
+fn check_metrics_for_nodes(
+    topology: &TopologySnapshot,
+    replica_metrics: &BTreeMap<&str, u64>,
+    orchestrator_metrics: &BTreeMap<&str, u64>,
+) {
+    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
+        node.assert_metrics_values(replica_metrics, REPLICA_METRICS_PORT);
+        node.assert_metrics_values(orchestrator_metrics, ORCHESTRATOR_METRICS_PORT);
+    }
+}
+
+/// Checks replica and orchestrator error metrics on all subnet nodes, using the
+/// same thresholds as the default `SystemTestGroup` teardown. Call this before
+/// replica restart so that errors accumulated in the current process are not lost.
+pub fn assert_no_critical_errors(env: &TestEnv) {
+    check_metrics_for_nodes(
+        &env.topology_snapshot(),
+        &default_replica_metrics(),
+        &default_orchestrator_metrics(),
+    );
+}
+
+/// Returns the teardowns that download the Prometheus data directory to the local
+/// test directory when the `DOWNLOAD_P8S_DATA` environment variable is set to `true`
+/// or `1`, and an empty vector otherwise.
+///
+/// Before downloading, the teardown waits for `DOWNLOAD_P8S_DATA_COOLDOWN_SECS`
+/// seconds (default `0`) such that Prometheus has time to scrape the final metrics.
+fn download_prometheus_data_teardowns() -> Vec<Box<dyn PotSetupFn>> {
+    let should_download = std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
+    if !should_download {
+        return Vec::new();
+    }
+    let teardown = |env: TestEnv| {
+        let cooldown_secs = std::env::var("DOWNLOAD_P8S_DATA_COOLDOWN_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        if cooldown_secs > 0 {
+            info!(
+                env.logger(),
+                "Waiting {cooldown_secs} seconds before downloading the prometheus data \
+                such that prometheus has time to scrape the final metrics ..."
+            );
+            std::thread::sleep(Duration::from_secs(cooldown_secs));
+        }
+        if env.download_prometheus_data_dir_if_exists() {
+            env.emit_report(String::from(
+                "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
+                directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
+            ));
+        } else {
+            env.emit_report(String::from(
+                "Not downloading the prometheus data because no PrometheusVm was deployed. \
+                Enable metrics for the test (e.g. `enable_metrics = True` on the Bazel target) \
+                if you want the prometheus data to be downloaded.",
+            ));
+        }
+    };
+    vec![Box::new(teardown)]
+}
+
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     teardowns: Vec<Box<dyn PotSetupFn>>,
@@ -693,25 +776,13 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
-            teardowns: Default::default(),
+            teardowns: download_prometheus_data_teardowns(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            replica_metrics_to_check: BTreeMap::from([
-                ("critical_errors", 0),
-                ("consensus_invalidated_artifacts", 0),
-                ("dkg_invalidated_artifacts", 0),
-                ("idkg_invalidated_artifacts", 0),
-                ("certification_invalidated_artifacts", 0),
-                ("canister_http_invalidated_artifacts", 0),
-            ]),
-            orchestrator_metrics_to_check: BTreeMap::from([
-                ("orchestrator_cup_deserialization_failed_total", 0),
-                ("orchestrator_state_removal_failed_total", 0),
-                ("orchestrator_tasks_failed_total", 0),
-                ("orchestrator_replica_process_start_attempts_total", 1),
-            ]),
+            replica_metrics_to_check: default_replica_metrics(),
+            orchestrator_metrics_to_check: default_orchestrator_metrics(),
             unallowed_log_patterns: BTreeMap::from([
                 ("This is a bug".to_string(), BTreeSet::new()),
                 (
@@ -719,11 +790,7 @@ impl SystemTestGroup {
                     BTreeSet::from([
                         // Canisters are expected to panic:
                         "canister".to_string(),
-                        // TODO: remove the following two lines after mainnet has advanced to include the `allowed_panics.rs` changes:
-                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:2185".to_string(),
-                        "rs/canister_sandbox/src/replica_controller/sandboxed_execution_controller.rs:1030".to_string(),
                         "rs/canister_sandbox/src/replica_controller/allowed_panics.rs".to_string(),
-                        "rs/state_manager/src/allowed_panics.rs".to_string(),
                     ]),
                 ),
             ]),
@@ -1036,16 +1103,11 @@ impl SystemTestGroup {
                         }
                     };
 
-                    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
-                        node.assert_metrics_values(
-                            &self.replica_metrics_to_check,
-                            REPLICA_METRICS_PORT,
-                        );
-                        node.assert_metrics_values(
-                            &self.orchestrator_metrics_to_check,
-                            ORCHESTRATOR_METRICS_PORT,
-                        );
-                    }
+                    check_metrics_for_nodes(
+                        &topology,
+                        &self.replica_metrics_to_check,
+                        &self.orchestrator_metrics_to_check,
+                    );
                 };
                 Some((
                     ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
