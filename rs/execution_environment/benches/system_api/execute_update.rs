@@ -12,6 +12,7 @@
 use candid::{CandidType, Deserialize};
 use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
@@ -1217,6 +1218,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 CyclesAccountManagerSubnetConfig::new(
                     SMALL_APP_SUBNET_MAX_SIZE,
                     CanisterCyclesCostSchedule::Normal,
+                    DEFAULT_REFERENCE_SUBNET_SIZE,
                 ),
             );
             let executed_instructions =

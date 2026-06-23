@@ -5,7 +5,7 @@ use ic_config::{
     execution_environment::Config,
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
+    subnet_config::SubnetConfig,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::{
@@ -2391,7 +2391,7 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+        let mut subnet_config = SubnetConfig::new(subnet_type);
         subnet_config.scheduler_config.scheduler_cores = 2;
         Self {
             execution_config: Config {
@@ -2484,7 +2484,7 @@ impl ExecutionTestBuilder {
         self.subnet_type = subnet_type;
         // If `subnet_type` is updated, then we need to update the subnet config
         // to match it.
-        self.subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+        self.subnet_config = SubnetConfig::new(subnet_type);
         self
     }
 
