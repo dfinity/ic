@@ -34,17 +34,41 @@ use rosetta_core::convert::principal_id_from_public_key;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tracing::log::debug;
 
+/// Maximum permitted ingress window, mirroring the 24-hour bound documented on
+/// `ConstructionPayloadsRequestMetadata`.
+const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// Validate the caller-provided ingress window before it is expanded into a
 /// list of ingress expiries.
 ///
-/// NOTE: currently a no-op (see DEFI-2902). The 24-hour bound is enforced in a
-/// follow-up commit; this seam exists so the reported (unbounded) behavior can
-/// be characterized by a regression test first.
+/// Rejects windows that would make the expiry loop iterate an excessive (or, on
+/// arithmetic wraparound, unbounded) number of times (see ICPBB-134 /
+/// DEFI-2902). Two independent bounds are enforced:
+/// - the span `ingress_end - ingress_start` must not exceed 24h, and
+/// - `ingress_end` must not be more than 24h in the future, which also rejects
+///   the near-`u64::MAX` payloads that would otherwise wrap the loop counter.
 fn validate_ingress_window(
-    _now: ic_types::time::Time,
-    _ingress_start: ic_types::time::Time,
-    _ingress_end: ic_types::time::Time,
+    now: ic_types::time::Time,
+    ingress_start: ic_types::time::Time,
+    ingress_end: ic_types::time::Time,
 ) -> Result<(), ApiError> {
+    let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
+    let now = now.as_nanos_since_unix_epoch();
+    let start = ingress_start.as_nanos_since_unix_epoch();
+    let end = ingress_end.as_nanos_since_unix_epoch();
+
+    if end.saturating_sub(start) > max_window {
+        return Err(ApiError::invalid_request(format!(
+            "The ingress window (ingress_end - ingress_start) must not exceed {} hours.",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    if end.saturating_sub(now) > max_window {
+        return Err(ApiError::invalid_request(format!(
+            "ingress_end must not be more than {} hours in the future.",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
     Ok(())
 }
 

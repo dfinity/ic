@@ -7,7 +7,7 @@ use super::utils::{
     handle_construction_hash, handle_construction_parse, handle_construction_payloads,
     handle_construction_submit,
 };
-use crate::common::constants::INGRESS_INTERVAL_OVERLAP;
+use crate::common::constants::{INGRESS_INTERVAL_OVERLAP, MAX_INGRESS_WINDOW};
 use crate::common::types::Error;
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -111,10 +111,26 @@ pub fn construction_combine(
 /// Validate the caller-provided ingress window before it is expanded into a
 /// list of ingress expiries.
 ///
-/// NOTE: currently a no-op (see DEFI-2902). The 24-hour bound is enforced in a
-/// follow-up commit; this seam exists so the reported (unbounded) behavior can
-/// be characterized by a regression test first.
-fn validate_ingress_window(_now: u64, _ingress_start: u64, _ingress_end: u64) -> Result<(), Error> {
+/// Rejects windows that would make the expiry loop iterate an excessive (or, on
+/// arithmetic wraparound, unbounded) number of times (see ICPBB-134 /
+/// DEFI-2902). Two independent bounds are enforced:
+/// - the span `ingress_end - ingress_start` must not exceed 24h, and
+/// - `ingress_end` must not be more than 24h in the future, which also rejects
+///   the near-`u64::MAX` payloads that would otherwise wrap the loop counter.
+fn validate_ingress_window(now: u64, ingress_start: u64, ingress_end: u64) -> Result<(), Error> {
+    let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
+    if ingress_end.saturating_sub(ingress_start) > max_window {
+        return Err(Error::processing_construction_failed(&format!(
+            "The ingress window (ingress_end - ingress_start) must not exceed {} hours: Start: {ingress_start}, End: {ingress_end}",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    if ingress_end.saturating_sub(now) > max_window {
+        return Err(Error::processing_construction_failed(&format!(
+            "ingress_end must not be more than {} hours in the future: Current time: {now}, End: {ingress_end}",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
     Ok(())
 }
 
@@ -498,6 +514,20 @@ mod tests {
                                 }
                             }
                             (_, _) => {}
+                        }
+                        // Windows wider than the permitted maximum, or with an
+                        // ingress_end too far in the future, are rejected before
+                        // the loop (ICPBB-134 / DEFI-2902).
+                        let eff_start = payloads_metadata.ingress_start.unwrap_or(now);
+                        let eff_end = payloads_metadata
+                            .ingress_end
+                            .unwrap_or(eff_start + ingress_interval);
+                        let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
+                        if eff_end.saturating_sub(eff_start) > max_window
+                            || eff_end.saturating_sub(now) > max_window
+                        {
+                            assert!(construction_payloads_response.is_err());
+                            continue;
                         }
                         let construction_parse_response = construction_parse(
                             construction_payloads_response
