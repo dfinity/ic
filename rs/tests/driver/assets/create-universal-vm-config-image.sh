@@ -62,6 +62,10 @@ if [[ -z "${INPUT_DIR:-}" || -z "${OUTPUT_FILE:-}" || -z "${LABEL:-}" ]]; then
     usage
 fi
 
+# MKFS_VFAT and MTOOLS are the Bazel-built mkfs.fat / mtools binaries, set in the
+# environment by the system_test rule (so the build container doesn't need system
+# dosfstools/mtools). mtools is a multi-call binary, driven as `mtools -c <cmd>`.
+
 tmp=$(mktemp)
 
 finalize() {
@@ -74,6 +78,6 @@ size=$(du --bytes -s "$INPUT_DIR" | awk '{print $1}')
 size=$((2 * size + 1048576))
 echo "image size: $size"
 truncate -s $size "$tmp"
-/usr/sbin/mkfs.vfat -n "$LABEL" "$tmp"
-mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
+"$MKFS_VFAT" -n "$LABEL" "$tmp"
+"$MTOOLS" -c mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
 zstd --threads=0 -10 -i "$tmp" -o "$OUTPUT_FILE" --force

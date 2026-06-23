@@ -129,6 +129,44 @@ mcopy = rule(
     },
 )
 
+def _tool_file(ctx):
+    """Extracts a single named binary out of a multi-file tool bundle.
+
+    Our `mkfs.fat`/`mtools` targets are `configure_make` bundles (the binary plus
+    e.g. an include dir), so they can't be passed around by a single path (e.g.
+    as a `$(rootpath)` runtime dep). This picks the requested binary out by
+    basename and exposes it as a standalone, executable, single-file target.
+
+    The output keeps the binary's original basename (placed under a per-target
+    directory to avoid colliding with the bundle alias of the same name). This
+    matters for multi-call binaries like `mtools`, which dispatch on argv[0]:
+    it must still be invoked as `mtools -c <subcmd>`.
+    """
+    tool = None
+    for f in ctx.files.bundle:
+        if f.basename == ctx.attr.binary:
+            tool = f
+            break
+    if not tool:
+        fail("could not locate '{}' binary among {} outputs".format(ctx.attr.binary, ctx.attr.bundle.label))
+
+    out = ctx.actions.declare_file("{}/{}".format(ctx.label.name, ctx.attr.binary))
+    ctx.actions.run_shell(
+        command = "cp -p {src} {out} && chmod +x {out}".format(src = tool.path, out = out.path),
+        inputs = [tool],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+tool_file = rule(
+    implementation = _tool_file,
+    doc = "Exposes a single named binary from a multi-file tool bundle as a standalone executable file.",
+    attrs = {
+        "bundle": attr.label(mandatory = True, allow_files = True),
+        "binary": attr.string(mandatory = True),
+    },
+)
+
 # Binaries needed for testing with canister_sandbox
 _SANDBOX_DATA = [
     "//rs/canister_sandbox",

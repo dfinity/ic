@@ -1,6 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("//bazel:defs.bzl", "tool_file")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 package(default_visibility = ["//visibility:public"])
@@ -246,6 +247,34 @@ alias(
         "@bazel_tools//src/conditions:linux_x86_64": "@mtools//:mtools_build",
         "//conditions:default": "@platforms//:incompatible",
     }),
+)
+
+# Single-file, executable handles for the FAT image tools above. The aliases
+# resolve to multi-file configure_make bundles; these expose just the binary so
+# it can be passed around by path (e.g. fed to the system-test driver as a
+# $(rootpath) runtime dep for creating UVM/SetupOS config images).
+# These resolve to @platforms//:incompatible on non-(linux, x86_64) platforms (see
+# the aliases above), so gate the extractors to the same platforms; otherwise the
+# rule would run with an empty bundle and fail. Consumers propagate this and are
+# skipped accordingly off-platform.
+tool_file(
+    name = "mkfs.fat.bin",
+    binary = "mkfs.fat",
+    bundle = "//:mkfs.fat",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+tool_file(
+    name = "mtools.bin",
+    binary = "mtools",
+    bundle = "//:mtools",
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
 )
 
 ### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)

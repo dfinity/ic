@@ -23,6 +23,16 @@ rust_library(
 rust_test(
     name = "partition_tools_test",
     crate = ":partition_tools",
+    # Bazel-built FAT tools used by the tests (instead of system dosfstools/mtools);
+    # fat.rs reads MKFS_VFAT/MTOOLS from the environment.
+    data = [
+        "//:mkfs.fat.bin",
+        "//:mtools.bin",
+    ],
+    env = {
+        "MKFS_VFAT": "$(rootpath //:mkfs.fat.bin)",
+        "MTOOLS": "$(rootpath //:mtools.bin)",
+    },
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:indoc",

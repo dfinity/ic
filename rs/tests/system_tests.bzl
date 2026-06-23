@@ -129,6 +129,13 @@ def system_test(
 
     _runtime_deps["TEST_BIN"] = test_driver_target
 
+    # Bazel-built tools the driver uses to assemble FAT config images for
+    # universal VMs / SetupOS, instead of system mkfs.vfat/mtools. These are set
+    # on the test process and read (by name) from the driver, the config-image
+    # scripts it spawns, and partition_tools.
+    _runtime_deps["MKFS_VFAT"] = "//:mkfs.fat.bin"
+    _runtime_deps["MTOOLS"] = "//:mtools.bin"
+
     env_var_files = {}
     icos_images = dict()
 

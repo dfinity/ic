@@ -5,6 +5,27 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// `mkfs.vfat` command. The Bazel build provides the binary via the `MKFS_VFAT`
+/// environment variable (the build container no longer ships system dosfstools);
+/// inside the IC-OS images at runtime it falls back to the system tool.
+fn mkfs_vfat_command() -> Command {
+    Command::new(std::env::var("MKFS_VFAT").unwrap_or_else(|_| "/usr/sbin/mkfs.vfat".to_string()))
+}
+
+/// `mcopy` command. The Bazel build provides mtools via the `MTOOLS` environment
+/// variable (a multi-call binary, driven as `mtools -c mcopy`); inside the IC-OS
+/// images at runtime it falls back to the system `mcopy`.
+fn mcopy_command() -> Command {
+    match std::env::var("MTOOLS") {
+        Ok(mtools) if !mtools.is_empty() => {
+            let mut command = Command::new(mtools);
+            command.arg("-c").arg("mcopy");
+            command
+        }
+        _ => Command::new("/usr/bin/mcopy"),
+    }
+}
+
 /// Configuration options for GuestOS bootstrap image/tar creation.
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct BootstrapOptions {
@@ -61,7 +82,7 @@ impl BootstrapOptions {
             .context("Failed to set output file size")?;
 
         // Format the disk image as FAT
-        if !Command::new("/usr/sbin/mkfs.vfat")
+        if !mkfs_vfat_command()
             .arg("-n")
             .arg("CONFIG")
             .arg(out_file)
@@ -124,7 +145,7 @@ impl BootstrapOptions {
             .collect::<Result<Vec<_>>>()
             .context("Failed to collect config directory entries")?;
 
-        let output = Command::new("/usr/bin/mcopy")
+        let output = mcopy_command()
             .arg("-i")
             .arg(vfat_image)
             .arg("-s")

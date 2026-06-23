@@ -203,6 +203,8 @@ fn create_universal_vm_config_image(
     label: &str,
 ) -> Result<()> {
     // pipe the uvm creation script into bash
+    // The MKFS_VFAT/MTOOLS/ZSTD env vars (Bazel-built tool paths) are set on the
+    // test process by the system_test rule and inherited by this child.
     let mut cmd = Command::new("/bin/bash")
         .stdin(Stdio::piped())
         // with .spawn() the parent's stdout & stderr are inherited

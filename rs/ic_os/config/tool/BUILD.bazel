@@ -103,7 +103,17 @@ rust_test(
     name = "config_lib_test_dev",
     crate = ":config_lib_dev",
     crate_features = ["dev"],
-    env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
+    # build_bootstrap_config_image() reads mkfs.vfat/mtools from MKFS_VFAT/MTOOLS
+    # (the build container no longer ships system dosfstools/mtools).
+    data = [
+        "//:mkfs.fat.bin",
+        "//:mtools.bin",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config",
+        "MKFS_VFAT": "$(rootpath //:mkfs.fat.bin)",
+        "MTOOLS": "$(rootpath //:mtools.bin)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:once_cell",
@@ -114,6 +124,16 @@ rust_test(
 rust_test(
     name = "config_lib_test",
     crate = ":config_lib",
+    # build_bootstrap_config_image() reads mkfs.vfat/mtools from MKFS_VFAT/MTOOLS
+    # (the build container no longer ships system dosfstools/mtools).
+    data = [
+        "//:mkfs.fat.bin",
+        "//:mtools.bin",
+    ],
+    env = {
+        "MKFS_VFAT": "$(rootpath //:mkfs.fat.bin)",
+        "MTOOLS": "$(rootpath //:mtools.bin)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:once_cell",

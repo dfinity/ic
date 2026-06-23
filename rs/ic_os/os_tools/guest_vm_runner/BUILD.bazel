@@ -103,7 +103,14 @@ rust_test(
     name = "guest_vm_runner_test",
     crate = ":guest_vm_runner_dev",
     crate_features = ["dev"],
-    data = glob(["golden/*"]),
+    data = glob(["golden/*"]) + [
+        "//:mkfs.fat.bin",
+        "//:mtools.bin",
+    ],
+    env = {
+        "MKFS_VFAT": "$(rootpath //:mkfs.fat.bin)",
+        "MTOOLS": "$(rootpath //:mtools.bin)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:goldenfile",
@@ -121,8 +128,19 @@ rust_test(
         "dev",
         "integration_tests",
     ],
-    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
-    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
+    # Launching a GuestOS VM calls assemble_config_media() ->
+    # build_bootstrap_config_image(), which reads mkfs.vfat/mtools from
+    # MKFS_VFAT/MTOOLS (the build container no longer ships system dosfstools/mtools).
+    data = glob(["golden/*"]) + [
+        "//:mkfs.fat.bin",
+        "//:mtools.bin",
+        "//ic-os/guestos/envs/prod:disk-img-for-tests.tar",
+    ],
+    env = {
+        "ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)",
+        "MKFS_VFAT": "$(rootpath //:mkfs.fat.bin)",
+        "MTOOLS": "$(rootpath //:mtools.bin)",
+    },
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = [

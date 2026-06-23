@@ -6,6 +6,16 @@ use anyhow::{Context, Result, anyhow, ensure};
 use crate::Partition;
 use crate::gpt;
 
+/// Build a `Command` that runs mtools' `mcopy`. `MTOOLS` is the Bazel-built
+/// mtools binary, provided via the environment; it is a multi-call binary, so
+/// `mcopy` is invoked as `mtools -c mcopy ...`.
+fn mcopy_command() -> Command {
+    let mtools = std::env::var("MTOOLS").expect("MTOOLS environment variable must be set");
+    let mut command = Command::new(mtools);
+    command.arg("-c").arg("mcopy");
+    command
+}
+
 pub struct FatPartition {
     offset_bytes: Option<u64>,
     original: PathBuf,
@@ -41,7 +51,7 @@ impl Partition for FatPartition {
     /// Copy a file into place
     fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new("mcopy")
+            mcopy_command()
                 .args([
                     "-o",
                     "-i",
@@ -52,7 +62,7 @@ impl Partition for FatPartition {
                 .output()
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            mcopy_command()
                 .args([
                     "-o",
                     "-i",
@@ -83,7 +93,7 @@ impl Partition for FatPartition {
         );
 
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new("mcopy")
+            mcopy_command()
                 .args([
                     "-s", // recursive copy
                     "-o", // overwrite existing files
@@ -95,7 +105,7 @@ impl Partition for FatPartition {
                 .output()
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            mcopy_command()
                 .args([
                     "-s", // recursive copy
                     "-o", // overwrite existing files
@@ -147,7 +157,7 @@ impl FatPartition {
     // Capture and return stdout, which may be used to "read" the file directly
     fn copy_file_inner(&mut self, from: &Path, to: &Path) -> Result<Vec<u8>> {
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new("mcopy")
+            mcopy_command()
                 .args([
                     "-o",
                     "-i",
@@ -158,7 +168,7 @@ impl FatPartition {
                 .output()
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            mcopy_command()
                 .args([
                     "-o",
                     "-i",
@@ -194,7 +204,9 @@ mod test {
             ])
             .status()?;
 
-        Command::new("/usr/sbin/mkfs.fat")
+        let mkfs_vfat =
+            std::env::var("MKFS_VFAT").expect("MKFS_VFAT environment variable must be set");
+        Command::new(mkfs_vfat)
             .args(["-F", "32", "-i", "0"])
             .arg(path.as_os_str())
             .status()?;

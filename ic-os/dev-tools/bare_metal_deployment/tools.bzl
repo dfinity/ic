@@ -34,6 +34,10 @@ def launch_bare_metal(name, image_zst_file):
             "$(location :" + binary_name + ")",
             "--inject_configuration_tool",
             "$(location //rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config)",
+            # Bazel-built mtools (the build container no longer ships system mtools),
+            # used by setupos-inject-config to write the FAT config partition.
+            "--mtools_tool",
+            "$(location //:mtools.bin)",
             "--upload_img",
             "$(location " + image_zst_file + ")",
             "--deterministic_ips_tool",
@@ -51,6 +55,7 @@ def launch_bare_metal(name, image_zst_file):
         data = [
             ":" + binary_name,
             image_zst_file,
+            "//:mtools.bin",
             "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-inject-config",
             "//ic-os/dev-tools/bare_metal_deployment:redfish_scripts",
             "//ic-os/dev-tools/bare_metal_deployment:benchmark_runner.sh",
