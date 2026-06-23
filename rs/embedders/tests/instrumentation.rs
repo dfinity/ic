@@ -813,13 +813,9 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let mut cd = SchedulerConfig::application_subnet()
+    let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-
-    if let WasmMemoryType::Wasm64 = wasm_memory_type {
-        cd *= EmbeddersConfig::default().wasm64_dirty_page_overhead_multiplier;
-    }
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
