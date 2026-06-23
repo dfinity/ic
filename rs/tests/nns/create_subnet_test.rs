@@ -409,26 +409,26 @@ async fn wait_for_expected_transcripts(
                     Err(err) => bail!("Failed to fetch metrics from subnet {subnet_id}: {err}"),
                 };
                 for key in &tag_keys {
-                    let per_node = values.get(key).map(Vec::as_slice).unwrap_or(&[]);
+                    let node_metric_values = values.get(key).map(Vec::as_slice).unwrap_or(&[]);
                     if want == 0 {
                         // No delivery expected yet: the series must be absent or zero.
-                        if per_node.iter().any(|v| *v != 0) {
+                        if node_metric_values.iter().any(|v| *v != 0) {
                             bail!(
-                                "Subnet {subnet_id}: metric {key} reports {per_node:?}, \
+                                "Subnet {subnet_id}: metric {key} reports {node_metric_values:?}, \
                                  expected no deliveries yet"
                             );
                         }
                     } else {
-                        if per_node.len() != *node_count {
+                        if node_metric_values.len() != *node_count {
                             bail!(
                                 "Subnet {subnet_id}: metric {key} reported by {} out of {} nodes",
-                                per_node.len(),
+                                node_metric_values.len(),
                                 node_count,
                             );
                         }
-                        if per_node.iter().any(|v| *v != want) {
+                        if node_metric_values.iter().any(|v| *v != want) {
                             bail!(
-                                "Subnet {subnet_id}: metric {key} reports {per_node:?}, \
+                                "Subnet {subnet_id}: metric {key} reports {node_metric_values:?}, \
                                  expected all values to be {want}"
                             );
                         }
@@ -464,20 +464,20 @@ async fn wait_until_subnet_mr_version(log: &Logger, subnet: &SubnetSnapshot, tar
                 Ok(values) => values,
                 Err(err) => bail!("Failed to fetch metrics from subnet {subnet_id}: {err}"),
             };
-            let Some(per_node) = values.get(MR_REGISTRY_VERSION_METRIC) else {
+            let Some(node_metric_values) = values.get(MR_REGISTRY_VERSION_METRIC) else {
                 bail!("Metric {MR_REGISTRY_VERSION_METRIC} not yet exposed on subnet {subnet_id}");
             };
-            if per_node.len() != expected_node_count {
+            if node_metric_values.len() != expected_node_count {
                 bail!(
                     "Subnet {subnet_id}: metric {MR_REGISTRY_VERSION_METRIC} reported by {} out \
                      of {} nodes",
-                    per_node.len(),
+                    node_metric_values.len(),
                     expected_node_count,
                 );
             }
-            if let Some(behind) = per_node.iter().find(|v| **v < target_version) {
+            if let Some(subnet_version) = node_metric_values.iter().find(|v| **v < target_version) {
                 bail!(
-                    "Subnet {subnet_id}: a node is still at MR registry version {behind} \
+                    "Subnet {subnet_id}: a node is still at MR registry version {subnet_version} \
                      (target: {target_version})"
                 );
             }
