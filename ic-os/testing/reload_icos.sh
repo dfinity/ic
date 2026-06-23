@@ -96,8 +96,7 @@ fetch_images() {
         upgrade)
             fetch_file "$GUESTOS_UPGRADE_IMG_TAR_SRC" "$GUESTOS_UPGRADE_IMG_TAR_PATH" "GuestOS upgrade image"
             ;;
-        none)
-            ;;
+        none) ;;
     esac
 }
 
@@ -381,8 +380,7 @@ finalize_deployment() {
         upgrade)
             echo "Only a GuestOS upgrade image was applied."
             ;;
-        none)
-            ;;
+        none) ;;
     esac
 }
 
