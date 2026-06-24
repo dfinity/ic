@@ -548,8 +548,8 @@ impl XNetSlicePool for TestSlicePool {
 
 /// `get_xnet_payload` must not include a slice from a deleted subnet even if
 /// the pool contains one (e.g., populated just before deletion). The deleted
-/// subnet is absent from `expected_stream_indices`, so its pool entry is
-/// garbage-collected before payload assembly and it never appears in the result.
+/// subnet is absent from `expected_stream_indices`, so it is never iterated
+/// over during payload assembly and never appears in the result.
 #[tokio::test]
 async fn get_xnet_payload_excludes_deleted_subnet_slice() {
     with_test_replica_logger(|log| {
