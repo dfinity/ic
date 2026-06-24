@@ -50,14 +50,15 @@ jobs:
             echo "Invalid commit hash '${commit}' (expected 7-40 hex characters)"
             exit 1
           fi
-          if ! git merge-base --is-ancestor -- "${commit}" HEAD; then
-            echo "Commit '${commit}' is not an ancestor of HEAD — aborting for security"
+          resolved_commit=$(git rev-parse --verify --quiet "${commit}^{commit}") || {
+            echo "Invalid or unknown commit hash '${commit}'"
+            exit 1
+          }
+          if ! git merge-base --is-ancestor -- "${resolved_commit}" HEAD; then
+            echo "Commit '${resolved_commit}' is not an ancestor of HEAD — aborting for security"
             exit 1
           fi
-          n=$(git rev-list --count "${commit}..HEAD")
-          # We checkout by commit count offset from HEAD (not directly from user input) to avoid
-          # git checkout on user-controlled data, which could be used for command injection.
-          git checkout --detach "HEAD~${n}"
+          git checkout --detach -- "${resolved_commit}"
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
