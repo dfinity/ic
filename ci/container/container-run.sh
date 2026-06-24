@@ -197,8 +197,8 @@ RUNTIME_RUN_ARGS=(
     # ensures processes are reaped correctly
     --init
 
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"     # mount the local repo checkout
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache" # C toolchain cache, persisted to speed up rebuilds
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # mount the local repo checkout
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"   # C toolchain cache, persisted to speed up rebuilds
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings
