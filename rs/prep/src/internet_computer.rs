@@ -27,11 +27,14 @@ use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, dc::v1::DataCenterRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-    replica_version::v1::ReplicaVersionRecord, routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::SubnetListRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    routing_table::v1::RoutingTable as PbRoutingTable,
+    subnet::v1::SubnetListRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_protobuf::registry::{
     dc::v1::Gps,
@@ -41,9 +44,10 @@ use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as Subnet
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
     FirewallRulesScope, ROOT_SUBNET_ID_KEY, make_api_boundary_node_record_key,
-    make_canister_ranges_key, make_data_center_record_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key,
+    make_blessed_replica_versions_key, make_canister_ranges_key, make_data_center_record_key,
+    make_firewall_rules_record_key, make_node_operator_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -253,7 +257,7 @@ pub struct IcConfig {
     target_dir: PathBuf,
     pub topology_config: TopologyConfig,
     /// When a node starts up, the orchestrator fetches the replica binary found
-    /// at the URL in the elected version record that carries the version
+    /// at the URL in the blessed version record that carries the version
     /// id referred to in the subnet record that the node belongs to.
     ///
     /// The following are parameters used for all subnets in the initial
@@ -646,10 +650,15 @@ impl IcConfig {
             opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
 
+        let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurements: self.guest_launch_measurements,
+        };
+
+        let blessed_replica_versions_record = BlessedReplicaVersions {
+            blessed_version_ids: vec![initial_replica_version],
         };
 
         write_registry_entry(
@@ -658,6 +667,14 @@ impl IcConfig {
             make_replica_version_key(self.initial_replica_version_id.clone()).as_ref(),
             version,
             replica_version_record,
+        );
+
+        write_registry_entry(
+            &data_provider,
+            self.target_dir.as_path(),
+            &make_blessed_replica_versions_key(),
+            version,
+            blessed_replica_versions_record,
         );
 
         let provisional_whitelist = match self.provisional_whitelist {

@@ -27,7 +27,7 @@ use ic_protobuf::registry::{
     dc::v1::DataCenterRecord,
     node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
-    replica_version::v1::ReplicaVersionRecord,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
@@ -36,7 +36,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
 use ic_registry_keys::{
-    make_canister_ranges_key, make_catch_up_package_contents_key, make_crypto_node_key,
+    make_blessed_replica_versions_key, make_canister_ranges_key,
+    make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -353,6 +354,9 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         release_package_urls: vec![release_package_url],
         guest_launch_measurements: None,
     };
+    let blessed_replica_version = BlessedReplicaVersions {
+        blessed_version_ids: vec![replica_version_id.clone()],
+    };
 
     let subnet_list = SubnetListRecord {
         subnets: vec![subnet_pid.get().to_vec()],
@@ -381,6 +385,10 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
+        ),
+        insert(
+            make_blessed_replica_versions_key().as_bytes(),
+            blessed_replica_version.encode_to_vec(),
         ),
         insert(
             ic_registry_keys::NODE_REWARDS_TABLE_KEY.as_bytes(),
@@ -623,6 +631,9 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         release_package_urls: vec![release_package_url],
         guest_launch_measurements,
     };
+    let blessed_replica_version = BlessedReplicaVersions {
+        blessed_version_ids: vec![replica_version_id.clone()],
+    };
     let subnet_list = SubnetListRecord {
         subnets: vec![nns_subnet_id.get().to_vec()],
     };
@@ -658,6 +669,10 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
             replica_version.encode_to_vec(),
+        ),
+        insert(
+            make_blessed_replica_versions_key().as_bytes(),
+            blessed_replica_version.encode_to_vec(),
         ),
     ];
 

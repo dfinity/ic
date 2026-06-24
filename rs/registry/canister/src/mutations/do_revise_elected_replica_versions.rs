@@ -5,18 +5,28 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-use ic_registry_keys::make_replica_version_key;
+use ic_protobuf::registry::{
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    subnet::v1::{SubnetListRecord, SubnetRecord},
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+};
+use ic_registry_keys::{
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
+    make_subnet_record_key, make_unassigned_nodes_config_record_key,
+};
 use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 
 impl Registry {
     /// Update the elected replica versions by:
-    /// a) Adding a new replica version to the registry
+    /// a) Adding a new replica version to the registry and blessing it, i.e.,
+    ///    adding the version's ID to the list of blessed replica versions.
     ///
-    /// b) Removing specified replica versions from the registry
+    /// b) Removing specified replica versions from the registry and retiring them, i.e.,
+    ///    removing the versions' IDs from the list of blessed replica versions.
     ///
     /// This method is called by the governance canister, after a proposal
     /// for updating the elected replica versions has been accepted.
@@ -42,11 +52,16 @@ impl Registry {
             })
             .collect();
 
+        let mut versions = self.remove_blessed_versions_or_panic(&versions_to_remove);
+
         if let Some(version) = payload.replica_version_to_elect.as_ref() {
             assert!(
                 !versions_to_remove.contains(version),
                 "{LOG_PREFIX}ReviseElectedGuestosVersionsPayload cannot elect and unelect the same version.",
             );
+
+            versions.push(version.clone());
+            println!("{LOG_PREFIX}Blessed versions after append: {versions:?}");
 
             mutations.push(
                 // Register the new version (that is, insert the new ReplicaVersionRecord)
@@ -67,8 +82,108 @@ impl Registry {
             );
         }
 
+        mutations.push(
+            // Update the list of blessed versions
+            RegistryMutation {
+                mutation_type: registry_mutation::Type::Upsert as i32,
+                key: make_blessed_replica_versions_key().as_bytes().to_vec(),
+                value: BlessedReplicaVersions {
+                    blessed_version_ids: versions,
+                }
+                .encode_to_vec(),
+            },
+        );
+
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+    }
+
+    /// Try to remove the given versions from registry. Panic if any of them are in
+    /// use by a subnet or unassigned nodes. Return the list of blessed version IDs
+    /// that remain after removal.
+    pub fn remove_blessed_versions_or_panic(
+        &self,
+        versions_to_remove: &BTreeSet<String>,
+    ) -> Vec<String> {
+        let version = self.latest_version();
+        let before_removal = self.get_blessed_replica_version_ids();
+
+        let after_removal: Vec<String> = before_removal
+            .iter()
+            .filter(|&v| !versions_to_remove.contains(v))
+            .cloned()
+            .collect();
+
+        if before_removal.len() == after_removal.len() {
+            return after_removal;
+        }
+
+        // Get all subnet records
+        let subnets_key = make_subnet_list_record_key();
+        let subnets = self
+            .get(subnets_key.as_bytes(), version)
+            .map(|reg_value| {
+                SubnetListRecord::decode(reg_value.value.as_slice())
+                    .unwrap()
+                    .subnets
+            })
+            .unwrap_or_default();
+
+        // Try to find a replica version that is both, part of the payload and used by a subnet
+        let in_use = subnets
+            .iter()
+            .map(|id| {
+                let subnet_id = SubnetId::new(PrincipalId::try_from(id).unwrap());
+                let subnet_key = make_subnet_record_key(subnet_id);
+                let reg_value = self.get(subnet_key.as_bytes(), version).unwrap();
+                SubnetRecord::decode(reg_value.value.as_slice())
+                    .unwrap()
+                    .replica_version_id
+            })
+            .filter(|id| versions_to_remove.contains(id))
+            .collect::<BTreeSet<String>>();
+
+        if !in_use.is_empty() {
+            panic!(
+                "{LOG_PREFIX}Cannot retire versions {in_use:?}, because they are currently deployed to a subnet!"
+            );
+        }
+
+        // Do the same for unassigned node record
+        let unassigned_key = make_unassigned_nodes_config_record_key();
+        let in_use = self
+            .get(unassigned_key.as_bytes(), version)
+            .map(|reg_value| {
+                UnassignedNodesConfigRecord::decode(reg_value.value.as_slice())
+                    .unwrap()
+                    .replica_version
+            })
+            .filter(|id| versions_to_remove.contains(id));
+
+        if let Some(version) = in_use {
+            panic!(
+                "{LOG_PREFIX}Cannot retire version {version}, because it is currently deployed to unassigned nodes!"
+            );
+        }
+
+        println!(
+            "{LOG_PREFIX}Blessed versions before: {before_removal:?} and after: {after_removal:?}"
+        );
+
+        after_removal
+    }
+
+    pub fn get_blessed_replica_version_ids(&self) -> Vec<String> {
+        self.get(
+            make_blessed_replica_versions_key().as_bytes(),
+            self.latest_version(),
+        )
+        .map(|reg_value| {
+            BlessedReplicaVersions::decode(reg_value.value.as_slice())
+                .expect("Failed to decode BlessedReplicaVersions")
+                .blessed_version_ids
+        })
+        .expect("BlessedReplicaVersions key not found in registry")
     }
 }
 
