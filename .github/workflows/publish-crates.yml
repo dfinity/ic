@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: 0
+          fetch-depth: ${{ github.event.inputs.commit != '' && '0' || '1' }}
 
       - name: Verify commit and check out
         if: ${{ github.event.inputs.commit != '' }}
