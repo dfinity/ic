@@ -537,7 +537,7 @@ impl From<CanisterIdError> for HttpRequestError {
 }
 
 /// The kinds of calls a delegation permits, as defined in
-/// `<https://internetcomputer.org/docs/current/references/ic-interface-spec>`.
+/// `<https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#authentication>`.
 /// An absent field on the [`Delegation`] is unrestricted, equivalent to
 /// [`DelegationPermissions::All`].
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
