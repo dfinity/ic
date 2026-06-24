@@ -56,8 +56,9 @@ configure_make(
     # as an output.
     postfix_script = (
         "mkdir -p $$INSTALLDIR/bin" +
-        " && cp misc/mke2fs $$INSTALLDIR/bin/mke2fs" +
-        " && cp misc/fuse2fs $$INSTALLDIR/bin/fuse2fs"
+        " && cp $$INSTALLDIR/sbin/mke2fs $$INSTALLDIR/bin/mke2fs" +
+        " && find $$INSTALLDIR -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} +" +
+        " && find $$INSTALLDIR/bin -mindepth 1 ! -name fuse2fs ! -name mke2fs -delete"
     ),
     # Static glibc linking is a Linux/glibc thing; this isn't expected to work
     # elsewhere.
