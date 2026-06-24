@@ -38,60 +38,12 @@ dep_in_cache() {
     esac
 }
 
-# Determines the name of the local cluster (e.g. "zh1-idx1"), used to build the
-# download URL served at artifacts.<cluster>.dfinity.network.
-resolve_cluster() {
-    # A valid cluster name (e.g. "zh1-idx1"): lowercase alphanumerics and
-    # hyphens, with no leading/trailing hyphen. We validate against this because
-    # the name is interpolated into the artifacts.<cluster>.dfinity.network URL,
-    # so unexpected characters would produce an invalid/unsafe URL.
-    local cluster_re='^[a-z0-9]([a-z0-9-]*[a-z0-9])?$'
-
-    # Allow an explicit override (e.g. for manual runs or unusual environments).
-    if [ -n "${SYSTEST_UPLOAD_CLUSTER:-}" ]; then
-        if [[ ! "$SYSTEST_UPLOAD_CLUSTER" =~ $cluster_re ]]; then
-            echo "SYSTEST_UPLOAD_CLUSTER='$SYSTEST_UPLOAD_CLUSTER' is not a valid cluster name (expected e.g. 'zh1-idx1')" >&2
-            exit 1
-        fi
-        echo "$SYSTEST_UPLOAD_CLUSTER"
-        return
-    fi
-
-    # Otherwise auto-detect from the in-cluster Kubernetes API server certificate,
-    # which carries a SAN of the form 'api.<cluster>.dfinity.network'. This works
-    # both on CI runners and in devenvs, and yields the exact cluster name.
-    if ! command -v openssl >/dev/null; then
-        echo "openssl not found; cannot auto-detect the cluster name, set SYSTEST_UPLOAD_CLUSTER explicitly" >&2
-        exit 1
-    fi
-
-    # Note: we deliberately don't check openssl s_client's exit status (it can
-    # reflect verification of the internal CA rather than connectivity) and
-    # instead validate the extracted name below. The `timeout` bounds DNS or
-    # network stalls so we fail fast instead of hanging CI.
-    local cluster=""
-    cluster=$(timeout 15 openssl s_client -connect kubernetes.default.svc:443 </dev/null 2>/dev/null \
-        | openssl x509 -noout -text 2>/dev/null \
-        | grep -m1 -oE 'api\.[a-z0-9][a-z0-9-]*\.dfinity\.network' \
-        | sed -E 's/^api\.(.*)\.dfinity\.network$/\1/') || true
-
-    if [[ ! "$cluster" =~ $cluster_re ]]; then
-        echo "could not determine the local cluster name from the API server certificate; set SYSTEST_UPLOAD_CLUSTER explicitly" >&2
-        exit 1
-    fi
-
-    echo "$cluster"
-}
-
 dep_filename="${1:?Dependency not specified}"
+cluster="${2:?Cluster not specified}"
+
 dep_sha256=$(sha256sum "$dep_filename" | cut -d' ' -f1)
 
 echo "Found dep to upload $dep_filename ($dep_sha256)" >&2
-
-# Determine the local cluster up front so we fail fast (before any upload) if it
-# cannot be determined.
-cluster=$(resolve_cluster)
-echo "dep '$dep_filename': local cluster is '$cluster'" >&2
 
 # Figure out _if_ the dep should be uploaded (no point re-uploading several GBs
 # if it's already in the local cache).
