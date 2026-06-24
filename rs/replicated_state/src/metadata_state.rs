@@ -989,7 +989,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             logs_migrated,
-            subnet_ids_at_last_reject_generation,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1100,7 +1100,9 @@ impl SystemMetadata {
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
             logs_migrated,
-            subnet_ids_at_last_reject_generation,
+            // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
+            // runs unconditionally on the first post-split round.
+            subnet_ids_at_last_reject_generation: None,
         })
     }
 
