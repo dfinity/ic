@@ -5,7 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
-use ic_logger::{ReplicaLogger, info, warn};
+use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_types::{RegistryVersion, ReplicaVersion, SubnetId};
 use nix::unistd::Pid;
@@ -297,7 +297,6 @@ pub(crate) struct IcBoundaryManager {
     inner: ProcessManager<IcBoundaryProcess>,
     registry: Arc<RegistryHelper>,
     current_domain_name: Option<String>,
-    logger: ReplicaLogger,
 }
 
 impl IcBoundaryManager {
@@ -307,12 +306,11 @@ impl IcBoundaryManager {
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
-        let inner = ProcessManager::new(config, metrics, logger.clone());
+        let inner = ProcessManager::new(config, metrics, logger);
         Self {
             inner,
             registry,
             current_domain_name: None,
-            logger,
         }
     }
 
@@ -321,82 +319,47 @@ impl IcBoundaryManager {
     pub(crate) fn new_for_test(
         inner: ProcessManager<IcBoundaryProcess>,
         registry: Arc<RegistryHelper>,
-        logger: ReplicaLogger,
     ) -> Self {
         Self {
             inner,
             registry,
             current_domain_name: None,
-            logger,
         }
     }
 
-    // TODO: consider returning an error when things fail instead of logging
     pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
         &mut self,
         replica_version: ReplicaVersion,
         registry_version: RegistryVersion,
-    ) {
-        match self.registry.get_node_domain_name(registry_version) {
-            Ok(Some(domain_name)) => {
-                let mut success = true;
-                // stop ic-boundary when the domain name changes and start it again.
-                if Some(&domain_name) != self.current_domain_name.as_ref()
-                    && let Err(err) = self.inner.stop()
-                {
-                    success = false;
-                    warn!(
-                        self.logger,
-                        "Failed to stop {}: {}",
-                        IcBoundaryProcess::NAME,
-                        err
-                    );
-                }
+    ) -> OrchestratorResult<()> {
+        let domain_name = match self.registry.get_node_domain_name(registry_version) {
+            Ok(domain_name) => domain_name,
+            Err(err @ OrchestratorError::DomainNameMissingError(_, _)) => {
+                // ic-boundary should not start when the node doesn't have a domain name
+                self.inner.stop()?;
 
-                // make sure ic-boundary is running
-                if let Err(err) = self
-                    .inner
-                    .ensure_running((replica_version, domain_name.clone()))
-                {
-                    success = false;
-                    warn!(
-                        self.logger,
-                        "Failed to start {}: {}",
-                        IcBoundaryProcess::NAME,
-                        err
-                    );
-                }
+                // Only clear the current domain name if we successfully stopped ic-boundary, so
+                // that we correctly detect we should first retry to stop it in case we get a new
+                // domain name in a next call.
+                self.current_domain_name = None;
+                return Err(err);
+            }
+            Err(err) => return Err(err),
+        };
 
-                if success {
-                    // Only update the current domain name if we performed the operations above
-                    // successfully, so that we can retry on the next call if not.
-                    self.current_domain_name = Some(domain_name);
-                }
-            }
-            // ic-boundary should not start when the node doesn't have a domain name
-            Ok(None) => {
-                warn!(
-                    self.logger,
-                    "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting {} down.",
-                    IcBoundaryProcess::NAME
-                );
-                if let Err(err) = self.inner.stop() {
-                    warn!(
-                        self.logger,
-                        "Failed to stop {}: {}",
-                        IcBoundaryProcess::NAME,
-                        err
-                    );
-                } else {
-                    // Only clear the current domain name if we successfully stopped ic-boundary,
-                    // so that we correctly detect we should first retry to stop it in case we get
-                    // a new domain name in a next call.
-                    self.current_domain_name = None;
-                }
-            }
-            // Failing to read the registry
-            Err(err) => warn!(self.logger, "Failed to fetch domain name: {}", err),
+        // stop ic-boundary when the domain name changes and start it again.
+        if Some(&domain_name) != self.current_domain_name.as_ref() {
+            self.inner.stop()?;
         }
+
+        // make sure ic-boundary is running
+        self.inner
+            .ensure_running((replica_version, domain_name.clone()))?;
+
+        // Only update the current domain name if we performed the operations above successfully,
+        // so that we can retry on the next call if not.
+        self.current_domain_name = Some(domain_name);
+        Ok(())
     }
 
     pub(crate) fn stop(&mut self) -> OrchestratorResult<()> {
@@ -537,6 +500,7 @@ impl MultipleProcessesManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -633,15 +597,15 @@ mod tests {
             Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
             no_op_logger(),
         );
-        let manager = IcBoundaryManager::new_for_test(inner, registry, no_op_logger());
+        let manager = IcBoundaryManager::new_for_test(inner, registry);
         (manager, log)
     }
 
-    fn ensure(manager: &mut IcBoundaryManager, registry_version: u64) {
+    fn ensure(manager: &mut IcBoundaryManager, registry_version: u64) -> OrchestratorResult<()> {
         manager.ensure_ic_boundary_running_and_restarted_on_domain_change(
             ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
             RegistryVersion::from(registry_version),
-        );
+        )
     }
 
     #[test]
@@ -650,7 +614,10 @@ mod tests {
         let registry = registry_with_node_domains(&[(1, None)]);
         let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
 
-        ensure(&mut manager, 1);
+        assert_matches!(
+            ensure(&mut manager, 1),
+            Err(OrchestratorError::DomainNameMissingError(_, _))
+        );
 
         let log = log.lock().unwrap();
         assert!(!log.running);
@@ -665,7 +632,7 @@ mod tests {
         let registry = registry_with_node_domains(&[(1, Some("api1.example.com"))]);
         let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
 
-        ensure(&mut manager, 1);
+        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
 
         let log = log.lock().unwrap();
         assert!(log.running);
@@ -683,8 +650,8 @@ mod tests {
         let registry = registry_with_node_domains(&[(1, Some("api1.example.com"))]);
         let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
 
-        ensure(&mut manager, 1);
-        ensure(&mut manager, 1);
+        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
+        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
 
         let log = log.lock().unwrap();
         assert!(log.running);
@@ -706,8 +673,8 @@ mod tests {
         ]);
         let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
 
-        ensure(&mut manager, 1);
-        ensure(&mut manager, 2);
+        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
+        ensure(&mut manager, 2).expect("ic-boundary should have started successfully");
 
         let log = log.lock().unwrap();
         assert!(log.running);
@@ -727,11 +694,14 @@ mod tests {
         let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
 
         // Running with a domain ...
-        ensure(&mut manager, 1);
+        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
         assert!(log.lock().unwrap().running);
 
         // ... then the domain is removed: ic-boundary must be stopped.
-        ensure(&mut manager, 2);
+        assert_matches!(
+            ensure(&mut manager, 2),
+            Err(OrchestratorError::DomainNameMissingError(_, _))
+        );
 
         let log = log.lock().unwrap();
         assert!(!log.running);

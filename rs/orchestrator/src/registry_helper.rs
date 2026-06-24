@@ -385,11 +385,11 @@ impl RegistryHelper {
     pub(crate) fn get_node_domain_name(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<String>> {
+    ) -> OrchestratorResult<String> {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
-        Ok(result)
+        result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
     }
 }

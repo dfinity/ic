@@ -78,6 +78,9 @@ pub(crate) enum OrchestratorError {
     /// An error occurred when trying to get the role (Api boundary node, replica, ...) of the node
     /// at the given registry version.
     RoleError(String, RegistryVersion),
+
+    /// The given node is missing a domain name at the given registry version.
+    DomainNameMissingError(NodeId, RegistryVersion),
 }
 
 impl OrchestratorError {
@@ -166,6 +169,12 @@ impl fmt::Display for OrchestratorError {
                 write!(
                     f,
                     "Failed to get the role of the node at the registry version {registry_version}: {msg}"
+                )
+            }
+            OrchestratorError::DomainNameMissingError(node_id, registry_version) => {
+                write!(
+                    f,
+                    "Node {node_id} does not have an associated domain name at registry version {registry_version}"
                 )
             }
         }
