@@ -1041,7 +1041,6 @@ pub struct CanisterHttpResponseMetadata {
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
     pub is_reject: bool,
-    pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
 
@@ -1052,14 +1051,12 @@ impl CountBytes for CanisterHttpResponseMetadata {
             content_hash,
             content_size,
             is_reject,
-            registry_version,
             replica_version,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
             + size_of_val(content_size)
             + size_of_val(is_reject)
-            + size_of_val(registry_version)
             + replica_version.as_ref().len()
     }
 }
@@ -1099,10 +1096,6 @@ impl CanisterHttpResponseReceipt {
 
     pub fn is_reject(&self) -> bool {
         self.metadata.is_reject
-    }
-
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
     }
 
     pub fn replica_version(&self) -> &ReplicaVersion {
@@ -1164,12 +1157,6 @@ impl CountBytes for CanisterHttpResponseProof {
                 .values()
                 .map(|s| std::mem::size_of::<NodeId>() + s.count_bytes())
                 .sum::<usize>()
-    }
-}
-
-impl CanisterHttpResponseProof {
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
     }
 }
 

@@ -40,7 +40,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, SubnetId,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
         CanisterHttpPayload, ConsensusResponse, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
@@ -51,7 +51,6 @@ use ic_types::{
         CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseShare,
         Replication,
     },
-    consensus::Committee,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
 };
@@ -135,35 +134,15 @@ impl CanisterHttpPayloadBuilderImpl {
 
     fn get_canister_http_payload_impl(
         &self,
-        height: Height,
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        // Derive threshold and faults_tolerated from a single committee call
-        let committee_members = match self.membership.get_canister_http_committee(height) {
-            Ok(members) => members,
-            Err(err) => {
-                warn!(self.log, "Failed to get canister http committee: {:?}", err);
-                return CanisterHttpPayload::default();
-            }
-        };
-        let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee_members.len());
-        let threshold = committee_members.len() - faults_tolerated;
-
-        let consensus_registry_version = match registry_version_at_height(
-            self.cache.as_ref(),
-            height,
-        ) {
-            Some(registry_version) => registry_version,
-            None => {
-                warn!(
-                    self.log,
-                    "Failed to obtain consensus registry version in canister http payload builder"
-                );
-                return CanisterHttpPayload::default();
-            }
-        };
+        // Committee threshold and faults_tolerated are derived per request from
+        // the registry version pinned in the request context. Cache the
+        // resulting `(threshold, faults_tolerated)` by registry version to avoid
+        // repeated registry lookups within a single payload.
+        let mut thresholds_by_version: BTreeMap<RegistryVersion, (usize, usize)> = BTreeMap::new();
 
         let state = match self
             .state_reader
@@ -209,15 +188,13 @@ impl CanisterHttpPayloadBuilderImpl {
                 .inspect(|_| {
                     total_share_count += 1;
                 })
-                // Filter out shares with the wrong registry version
-                .filter(|&share| share.content.registry_version() == consensus_registry_version)
-                .inspect(|_| {
-                    active_shares += 1;
-                })
                 // Filter out shares for responses to requests that already have
                 // responses in the block chain up to the point we are creating a
                 // new payload.
-                .filter(|&share| !delivered_ids.contains(&share.content.id()));
+                .filter(|&share| !delivered_ids.contains(&share.content.id()))
+                .inspect(|_| {
+                    active_shares += 1;
+                });
 
             // Group the shares by their metadata
             let shares_by_callback_id = group_shares_by_callback_id(share_candidates);
@@ -265,6 +242,38 @@ impl CanisterHttpPayloadBuilderImpl {
                 };
                 match &request.replication {
                     Replication::FullyReplicated => {
+                        // Committee threshold/faults_tolerated for this request
+                        // are derived from the registry version pinned in its
+                        // context (cached across requests sharing a version).
+                        let (threshold, faults_tolerated) =
+                            match thresholds_by_version.get(&request.registry_version) {
+                                Some(values) => *values,
+                                None => {
+                                    match self.membership.get_canister_http_committee_at_version(
+                                        request.registry_version,
+                                    ) {
+                                        Ok(committee) => {
+                                            let faults_tolerated =
+                                                ic_types::consensus::get_faults_tolerated(
+                                                    committee.len(),
+                                                );
+                                            let threshold = committee.len() - faults_tolerated;
+                                            thresholds_by_version.insert(
+                                                request.registry_version,
+                                                (threshold, faults_tolerated),
+                                            );
+                                            (threshold, faults_tolerated)
+                                        }
+                                        Err(err) => {
+                                            warn!(
+                                                self.log,
+                                                "Failed to get canister http committee: {:?}", err
+                                            );
+                                            continue;
+                                        }
+                                    }
+                                }
+                            };
                         if let Some(response) =
                             find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
@@ -421,20 +430,14 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Get the consensus registry version
+        // Registry version used only to resolve signer public keys for the
+        // batched signature verification at the end. Committee membership and
+        // validity are derived per request from the registry version pinned in
+        // the request context (the source of truth for the request).
         let consensus_registry_version = registry_version_at_height(self.cache.as_ref(), height)
             .ok_or(CanisterHttpPayloadValidationError::ValidationFailed(
                 CanisterHttpPayloadValidationFailure::ConsensusRegistryVersionUnavailable,
             ))?;
-
-        let committee = self
-            .membership
-            .get_canister_http_committee(height)
-            .map_err(|_| {
-                CanisterHttpPayloadValidationError::ValidationFailed(
-                    CanisterHttpPayloadValidationFailure::Membership,
-                )
-            })?;
 
         // Shares reconstructed from aggregated response proofs.
         let mut reconstructed_shares: Vec<CanisterHttpResponseShare> = Vec::new();
@@ -447,16 +450,6 @@ impl CanisterHttpPayloadBuilderImpl {
             // Check that response is consistent
             utils::check_response_consistency(response)
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
-
-            // Validate response against consensus registry version
-            if response.proof.registry_version() != consensus_registry_version {
-                return invalid_artifact(
-                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-                        expected: consensus_registry_version,
-                        received: response.proof.registry_version(),
-                    },
-                );
-            }
 
             // Check that the response is not submitted twice
             if !delivered_ids.insert(response.content.id) {
@@ -475,19 +468,20 @@ impl CanisterHttpPayloadBuilderImpl {
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
                 Replication::FullyReplicated => {
-                    let threshold = match self
+                    // The committee is the subnet node set at the registry
+                    // version pinned in the request context.
+                    let committee = self
                         .membership
-                        .get_committee_threshold(height, Committee::CanisterHttp)
-                    {
-                        Ok(threshold) => threshold,
-                        Err(err) => {
+                        .get_canister_http_committee_at_version(request_context.registry_version)
+                        .map_err(|err| {
                             warn!(self.log, "Failed to get membership: {:?}", err);
-                            return validation_failed(
+                            CanisterHttpPayloadValidationError::ValidationFailed(
                                 CanisterHttpPayloadValidationFailure::Membership,
-                            );
-                        }
-                    };
-                    (committee.clone(), threshold)
+                            )
+                        })?;
+                    let threshold = committee.len()
+                        - ic_types::consensus::get_faults_tolerated(committee.len());
+                    (committee, threshold)
                 }
                 Replication::Flexible { .. } => {
                     return invalid_artifact(
@@ -533,26 +527,8 @@ impl CanisterHttpPayloadBuilderImpl {
         // Defer signature verification of the reconstructed response shares.
         sig_inputs.extend(response_share_sig_inputs(&reconstructed_shares));
 
-        let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee.len());
-
         for response in &payload.divergence_responses {
-            let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
-                .shares
-                .iter()
-                .map(|share| share.signature.signer)
-                .partition(|signer| committee.iter().any(|id| id == signer));
-
-            if !invalid_signers.is_empty() {
-                return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
-                    invalid_signers,
-                    committee,
-                    valid_signers,
-                });
-            }
-
-            // Defer signature verification.
-            sig_inputs.extend(response_share_sig_inputs(&response.shares));
-
+            // A divergence proof must contain shares for exactly one callback id.
             let grouped_shares = group_shares_by_callback_id(response.shares.iter());
             if grouped_shares.len() != 1 {
                 return invalid_artifact(
@@ -575,6 +551,35 @@ impl CanisterHttpPayloadBuilderImpl {
                         InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
                     );
                 }
+
+                // The committee is the subnet node set at the registry version
+                // pinned in the request context.
+                let committee = self
+                    .membership
+                    .get_canister_http_committee_at_version(context.registry_version)
+                    .map_err(|_| {
+                        CanisterHttpPayloadValidationError::ValidationFailed(
+                            CanisterHttpPayloadValidationFailure::Membership,
+                        )
+                    })?;
+                let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee.len());
+
+                let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
+                    .shares
+                    .iter()
+                    .map(|share| share.signature.signer)
+                    .partition(|signer| committee.iter().any(|id| id == signer));
+
+                if !invalid_signers.is_empty() {
+                    return invalid_artifact(InvalidCanisterHttpPayloadReason::SignersNotMembers {
+                        invalid_signers,
+                        committee,
+                        valid_signers,
+                    });
+                }
+
+                // Defer signature verification.
+                sig_inputs.extend(response_share_sig_inputs(&response.shares));
 
                 // Enforce per-replica refund allowance for divergence shares.
                 for share in grouped_shares.values().flatten() {
@@ -642,7 +647,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     callback_id,
                     flex_committee,
                     &mut seen_signers,
-                    consensus_registry_version,
                     context.refund_status.per_replica_allowance,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
@@ -709,7 +713,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             callback_id,
                             flex_committee,
                             &mut seen_signers,
-                            consensus_registry_version,
                             context.refund_status.per_replica_allowance,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
@@ -774,7 +777,6 @@ impl CanisterHttpPayloadBuilderImpl {
                             callback_id,
                             flex_committee,
                             &mut seen_signers,
-                            consensus_registry_version,
                             context.refund_status.per_replica_allowance,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
@@ -838,7 +840,7 @@ impl CanisterHttpPayloadBuilderImpl {
 impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     fn build_payload(
         &self,
-        height: Height,
+        _height: Height,
         max_size: NumBytes,
         past_payloads: &[PastPayload],
         context: &ValidationContext,
@@ -865,7 +867,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
         );
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
-        let payload = self.get_canister_http_payload_impl(height, context, delivered_ids, max_size);
+        let payload = self.get_canister_http_payload_impl(context, delivered_ids, max_size);
         parse::payload_to_bytes(payload, max_size)
     }
 

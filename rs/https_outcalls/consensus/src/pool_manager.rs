@@ -382,7 +382,6 @@ impl CanisterHttpPoolManagerImpl {
                     let receipt_share = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: response.id,
-                            registry_version,
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: response.content.is_reject(),
@@ -575,15 +574,15 @@ impl CanisterHttpPoolManagerImpl {
 
                 let node_is_in_committee = self
                     .membership
-                    .node_belongs_to_canister_http_committee(
-                        finalized_height,
+                    .node_belongs_to_canister_http_committee_at_version(
+                        context.registry_version,
                         share.signature.signer,
                     )
                     .map_err(|e| {
                         warn!(
                             self.log,
-                            "Unable to check membership for share at height {}, {:?}",
-                            finalized_height,
+                            "Unable to check membership for share at registry version {}, {:?}",
+                            context.registry_version,
                             e
                         );
                         e
@@ -837,7 +836,6 @@ pub mod test {
                     let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(1),
-                            registry_version: RegistryVersion::from(1),
                             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                             content_size: 0,
                             is_reject: false,
@@ -937,7 +935,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
@@ -1046,7 +1043,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
@@ -1177,7 +1173,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
@@ -1379,7 +1374,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
-                        registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
@@ -1480,7 +1474,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
@@ -1621,7 +1614,6 @@ pub mod test {
                     let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(0),
-                            registry_version: RegistryVersion::from(1),
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
@@ -1690,7 +1682,6 @@ pub mod test {
                     let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: CallbackId::from(0),
-                            registry_version: RegistryVersion::from(1),
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
@@ -1797,7 +1788,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
@@ -2142,7 +2132,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
-                        registry_version: RegistryVersion::from(1),
                         content_hash: dishonest_hash,
                         content_size: dishonest_response.content.count_bytes() as u32,
                         is_reject: true,
@@ -2284,7 +2273,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: ic_types::crypto::crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: true,
@@ -2365,7 +2353,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(7),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
@@ -2689,7 +2676,6 @@ pub mod test {
                         share.content.content_hash(),
                         &ic_types::crypto::crypto_hash(&expected_response)
                     );
-                    assert_eq!(share.content.registry_version(), RegistryVersion::from(1));
                     assert_eq!(share.signature.signer, replica_config.node_id);
                 } else {
                     panic!(
@@ -2769,7 +2755,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(7),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,
@@ -2936,7 +2921,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
-                        registry_version: RegistryVersion::from(1),
                         content_hash: crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
@@ -3038,7 +3022,6 @@ pub mod test {
                 let response_metadata = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: callback_id,
-                        registry_version: RegistryVersion::from(1),
                         content_hash: crypto_hash(&response),
                         content_size: response.content.count_bytes() as u32,
                         is_reject: false,
@@ -3276,7 +3259,6 @@ pub mod test {
                     let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
-                            registry_version: RegistryVersion::from(1),
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
@@ -3343,7 +3325,6 @@ pub mod test {
                     let response_metadata = CanisterHttpResponseReceipt {
                         metadata: CanisterHttpResponseMetadata {
                             id: callback_id,
-                            registry_version: RegistryVersion::from(1),
                             content_hash: ic_types::crypto::crypto_hash(&response),
                             content_size: response.content.count_bytes() as u32,
                             is_reject: false,
@@ -3521,7 +3502,6 @@ pub mod test {
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
                         id: CallbackId::from(0),
-                        registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
                         content_size: 0,
                         is_reject: false,

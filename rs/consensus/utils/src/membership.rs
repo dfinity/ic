@@ -5,7 +5,7 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
         Committee, HasHeight, RandomBeacon, Rank, Threshold, get_committee_size,
         get_faults_tolerated,
@@ -46,10 +46,17 @@ impl Membership {
 
     /// Return the node IDs from the registry.
     pub fn get_nodes(&self, height: Height) -> Result<Vec<NodeId>, MembershipError> {
-        use ic_registry_client_helpers::subnet::SubnetRegistry;
         let registry_version = registry_version_at_height(self.consensus_cache.as_ref(), height)
             .ok_or(MembershipError::UnableToRetrieveDkgSummary(height))?;
+        self.get_nodes_at_version(registry_version)
+    }
 
+    /// Return the node IDs on the subnet at the given registry version.
+    pub fn get_nodes_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<Vec<NodeId>, MembershipError> {
+        use ic_registry_client_helpers::subnet::SubnetRegistry;
         let list = self
             .registry_client
             .get_node_ids_on_subnet(self.subnet_id, registry_version)
@@ -199,6 +206,33 @@ impl Membership {
         node_id: NodeId,
     ) -> Result<bool, MembershipError> {
         Ok(self.get_canister_http_committee(height)?.contains(&node_id))
+    }
+
+    /// Get the committee to be used for canister http at the given registry
+    /// version.
+    ///
+    /// In contrast to [`Self::get_canister_http_committee`], the committee is
+    /// determined by an explicit registry version rather than by the registry
+    /// version active at some block height. This is used to pin a canister http
+    /// request to the committee that was active at the registry version stored
+    /// in the request context, which is the source of truth for the request.
+    pub fn get_canister_http_committee_at_version(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<Vec<NodeId>, MembershipError> {
+        self.get_nodes_at_version(registry_version)
+    }
+
+    /// Return true if the given node ID is part of the canister http committee
+    /// at the given registry version.
+    pub fn node_belongs_to_canister_http_committee_at_version(
+        &self,
+        registry_version: RegistryVersion,
+        node_id: NodeId,
+    ) -> Result<bool, MembershipError> {
+        Ok(self
+            .get_canister_http_committee_at_version(registry_version)?
+            .contains(&node_id))
     }
 
     /// Return true if the given node ID is in the low threshold committee at

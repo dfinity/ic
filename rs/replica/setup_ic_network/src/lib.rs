@@ -166,11 +166,7 @@ impl Bouncers {
             state_reader.clone(),
         ));
 
-        let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(
-            consensus_pool_cache.clone(),
-            state_reader.clone(),
-            log.clone(),
-        ));
+        let https_outcalls = Arc::new(CanisterHttpGossipImpl::new(state_reader.clone()));
 
         Self {
             ingress,

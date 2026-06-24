@@ -168,16 +168,6 @@ fn multiple_payload_test() {
                         );
                     }
 
-                    // Add a response with mismatching registry version
-                    let (response, mut metadata) = test_response_and_metadata(2);
-                    metadata.registry_version = RegistryVersion::new(5);
-                    let shares = metadata_to_shares(subnet_size, &metadata);
-                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
-                    add_received_shares_to_pool(
-                        pool_access.deref_mut(),
-                        shares[1..subnet_size].to_vec(),
-                    );
-
                     // Add a oversized response
                     let (mut response, metadata) = test_response_and_metadata(3);
                     response.content =
@@ -490,29 +480,6 @@ fn oversized_validation() {
             ),
         )) if expected == 2 * 1024 * 1024 && received > expected => (),
         x => panic!("Expected PayloadTooBig, got {x:?}"),
-    }
-}
-
-/// Test that payloads with wrong registry version don't validate
-#[test]
-fn registry_version_validation() {
-    let validation_result = run_non_flexible_validation_test(
-        true,
-        |_, metadata| {
-            // Set metadata to a newer registry version
-            metadata.registry_version = RegistryVersion::new(2);
-        },
-        &ValidationContext {
-            ..default_validation_context()
-        },
-    );
-    match validation_result {
-        Err(ValidationError::InvalidArtifact(
-            InvalidPayloadReason::InvalidCanisterHttpPayload(
-                InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { .. },
-            ),
-        )) => (),
-        x => panic!("Expected RegistryVersionMismatch, got {x:?}"),
     }
 }
 
@@ -1542,7 +1509,6 @@ fn test_response_and_metadata_with_content(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };
     (response, metadata)
@@ -2799,43 +2765,6 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
                     InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
                 )
             )) if cb_id == callback_id && mm_id == mismatched_id
-        );
-    });
-}
-
-#[test]
-fn flexible_invalid_registry_version_mismatch() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
-        let wrong_registry_version = RegistryVersion::new(999);
-        let mut entry = flexible_response(42, 0, b"data");
-        entry.proof.content.metadata.registry_version = wrong_registry_version;
-        let validation_context = default_validation_context();
-        let expected_registry_version = validation_context.registry_version;
-
-        let payload = flexible_payload(vec![FlexibleCanisterHttpResponses {
-            callback_id,
-            responses: vec![entry],
-        }]);
-
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&validation_context),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch {
-                        expected,
-                        received,
-                    }
-                )
-            )) if expected == expected_registry_version && received == wrong_registry_version
         );
     });
 }
@@ -4202,45 +4131,6 @@ fn flexible_error_responses_too_large_signer_not_in_committee() {
 }
 
 #[test]
-fn flexible_error_responses_too_large_registry_version_mismatch() {
-    let num_nodes = 4;
-    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    let huge = (MAX_CANISTER_HTTP_PAYLOAD_SIZE as u32 / 2) + 100_000;
-    setup_test_with_flexible_context(num_nodes, callback_id, committee, 2, 4, |pb, _pool| {
-        let share_ok = metadata_share_with_content_size(callback_id.get(), 0, huge);
-        // Share with wrong registry version
-        let mut share_bad = metadata_share_with_content_size(callback_id.get(), 1, huge);
-        share_bad.content.metadata.registry_version = RegistryVersion::new(999);
-
-        let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
-                callback_id,
-                all_seen_shares: vec![share_ok, share_bad],
-                total_requests: 4,
-                min_responses: 2,
-            }],
-            ..Default::default()
-        };
-        let result = pb.validate_payload(
-            Height::new(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { expected: e, received: r }
-                )
-            )) if e == RegistryVersion::new(1) && r == RegistryVersion::new(999)
-        );
-    });
-}
-
-#[test]
 fn flexible_error_responses_too_large_invalid_signature() {
     let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
@@ -4484,41 +4374,6 @@ fn flexible_error_too_many_rejects_callback_id_mismatch_in_response() {
                     InvalidCanisterHttpPayloadReason::FlexibleCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
                 )
             )) if cb_id == callback_id && mm_id == CallbackId::new(999)
-        );
-    });
-}
-
-#[test]
-fn flexible_error_too_many_rejects_registry_version_mismatch() {
-    let num_nodes = 4;
-    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
-    let callback_id = CallbackId::from(42);
-
-    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
-        let entry_ok = flexible_reject_response(callback_id.get(), 0);
-        let mut entry_bad = flexible_reject_response(callback_id.get(), 1);
-        entry_bad.proof.content.metadata.registry_version = RegistryVersion::new(999);
-
-        let payload = CanisterHttpPayload {
-            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
-                callback_id,
-                reject_responses: vec![entry_ok, entry_bad],
-            }],
-            ..Default::default()
-        };
-        let result = pb.validate_payload(
-            Height::new(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RegistryVersionMismatch { expected: e, received: r }
-                )
-            )) if e == RegistryVersion::new(1) && r == RegistryVersion::new(999)
         );
     });
 }
@@ -4865,7 +4720,6 @@ fn metadata_share_with_content_size(
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xAB; 32])),
         content_size,
         is_reject: false,
-        registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };
     metadata_to_share(signer_node, &metadata)
@@ -4877,7 +4731,6 @@ fn reject_metadata_share(callback_id: u64, signer_node: u64) -> CanisterHttpResp
         content_hash: CryptoHashOf::new(CryptoHash(vec![0xCD; 32])),
         content_size: 50,
         is_reject: true,
-        registry_version: RegistryVersion::new(1),
         replica_version: ReplicaVersion::default(),
     };
     metadata_to_share(signer_node, &metadata)

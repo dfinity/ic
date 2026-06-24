@@ -1073,7 +1073,6 @@ mod crypto_hash_stability {
             content_hash: test_crypto_hash_of(0x42),
             content_size: 0,
             is_reject: false,
-            registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let hash = crypto_hash(&data);
@@ -1092,7 +1091,6 @@ mod crypto_hash_stability {
             content_hash: test_crypto_hash_of(0x42),
             content_size: 0,
             is_reject: false,
-            registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let receipt_share = CanisterHttpResponseReceipt {

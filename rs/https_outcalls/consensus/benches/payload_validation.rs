@@ -473,7 +473,6 @@ fn response_and_metadata(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        registry_version: REGISTRY_VERSION,
         replica_version: ReplicaVersion::default(),
     };
     (response, metadata)
