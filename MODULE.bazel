@@ -767,6 +767,16 @@ http_archive(
     ],
 )
 
+# e2fsdroid, used to populate ext4 filesystem images for IC-OS.
+# We use the prebuilt binary from android platform-tools.
+http_archive(
+    name = "android_platform_tools",
+    build_file = "@//third_party:BUILD.e2fsdroid.bazel",
+    sha256 = "defcee9da1f22fe5c2324ec0edf612122f1c6ffe01a7b124191e07fcc74f8fff",
+    strip_prefix = "platform-tools",
+    urls = ["https://dl.google.com/android/repository/platform-tools_r33.0.2-linux.zip"],
+)
+
 http_archive(
     name = "lmdb",
     build_file = "@//third_party:BUILD.lmdb.bazel",
@@ -1279,4 +1289,4 @@ archive_override(
 )
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
-motoko.toolchain(version = "0.16.3")
+motoko.toolchain(version = "0.16.3")  # NOTE: keep version in line with Dockerfile

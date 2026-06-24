@@ -227,6 +227,8 @@ pub struct CanisterHttpRequestContext {
     pub pricing_version: ::core::option::Option<PricingVersion>,
     #[prost(message, optional, tag = "13")]
     pub refund_status: ::core::option::Option<RefundStatus>,
+    #[prost(uint64, tag = "14")]
+    pub registry_version: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefundStatus {
@@ -453,6 +455,9 @@ pub struct SubnetCallContextManager {
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
     #[prost(message, repeated, tag = "19")]
     pub pre_signature_stashes: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
+    #[prost(message, repeated, tag = "20")]
+    pub delivered_canister_http_request_contexts:
+        ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {

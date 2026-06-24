@@ -23,3 +23,4 @@ mod cycles_account_manager;
 pub use cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, IngressInductionCost, ResourceSaturation,
 };
+pub use ic_types_cycles::CyclesAccountManagerSubnetConfig;

@@ -12,7 +12,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::IngressState;
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
@@ -217,8 +217,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     // Should be enough cycles to create the canister, but not enough to upgrade it
     let balance_cycles = test.cycles_account_manager().execution_cost(
         (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         WasmExecutionMode::Wasm32,
     );
 
@@ -237,8 +236,7 @@ fn upgrade_fails_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
     let canister_id = test

@@ -30,26 +30,6 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Install a version of google-android-platform-tools-installer with e2fsdroid
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    mkdir e2fsdroid && \
-    cd e2fsdroid && \
-    curl -fsSLO http://mirrors.kernel.org/ubuntu/pool/multiverse/g/google-android-installers/google-android-platform-tools-installer_35.0.0+1710437545-3build2_amd64.deb && \
-    curl -fsSLO http://mirrors.kernel.org/ubuntu/pool/multiverse/g/google-android-installers/google-android-licenses_1710437545-3build2_all.deb && \
-    dpkg-deb -R google-android-platform-tools-installer_35.0.0+1710437545-3build2_amd64.deb contents && \
-    cd contents && \
-    sed -i 's/35.0.0/33.0.2/' DEBIAN/control DEBIAN/postinst && \
-    sed -i '/Version/ s/$/+downgraded/' DEBIAN/control && \
-    rm usr/share/google-android-platform-tools-installer/platform-tools_r35.0.0-linux.zip.sha1 && \
-    echo "6bf4f747ad929b02378b44ce083b4502d26109c7  platform-tools_r33.0.2-linux.zip" > usr/share/google-android-platform-tools-installer/platform-tools_r33.0.2-linux.zip.sha1 && \
-    find . -type f -not -path "./DEBIAN/*" -exec md5sum {} + | sort -k 2 | sed 's/\.\/\(.*\)/\1/' > DEBIAN/md5sums && \
-    cd .. && \
-    dpkg-deb -b contents/ downgraded.deb && \
-    apt -yqq install ./downgraded.deb ./google-android-licenses_1710437545-3build2_all.deb && \
-    apt-mark hold google-android-platform-tools-installer && \
-    cd .. && \
-    rm -rf e2fsdroid
-
 ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
@@ -62,6 +42,8 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/
 RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
+# This is only used by Cargo; Bazel pulls its own via rules_motoko
+# NOTE: keep version in line with rules_motoko
 ARG motoko_version=0.16.3
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
@@ -96,7 +78,7 @@ FROM base as dev
 
 # Add GitHub CLI repository to get the latest version
 RUN mkdir -p -m 755 /etc/apt/keyrings \
-	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+	&& out=$(mktemp) && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" \
 	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
 	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
 	&& mkdir -p -m 755 /etc/apt/sources.list.d \

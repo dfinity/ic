@@ -1,6 +1,7 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
 use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig};
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_interfaces::execution_environment::{HypervisorResult, MessageMemoryUsage, SystemApi};
@@ -43,13 +44,14 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
+    let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
 
     let request_payload_cost = cycles_account_manager
-        .xnet_call_bytes_transmitted_fee(
-            request.payload_size_bytes(),
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-        )
+        .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), subnet_cycles_config)
         .real();
 
     // Set cycles balance low enough that not even the cost for transferring
@@ -62,16 +64,9 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
     );
 
     request.prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-            WASM_EXECUTION_MODE,
-        );
-    request.prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
-        request.payload_size_bytes(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
+        .prepayment_for_response_execution(subnet_cycles_config, WASM_EXECUTION_MODE);
+    request.prepayment_for_call_transmission = cycles_account_manager
+        .xnet_total_transmission_fee(request.payload_size_bytes(), subnet_cycles_config);
 
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
@@ -83,7 +78,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         Default::default(),
         Some(request.sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        subnet_cycles_config,
     );
 
     assert_eq!(
@@ -103,18 +98,16 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
-
-    request.prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-            WASM_EXECUTION_MODE,
-        );
-    request.prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
-        request.payload_size_bytes(),
+    let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
         SMALL_APP_SUBNET_MAX_SIZE,
         CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
     );
+
+    request.prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(subnet_cycles_config, WASM_EXECUTION_MODE);
+    request.prepayment_for_call_transmission = cycles_account_manager
+        .xnet_total_transmission_fee(request.payload_size_bytes(), subnet_cycles_config);
     let total_cost = request.prepayment_for_response_execution.real()
         + request.prepayment_for_call_transmission.real();
 
@@ -137,7 +130,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         Default::default(),
         Some(request.sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        subnet_cycles_config,
     );
 
     assert_eq!(
@@ -156,6 +149,11 @@ fn push_output_request_succeeds_with_enough_cycles() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .build();
+    let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        cost_schedule,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
 
     let system_state = SystemState::new_running_for_testing(
         canister_test_id(0),
@@ -175,24 +173,17 @@ fn push_output_request_succeeds_with_enough_cycles() {
         Default::default(),
         caller,
         None,
-        cost_schedule,
+        subnet_cycles_config,
     );
 
     let mut request = OutputRequestBuilder::default().build();
 
     request.prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(
-            SMALL_APP_SUBNET_MAX_SIZE,
-            cost_schedule,
-            WASM_EXECUTION_MODE,
-        );
-    request.prepayment_for_response_transmission = cycles_account_manager
-        .prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
-    request.prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
-        request.payload_size_bytes(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        cost_schedule,
-    );
+        .prepayment_for_response_execution(subnet_cycles_config, WASM_EXECUTION_MODE);
+    request.prepayment_for_response_transmission =
+        cycles_account_manager.prepayment_for_response_transmission(subnet_cycles_config);
+    request.prepayment_for_call_transmission = cycles_account_manager
+        .xnet_total_transmission_fee(request.payload_size_bytes(), subnet_cycles_config);
 
     assert_eq!(
         sandbox_safe_system_state.push_output_request(
@@ -212,6 +203,11 @@ fn correct_charging_source_canister_for_a_request() {
         .with_max_num_instructions(MAX_NUM_INSTRUCTIONS)
         .with_subnet_type(subnet_type)
         .build();
+    let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        cost_schedule,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
     let mut system_state = SystemState::new_running_for_testing(
         canister_test_id(0),
         user_test_id(1).get(),
@@ -236,22 +232,15 @@ fn correct_charging_source_canister_for_a_request() {
         Default::default(),
         Some(request.sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        subnet_cycles_config,
     );
 
     request.prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-            WASM_EXECUTION_MODE,
-        );
-    request.prepayment_for_response_transmission = cycles_account_manager
-        .prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE, cost_schedule);
-    request.prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
-        request.payload_size_bytes(),
-        SMALL_APP_SUBNET_MAX_SIZE,
-        cost_schedule,
-    );
+        .prepayment_for_response_execution(subnet_cycles_config, WASM_EXECUTION_MODE);
+    request.prepayment_for_response_transmission =
+        cycles_account_manager.prepayment_for_response_transmission(subnet_cycles_config);
+    request.prepayment_for_call_transmission = cycles_account_manager
+        .xnet_total_transmission_fee(request.payload_size_bytes(), subnet_cycles_config);
     let total_cost = request.prepayment_for_response_execution.real()
         + request.prepayment_for_call_transmission.real();
 
@@ -288,8 +277,7 @@ fn correct_charging_source_canister_for_a_request() {
         &no_op_counter,
         &response.response_payload,
         request.prepayment_for_response_transmission,
-        SMALL_APP_SUBNET_MAX_SIZE,
-        cost_schedule,
+        subnet_cycles_config,
     );
 
     system_state.refund_cycles(request.prepayment_for_call_transmission, refund_cycles);
@@ -301,8 +289,7 @@ fn correct_charging_source_canister_for_a_request() {
             + cycles_account_manager
                 .xnet_call_bytes_transmitted_fee(
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES - response.payload_size_bytes(),
-                    SMALL_APP_SUBNET_MAX_SIZE,
-                    cost_schedule,
+                    subnet_cycles_config,
                 )
                 .real(),
         system_state.balance()
@@ -461,7 +448,11 @@ fn is_controller_test() {
         Default::default(),
         caller,
         None,
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -536,6 +527,11 @@ fn test_inter_canister_call(
         NumSeconds::from(100_000),
     );
 
+    let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
@@ -546,26 +542,16 @@ fn test_inter_canister_call(
         Default::default(),
         Some(sender.into()),
         None,
-        CanisterCyclesCostSchedule::Normal,
+        subnet_cycles_config,
     );
 
     let prepayment_for_response_execution = cycles_account_manager
-        .prepayment_for_response_execution(
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-            WASM_EXECUTION_MODE,
-        );
-    let prepayment_for_response_transmission = cycles_account_manager
-        .prepayment_for_response_transmission(
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
-        );
+        .prepayment_for_response_execution(subnet_cycles_config, WASM_EXECUTION_MODE);
+    let prepayment_for_response_transmission =
+        cycles_account_manager.prepayment_for_response_transmission(subnet_cycles_config);
     let payload_size = NumBytes::from((method_name.len() + arg.len()) as u64);
-    let prepayment_for_call_transmission = cycles_account_manager.xnet_total_transmission_fee(
-        payload_size,
-        SMALL_APP_SUBNET_MAX_SIZE,
-        CanisterCyclesCostSchedule::Normal,
-    );
+    let prepayment_for_call_transmission =
+        cycles_account_manager.xnet_total_transmission_fee(payload_size, subnet_cycles_config);
 
     let request = OutputRequestBuilder::default()
         .sender(sender)

@@ -176,6 +176,7 @@ pub struct CanisterStateBits {
     pub cycles_debit: Cycles,
     pub reserved_balance: Cycles,
     pub reserved_balance_limit: Option<Cycles>,
+    pub minimum_incoming_canister_call_cycles: Cycles,
     pub status: CanisterStatus,
     pub rounds_scheduled: u64,
     pub scheduled_as_first: u64,

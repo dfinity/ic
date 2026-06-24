@@ -9,7 +9,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
+    subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
@@ -1254,7 +1254,6 @@ pub struct StateMachine {
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    cost_schedule: CanisterCyclesCostSchedule,
     hypervisor_config: HypervisorConfig,
 }
 
@@ -2068,10 +2067,7 @@ impl StateMachine {
 
         let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
-            None => (
-                SubnetConfig::new(subnet_type, SubnetSecurity::None),
-                HypervisorConfig::default(),
-            ),
+            None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
@@ -2442,7 +2438,6 @@ impl StateMachine {
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            cost_schedule,
             hypervisor_config,
         }
     }
@@ -4677,12 +4672,10 @@ impl StateMachine {
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload, None);
         let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
-        let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             &msg,
             effective_canister_id,
-            subnet_size,
-            self.cost_schedule,
+            self.get_latest_state().get_own_subnet_cycles_config(),
         )
     }
 
@@ -5677,7 +5670,7 @@ pub fn two_subnets_with_config(
 /// Sets up two `StateMachine` that can communicate with each other.
 pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
+        SubnetConfig::new(SubnetType::Application),
         HypervisorConfig::default(),
     );
     two_subnets_with_config(config.clone(), config)

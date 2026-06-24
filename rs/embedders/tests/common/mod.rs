@@ -1,8 +1,13 @@
 use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
     SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -10,6 +15,7 @@ use ic_embedders::wasmtime_embedder::system_api::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
@@ -230,7 +236,11 @@ pub fn get_system_api(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     SystemApiImpl::new(
         api_type,
