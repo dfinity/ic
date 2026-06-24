@@ -9,8 +9,8 @@ on:
       crate-version:
         description: 'The version of the crate to publish'
         required: true
-      ref:
-        description: 'Branch, tag, or commit to publish from (must be an ancestor of HEAD; defaults to the workflow run\'s HEAD)'
+      commit:
+        description: 'Commit to publish from (must be an ancestor of HEAD; defaults to the workflow run\'s HEAD)'
         required: false
         default: ''
       dry-run:
@@ -39,18 +39,18 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: ${{ github.event.inputs.ref != '' && '0' || '1' }}
+          fetch-depth: ${{ github.event.inputs.commit != '' && '0' || '1' }}
 
-      - name: Verify ref and check out
-        if: ${{ github.event.inputs.ref != '' }}
+      - name: Verify commit and check out
+        if: ${{ github.event.inputs.commit != '' }}
         run: |
           set -euo pipefail
-          ref="${{ github.event.inputs.ref }}"
-          if ! git merge-base --is-ancestor -- "${ref}" HEAD; then
-            echo "Ref '${ref}' is not an ancestor of HEAD — aborting for security"
+          commit="${{ github.event.inputs.commit }}"
+          if ! git merge-base --is-ancestor -- "${commit}" HEAD; then
+            echo "Commit '${commit}' is not an ancestor of HEAD — aborting for security"
             exit 1
           fi
-          git checkout --detach -- "${ref}"
+          git checkout --detach -- "${commit}"
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
