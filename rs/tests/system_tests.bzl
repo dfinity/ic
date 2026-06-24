@@ -442,7 +442,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_size",
         srcs = srcmap.keys(),
         outs = [name + "_size.txt"],
-        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
+        # Round the size up to a multiple of 4096 so the raw image is
+        # block-aligned: QEMU opened with cache='none' (O_DIRECT) refuses a
+        # writable raw image whose size is not a multiple of the host block size.
+        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" { s = 2 * $$1 + 1048576; print int((s + 4095) / 4096) * 4096 }' > $@",
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],

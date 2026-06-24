@@ -873,6 +873,7 @@ impl LocalBackend {
             let dst_name = format!("extra-{i}.img");
             let dst = vm_dir.join(&dst_name);
             extract_image(src, &dst, &self.logger)?;
+            pad_to_request_alignment(&dst)?;
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o600))?;
             paths.push(dst);
         }
@@ -1222,6 +1223,47 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
         info!(logger, "Copying {} -> {}", src.display(), dst.display());
         std::fs::copy(src, dst)
             .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
+    }
+    Ok(())
+}
+
+/// Round the raw disk image at `path` up so its byte length is a multiple of
+/// [`DISK_REQUEST_ALIGNMENT`], padding with trailing zeros.
+///
+/// The domain XML opens every disk with `cache='none'` (O_DIRECT), whose QEMU
+/// request alignment is the host block size (512 or 4096 bytes). A *writable*
+/// raw image whose size is not a multiple of that alignment cannot be opened
+/// without the `resize` permission, so QEMU aborts the domain start with:
+///
+///   Cannot get 'write' permission without 'resize':
+///   Image size is not a multiple of request alignment
+///
+/// The universal-VM config images are sized as `2*du + 1MiB`
+/// (`rs/tests/driver/assets/create-universal-vm-config-image.sh`), and prebuilt
+/// UVM config images need not be aligned either, so pad them here. They carry a
+/// FAT filesystem that records its own length and ignores trailing bytes, so the
+/// padding is inert. Only these extra (config) disks are padded; boot disks are
+/// already block aligned and may use a GPT backup header at the last sector,
+/// which padding would displace.
+fn pad_to_request_alignment(path: &Path) -> Result<()> {
+    /// Upper bound on the host block size (covers 512- and 4096-byte sectors).
+    const DISK_REQUEST_ALIGNMENT: u64 = 4096;
+    let len = std::fs::metadata(path)
+        .with_context(|| format!("stat {} for alignment padding", path.display()))?
+        .len();
+    let aligned = len.next_multiple_of(DISK_REQUEST_ALIGNMENT);
+    if aligned != len {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .with_context(|| format!("opening {} to pad for alignment", path.display()))?
+            .set_len(aligned)
+            .with_context(|| {
+                format!(
+                    "padding {} from {len} to {aligned} bytes for request alignment",
+                    path.display()
+                )
+            })?;
     }
     Ok(())
 }
