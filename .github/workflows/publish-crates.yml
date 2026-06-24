@@ -46,11 +46,15 @@ jobs:
         run: |
           set -euo pipefail
           commit="${{ github.event.inputs.commit }}"
-          if ! git merge-base --is-ancestor "${commit}" HEAD; then
+          if [[ ! "${commit}" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+            echo "Invalid commit hash '${commit}' (expected 7-40 hex characters)"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor -- "${commit}" HEAD; then
             echo "Commit '${commit}' is not an ancestor of HEAD — aborting for security"
             exit 1
           fi
-          git checkout "${commit}"
+          git checkout --detach "${commit}"
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
