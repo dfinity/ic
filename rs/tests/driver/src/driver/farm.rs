@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
-    sync::{Arc, Condvar},
     time::{Duration, Instant},
 };
 
