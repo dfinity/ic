@@ -80,7 +80,7 @@ else
     done
 fi
 
-# Use the DC-local bazel cache directly, without going through the redirect server.
+# Use the DC-local bazel cache directly, without going through the redirect server
 dep_download_url="https://artifacts.$cluster.dfinity.network/cas/$dep_sha256"
 echo "dep '$dep_filename': download_url: '$dep_download_url'" >&2
 echo "$dep_download_url"
