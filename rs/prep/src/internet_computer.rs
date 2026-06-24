@@ -27,11 +27,14 @@ use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, dc::v1::DataCenterRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord,
+    dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-    replica_version::v1::ReplicaVersionRecord, routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::SubnetListRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+    routing_table::v1::RoutingTable as PbRoutingTable,
+    subnet::v1::SubnetListRecord,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_protobuf::registry::{
     dc::v1::Gps,
@@ -646,10 +649,15 @@ impl IcConfig {
             opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
 
+        let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurements: self.guest_launch_measurements,
+        };
+
+        let blessed_replica_versions_record = BlessedReplicaVersions {
+            blessed_version_ids: vec![initial_replica_version],
         };
 
         write_registry_entry(
@@ -658,6 +666,18 @@ impl IcConfig {
             make_replica_version_key(self.initial_replica_version_id.clone()).as_ref(),
             version,
             replica_version_record,
+        );
+
+        write_registry_entry(
+            &data_provider,
+            self.target_dir.as_path(),
+            // Written inline (rather than via a helper in ic_registry_keys) for
+            // backwards compatibility only: the registry canister no longer
+            // maintains the blessed replica versions list, but mainnet versions
+            // of it still expect this key to be present.
+            "blessed_replica_versions",
+            version,
+            blessed_replica_versions_record,
         );
 
         let provisional_whitelist = match self.provisional_whitelist {
