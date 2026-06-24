@@ -720,7 +720,6 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         assert_eq!(n_rejects, 10);
         assert_eq!(n_destination_invalid, 4);
         assert_eq!(n_canister_uninstalled, 6);
-        assert_eq!(n_rejects, 10);
         // 4 rejects for output-queue requests each refund req_payment;
         // synthetic rejects from generate_reject_responses_for_deleted_subnets() refund zero.
         assert_eq!(total_refund, req_payment * 4_u64);
