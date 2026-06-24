@@ -9,6 +9,10 @@ on:
       crate-version:
         description: 'The version of the crate to publish'
         required: true
+      commit:
+        description: 'Commit hash to publish from (must be an ancestor of HEAD; defaults to HEAD)'
+        required: false
+        default: ''
       dry-run:
         description: "If true, run publish in dry-run mode (don't actually publish the crate)"
         required: false
@@ -34,6 +38,19 @@ jobs:
     environment: publish-crates
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Verify commit and check out
+        if: ${{ github.event.inputs.commit != '' }}
+        run: |
+          set -euo pipefail
+          commit="${{ github.event.inputs.commit }}"
+          if ! git merge-base --is-ancestor "${commit}" HEAD; then
+            echo "Commit '${commit}' is not an ancestor of HEAD — aborting for security"
+            exit 1
+          fi
+          git checkout "${commit}"
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
