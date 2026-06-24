@@ -1078,7 +1078,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "ebf5373f06dadd9a3d7d3b59ce457533428ff27d4d588b8434f786d1d8c1a9db",
+            "10e5099acf02057c8dece601575e578f2289d1cca0aa27dfd793ed3a3d8ea4d7",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1109,7 +1109,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "a9372188df0e1057515013fa0208e8a6bf6aec7a5f5271c02585454c2bd32a2a",
+            "f3f73fb255a31933e6d4b10b99dbb77a92a0404c42fd075dd6394d52a56f6ccf",
             "Hash of CanisterHttpResponseShare changed"
         );
     }

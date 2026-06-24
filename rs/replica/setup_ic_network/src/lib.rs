@@ -144,7 +144,6 @@ struct Bouncers {
 
 impl Bouncers {
     fn new(
-        log: &ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
         time_source: Arc<dyn TimeSource>,
@@ -203,7 +202,6 @@ impl AbortableBroadcastChannels {
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
         let bouncers = Bouncers::new(
-            log,
             metrics_registry,
             subnet_id,
             time_source.clone(),
