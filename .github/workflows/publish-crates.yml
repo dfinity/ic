@@ -10,7 +10,7 @@ on:
         description: 'The version of the crate to publish'
         required: true
       ref:
-        description: 'Branch, tag, or commit to publish from (must be an ancestor of master; defaults to HEAD)'
+        description: 'Branch, tag, or commit to publish from (must be an ancestor of HEAD; defaults to the workflow run\'s HEAD)'
         required: false
         default: ''
       dry-run:
