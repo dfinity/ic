@@ -200,7 +200,7 @@ pub struct SystemMetadata {
     ///
     /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
-    pub subnets_with_reject_responses: Option<Vec<SubnetId>>,
+    pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -572,7 +572,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
-            subnets_with_reject_responses: None,
+            subnet_ids_at_last_reject_generation: None,
         }
     }
 
@@ -883,7 +883,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
             logs_migrated: _,
-            subnets_with_reject_responses: _,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -989,7 +989,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             logs_migrated,
-            subnets_with_reject_responses,
+            subnet_ids_at_last_reject_generation,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1100,7 +1100,7 @@ impl SystemMetadata {
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
             logs_migrated,
-            subnets_with_reject_responses,
+            subnet_ids_at_last_reject_generation,
         })
     }
 
@@ -2203,7 +2203,7 @@ pub mod testing {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
-            subnets_with_reject_responses: None,
+            subnet_ids_at_last_reject_generation: None,
         };
     }
 }

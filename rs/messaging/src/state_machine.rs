@@ -278,7 +278,7 @@ impl StateMachine for StateMachineImpl {
             .collect();
         let subnet_list_changed = state_after_stream_builder
             .metadata
-            .subnets_with_reject_responses
+            .subnet_ids_at_last_reject_generation
             .as_ref()
             != Some(&current_subnet_ids);
         if subnet_list_changed {
@@ -299,7 +299,7 @@ impl StateMachine for StateMachineImpl {
             if errors.is_empty() {
                 state_after_stream_builder
                     .metadata
-                    .subnets_with_reject_responses = Some(current_subnet_ids);
+                    .subnet_ids_at_last_reject_generation = Some(current_subnet_ids);
             }
         }
 

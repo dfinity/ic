@@ -572,7 +572,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             },
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
-            subnets_with_reject_responses: None,
+            subnet_ids_at_last_reject_generation: None,
         })
     }
 }
