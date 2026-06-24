@@ -351,6 +351,8 @@ until ipv4=$(ip -j address show dev enp2s0 \
 do
   if [ "$count" -ge 300 ]; then
     echo "Timed out waiting for IPv4 address!" >&2
+    echo "networkctl status enp2s0:" >&2
+    networkctl status enp2s0 >&2
     exit 1
   fi
   sleep 1

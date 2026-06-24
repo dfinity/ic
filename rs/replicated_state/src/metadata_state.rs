@@ -337,6 +337,21 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.cost_schedule)
     }
 
+    /// Returns the reference subnet size of the given subnet, derived from its type and SEV status.
+    /// System subnets always use the default reference size regardless of SEV.
+    pub fn get_reference_subnet_size(&self, subnet_id: &SubnetId) -> Option<usize> {
+        use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE};
+        self.subnets.get(subnet_id).map(|subnet_topology| {
+            if subnet_topology.subnet_type != SubnetType::System
+                && subnet_topology.subnet_features.sev_enabled
+            {
+                SEV_REFERENCE_SUBNET_SIZE
+            } else {
+                DEFAULT_REFERENCE_SUBNET_SIZE
+            }
+        })
+    }
+
     /// Returns the subnets map used for the certified state tree.
     ///
     /// On the NNS subnet this returns the full, unfiltered map (including cloud
@@ -571,6 +586,13 @@ impl SystemMetadata {
     /// not populated.
     pub fn own_cost_schedule(&self) -> Option<CanisterCyclesCostSchedule> {
         self.network_topology.get_cost_schedule(&self.own_subnet_id)
+    }
+
+    /// Returns the reference subnet size of this subnet derived from its SEV
+    /// status, `None` if `network_topology` is not populated.
+    pub fn own_reference_subnet_size(&self) -> Option<usize> {
+        self.network_topology
+            .get_reference_subnet_size(&self.own_subnet_id)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
