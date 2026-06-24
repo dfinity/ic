@@ -186,9 +186,6 @@ impl Farm {
         filename: &str,
     ) -> FarmResult<FileId> {
         let size = std::fs::metadata(&path).map_err(FarmError::IoError)?.len();
-        // Throttle concurrent uploads to `MAX_CONCURRENT_UPLOADS`; the permit
-        // is held across the entire retry loop so that retried uploads still
-        // count against the cap.
         info!(
             self.logger,
             "Uploading file: {} of size {} bytes ...", filename, size
