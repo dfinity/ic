@@ -44,52 +44,6 @@ const TIMEOUT_SETTINGS: TimeoutSettings = TimeoutSettings {
 const FARM_VM_CREATED_EVENT_NAME: &str = "farm_vm_created_event";
 const VM_CONSOLE_LINK_CREATED_EVENT_NAME: &str = "vm_console_link_created_event";
 
-/// Cap on concurrent `upload_file` calls per `Farm` instance (clones share the
-/// HTTP client and this semaphore). Farm's web server advertises HTTP/2
-/// SETTINGS_MAX_CONCURRENT_STREAMS=64 and tears down the whole connection if a
-/// burst of multiplexed streams exceeds that limit, so stay well below it,
-/// leaving headroom for other requests sharing the client (e.g. the keepalive
-/// task). Under HTTP/1.1 this bounds the number of parallel TCP connections
-/// instead.
-const MAX_CONCURRENT_UPLOADS: usize = 32;
-
-/// Minimal counting semaphore for blocking contexts (`std` has none and the
-/// `Farm` API is called from plain OS threads).
-#[derive(Debug)]
-struct UploadSemaphore {
-    permits: Mutex<usize>,
-    cvar: Condvar,
-}
-
-impl UploadSemaphore {
-    fn new(permits: usize) -> Self {
-        Self {
-            permits: Mutex::new(permits),
-            cvar: Condvar::new(),
-        }
-    }
-
-    /// Blocks until a permit is free. The permit is held until the returned
-    /// guard is dropped (including on panic).
-    fn acquire(&self) -> UploadPermit<'_> {
-        let mut permits = self.permits.lock().unwrap();
-        while *permits == 0 {
-            permits = self.cvar.wait(permits).unwrap();
-        }
-        *permits -= 1;
-        UploadPermit(self)
-    }
-}
-
-struct UploadPermit<'a>(&'a UploadSemaphore);
-
-impl Drop for UploadPermit<'_> {
-    fn drop(&mut self) {
-        *self.0.permits.lock().unwrap() += 1;
-        self.0.cvar.notify_one();
-    }
-}
-
 /// Farm managed resources that make up the Internet Computer under test. The
 /// `Farm`-structure translates abstract requests (for resources) to concrete
 /// http-requests.
@@ -99,7 +53,6 @@ pub struct Farm {
     pub logger: Logger,
     client: Client,
     pub override_host_features: Option<Vec<HostFeature>>,
-    upload_semaphore: Arc<UploadSemaphore>,
 }
 
 impl Farm {
@@ -121,7 +74,6 @@ impl Farm {
             logger,
             client,
             override_host_features: None,
-            upload_semaphore: Arc::new(UploadSemaphore::new(MAX_CONCURRENT_UPLOADS)),
         }
     }
 
@@ -137,7 +89,6 @@ impl Farm {
             logger: env.logger(),
             client,
             override_host_features: env.read_host_features(context),
-            upload_semaphore: Arc::new(UploadSemaphore::new(MAX_CONCURRENT_UPLOADS)),
         }
     }
 
@@ -238,7 +189,6 @@ impl Farm {
         // Throttle concurrent uploads to `MAX_CONCURRENT_UPLOADS`; the permit
         // is held across the entire retry loop so that retried uploads still
         // count against the cap.
-        let _permit = self.upload_semaphore.acquire();
         info!(
             self.logger,
             "Uploading file: {} of size {} bytes ...", filename, size
