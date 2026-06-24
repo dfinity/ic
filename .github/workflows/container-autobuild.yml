@@ -155,7 +155,10 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         with:
           script: |
-            let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
+            // Hidden marker used to find this workflow's comment on subsequent runs
+            const marker = '<!-- container-autobuild-image-tag -->';
+            let message = marker + '\n'
+            message += 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
             message += 'New container images with tag: `${{ needs.build-image-prep.outputs.image_tag }}`\n'
             message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imageid }}`\n'
             message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imageid }}`\n'
@@ -169,7 +172,7 @@ jobs:
 
             const botComment = comments.data.find(comment =>
               comment.user.type === 'Bot' &&
-              comment.body.includes('New container image:')
+              comment.body.includes(marker)
             );
 
             if (botComment) {

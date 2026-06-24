@@ -557,6 +557,12 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
+    /// Minimum number of cycles required for an incoming call from a different canister.
+    /// Calls from a different canister with fewer cycles are rejected with a CanisterError at no cycles cost to the callee.
+    /// Self-calls (from the canister itself) and ingress messages are not affected.
+    /// A value of 0 means no minimum is enforced.
+    pub minimum_incoming_canister_call_cycles: Cycles,
+
     /// Queue of tasks to be executed next. If a paused or aborted execution task is
     /// present, it must be executed before any other tasks or messages.
     pub task_queue: TaskQueue,
@@ -754,6 +760,7 @@ impl SystemState {
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
+            minimum_incoming_canister_call_cycles: Cycles::zero(),
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             environment_variables: Default::default(),
@@ -798,6 +805,7 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
+        minimum_incoming_canister_call_cycles: Cycles,
         task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
@@ -832,6 +840,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
+            minimum_incoming_canister_call_cycles,
             task_queue,
             global_timer,
             canister_version,
@@ -2671,6 +2680,7 @@ pub mod testing {
             ingress_induction_cycles_debit: Default::default(),
             reserved_balance: Default::default(),
             reserved_balance_limit: Default::default(),
+            minimum_incoming_canister_call_cycles: Cycles::zero(),
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: Default::default(),

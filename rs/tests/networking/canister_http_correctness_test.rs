@@ -27,6 +27,7 @@ use ic_agent::{
 };
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_cdk::api::call::RejectionCode;
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_management_canister_types_private::{
     HttpHeader, HttpMethod, TransformContext, TransformFunc,
@@ -44,6 +45,7 @@ use ic_system_test_driver::{
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    RegistryVersion,
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES},
     time::UNIX_EPOCH,
 };
@@ -2718,6 +2720,7 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
+        RegistryVersion::from(1),
         &mut rand::thread_rng(),
     )
     .unwrap();
@@ -2725,7 +2728,11 @@ fn expected_cycle_cost(
     let cycle_fee = cm.http_request_fee(
         req_size,
         Some(NumBytes::from(response_size)),
-        CyclesAccountManagerSubnetConfig::new(subnet_size, CanisterCyclesCostSchedule::Normal),
+        CyclesAccountManagerSubnetConfig::new(
+            subnet_size,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     cycle_fee.real().get().try_into().unwrap()
 }
