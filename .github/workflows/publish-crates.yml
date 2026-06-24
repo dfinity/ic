@@ -54,7 +54,10 @@ jobs:
             echo "Commit '${commit}' is not an ancestor of HEAD — aborting for security"
             exit 1
           fi
-          git checkout --detach "${commit}"
+          n=$(git rev-list --count "${commit}..HEAD")
+          # We checkout by commit count offset from HEAD (not directly from user input) to avoid
+          # git checkout on user-controlled data, which could be used for command injection.
+          git checkout --detach "HEAD~${n}"
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
