@@ -715,9 +715,6 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                 note: &'static str,
                 // The `permissions` value of each delegation in the chain
                 // (`None` means the field is omitted for that delegation).
-                // Unsupported values cannot be represented (the field is a
-                // closed enum) and are rejected when the request is decoded;
-                // that path is covered by ic-types CBOR-decoding tests.
                 permissions: Vec<Option<DelegationPermissions>>,
                 outcome: Outcome,
             }
@@ -778,7 +775,7 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                         &delegations,
                     )
                     .await;
-                    // Both remaining outcomes permit query calls.
+                    // Query calls are permitted regardless of the outcome.
                     response.expect_query_ok(api_ver);
                 }
 
@@ -791,7 +788,7 @@ pub fn requests_with_delegation_permissions(env: TestEnv) {
                         &delegations,
                     )
                     .await;
-                    // Both remaining outcomes permit read_state requests.
+                    // read_state requests are permitted regardless of the outcome.
                     response.expect_read_state_ok(api_ver);
                 }
 

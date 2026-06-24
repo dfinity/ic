@@ -537,10 +537,9 @@ impl From<CanisterIdError> for HttpRequestError {
 }
 
 /// The kinds of calls a delegation permits, as defined in
-/// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication>`.
+/// `<https://internetcomputer.org/docs/current/references/ic-interface-spec>`.
 /// An absent field on the [`Delegation`] is unrestricted, equivalent to
-/// [`DelegationPermissions::All`]. Unsupported values are rejected when
-/// decoding the request.
+/// [`DelegationPermissions::All`].
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum DelegationPermissions {
@@ -586,15 +585,13 @@ impl Delegation {
         }
     }
 
-    /// Restricts the delegation to the given canister targets. Chainable
-    /// with [`Self::with_permissions`] to build a delegation carrying both.
+    /// Restricts the delegation to the given canister targets.
     pub fn with_targets(mut self, targets: Vec<CanisterId>) -> Self {
         self.targets = Some(targets.iter().map(|c| Blob(c.get().to_vec())).collect());
         self
     }
 
-    /// Restricts the kinds of calls the delegation permits. Chainable with
-    /// [`Self::with_targets`] to build a delegation carrying both.
+    /// Restricts the kinds of calls the delegation permits.
     pub fn with_permissions(mut self, permissions: DelegationPermissions) -> Self {
         self.permissions = Some(permissions);
         self
