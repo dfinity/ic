@@ -9,8 +9,8 @@ on:
       crate-version:
         description: 'The version of the crate to publish'
         required: true
-      commit:
-        description: 'Commit hash to publish from (must be an ancestor of HEAD; defaults to HEAD)'
+      ref:
+        description: 'Branch, tag, or commit to publish from (must be an ancestor of master; defaults to HEAD)'
         required: false
         default: ''
       dry-run:
@@ -39,26 +39,18 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          fetch-depth: ${{ github.event.inputs.commit != '' && '0' || '1' }}
+          fetch-depth: ${{ github.event.inputs.ref != '' && '0' || '1' }}
 
-      - name: Verify commit and check out
-        if: ${{ github.event.inputs.commit != '' }}
+      - name: Verify ref and check out
+        if: ${{ github.event.inputs.ref != '' }}
         run: |
           set -euo pipefail
-          commit="${{ github.event.inputs.commit }}"
-          if [[ ! "${commit}" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
-            echo "Invalid commit hash '${commit}' (expected 7-40 hex characters)"
+          ref="${{ github.event.inputs.ref }}"
+          if ! git merge-base --is-ancestor -- "${ref}" HEAD; then
+            echo "Ref '${ref}' is not an ancestor of HEAD — aborting for security"
             exit 1
           fi
-          resolved_commit=$(git rev-parse --verify --quiet "${commit}^{commit}") || {
-            echo "Invalid or unknown commit hash '${commit}'"
-            exit 1
-          }
-          if ! git merge-base --is-ancestor -- "${resolved_commit}" HEAD; then
-            echo "Commit '${resolved_commit}' is not an ancestor of HEAD — aborting for security"
-            exit 1
-          fi
-          git checkout --detach -- "${resolved_commit}"
+          git checkout --detach -- "${ref}"
 
       - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe
         id: auth
