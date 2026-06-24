@@ -649,17 +649,11 @@ impl IcConfig {
             opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
 
-        let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurements: self.guest_launch_measurements,
         };
-
-        let blessed_replica_versions_record = BlessedReplicaVersions {
-            blessed_version_ids: vec![initial_replica_version],
-        };
-
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
@@ -668,6 +662,20 @@ impl IcConfig {
             replica_version_record,
         );
 
+        // TOOD: Commit d91a23fe (#10495, "Drop final active blessed version components")
+        // stopped writing the `blessed_replica_versions` registry key in `ic-prep`.
+        // However, the registry canister currently **deployed on mainnet** still reads this key
+        // when processing `ReviseElectedGuestosVersions` proposals and panics if it is absent:
+        //
+        //   'BlessedReplicaVersions key not found in registry', rs/registry/canister/src/mutations/do_revise_elected_replica_versions.rs:186:10
+        //
+        // This broke all system_test_nns tests which use the mainnet NNS and attempt an upgrade.
+        // To fix the following inserts a "blessed_replica_versions" entry into the registry.
+        // Remove this once the mainnet canister has been upgraded not to read it anymore.
+        let initial_replica_version = self.initial_replica_version_id.to_string();
+        let blessed_replica_versions_record = BlessedReplicaVersions {
+            blessed_version_ids: vec![initial_replica_version],
+        };
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
