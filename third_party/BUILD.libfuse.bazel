@@ -8,10 +8,12 @@ filegroup(
     ),
 )
 
+# This only builds with --hermetic_cc=false or the disable_hermetic_cc transition.
 meson(
     name = "libfuse",
     env = {
-        "CFLAGS": "-g -O2",
+        "ARFLAGS": "crD", # for build determinism
+        "CFLAGS": "-O2",
     },
     lib_source = ":all_srcs",
     options = {
