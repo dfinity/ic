@@ -268,15 +268,34 @@ impl StateMachine for StateMachineImpl {
         // enforcing the best-effort memory limit, so best-effort rejects are subject to shedding.
         // Called after `build_streams()` so that output-queue requests to deleted subnets
         // are already rejected with `DestinationInvalid` (more precise) by `build_streams()`.
-        for error in state_after_stream_builder.generate_reject_responses_for_deleted_subnets() {
-            // Critical error, responses should always be inducted successfully.
-            error!(
-                self.log,
-                "{}: Inducting synthetic reject response for deleted subnet failed: {}",
-                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
-                error
-            );
-            self.metrics.critical_error_induct_response_failed.inc();
+        // Skipped when the subnet list in network topology is unchanged since the last call.
+        let current_subnet_ids: Vec<SubnetId> = state_after_stream_builder
+            .metadata
+            .network_topology
+            .subnets()
+            .keys()
+            .cloned()
+            .collect();
+        let subnet_list_changed = state_after_stream_builder
+            .metadata
+            .subnets_with_reject_responses
+            .as_ref()
+            != Some(&current_subnet_ids);
+        if subnet_list_changed {
+            for error in state_after_stream_builder.generate_reject_responses_for_deleted_subnets()
+            {
+                // Critical error, responses should always be inducted successfully.
+                error!(
+                    self.log,
+                    "{}: Inducting synthetic reject response for deleted subnet failed: {}",
+                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                    error
+                );
+                self.metrics.critical_error_induct_response_failed.inc();
+            }
+            state_after_stream_builder
+                .metadata
+                .subnets_with_reject_responses = Some(current_subnet_ids);
         }
 
         // Shed enough messages to stay below the best-effort message memory limit.
