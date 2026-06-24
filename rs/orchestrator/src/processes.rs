@@ -339,10 +339,12 @@ impl IcBoundaryManager {
     ) {
         match self.registry.get_node_domain_name(registry_version) {
             Ok(Some(domain_name)) => {
+                let mut success = true;
                 // stop ic-boundary when the domain name changes and start it again.
                 if Some(&domain_name) != self.current_domain_name.as_ref()
                     && let Err(err) = self.inner.stop()
                 {
+                    success = false;
                     warn!(
                         self.logger,
                         "Failed to stop {}: {}",
@@ -356,15 +358,18 @@ impl IcBoundaryManager {
                     .inner
                     .ensure_running((replica_version, domain_name.clone()))
                 {
+                    success = false;
                     warn!(
                         self.logger,
                         "Failed to start {}: {}",
                         IcBoundaryProcess::NAME,
                         err
                     );
-                } else {
-                    // Only update the current domain name if we successfully started ic-boundary,
-                    // so that we can retry on the next call.
+                }
+
+                if success {
+                    // Only update the current domain name if we performed the operations above
+                    // successfully, so that we can retry on the next call if not.
                     self.current_domain_name = Some(domain_name);
                 }
             }
