@@ -68,7 +68,6 @@ use std::time::Duration;
 
 const METRIC_TIMEOUT: Duration = Duration::from_secs(120);
 const METRIC_BACKOFF: Duration = Duration::from_secs(5);
-const MR_REGISTRY_VERSION_METRIC: &str = "mr_registry_version";
 
 const NODES_PER_SUBNET: usize = 4;
 const ORIGINAL_SUBNETS: usize = 3;
@@ -452,7 +451,7 @@ async fn wait_for_expected_transcripts(
 /// at least `target_version`.
 async fn wait_until_subnet_mr_version(log: &Logger, subnet: &SubnetSnapshot, target_version: u64) {
     let expected_node_count = subnet.nodes().count();
-    let metrics = MetricsFetcher::new(subnet.nodes(), vec![MR_REGISTRY_VERSION_METRIC.into()]);
+    let metrics = MetricsFetcher::new(subnet.nodes(), vec!["mr_registry_version".into()]);
     let subnet_id = subnet.subnet_id;
 
     retry_with_msg_async!(
@@ -468,12 +467,12 @@ async fn wait_until_subnet_mr_version(log: &Logger, subnet: &SubnetSnapshot, tar
                 Ok(values) => values,
                 Err(err) => bail!("Failed to fetch metrics from subnet {subnet_id}: {err}"),
             };
-            let Some(node_metric_values) = values.get(MR_REGISTRY_VERSION_METRIC) else {
-                bail!("Metric {MR_REGISTRY_VERSION_METRIC} not yet exposed on subnet {subnet_id}");
+            let Some(node_metric_values) = values.get("mr_registry_version") else {
+                bail!("Metric mr_registry_version not yet exposed on subnet {subnet_id}");
             };
             if node_metric_values.len() != expected_node_count {
                 bail!(
-                    "Subnet {subnet_id}: metric {MR_REGISTRY_VERSION_METRIC} reported by {} out \
+                    "Subnet {subnet_id}: metric mr_registry_version reported by {} out \
                      of {} nodes",
                     node_metric_values.len(),
                     expected_node_count,
