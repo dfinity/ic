@@ -1143,7 +1143,7 @@ impl IcNodeSnapshot {
                 assert!(
                     !metrics_to_check
                         .keys()
-                        .any(|other_name| other_name != name && name.starts_with(*other_name)),
+                        .any(|other_name| *other_name != name && name.starts_with(*other_name)),
                     "The metric `{name}` is not prefix-free with respect to the other metrics to check. \
                     This is not allowed. Please specify a prefix-free set of metrics to check."
                 );
