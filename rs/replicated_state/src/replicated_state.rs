@@ -956,6 +956,7 @@ impl ReplicatedState {
         let mut errors = Vec::new();
         for (canister_id, callbacks) in rejects {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
+            let canister_state = Arc::make_mut(&mut canister);
             for (callback_id, respondent, deadline) in callbacks {
                 let response = RequestOrResponse::Response(Arc::new(Response {
                     originator: canister_id,
@@ -974,7 +975,7 @@ impl ReplicatedState {
                     ),
                     deadline,
                 }));
-                if let Err((error, _)) = Arc::make_mut(&mut canister).push_input(
+                if let Err((error, _)) = canister_state.push_input(
                     response,
                     &mut available_guaranteed_response_memory,
                     own_subnet_type,
