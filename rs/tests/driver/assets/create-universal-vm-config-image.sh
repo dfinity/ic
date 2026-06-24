@@ -76,7 +76,7 @@ size=$((2 * size + 1048576))
 # with cache='none' (O_DIRECT) refuses a writable raw image whose size is not a
 # multiple of the host block size. Block-aligning here keeps the image usable in
 # environments that require it.
-size=$(( (size + 4095) / 4096 * 4096 ))
+size=$(((size + 4095) / 4096 * 4096))
 echo "image size: $size"
 truncate -s $size "$tmp"
 /usr/sbin/mkfs.vfat -n "$LABEL" "$tmp"
