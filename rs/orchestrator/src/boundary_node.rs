@@ -49,21 +49,19 @@ impl BoundaryNodeManager {
                     );
                     // NOTE: We could also shutdown the boundary node here. However, it makes sense to continue
                     // serving requests while the orchestrator is downloading the new image in most cases.
-                } else {
-                    if let Err(err) = self
-                        .process_manager
-                        .ensure_ic_boundary_running_and_restarted_on_domain_change(
-                            self.version.clone(),
-                            registry_version,
-                        )
-                    {
-                        warn!(
-                            self.logger,
-                            "Failed to ensure {} is running: {}",
-                            IcBoundaryProcess::NAME,
-                            err
-                        );
-                    }
+                } else if let Err(err) = self
+                    .process_manager
+                    .ensure_ic_boundary_running_and_restarted_on_domain_change(
+                        self.version.clone(),
+                        registry_version,
+                    )
+                {
+                    warn!(
+                        self.logger,
+                        "Failed to ensure {} is running: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
                 }
             }
             // BN should not be active
