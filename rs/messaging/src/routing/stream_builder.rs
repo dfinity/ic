@@ -452,7 +452,7 @@ impl StreamBuilderImpl {
         let mut oversized_requests = Vec::new();
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
         let mut engine_response_dropped_cycles = Cycles::zero();
-        let mut responses_to_discard = Vec::new();
+        let mut dropped_response_cycles = Cycles::zero();
         let own_cost_schedule = state.get_own_cost_schedule();
 
         let mut output_iter = state.output_into_iter();
@@ -672,7 +672,7 @@ impl StreamBuilderImpl {
                                     rep
                                 );
                             }
-                            responses_to_discard.push(rep);
+                            dropped_response_cycles += rep.refund;
                         }
                     }
                 }
@@ -680,13 +680,11 @@ impl StreamBuilderImpl {
         }
         drop(output_iter);
 
-        for rep in responses_to_discard {
-            if !rep.refund.is_zero() {
-                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                    rep.refund,
-                    own_cost_schedule,
-                ));
-            }
+        if !dropped_response_cycles.is_zero() {
+            state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                dropped_response_cycles,
+                own_cost_schedule,
+            ));
         }
 
         for req in requests_to_reject {
