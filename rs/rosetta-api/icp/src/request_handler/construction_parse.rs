@@ -788,7 +788,7 @@ mod tests {
             .expect("Could not get system time")
             .as_nanos() as u64;
         // `ingress_start` is kept within a realistic window around `now`: the
-        // ingress window is now bounded to 24h (ICPBB-134 / DEFI-2902), and this
+        // ingress window is now bounded to 24h, and this
         // also avoids overflowing `ingress_start + ingress_interval` below.
         let gen_ingress_start = proptest::option::of(now..(now + ONE_HOUR_NANOS));
         let gen_metadata = proptest::option::of(

@@ -42,8 +42,7 @@ const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 /// list of ingress expiries.
 ///
 /// Rejects windows that would make the expiry loop iterate an excessive (or, on
-/// arithmetic wraparound, unbounded) number of times (see ICPBB-134 /
-/// DEFI-2902). It enforces that:
+/// arithmetic wraparound, unbounded) number of times. It enforces that:
 /// - `ingress_start` is strictly before `ingress_end` (an empty or reversed
 ///   window would otherwise produce an empty/degenerate set of payloads),
 /// - the span `ingress_end - ingress_start` must not exceed 24h, and
@@ -1171,7 +1170,7 @@ mod tests {
         Time::from_nanos_since_unix_epoch(nanos)
     }
 
-    // Vector A (ICPBB-134): a window far larger than the documented 24h bound is
+    // Vector A: a window far larger than the documented 24h bound is
     // rejected before the loop.
     #[test]
     fn oversized_ingress_window_is_rejected() {
@@ -1181,14 +1180,14 @@ mod tests {
         );
     }
 
-    // Vector A' (ICPBB-134): a tiny start with a near-`u64::MAX` end (an enormous
+    // Vector A': a tiny start with a near-`u64::MAX` end (an enormous
     // span) is rejected.
     #[test]
     fn unbounded_ingress_span_is_rejected() {
         assert!(validate_ingress_window(t(NOW_NANOS), t(0), t(u64::MAX)).is_err());
     }
 
-    // Vector B (ICPBB-134): the near-`u64::MAX` wrap payload has a tiny span but a
+    // Vector B: the near-`u64::MAX` wrap payload has a tiny span but a
     // far-future end, so it is rejected by the future bound.
     #[test]
     fn near_u64_max_ingress_window_is_rejected() {

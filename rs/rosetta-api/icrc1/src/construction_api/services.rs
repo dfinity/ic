@@ -112,13 +112,19 @@ pub fn construction_combine(
 /// list of ingress expiries.
 ///
 /// Rejects windows that would make the expiry loop iterate an excessive (or, on
-/// arithmetic wraparound, unbounded) number of times (see ICPBB-134 /
-/// DEFI-2902). Two independent bounds are enforced:
+/// arithmetic wraparound, unbounded) number of times. It enforces that:
+/// - `ingress_start` is strictly before `ingress_end` (an empty or reversed
+///   window would otherwise produce an empty/degenerate set of payloads),
 /// - the span `ingress_end - ingress_start` must not exceed 24h, and
 /// - `ingress_end` must not be more than 24h in the future, which also rejects
 ///   the near-`u64::MAX` payloads that would otherwise wrap the loop counter.
 fn validate_ingress_window(now: u64, ingress_start: u64, ingress_end: u64) -> Result<(), Error> {
     let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
+    if ingress_start >= ingress_end {
+        return Err(Error::processing_construction_failed(&format!(
+            "Ingress start should start before ingress end: Start: {ingress_start}, End: {ingress_end}"
+        )));
+    }
     if ingress_end.saturating_sub(ingress_start) > max_window {
         return Err(Error::processing_construction_failed(&format!(
             "The ingress window (ingress_end - ingress_start) must not exceed {} hours: Start: {ingress_start}, End: {ingress_end}",
@@ -170,12 +176,6 @@ pub fn construction_payloads(
         .as_ref()
         .and_then(|meta| meta.memo.clone())
         .map(|memo| memo.into());
-
-    if ingress_start >= ingress_end {
-        return Err(Error::processing_construction_failed(&format!(
-            "Ingress start should start before ingress end: Start: {ingress_start}, End: {ingress_end}"
-        )));
-    }
 
     if ingress_end < now + ingress_interval {
         return Err(Error::processing_construction_failed(&format!(
@@ -293,7 +293,7 @@ mod tests {
     // A realistic "now" (~2023) that is well away from the u64 boundary.
     const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
 
-    // Vector A (ICPBB-134): a window far larger than the documented 24h bound is
+    // Vector A: a window far larger than the documented 24h bound is
     // rejected before the loop.
     #[test]
     fn oversized_ingress_window_is_rejected() {
@@ -302,14 +302,14 @@ mod tests {
         );
     }
 
-    // Vector A' (ICPBB-134): a tiny start with a near-`u64::MAX` end (an enormous
+    // Vector A': a tiny start with a near-`u64::MAX` end (an enormous
     // span) is rejected.
     #[test]
     fn unbounded_ingress_span_is_rejected() {
         assert!(validate_ingress_window(NOW_NANOS, 0, u64::MAX).is_err());
     }
 
-    // Vector B (ICPBB-134): the near-`u64::MAX` wrap payload has a tiny span but a
+    // Vector B: the near-`u64::MAX` wrap payload has a tiny span but a
     // far-future end, so it is rejected by the future bound.
     #[test]
     fn near_u64_max_ingress_window_is_rejected() {
@@ -538,7 +538,7 @@ mod tests {
                         }
                         // Windows wider than the permitted maximum, or with an
                         // ingress_end too far in the future, are rejected before
-                        // the loop (ICPBB-134 / DEFI-2902).
+                        // the loop.
                         let eff_start = payloads_metadata.ingress_start.unwrap_or(now);
                         let eff_end = payloads_metadata
                             .ingress_end
