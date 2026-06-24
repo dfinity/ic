@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 15.0.0 - 2026-06-24
+
 ### Added
 - Added the `PATCH` variant to the `CanisterHttpMethod` enum (canister HTTPS outcalls). Note: `PATCH` outcalls are currently rejected by the execution layer until support has rolled out to all replicas.
 - The function `PocketIc::delete_subnet` to delete a subnet. Only non-named subnets (application, cloud engine, system, or verified application) can be deleted.
