@@ -12,7 +12,7 @@ filegroup(
 meson(
     name = "libfuse",
     env = {
-        "ARFLAGS": "crD", # for build determinism
+        "ARFLAGS": "crD",  # for build determinism
         "CFLAGS": "-O2",
     },
     lib_source = ":all_srcs",
