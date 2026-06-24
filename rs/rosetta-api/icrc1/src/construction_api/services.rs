@@ -293,8 +293,8 @@ mod tests {
     // A realistic "now" (~2023) that is well away from the u64 boundary.
     const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
 
-    // Vector A: a window far larger than the documented 24h bound is
-    // rejected before the loop.
+    // A window whose span exceeds the documented 24h bound would make the loop
+    // build a huge list of ingress expiries, so it is rejected before the loop.
     #[test]
     fn oversized_ingress_window_is_rejected() {
         assert!(
@@ -302,15 +302,17 @@ mod tests {
         );
     }
 
-    // Vector A': a tiny start with a near-`u64::MAX` end (an enormous
-    // span) is rejected.
+    // A near-zero start together with a near-`u64::MAX` end spans almost the
+    // entire u64 range; that enormous span is rejected (it would otherwise
+    // iterate billions of times).
     #[test]
     fn unbounded_ingress_span_is_rejected() {
         assert!(validate_ingress_window(NOW_NANOS, 0, u64::MAX).is_err());
     }
 
-    // Vector B: the near-`u64::MAX` wrap payload has a tiny span but a
-    // far-future end, so it is rejected by the future bound.
+    // A window ending at (near) `u64::MAX` has a small span but an end far in the
+    // future; without the future bound the loop counter would wrap past
+    // `u64::MAX` and never terminate. The future bound rejects it.
     #[test]
     fn near_u64_max_ingress_window_is_rejected() {
         assert!(
