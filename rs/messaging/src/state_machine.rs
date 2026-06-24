@@ -282,8 +282,8 @@ impl StateMachine for StateMachineImpl {
             .as_ref()
             != Some(&current_subnet_ids);
         if subnet_list_changed {
-            for error in state_after_stream_builder.generate_reject_responses_for_deleted_subnets()
-            {
+            let errors = state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
+            for error in &errors {
                 // Critical error, responses should always be inducted successfully.
                 error!(
                     self.log,
@@ -293,9 +293,14 @@ impl StateMachine for StateMachineImpl {
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
             }
-            state_after_stream_builder
-                .metadata
-                .subnets_with_reject_responses = Some(current_subnet_ids);
+            // Only update the subnet list if all responses were successfully inducted.
+            // On error, retry next round (already-enqueued responses are filtered by
+            // `has_enqueued_response`, so only the relevant callbacks are retried).
+            if errors.is_empty() {
+                state_after_stream_builder
+                    .metadata
+                    .subnets_with_reject_responses = Some(current_subnet_ids);
+            }
         }
 
         // Shed enough messages to stay below the best-effort message memory limit.
