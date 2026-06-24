@@ -4,7 +4,7 @@ Title:: Basic HTTP requests from canisters
 Goal:: Ensure simple HTTP requests can be made from canisters.
 
 Run with:
-ict test //rs/tests/networking:canister_http_non_replicated_test -- --test_tmpdir=./canister_http_non_replicated_test
+bazel test //rs/tests/networking:canister_http_non_replicated_test --test_tmpdir=./canister_http_non_replicated_test
 
 Runbook::
 0. Instantiate a universal VM with a webserver

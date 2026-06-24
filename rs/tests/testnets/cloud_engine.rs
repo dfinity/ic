@@ -11,28 +11,16 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create cloud_engine --output-dir=./cloud_engine -- --test_tmpdir=./cloud_engine
+//   $ bazel run //rs/tests/testnets:cloud_engine --test_tmpdir=./cloud_engine
 //
-// The --output-dir=./cloud_engine will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./cloud_engine will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
 //   $ ssh -i cloud_engine/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
 //
-// Note that you can get the  address of the IC node from the ict console output:
+// Note that you can get the address of the IC node from the bazel output by looking for farm_vm_created_event.
 //
-//   {
-//     "nodes": [
-//       {
-//         "id": "...",
-//         "ipv6": "..."
-//       }
-//     ],
-//     "subnet_id": "...",
-//     "subnet_type": "cloud_engine"
-//   }
-//
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.cloud_engine--1692597750709.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.cloud_engine--1692597750709.testnet.farm.dfinity.systems,

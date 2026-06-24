@@ -13,7 +13,7 @@
 // Setup example (pass `--test_env` so the driver sees it):
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create baremetal_app_subnet --verbose --output-dir=./test_tmpdir -- \
+//   $ bazel run //rs/tests/testnets:baremetal_app_subnet \
 //       --test_tmpdir=./test_tmpdir \
 //       --test_env BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)" \
 //       --test_env TRUSTED_EXECUTION_ENVIRONMENT=true   # false for non-SEV
@@ -56,7 +56,7 @@ fn setup(env: TestEnv) {
         panic!(
             "BARE_METAL_HOST_SECRETS is not set (path to bare-metal host INI).\n\
              Export it, e.g. export BARE_METAL_HOST_SECRETS=\"$(realpath host.ini)\",\n\
-             or pass --test_env=BARE_METAL_HOST_SECRETS=\"$(realpath host.ini)\" to ict/bazel."
+             or pass --test_env=BARE_METAL_HOST_SECRETS=\"$(realpath host.ini)\" to bazel."
         );
     }
 

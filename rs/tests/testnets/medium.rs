@@ -4,41 +4,17 @@
 //
 // You can setup this testnet by executing the following commands:
 //
-//   $ ./ci/tools/docker-run
-//   $ ict testnet create medium -output-dir=./medium -- --test_tmpdir=./medium
+//   $ ./ci/tools/container-run.sh
+//   $ bazel run //rs/tests/testnets:medium --test_tmpdir=./medium
 //
-// The --output-dir=./medium will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./medium will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i medium/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@
+//   $ ssh -i medium/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
-// Note that you can get the  address of the IC node from the ict console output:
+// Note that you can get the $ipv6 address of the IC node from the farm_vm_created_events in the output.
 //
-//   {
-//     "nodes": [
-//       {
-//         "id": "g47v4-zoq32-p47if-t7x33-2gz2d-jeypp-bbp4q-xyhbv-grdb7-gqbxv-zae",
-//         "ipv6": "2a0b:21c0:4003:2:50a9:4bff:fe98:3df0"
-//       },
-//       {
-//         "id": "2s2bb-usha5-fowjz-jyeyf-vejpo-n652p-q5kyg-52uqt-abtat-mkzg2-qqe",
-//         "ipv6": "2a0b:21c0:4003:2:5045:c7ff:fe7a:c238"
-//       },
-//       {
-//         "id": "3z3nq-pmhud-jqsxo-eg7fq-b763j-dhi4a-4s7m7-eq43u-t7eo4-md4rp-tae",
-//         "ipv6": "2a0b:21c0:4003:2:503d:bbff:fe04:f06a"
-//       },
-//       {
-//         "id": "roojr-se27p-d4o73-677xm-kq6v3-blmvv-mcqd4-zmwc7-6z2vf-5rp4w-dqe",
-//         "ipv6": "2a0b:21c0:4003:2:5041:a0ff:fe67:99fa"
-//       }
-//     ],
-//     "subnet_id": "uvyxl-j4r6h-whosj-53i5h-3xmm5-hceei-4mq4a-lpilk-bt3mq-dx4jp-4ae",
-//     "subnet_type": "application"
-//   }
-//
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.medium--1692597750709.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.medium--1692597750709.testnet.farm.dfinity.systems,

@@ -168,17 +168,6 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 ZIG_CACHE="${CACHE_DIR}/zig-cache"
 mkdir -p "${ZIG_CACHE}"
 
-# ict stores testnet metadata here, shared with the host's ict. Some docker
-# daemons (e.g. namespace.so) can't bind-mount the host's /tmp, so under
-# docker we use a different host dir.
-CTR_ICT_TESTNETS="/tmp/ict_testnets" # path inside the container
-if [ "$RUNTIME" = docker ]; then
-    HOST_ICT_TESTNETS="${CACHE_DIR}/ict_testnets"
-else
-    HOST_ICT_TESTNETS="${CTR_ICT_TESTNETS}"
-fi
-mkdir -p "${HOST_ICT_TESTNETS}"
-
 # make sure we have all bind-mounts
 # ~/.aws, ~/.ssh: credentials forwarded to the container
 # ~/.cache: used as cache persisted across containers (cargo, etc)
@@ -210,7 +199,6 @@ RUNTIME_RUN_ARGS=(
 
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"     # mount the local repo checkout
     --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache" # C toolchain cache, persisted to speed up rebuilds
-    --mount type=bind,source="${HOST_ICT_TESTNETS}",target="${CTR_ICT_TESTNETS}"
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings

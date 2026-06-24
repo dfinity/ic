@@ -18,14 +18,14 @@
 // to unpack and 59G of disk space.
 //
 // ```
-// $ ict testnet create mainnet_nns_state --verbose -- --test_tmpdir=./mainnet_nns_state
+// $ bazel run //rs/tests/testnets:mainnet_nns_state --test_tmpdir=./mainnet_nns_state
 // ```
 //
 // Additional configuration:
 //  - --test_env=DKG_INTERVAL=<dkg_interval>
 //  - --test_env=NNS_STATE_ON_BACKUP_POD=<path_on_remote_backup_pod> (default: dev@zh1-pyr07.zh1.dfinity.network:/home/dev/nns_state.tar.zst)
 //
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.mainnet-nns--1758812276301.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.mainnet-nns--1758812276301.testnet.farm.dfinity.systems,

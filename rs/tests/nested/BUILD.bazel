@@ -91,7 +91,7 @@ system_test_nns(
 # Tests if the current GuestOS version on a bare-metal SEV-enabled node can successfully
 # upgrade to the current test image.
 # This test requires manually injecting the baremetal configuration.
-# ict test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "guestos_upgrade_from_current_to_current_test_sev",
@@ -126,7 +126,7 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 # on SEV-enabled nodes
 # This test requires manually injecting the baremetal configuration
-# ict test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current_sev",
@@ -187,7 +187,7 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit on
 # SEV-enabled nodes
 # This test requires manually injecting the baremetal configuration
-# ict test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current_sev",
@@ -206,7 +206,7 @@ system_test_nns(
 
 # Tests if SEV-enabled nodes can be recovered using a recovery GuestOS image
 # This test requires manually injecting the baremetal configuration
-# ict test //rs/tests/nested:sev_recovery -- --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
+# bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath zh2-dll01.ini)"
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "sev_recovery",

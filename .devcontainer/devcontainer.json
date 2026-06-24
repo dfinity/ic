@@ -59,11 +59,6 @@
       "source": "${localEnv:HOME}/.local/share/fish",
       "target": "/home/ubuntu/.local/share/fish",
       "type": "bind"
-    },
-    {
-      "source": "/tmp/ict_testnets",
-      "target": "/tmp/ict_testnets",
-      "type": "bind"
     }
   ],
   "customizations": {
