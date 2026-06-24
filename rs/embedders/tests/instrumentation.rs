@@ -867,7 +867,7 @@ fn run_charge_for_dirty_stable64_test() {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 10000);
+    let mut instance = new_instance_for_stable_write(wat, 1_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -940,12 +940,12 @@ fn run_charge_for_dirty_stable64_test() {
             + csg
             + cc * 15
             + cs * 2
-            + cd * 3
+            + cd
             + csw * 2
             + csr
             + cl
             + cg
-            + overhead
+            + overhead * cd
     );
 
     // Now run the same with insufficient instructions
@@ -984,7 +984,7 @@ fn run_charge_for_dirty_stable_test() {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 10000);
+    let mut instance = new_instance_for_stable_write(wat, 1_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -1057,12 +1057,12 @@ fn run_charge_for_dirty_stable_test() {
             + csg
             + cc * 15
             + cs * 2
-            + cd * 3
+            + cd
             + csw * 2
             + csr
             + cl
             + cg
-            + overhead
+            + overhead * cd
     );
 
     // Now run the same with insufficient instructions
@@ -1166,7 +1166,7 @@ fn metering_wasm64_load_store_canister() {
         )"#;
 
     let mut embedder_config = EmbeddersConfig::default();
-    // embedder_config.dirty_page_overhead = NumInstructions::new(1);
+    embedder_config.dirty_page_overhead = NumInstructions::new(1);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(embedder_config)
