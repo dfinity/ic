@@ -7,6 +7,7 @@ cd "$(git rev-parse --show-toplevel)"
 INPUT_FILES=(
     rust-toolchain.toml
     ci/container/Dockerfile
+    ci/container/init.sh
     ci/container/files/*
 )
 
