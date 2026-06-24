@@ -939,8 +939,8 @@ mod tests {
     }
 
     // When the caller does not specify a memo, `construction_payloads` uses a
-    // deterministic memo of 0 (the value the ledger treats as "no memo")
-    // instead of a random one. With the time-based inputs pinned, reconstructing
+    // deterministic memo of 0 instead of a random one. With the time-based
+    // inputs pinned, reconstructing
     // the same transfer must therefore produce a byte-identical unsigned
     // transaction every time -- and hence the same transaction hash -- so that
     // the ledger's `created_at_time` based deduplication can catch a retried

@@ -88,11 +88,11 @@ impl RosettaRequestHandler {
             .map(ic_ledger_core::timestamp::TimeStamp::from_nanos_since_unix_epoch)
             .unwrap_or_else(|| std::time::SystemTime::now().into());
 
-        // When the caller does not specify a memo, default to Memo(0) (the
-        // ledger's "no memo" value) rather than a random memo. A random memo
-        // would change the transaction hash on every reconstruction of the
-        // same transfer, defeating the ledger's created_at_time based
-        // deduplication and allowing a retried transfer to be applied twice.
+        // When the caller does not specify a memo, default to Memo(0) rather
+        // than a random memo. A random memo would change the transaction hash
+        // on every reconstruction of the same transfer, defeating the ledger's
+        // created_at_time based deduplication and allowing a retried transfer
+        // to be applied twice.
         let memo: Memo = meta
             .as_ref()
             .and_then(|meta| meta.memo)
