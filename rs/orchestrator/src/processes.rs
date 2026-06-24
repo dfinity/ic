@@ -448,6 +448,7 @@ impl MultipleProcessesManager {
     }
 
     /// Start all processes appropriate for this node.
+    /// If a process fails to start, continue starting the others and return the first error.
     ///
     /// Always starts the replica.  For cloud-engine subnet nodes it also
     /// starts ic-gateway.
@@ -457,8 +458,11 @@ impl MultipleProcessesManager {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        self.replica_manager
-            .ensure_running((replica_version.clone(), subnet_id))?;
+        let mut result = Ok(());
+        result = result.and(
+            self.replica_manager
+                .ensure_running((replica_version.clone(), subnet_id)),
+        );
 
         // Cloud-engine nodes run ic-gateway as a sidecar, but only once the
         // launch is enabled (see `IC_GATEWAY_LAUNCH_ENABLED`). Until then,
@@ -470,15 +474,15 @@ impl MultipleProcessesManager {
                 | Some(SubnetType::Application)
                 | Some(SubnetType::System)
                 | Some(SubnetType::VerifiedApplication) => {
-                    self.ic_gateway_manager.stop()?;
+                    result = result.and(self.ic_gateway_manager.stop());
                 }
                 Some(SubnetType::CloudEngine) => {
-                    self.ic_gateway_manager.ensure_running(replica_version)?;
+                    result = result.and(self.ic_gateway_manager.ensure_running(replica_version));
                 }
             }
         }
 
-        Ok(())
+        result
     }
 
     /// Stop the replica process.
@@ -486,14 +490,16 @@ impl MultipleProcessesManager {
         self.replica_manager.stop()
     }
 
-    /// Stop every managed process.
+    /// Stop every managed process in reverse order of startup
+    /// If a process fails to stop, continue stopping the others and return the first error.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
+        let mut result = Ok(());
         if self.ic_gateway_launch_enabled {
-            self.ic_gateway_manager.stop()?;
+            result = result.and(self.ic_gateway_manager.stop());
         }
-        self.replica_manager.stop()?;
+        result = result.and(self.replica_manager.stop());
 
-        Ok(())
+        result
     }
 }
 
