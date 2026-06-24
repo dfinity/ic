@@ -131,6 +131,7 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
@@ -684,6 +685,45 @@ pub fn encode_metrics(
         },
         "Time since the latest voting power snapshot, in seconds. If no snapshot has been taken yet, this will be infinity.",
     )?;
+
+    // Maturity Modulation / ICP-XDR price history freshness. Skipped entirely when the underlying
+    // state is unset so that alerts do not fire on freshly-installed canisters before the initial
+    // backfill completes.
+
+    if let Some(updated_at_days_since_epoch) = governance
+        .heap_data
+        .maturity_modulation
+        .as_ref()
+        .and_then(|mm| mm.updated_at_days_since_epoch)
+    {
+        w.encode_gauge(
+            "governance_maturity_modulation_updated_at_timestamp_seconds",
+            (updated_at_days_since_epoch * ONE_DAY_SECONDS) as f64,
+            "Timestamp (seconds since the Unix epoch) of the day for which the cached maturity modulation was last computed.",
+        )?;
+    }
+
+    if let Some(icp_price_history) = governance.heap_data.icp_price_history.as_ref() {
+        const ICP_XDR_PRICE_HISTORY_WINDOW_DAYS: u64 = 365;
+        let current_day = governance.env.now() / ONE_DAY_SECONDS;
+        let oldest_day_in_window =
+            current_day.saturating_sub(ICP_XDR_PRICE_HISTORY_WINDOW_DAYS - 1);
+        let days_present_in_window = icp_price_history
+            .icp_xdr_rates
+            .iter()
+            .filter(|p| {
+                let day = p.timestamp_seconds / ONE_DAY_SECONDS;
+                day >= oldest_day_in_window && day <= current_day
+            })
+            .count() as u64;
+        let missing_days_in_window =
+            ICP_XDR_PRICE_HISTORY_WINDOW_DAYS.saturating_sub(days_present_in_window);
+        w.encode_gauge(
+            "governance_icp_xdr_price_history_missing_days_in_window",
+            missing_days_in_window as f64,
+            "Number of days in [today-364, today] with no ICP/XDR rate entry in icp_price_history.",
+        )?;
+    }
 
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 

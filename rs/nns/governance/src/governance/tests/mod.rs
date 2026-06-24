@@ -865,9 +865,13 @@ mod metrics_tests {
     use crate::{
         encode_metrics,
         governance::Governance,
-        pb::v1::{Motion, Proposal, ProposalData, Tally, Topic, proposal},
+        pb::v1::{
+            IcpPriceHistory, MaturityModulation, Motion, Proposal, ProposalData, SampledPrice,
+            Tally, Topic, proposal,
+        },
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
+    use ic_nervous_system_common::ONE_DAY_SECONDS;
 
     #[test]
     fn test_metrics_total_voting_power() {
@@ -1019,6 +1023,88 @@ mod metrics_tests {
 
         // We assert that decided proposals are filtered out from metrics
         assert!(!s.contains("proposal_id=\"2\""));
+    }
+
+    #[test]
+    fn test_metrics_maturity_modulation_and_icp_price_history() {
+        const METRIC_MATURITY_MODULATION: &str =
+            "governance_maturity_modulation_updated_at_timestamp_seconds";
+        const METRIC_MISSING_DAYS: &str = "governance_icp_xdr_price_history_missing_days_in_window";
+
+        let current_day: u64 = 20_000;
+        let now_seconds = current_day * ONE_DAY_SECONDS;
+
+        // Case 1: freshly-installed canister — `maturity_modulation.updated_at_days_since_epoch`
+        // is `None` and `icp_price_history` is `None`. Neither gauge should be emitted.
+        let governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), now_seconds)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+        let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 0);
+        encode_metrics(&governance, &mut writer).unwrap();
+        let body = writer.into_inner();
+        let s = String::from_utf8_lossy(&body);
+        assert!(
+            !s.contains(METRIC_MATURITY_MODULATION),
+            "expected no maturity modulation gauge when state is None, got:\n{s}",
+        );
+        assert!(
+            !s.contains(METRIC_MISSING_DAYS),
+            "expected no missing-days gauge when state is None, got:\n{s}",
+        );
+
+        // Case 2: both states are Some.
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), now_seconds)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+        let updated_at_days_since_epoch = current_day - 2;
+        governance.heap_data.maturity_modulation = Some(MaturityModulation {
+            current_value_permyriad: Some(42),
+            updated_at_days_since_epoch: Some(updated_at_days_since_epoch),
+        });
+        // Three of the last 365 days have entries; one stale entry outside the window must not
+        // count toward `days_present`.
+        governance.heap_data.icp_price_history = Some(IcpPriceHistory {
+            icp_xdr_rates: vec![
+                SampledPrice {
+                    timestamp_seconds: (current_day - 500) * ONE_DAY_SECONDS,
+                    xdr_permyriad_per_icp: 50_000,
+                },
+                SampledPrice {
+                    timestamp_seconds: (current_day - 2) * ONE_DAY_SECONDS,
+                    xdr_permyriad_per_icp: 50_000,
+                },
+                SampledPrice {
+                    timestamp_seconds: (current_day - 1) * ONE_DAY_SECONDS,
+                    xdr_permyriad_per_icp: 50_000,
+                },
+                SampledPrice {
+                    timestamp_seconds: current_day * ONE_DAY_SECONDS,
+                    xdr_permyriad_per_icp: 50_000,
+                },
+            ],
+        });
+        let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 0);
+        encode_metrics(&governance, &mut writer).unwrap();
+        let body = writer.into_inner();
+        let s = String::from_utf8_lossy(&body);
+        let expected_ts = updated_at_days_since_epoch * ONE_DAY_SECONDS;
+        assert!(
+            s.contains(&format!("{METRIC_MATURITY_MODULATION} {expected_ts} 0")),
+            "expected maturity modulation gauge with value {expected_ts}, got:\n{s}",
+        );
+        let expected_missing_days = 365_u64 - 3;
+        assert!(
+            s.contains(&format!("{METRIC_MISSING_DAYS} {expected_missing_days} 0")),
+            "expected missing-days gauge with value {expected_missing_days}, got:\n{s}",
+        );
     }
 }
 
