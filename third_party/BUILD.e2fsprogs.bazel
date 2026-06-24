@@ -55,10 +55,10 @@ configure_make(
     # The headers under include/ are kept since rules_foreign_cc declares them
     # as an output.
     postfix_script = (
-            "mkdir -p $$INSTALLDIR/bin" +
-            " && cp misc/mke2fs $$INSTALLDIR/bin/mke2fs" +
-            " && cp misc/fuse2fs $$INSTALLDIR/bin/fuse2fs"
-        ),
+        "mkdir -p $$INSTALLDIR/bin" +
+        " && cp misc/mke2fs $$INSTALLDIR/bin/mke2fs" +
+        " && cp misc/fuse2fs $$INSTALLDIR/bin/fuse2fs"
+    ),
     # Static glibc linking is a Linux/glibc thing; this isn't expected to work
     # elsewhere.
     target_compatible_with = [
