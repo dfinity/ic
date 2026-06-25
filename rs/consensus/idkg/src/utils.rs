@@ -342,13 +342,6 @@ pub fn get_idkg_chain_key_config_if_enabled(
             .iter()
             // Skip keys that don't need to run IDKG protocol
             .filter(|key_config| key_config.key_id.is_idkg_key())
-            // A key that has `presignatures_to_create_in_advance` set to 0 is not active
-            .filter(|key_config| {
-                key_config
-                    .pre_signatures_to_create_in_advance
-                    .unwrap_or_default()
-                    != 0
-            })
             .count();
 
         if num_active_key_ids == 0 {
@@ -807,11 +800,11 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
-                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                    .expect("Should successfully get the config");
-
-            assert!(config.is_none());
+            let result =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+            assert_matches!(result, Err(RegistryClientError::DecodeError { error })
+                if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+                    && error.contains("should be non-zero"));
         })
     }
 
@@ -836,10 +829,8 @@ mod tests {
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
             assert_matches!(result, Err(RegistryClientError::DecodeError{ error })
-              if error.contains("\
-                   failed with Missing required struct field: \
-                   KeyConfig::pre_signatures_to_create_in_advance\
-              ")
+              if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+              && error.contains("should be non-zero")
             );
         })
     }
@@ -861,10 +852,12 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
+            let result =
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
-            assert_matches!(config, Ok(None));
+            assert_matches!(result, Err(RegistryClientError::DecodeError { error })
+                if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+                    && error.contains("should be None"));
         })
     }
 
@@ -885,10 +878,12 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
+            let result =
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
-            assert_matches!(config, Ok(None));
+            assert_matches!(result, Err(RegistryClientError::DecodeError { error })
+                if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+                    && error.contains("should be None"));
         })
     }
 
