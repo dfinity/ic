@@ -5,7 +5,10 @@ use ic_protobuf::{
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{
     NodeId, RegistryVersion, SubnetId,
-    consensus::{Block, SubnetSplittingArgs, dkg::SubnetSplittingStatus},
+    consensus::{
+        Block, SubnetSplittingArgs,
+        dkg::{SplittingArgs, SubnetSplittingStatus},
+    },
     registry::RegistryClientError,
 };
 use thiserror::Error;
@@ -64,10 +67,22 @@ pub fn get_status(
     })
 }
 
+pub fn is_split_scheduled(summary_block: &Block) -> Option<SplittingArgs> {
+    match summary_block
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .subnet_splitting_status()
+    {
+        SubnetSplittingStatus::Scheduled(splitting_args) => Some(splitting_args),
+        SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::PostSplit { .. } => None,
+    }
+}
+
 #[derive(Debug)]
 pub struct PostSplitAssignment {
     pub new_subnet_id: SubnetId,
-    // for debugging purposes
     pub other_subnet_id: SubnetId,
 }
 
@@ -77,8 +92,6 @@ pub enum PostSplitAssignmentError {
     FailedToGetSubnetIdFromTheRegistry(RegistryVersion, RegistryClientError),
     #[error("The node is unassigned at registry version {0}")]
     Unassigned(RegistryVersion),
-    #[error("The subnet is not being split according to the summary block")]
-    NotSplitting,
     #[error("The node changed subnets during subnet splitting")]
     DisallowedMembershipChange(SubnetId),
 }
@@ -87,20 +100,11 @@ pub fn get_post_split_subnet_assignment(
     node_id: NodeId,
     summary_block: &Block,
     registry_client: &dyn RegistryClient,
-) -> Result<PostSplitAssignment, PostSplitAssignmentError> {
-    let SubnetSplittingStatus::Scheduled {
+    SplittingArgs {
         destination_subnet_id,
         source_subnet_id,
-    } = summary_block
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .subnet_splitting_status()
-    else {
-        return Err(PostSplitAssignmentError::NotSplitting);
-    };
-
+    }: SplittingArgs,
+) -> Result<PostSplitAssignment, PostSplitAssignmentError> {
     let new_subnet_id = registry_client
         .get_subnet_id_from_node_id(node_id, summary_block.context.registry_version)
         .map_err(|err| {
@@ -281,10 +285,10 @@ mod tests {
     }
 
     fn make_scheduled_summary_block() -> Block {
-        make_summary_block_with_status(SubnetSplittingStatus::Scheduled {
+        make_summary_block_with_status(SubnetSplittingStatus::Scheduled(SplittingArgs {
             source_subnet_id: SOURCE_SUBNET_ID,
             destination_subnet_id: DESTINATION_SUBNET_ID,
-        })
+        }))
     }
 
     fn set_up_post_split_registry(
@@ -359,8 +363,10 @@ mod tests {
         let block = make_scheduled_summary_block();
         let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
 
-        let result = get_post_split_subnet_assignment(NODE_1, &block, registry.as_ref())
-            .expect("Should succeed");
+        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
+        let result =
+            get_post_split_subnet_assignment(NODE_1, &block, registry.as_ref(), splitting_args)
+                .expect("Should succeed");
 
         assert_eq!(result.new_subnet_id, SOURCE_SUBNET_ID);
         assert_eq!(result.other_subnet_id, DESTINATION_SUBNET_ID);
@@ -371,15 +377,17 @@ mod tests {
         let block = make_scheduled_summary_block();
         let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
 
-        let result = get_post_split_subnet_assignment(NODE_2, &block, registry.as_ref())
-            .expect("Should succeed");
+        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
+        let result =
+            get_post_split_subnet_assignment(NODE_2, &block, registry.as_ref(), splitting_args)
+                .expect("Should succeed");
 
         assert_eq!(result.new_subnet_id, DESTINATION_SUBNET_ID);
         assert_eq!(result.other_subnet_id, SOURCE_SUBNET_ID);
     }
 
     #[rstest]
-    fn should_fail_with_not_splitting_when_subnet_splitting_not_scheduled_test(
+    fn should_not_be_scheduled_when_subnet_splitting_not_scheduled_test(
         #[values(
             SubnetSplittingStatus::NotScheduled,
             SubnetSplittingStatus::PostSplit { new_subnet_id: SOURCE_SUBNET_ID },
@@ -389,9 +397,7 @@ mod tests {
         let block = make_summary_block_with_status(status);
         let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
 
-        let result = get_post_split_subnet_assignment(NODE_1, &block, registry.as_ref());
-
-        assert_matches!(result, Err(PostSplitAssignmentError::NotSplitting));
+        assert!(is_split_scheduled(&block).is_none());
     }
 
     #[test]
@@ -399,7 +405,9 @@ mod tests {
         let block = make_scheduled_summary_block();
         let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
 
-        let result = get_post_split_subnet_assignment(NODE_3, &block, registry.as_ref());
+        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
+        let result =
+            get_post_split_subnet_assignment(NODE_3, &block, registry.as_ref(), splitting_args);
 
         assert_matches!(result, Err(PostSplitAssignmentError::DisallowedMembershipChange(s)) if s == OTHER_SUBNET_ID);
     }
@@ -409,7 +417,9 @@ mod tests {
         let block = make_scheduled_summary_block();
         let registry = set_up_post_split_registry(&[NODE_1], &[NODE_2], &[NODE_3]);
 
-        let result = get_post_split_subnet_assignment(NODE_4, &block, registry.as_ref());
+        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
+        let result =
+            get_post_split_subnet_assignment(NODE_4, &block, registry.as_ref(), splitting_args);
 
         assert_matches!(result, Err(PostSplitAssignmentError::Unassigned(v)) if v == REGISTRY_CUP_REGISTRY_VERSION);
     }
@@ -418,7 +428,9 @@ mod tests {
     fn should_fail_when_registry_returns_error_test() {
         let block = make_scheduled_summary_block();
 
-        let result = get_post_split_subnet_assignment(NODE_1, &block, &ErrorRegistryClient);
+        let splitting_args = is_split_scheduled(&block).expect("Should be scheduled");
+        let result =
+            get_post_split_subnet_assignment(NODE_1, &block, &ErrorRegistryClient, splitting_args);
 
         assert_matches!(result, Err(PostSplitAssignmentError::FailedToGetSubnetIdFromTheRegistry(v, _)) if v == REGISTRY_CUP_REGISTRY_VERSION);
     }

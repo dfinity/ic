@@ -99,7 +99,7 @@ pub(crate) fn should_halt(
             SubnetSplittingStatus::NotScheduled => false,
             // After the split, don't produce any blocks until we are on the right subnet.
             SubnetSplittingStatus::PostSplit { new_subnet_id } => subnet_id != new_subnet_id,
-            SubnetSplittingStatus::Scheduled { .. } => height >= summary_block.height,
+            SubnetSplittingStatus::Scheduled(..) => height >= summary_block.height,
         }
     });
 
@@ -168,7 +168,7 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         ReplicaVersion,
-        consensus::{BlockPayload, Payload},
+        consensus::{BlockPayload, Payload, dkg::SplittingArgs},
         crypto::crypto_hash,
     };
     use ic_types_test_utils::ids::{SUBNET_0, SUBNET_1};
@@ -253,7 +253,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 }),
+        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Halted),
     })]
@@ -262,7 +262,7 @@ mod tests {
         current_height: CUP_HEIGHT,
         replica_version: ReplicaVersion::default(),
         halt_at_cup_height: false,
-        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 }),
+        subnet_splitting_status: Some(SubnetSplittingStatus::Scheduled(SplittingArgs { destination_subnet_id: SUBNET_0, source_subnet_id: SUBNET_1 })),
         subnet_id: SUBNET_0,
         expected_status: Some(Status::Halting),
     })]

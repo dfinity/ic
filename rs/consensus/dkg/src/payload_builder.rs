@@ -6,7 +6,7 @@ use crate::{
     },
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader, subnet_splitting};
 use ic_interfaces::{
     crypto::{ErrorReproducibility, NiDkgAlgorithm},
     dkg::DkgPool,
@@ -28,7 +28,7 @@ use ic_types::{
         Block,
         dkg::{
             DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
-            RemoteTranscriptResult, SubnetSplittingStatus,
+            RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus,
         },
         get_faults_tolerated,
     },
@@ -539,10 +539,10 @@ pub(super) fn create_summary_payload(
     //     subnet_splitting::Status::Scheduled {
     //         destination_subnet_id,
     //         scheduled_at: _,
-    //     } => Some(SubnetSplittingStatus::Scheduled {
+    //     } => Some(SubnetSplittingStatus::Scheduled(SplittingArgs {
     //         destination_subnet_id,
     //         source_subnet_id: subnet_id,
-    //     }),
+    //     })),
     // };
 
     // New configs are created using the new stable registry version proposed by this
@@ -915,7 +915,7 @@ pub fn get_post_split_dkg_summary(
     let last_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
     debug_assert!(matches!(
         last_summary.subnet_splitting_status(),
-        SubnetSplittingStatus::Scheduled { .. }
+        SubnetSplittingStatus::Scheduled(..)
     ));
     let registry_version = last_summary_block.context.registry_version;
 

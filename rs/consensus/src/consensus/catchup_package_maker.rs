@@ -33,7 +33,8 @@ use ic_types::{
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpPackage, CatchUpPackageShare,
         CatchUpShareContent, HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload, dkg::SubnetSplittingStatus,
+        RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+        dkg::{SplittingArgs, SubnetSplittingStatus},
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
@@ -455,10 +456,10 @@ pub(crate) fn get_catch_up_package_type(
         .dkg
         .subnet_splitting_status()
     {
-        SubnetSplittingStatus::Scheduled {
+        SubnetSplittingStatus::Scheduled(SplittingArgs {
             destination_subnet_id,
             source_subnet_id,
-        } => {
+        }) => {
             let new_subnet_id = get_new_subnet_id(
                 registry,
                 summary_block,
@@ -1247,10 +1248,10 @@ mod tests {
 
                 pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
 
-                let subnet_splitting_status = SubnetSplittingStatus::Scheduled {
+                let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
                     source_subnet_id: SOURCE_SUBNET_ID,
                     destination_subnet_id: DESTINATION_SUBNET_ID,
-                };
+                });
                 let mut proposal = pool.make_next_block();
                 let block = proposal.content.as_mut();
                 block.context.certified_height = context_certified_height;
@@ -1356,10 +1357,10 @@ mod tests {
             pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
 
             let subnet_splitting_status =
-                ic_types::consensus::dkg::SubnetSplittingStatus::Scheduled {
+                ic_types::consensus::dkg::SubnetSplittingStatus::Scheduled(SplittingArgs {
                     source_subnet_id: SOURCE_SUBNET_ID,
                     destination_subnet_id: DESTINATION_SUBNET_ID,
-                };
+                });
 
             let mut proposal = pool.make_next_block();
             let block = proposal.content.as_mut();

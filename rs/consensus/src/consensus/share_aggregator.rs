@@ -535,7 +535,8 @@ mod tests {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 use ic_types::consensus::{
-                    backwards_compatibility::BackwardsCompatibleOption, dkg::SubnetSplittingStatus,
+                    backwards_compatibility::BackwardsCompatibleOption,
+                    dkg::{SplittingArgs, SubnetSplittingStatus},
                 };
 
                 const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
@@ -607,10 +608,10 @@ mod tests {
 
                 pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
 
-                let subnet_splitting_status = SubnetSplittingStatus::Scheduled {
+                let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
                     source_subnet_id: SOURCE_SUBNET_ID,
                     destination_subnet_id: DESTINATION_SUBNET_ID,
-                };
+                });
                 let mut proposal = pool.make_next_block();
                 let block = proposal.content.as_mut();
                 block.context.certified_height = block.height;

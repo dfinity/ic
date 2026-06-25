@@ -9,11 +9,7 @@ use crate::consensus::{
 use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_idkg::utils::get_idkg_subnet_public_keys_and_pre_signatures;
-use ic_consensus_utils::{
-    membership::Membership,
-    pool_reader::PoolReader,
-    subnet_splitting::{self, PostSplitAssignment, PostSplitAssignmentError},
-};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader, subnet_splitting};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -33,11 +29,7 @@ use ic_types::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
         ConsensusResponse,
     },
-    consensus::{
-        Block, BlockPayload, HasVersion,
-        dkg::{RemoteTranscriptResult, SubnetSplittingStatus},
-        idkg,
-    },
+    consensus::{Block, BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
     crypto::{
         randomness_from_crypto_hashable,
         threshold_sig::{
@@ -222,48 +214,46 @@ pub(crate) fn deliver_batches_with_result_processor(
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(summary_payload) => {
-                match summary_payload.dkg.subnet_splitting_status() {
-                    SubnetSplittingStatus::Scheduled { .. } => {
-                        let PostSplitAssignment {
-                            new_subnet_id,
-                            other_subnet_id,
-                        } = match subnet_splitting::get_post_split_subnet_assignment(
-                            maybe_node_id.expect("Subnet splitting not yet enabled in ic-replay"),
-                            &block,
-                            registry_client,
-                        ) {
-                            Ok(assignment) => assignment,
-                            Err(PostSplitAssignmentError::NotSplitting) => {
-                                panic!("Expected subnet splitting to be scheduled, but it is not")
-                            }
-                            Err(err) => {
-                                warn!(
-                                    every_n_seconds => 30,
-                                    log,
-                                    "Error getting new subnet assignment: {err}"
-                                );
-                                break;
-                            }
-                        };
-
-                        info!(
-                            log,
-                            "Delivering splitting block. New subnet assignment: {new_subnet_id}"
-                        );
-
-                        BatchContent::Splitting {
-                            new_subnet_id,
-                            other_subnet_id,
+            BlockPayload::Summary(_summary_payload) => {
+                if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
+                    let node_id =
+                        maybe_node_id.expect("Subnet splitting not yet enabled in ic-replay");
+                    let subnet_splitting::PostSplitAssignment {
+                        new_subnet_id,
+                        other_subnet_id,
+                    } = match subnet_splitting::get_post_split_subnet_assignment(
+                        node_id,
+                        &block,
+                        registry_client,
+                        scheduled,
+                    ) {
+                        Ok(assignment) => assignment,
+                        Err(err) => {
+                            warn!(
+                                every_n_seconds => 30,
+                                log,
+                                "Error getting new subnet assignment: {err}"
+                            );
+                            break;
                         }
+                    };
+
+                    info!(
+                        log,
+                        "Delivering splitting block. New subnet assignment: {new_subnet_id}"
+                    );
+
+                    BatchContent::Splitting {
+                        new_subnet_id,
+                        other_subnet_id,
                     }
-                    SubnetSplittingStatus::PostSplit { .. }
-                    | SubnetSplittingStatus::NotScheduled => BatchContent::Data {
+                } else {
+                    BatchContent::Data {
                         batch_messages: BatchMessages::default(),
                         chain_key_data,
                         consensus_responses,
                         requires_full_state_hash,
-                    },
+                    }
                 }
             }
             BlockPayload::Data(data_payload) => {
@@ -618,7 +608,7 @@ mod tests {
         consensus::{
             DataPayload, HashedBlock, Payload as ConsensusPayload, Rank,
             backwards_compatibility::BackwardsCompatibleOption,
-            dkg::{DkgDataPayload, RemoteTranscriptResult},
+            dkg::{DkgDataPayload, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus},
         },
         crypto::{
             CryptoHash, CryptoHashOf,
@@ -870,10 +860,10 @@ mod tests {
             block.context.registry_version = SPLITTING_REGISTRY_VERSION;
             let mut payload = block.payload.as_ref().as_summary().clone();
             payload.dkg.subnet_splitting_status = BackwardsCompatibleOption::new_for_test_only(
-                Some(SubnetSplittingStatus::Scheduled {
+                Some(SubnetSplittingStatus::Scheduled(SplittingArgs {
                     source_subnet_id: SOURCE_SUBNET_ID,
                     destination_subnet_id: DESTINATION_SUBNET_ID,
-                }),
+                })),
             );
             block.payload = ConsensusPayload::new(
                 ic_types::crypto::crypto_hash,

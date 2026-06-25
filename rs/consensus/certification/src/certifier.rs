@@ -651,7 +651,7 @@ impl CertifierImpl {
             Some(SubnetSplittingStatus::NotScheduled) => Ok(false),
             // Don't produce certifications in the dkg interval where the subnet splitting is
             // happening as it will be skipped by consensus anyways
-            Some(SubnetSplittingStatus::Scheduled { .. }) => Ok(true),
+            Some(SubnetSplittingStatus::Scheduled(..)) => Ok(true),
             // Wait for the replica to be restarted with the new `subnet_id`
             Some(SubnetSplittingStatus::PostSplit { new_subnet_id }) => {
                 Ok(new_subnet_id != self.replica_config.subnet_id)
@@ -708,6 +708,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::{
         BlockPayload, HashedBlock, Payload, backwards_compatibility::BackwardsCompatibleOption,
+        dkg::SplittingArgs,
     };
     use ic_types::{
         CryptoHashOfPartialState, Height,
@@ -1695,10 +1696,10 @@ mod tests {
     }
 
     fn scheduled_splitting() -> SubnetSplittingStatus {
-        SubnetSplittingStatus::Scheduled {
+        SubnetSplittingStatus::Scheduled(SplittingArgs {
             source_subnet_id: subnet_test_id(0),
             destination_subnet_id: subnet_test_id(1),
-        }
+        })
     }
 
     fn done_splitting_different_subnet() -> SubnetSplittingStatus {
@@ -1776,7 +1777,7 @@ mod tests {
                     );
 
                     match status {
-                        SubnetSplittingStatus::Scheduled { .. } => {
+                        SubnetSplittingStatus::Scheduled(..) => {
                             assert!(
                                 shares.is_empty(),
                                 "Expected no shares during subnet splitting, got: {shares:?}"
@@ -1849,7 +1850,7 @@ mod tests {
 
                     let result = certifier.validate_share(&cert_pool, &share);
                     match status {
-                        SubnetSplittingStatus::Scheduled { .. } => {
+                        SubnetSplittingStatus::Scheduled(..) => {
                             assert_eq!(
                                 result,
                                 Some(ChangeAction::HandleInvalid(

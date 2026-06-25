@@ -4665,9 +4665,11 @@ pub mod test {
         use ic_test_utilities_logger::with_test_replica_logger;
         use ic_test_utilities_registry::insert_initial_dkg_transcript;
         use ic_types::consensus::{
-            backwards_compatibility::BackwardsCompatibleOption, dkg::SubnetSplittingStatus,
+            backwards_compatibility::BackwardsCompatibleOption,
+            dkg::{SplittingArgs, SubnetSplittingStatus},
         };
         use ic_types_test_utils::ids::{NODE_3, NODE_4, SUBNET_1, SUBNET_2};
+
         use std::str::FromStr;
 
         enum MalformShare {
@@ -4794,10 +4796,10 @@ pub mod test {
 
                     pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
 
-                    let subnet_splitting_status = SubnetSplittingStatus::Scheduled {
+                    let subnet_splitting_status = SubnetSplittingStatus::Scheduled(SplittingArgs {
                         source_subnet_id: SOURCE_SUBNET_ID,
                         destination_subnet_id: DESTINATION_SUBNET_ID,
-                    };
+                    });
                     let mut proposal = pool.make_next_block();
                     let block = proposal.content.as_mut();
                     block.context.certified_height = block.height;

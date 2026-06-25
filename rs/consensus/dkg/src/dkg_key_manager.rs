@@ -3,18 +3,14 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use ic_consensus_utils::{
-    crypto::ConsensusCrypto,
-    pool_reader::PoolReader,
-    subnet_splitting::{self, PostSplitAssignment},
-};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader, subnet_splitting};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::{
     Height,
-    consensus::{HasHeight, dkg::DkgSummary},
+    consensus::{Block, HasHeight, dkg::DkgSummary},
     crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
         errors::load_transcript_error::DkgLoadTranscriptError,
@@ -252,31 +248,47 @@ impl DkgKeyManager {
         // Always try to create the summary following a potential subnet split and load its
         // transcripts. This is needed as a special case, to let the replica sign and verify CUP
         // shares corresponding to that post-split summary using the new DKG transcripts.
-        if let Ok(PostSplitAssignment {
-            new_subnet_id,
-            other_subnet_id: _,
-        }) = subnet_splitting::get_post_split_subnet_assignment(
+        self.load_post_split_transcripts_if_necessary(&summary_block);
+    }
+
+    fn load_post_split_transcripts_if_necessary(&mut self, summary_block: &Block) {
+        let Some(scheduled) = subnet_splitting::is_split_scheduled(&summary_block) else {
+            return;
+        };
+
+        let new_subnet_id = match subnet_splitting::get_post_split_subnet_assignment(
             self.replica_config.node_id,
             &summary_block,
             self.registry.as_ref(),
+            scheduled,
         ) {
+            Ok(assignment) => assignment.new_subnet_id,
+            Err(err) => {
+                error!(
+                    self.logger,
+                    "Couldn't determine the post-split subnet assignment after the split: {err:?}"
+                );
+                return;
+            }
+        };
+
+        let next_summary =
             match get_post_split_dkg_summary(new_subnet_id, self.registry.as_ref(), &summary_block)
             {
-                Ok(next_summary) => {
-                    info!(self.logger, "Adding post-split DKG transcripts");
-
-                    self.load_transcripts_from_summary(&next_summary);
-                    self.last_dkg_summary_height = Some(next_summary.height);
-                }
+                Ok(next_summary) => next_summary,
                 Err(err) => {
                     error!(
                         self.logger,
                         "Couldn't get the next DKG summary for the new subnet {new_subnet_id:?} \
                         after the split: {err:?}"
                     );
+                    return;
                 }
-            }
-        }
+            };
+
+        info!(every_n_seconds => 5, self.logger, "Adding post-split DKG transcripts");
+        self.load_transcripts_from_summary(&next_summary);
+        self.last_dkg_summary_height = Some(next_summary.height);
     }
 
     /// Ensures that the pending transcripts are loaded BEFORE they are needed. For
@@ -607,8 +619,9 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::{
-        BlockPayload, HashedBlock, Payload, backwards_compatibility::BackwardsCompatibleOption,
-        dkg::SubnetSplittingStatus,
+        BlockPayload, HashedBlock, Payload,
+        backwards_compatibility::BackwardsCompatibleOption,
+        dkg::{SplittingArgs, SubnetSplittingStatus},
     };
 
     #[test]
@@ -787,10 +800,10 @@ mod tests {
                 let mut splitting_summary = splitting_block.payload.as_ref().as_summary().clone();
                 splitting_summary.dkg.subnet_splitting_status =
                     BackwardsCompatibleOption::new_for_test_only(Some(
-                        SubnetSplittingStatus::Scheduled {
+                        SubnetSplittingStatus::Scheduled(SplittingArgs {
                             source_subnet_id,
                             destination_subnet_id,
-                        },
+                        }),
                     ));
                 splitting_block.payload = Payload::new(
                     ic_types::crypto::crypto_hash,
