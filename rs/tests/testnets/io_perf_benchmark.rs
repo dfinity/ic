@@ -12,7 +12,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ NUM_PERF_HOSTS=1 bazel run //rs/tests/testnets:io_perf_benchmark --test_tmpdir=./test_tmpdir
+//   $ NUM_PERF_HOSTS=1 bazel run //rs/tests/testnets:io_perf_benchmark --test_tmpdir=./test_tmpdir -- --keepalive
 //
 // Note: The `./test_tmpdir` directory is included in `.gitignore`.
 //

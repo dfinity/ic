@@ -71,7 +71,7 @@ system_test(
     ],
 )
 
-# bazel run //rs/tests/node:launch_single_guest
+# bazel run //rs/tests/node:launch_single_guest -- --keepalive
 # Or, to measure startup time:
 # bazel run //rs/tests/node:launch_single_guest -- --quiet
 system_test(
@@ -89,7 +89,7 @@ system_test(
     ],
 )
 
-# bazel run //rs/tests/node:launch_single_host
+# bazel run //rs/tests/node:launch_single_host -- --keepalive
 # Or, to measure startup time:
 # bazel run //rs/tests/node:launch_single_host -- --quiet
 system_test(

@@ -6,7 +6,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/container-run.sh
-//   $ bazel run //rs/tests/testnets:single_app_large_node_with_nns --test_tmpdir=./single_app_large_node_with_nns
+//   $ bazel run //rs/tests/testnets:single_app_large_node_with_nns --test_tmpdir=./single_app_large_node_with_nns -- --keepalive
 //
 // The --test_tmpdir=./single_app_large_node_with_nns will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:

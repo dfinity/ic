@@ -19,7 +19,7 @@
 // to unpack and 59G of disk space.
 //
 // ```
-// $ bazel run //rs/tests/testnets:mainnet_nns_state --test_tmpdir=./mainnet_nns_state
+// $ bazel run //rs/tests/testnets:mainnet_nns_state --test_tmpdir=./mainnet_nns_state -- --keepalive
 // ```
 //
 // Additional configuration:

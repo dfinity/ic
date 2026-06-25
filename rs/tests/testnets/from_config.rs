@@ -32,7 +32,7 @@
 //     ],
 //     "target_version": { "version_id": "..." }
 //   }
-//   '
+//   ' -- --keepalive
 //
 // Note that you can get the address of the IC node from the farm_vm_created_events in theoutput.
 //
