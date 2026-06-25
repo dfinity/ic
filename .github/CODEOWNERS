@@ -9,13 +9,13 @@
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
-/bin/fuzzing/             @dfinity/security
+/bin/fuzzing/             @dfinity/core-protocol
 
 # [Bazel]
 .bazelrc                           @dfinity/idx
 .bazelversion                      @dfinity/idx
 /bazel/                            @dfinity/idx
-/bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/security
+/bazel/fuzz_testing.bzl            @dfinity/idx @dfinity/core-protocol
 /BUILD.bazel                       @dfinity/idx
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
@@ -118,9 +118,8 @@ go.sum                    @dfinity/idx
 /rs/ethereum/                                           @dfinity/defi
 /rs/engine_controller/                                  @dfinity/dre
 /rs/execution_environment/                              @dfinity/core-protocol
-/rs/fuzzers/                                            @dfinity/security
+/rs/fuzzers/                                            @dfinity/core-protocol
 /rs/http_endpoints/                                     @dfinity/core-protocol
-/rs/http_endpoints/fuzz/                                @dfinity/security
 /rs/http_utils/                                         @dfinity/core-protocol
 /rs/https_outcalls/                                     @dfinity/core-protocol
 /rs/https_outcalls/consensus/                           @dfinity/core-protocol
