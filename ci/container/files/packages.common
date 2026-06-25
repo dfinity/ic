@@ -45,5 +45,18 @@ rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
+# Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
+# Provides per-test libvirtd subprocess + KVM-accelerated QEMU + dnsmasq for the
+# libvirt network's DHCP.
+libvirt-daemon
+libvirt-daemon-driver-qemu
+qemu-system-x86
+qemu-utils
+dnsmasq-base
+ovmf
+# Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
+# plus `setcap`/`getcap`; see ci/container/Dockerfile.
+libcap2-bin
+
 # For ci/githubstats/query.py
 libpq-dev

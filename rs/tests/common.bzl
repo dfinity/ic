@@ -4,6 +4,12 @@ Common dependencies for system-tests.
 
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_NNS")
 
+# The number of CPUs to reserve minimally for system_tests using the local backend.
+MIN_LOCAL_CPUS = 1
+
+# This should equal DEFAULT_VCPUS_PER_VM in rs/tests/driver/src/driver/resource.rs.
+DEFAULT_VCPUS_PER_VM = 6
+
 MAINNET_ENV = {
     "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
     "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],

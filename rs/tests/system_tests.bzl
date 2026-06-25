@@ -21,6 +21,7 @@ def system_test(
         test_driver_target = None,
         runtime_deps = {},
         tags = [],
+        backend = None,
         test_timeout = "long",
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
@@ -42,6 +43,7 @@ def system_test(
         additional_colocate_tags = [],
         logs = True,
         vm_allocation_mode = None,
+        cpus = None,
         **kwargs):
     """Declares a system-test.
 
@@ -51,6 +53,10 @@ def system_test(
       test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
+      backend: None | "farm" | "local".
+        If "farm" the `_local` variant will be tagged as "manual".
+        If "local" the non `_local` variants will be tagged as "manual".
+        If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
@@ -92,6 +98,9 @@ def system_test(
         `"performanceOptimizedAllocation"`,
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
+      cpus: Optional number of CPU cores to reserve for the local variant of the test.
+        This will translate into a `cpu:N` tag for the `_local` variant.
+        Heuristic: set it to MIN_LOCAL_CPUS + number of vCPUs required for the whole testnet. DEFAULT_VCPUS_PER_VM can be used for the default number of vCPUs per VM if not overridden.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -226,27 +235,100 @@ def system_test(
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
     env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
-    tags = tags + ["requires-network", "system_test"]
-
-    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
-    data.append("//bazel:volatile-status.txt")
-
     # Make the test driver allocate the Farm testnet to the same DC as the
     # machine running the test (the DC volatile status variable derived from
     # NODE_NAME). This avoids slow cross-DC transfers of large images.
     # No-op when the DC is unknown, e.g. when running locally.
-    env["ALLOCATE_TESTNET_TO_LOCAL_DC"] = "1"
+    farm_only_env = {
+        "ALLOCATE_TESTNET_TO_LOCAL_DC": "1",
+    }
+
+    valid_backends = [None, "farm", "local"]
+    if backend not in valid_backends:
+        fail("Invalid backend {}: must be one of {}".format(
+            repr(backend),
+            valid_backends,
+        ))
+
+    tags = tags + ["system_test"]
+
+    # The Farm backend needs sandbox network access, so it gets `requires-network`.
+    # The local backend is the opposite: it creates its bridge/TAPs and boots VMs
+    # inside the test's own network namespace, which (with
+    # `--nosandbox_default_allow_network`) only works when the test runs in a fresh
+    # network namespace owned by the sandbox's user namespace -- i.e. when
+    # `requires-network` is *absent*. With the tag present the test runs in the host
+    # network namespace, where the user-namespaced sandbox process lacks effective
+    # CAP_NET_ADMIN and bridge creation fails with
+    #`RTNETLINK answers: Operation not permitted`.
+    farm_tags = tags + ["requires-network"]
+
+    env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
+    data.append("//bazel:volatile-status.txt")
+
+    # Runtime deps that are only needed when running on the local (libvirt-based) backend.
+    _local_only_deps = {
+        image_name + "_PATH": image_path
+        for image_name, image_path in icos_images.items()
+    }
+
+    # Images that are only served by the Local backend's file server (and never
+    # uploaded to Farm): e.g. the mainnet GuestOS update images. These get a
+    # `_PATH` runtime dep for the local backend; their `_HASH` is already set in
+    # the environment by `configure_icos`, so the file server can advertise them
+    # under the correct content hash. They are intentionally *not* added to
+    # `icos_images` so the Farm variant keeps downloading them from the CDN.
+    for image_name, image_path in icos_config.local_only_icos_images.items():
+        _local_only_deps[image_name + "_PATH"] = image_path
+
+    _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+    _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+    _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
+
+    local_dep_env = {
+        name: "$(rootpath {})".format(dep)
+        for name, dep in _local_only_deps.items()
+    } | {
+        "NET_ADMIN_LAUNCHER_PATH": "/usr/local/bin/ic-net-admin",
+    }
+
+    # The local backend runs in a sandbox without external network access, so it
+    # has no Vector VM to ship logs to ElasticSearch (--no-logs). Instead, stream
+    # the journald logs of all IC nodes directly to the test log
+    # (--stream-ic-node-logs) and tail each VM's serial console
+    # (--stream-console-logs).
+    local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
+
+    reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
+
+    sh_test(
+        name = test_name + "_local",
+        srcs = ["//rs/tests:run_systest.sh"],
+        data = data + [dep for dep in _local_only_deps.values() if dep not in data],
+        env = env | local_dep_env | {
+            "SYSTEM_TEST_BACKEND": "local",
+            "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple + local_args),
+            "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
+            "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
+        },
+        env_inherit = env_inherit,
+        tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
+        target_compatible_with = ["@platforms//os:linux"],
+        timeout = test_timeout,
+        visibility = visibility,
+    )
 
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
         data = data,
-        env = env | {
+        env = env | farm_only_env | {
             "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
             "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
         },
         env_inherit = env_inherit,
-        tags = tags + (["manual"] if "colocate" in tags else []),
+        tags = farm_tags + (["manual"] if "colocate" in tags or backend == "local" else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -261,7 +343,7 @@ def system_test(
             "//rs/tests/idx:colocate_test_bin",
         ],
         env_inherit = env_inherit,
-        env = env | {
+        env = env | farm_only_env | {
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
@@ -270,7 +352,7 @@ def system_test(
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
               ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
-        tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
+        tags = farm_tags + (["manual"] if not "colocate" in tags or backend == "local" else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
@@ -360,7 +442,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_size",
         srcs = srcmap.keys(),
         outs = [name + "_size.txt"],
-        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" {print 2 * $$1 + 1048576}' > $@",
+        # Round the size up to a multiple of 4096 so the raw image is
+        # block-aligned: QEMU opened with cache='none' (O_DIRECT) refuses a
+        # writable raw image whose size is not a multiple of the host block size.
+        cmd = "du --bytes -csL $(SRCS) | awk '$$2 == \"total\" { s = 2 * $$1 + 1048576; print int((s + 4095) / 4096) * 4096 }' > $@",
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
         visibility = ["//visibility:private"],
