@@ -1,10 +1,6 @@
 name: local-system-tests
 
 on:
-  # TEMPORARY: smoke-test this workflow from the feature branch before it's on
-  # master. REMOVE this `push` trigger before merging.
-  push:
-    branches: [basvandijk/local-systests]
   schedule:
     - cron: "0 21 * * *" # 21:00 UTC
   workflow_dispatch:
