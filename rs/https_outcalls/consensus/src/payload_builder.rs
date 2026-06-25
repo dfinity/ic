@@ -49,6 +49,7 @@ use ic_types::{
         CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseShare,
         Replication,
     },
+    consensus::get_faults_tolerated,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSigBatchEntry,
@@ -135,12 +136,6 @@ impl CanisterHttpPayloadBuilderImpl {
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        // Committee threshold and faults_tolerated are derived per request from
-        // the registry version pinned in the request context. Cache the
-        // resulting `(threshold, faults_tolerated)` by registry version to avoid
-        // repeated registry lookups within a single payload.
-        let mut thresholds_by_version: BTreeMap<RegistryVersion, (usize, usize)> = BTreeMap::new();
-
         let state = match self
             .state_reader
             .get_state_at(validation_context.certified_height)
@@ -241,37 +236,20 @@ impl CanisterHttpPayloadBuilderImpl {
                     Replication::FullyReplicated => {
                         // Committee threshold/faults_tolerated for this request
                         // are derived from the registry version pinned in its
-                        // context (cached across requests sharing a version).
-                        let (threshold, faults_tolerated) =
-                            match thresholds_by_version.get(&request.registry_version) {
-                                Some(values) => *values,
-                                None => {
-                                    match self
-                                        .membership
-                                        .get_canister_http_committee(request.registry_version)
-                                    {
-                                        Ok(committee) => {
-                                            let faults_tolerated =
-                                                ic_types::consensus::get_faults_tolerated(
-                                                    committee.len(),
-                                                );
-                                            let threshold = committee.len() - faults_tolerated;
-                                            thresholds_by_version.insert(
-                                                request.registry_version,
-                                                (threshold, faults_tolerated),
-                                            );
-                                            (threshold, faults_tolerated)
-                                        }
-                                        Err(err) => {
-                                            warn!(
-                                                self.log,
-                                                "Failed to get canister http committee: {:?}", err
-                                            );
-                                            continue;
-                                        }
-                                    }
-                                }
-                            };
+                        // context.
+                        let (threshold, faults_tolerated) = match self
+                            .membership
+                            .get_canister_http_committee(request.registry_version)
+                        {
+                            Ok(committee) => {
+                                let faults_tolerated = get_faults_tolerated(committee.len());
+                                (committee.len() - faults_tolerated, faults_tolerated)
+                            }
+                            Err(err) => {
+                                warn!(self.log, "Failed to get canister http committee: {:?}", err);
+                                continue;
+                            }
+                        };
                         if let Some(response) =
                             find_fully_replicated_response(grouped_shares, threshold, &*pool_access)
                         {
@@ -427,15 +405,11 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Shares reconstructed from aggregated response proofs, each paired with
-        // the registry version pinned in its request context (at which the
-        // signer's public key is resolved during batched verification).
+        // Shares reconstructed from aggregated response proofs.
         let mut reconstructed_shares: Vec<(CanisterHttpResponseShare, RegistryVersion)> =
             Vec::new();
         // Accumulates all signatures in the payload, so that they can be checked
         // in a single batched multi-message verification call at the very end.
-        // Each input carries the registry version pinned in its request context,
-        // at which that signer's public key is resolved.
         let mut sig_inputs: Vec<ResponseShareSigInput> = Vec::new();
 
         // Check conditions on individual responses
@@ -472,8 +446,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                 CanisterHttpPayloadValidationFailure::Membership,
                             )
                         })?;
-                    let threshold = committee.len()
-                        - ic_types::consensus::get_faults_tolerated(committee.len());
+                    let threshold = committee.len() - get_faults_tolerated(committee.len());
                     (committee, threshold)
                 }
                 Replication::Flexible { .. } => {
@@ -513,8 +486,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             }
-            // Reconstruct the per-signer shares from the response proof, tagging
-            // each with the registry version pinned in this request's context.
+            // Reconstruct the per-signer shares from the response proof.
             reconstructed_shares.extend(
                 utils::reconstruct_individual_shares(&response.proof)
                     .map(|share| (share, request_context.registry_version)),
@@ -568,7 +540,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             CanisterHttpPayloadValidationFailure::Membership,
                         )
                     })?;
-                let faults_tolerated = ic_types::consensus::get_faults_tolerated(committee.len());
+                let faults_tolerated = get_faults_tolerated(committee.len());
 
                 let (valid_signers, invalid_signers): (Vec<NodeId>, Vec<NodeId>) = response
                     .shares

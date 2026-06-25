@@ -4,7 +4,9 @@
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, is_current_protocol_version, membership::Membership,
+    crypto::ConsensusCrypto,
+    is_current_protocol_version,
+    membership::{Membership, MembershipError},
 };
 use ic_interfaces::{
     canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
@@ -20,13 +22,13 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, NumBytes, RegistryVersion, ReplicaVersion, canister_http::*, crypto::Signed,
+    CountBytes, NodeId, NumBytes, ReplicaVersion, canister_http::*, crypto::Signed,
     messages::CallbackId, replica_config::ReplicaConfig,
 };
 use ic_utils::str::StrEllipsize;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
 };
@@ -244,9 +246,9 @@ impl CanisterHttpPoolManagerImpl {
             .collect::<Vec<String>>()
     }
 
-    /// Returns whether the local node belongs to the committee responsible for
-    /// the given request, evaluated at the registry version pinned in the
-    /// request context (the source of truth for the request).
+    /// Returns whether `node_id` belongs to the committee responsible for the
+    /// given request, evaluated at the registry version pinned in the request
+    /// context.
     ///
     /// For [`Replication::FullyReplicated`] the committee is the full set of
     /// subnet nodes at `context.registry_version`. For
@@ -254,27 +256,18 @@ impl CanisterHttpPoolManagerImpl {
     /// signers are pinned in the context, so [`Replication::is_authorized_signer`]
     /// suffices.
     ///
-    /// Fails closed: a failed or empty membership lookup is treated as "not a
-    /// member". Results are cached per registry version to avoid repeated
-    /// registry lookups across requests sharing a version.
+    /// Returns `Err` only when the committee lookup fails.
     fn node_belongs_to_request_committee(
         &self,
         context: &CanisterHttpRequestContext,
-        membership_cache: &mut BTreeMap<RegistryVersion, bool>,
-    ) -> bool {
+        node_id: NodeId,
+    ) -> Result<bool, MembershipError> {
         match &context.replication {
-            Replication::FullyReplicated => *membership_cache
-                .entry(context.registry_version)
-                .or_insert_with(|| {
-                    self.membership
-                        .node_belongs_to_canister_http_committee(
-                            context.registry_version,
-                            self.replica_config.node_id,
-                        )
-                        .unwrap_or(false)
-                }),
+            Replication::FullyReplicated => self
+                .membership
+                .node_belongs_to_canister_http_committee(context.registry_version, node_id),
             replication @ (Replication::NonReplicated(_) | Replication::Flexible { .. }) => {
-                replication.is_authorized_signer(&self.replica_config.node_id)
+                Ok(replication.is_authorized_signer(&node_id))
             }
         }
     }
@@ -315,12 +308,13 @@ impl CanisterHttpPoolManagerImpl {
 
         let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
-        let mut membership_cache = BTreeMap::new();
-
         for (id, context) in http_requests {
             // Only make a request if this node belongs to the request's committee
-            // at the registry version pinned in its context.
-            if !self.node_belongs_to_request_committee(context, &mut membership_cache) {
+            // at the registry version pinned in its context/
+            if !self
+                .node_belongs_to_request_committee(context, self.replica_config.node_id)
+                .unwrap_or(false)
+            {
                 continue;
             }
 
@@ -355,7 +349,6 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["create_shares_from_responses"])
             .start_timer();
         let mut change_set = Vec::new();
-        let mut membership_cache = BTreeMap::new();
 
         let active_contexts = &self
             .latest_state()
@@ -379,13 +372,6 @@ impl CanisterHttpPoolManagerImpl {
                         self.requested_id_cache.borrow_mut().remove(&response.id);
                         continue;
                     };
-
-                    // Only sign a share for requests whose committee this node
-                    // belongs to, at the registry version pinned in the context.
-                    if !self.node_belongs_to_request_committee(context, &mut membership_cache) {
-                        self.requested_id_cache.borrow_mut().remove(&response.id);
-                        continue;
-                    }
 
                     // Truncate the reject message if it's too long.
                     //
@@ -529,15 +515,7 @@ impl CanisterHttpPoolManagerImpl {
                             ));
                         }
                     }
-                    replication @ Replication::NonReplicated(_)
-                    | replication @ Replication::Flexible { .. } => {
-                        if !replication.is_authorized_signer(&share.signature.signer) {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Share signed by non-authorized node".to_string(),
-                            ));
-                        }
-
+                    Replication::NonReplicated(_) | Replication::Flexible { .. } => {
                         let Some(response) = &artifact.response else {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
                                 share.clone(),
@@ -587,26 +565,20 @@ impl CanisterHttpPoolManagerImpl {
                 }
 
                 let node_is_in_committee = self
-                    .membership
-                    .node_belongs_to_canister_http_committee(
-                        context.registry_version,
-                        share.signature.signer,
-                    )
-                    .map_err(|e| {
+                    .node_belongs_to_request_committee(context, share.signature.signer)
+                    .inspect_err(|e| {
                         warn!(
                             self.log,
                             "Unable to check membership for share at registry version {}, {:?}",
                             context.registry_version,
                             e
                         );
-                        e
                     })
                     .ok()?;
                 if !node_is_in_committee {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
-                        "Share signed by node that is not a member of the canister http committee"
-                            .to_string(),
+                        "Share signed by node not in the request's committee".to_string(),
                     ));
                 }
                 // TODO: more precise error handling
@@ -1399,7 +1371,7 @@ pub mod test {
                 assert_matches!(
                     &change_set[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason) => {
-                        assert_eq!(reason, "Share signed by non-authorized node");
+                        assert_eq!(reason, "Share signed by node not in the request's committee");
                     }
                 );
             })
@@ -2923,7 +2895,7 @@ pub mod test {
                 assert_matches!(
                     &change_set[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason) => {
-                        assert_eq!(reason, "Share signed by non-authorized node");
+                        assert_eq!(reason, "Share signed by node not in the request's committee");
                     }
                 );
             })
