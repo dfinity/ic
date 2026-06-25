@@ -14,9 +14,7 @@ use crate::{
     },
 };
 use candid::{Decode, Encode};
-use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
-};
+use ic_consensus_utils::{crypto::ConsensusCrypto, membership::Membership};
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
@@ -85,7 +83,6 @@ pub struct CanisterHttpBatchStats {
 /// Implementation of the [`BatchPayloadBuilder`] for the canister http feature.
 pub struct CanisterHttpPayloadBuilderImpl {
     pool: Arc<RwLock<dyn CanisterHttpPool>>,
-    cache: Arc<dyn ConsensusPoolCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     membership: Arc<Membership>,
@@ -111,7 +108,6 @@ impl CanisterHttpPayloadBuilderImpl {
 
         Self {
             pool,
-            cache,
             crypto,
             state_reader,
             membership,
@@ -366,7 +362,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
     pub fn validate_canister_http_payload_impl(
         &self,
-        height: Height,
+        _height: Height,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
         mut delivered_ids: HashSet<CallbackId>,
@@ -431,19 +427,15 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Registry version used only to resolve signer public keys for the
-        // batched signature verification at the end. Committee membership and
-        // validity are derived per request from the registry version pinned in
-        // the request context (the source of truth for the request).
-        let consensus_registry_version = registry_version_at_height(self.cache.as_ref(), height)
-            .ok_or(CanisterHttpPayloadValidationError::ValidationFailed(
-                CanisterHttpPayloadValidationFailure::ConsensusRegistryVersionUnavailable,
-            ))?;
-
-        // Shares reconstructed from aggregated response proofs.
-        let mut reconstructed_shares: Vec<CanisterHttpResponseShare> = Vec::new();
+        // Shares reconstructed from aggregated response proofs, each paired with
+        // the registry version pinned in its request context (at which the
+        // signer's public key is resolved during batched verification).
+        let mut reconstructed_shares: Vec<(CanisterHttpResponseShare, RegistryVersion)> =
+            Vec::new();
         // Accumulates all signatures in the payload, so that they can be checked
         // in a single batched multi-message verification call at the very end.
+        // Each input carries the registry version pinned in its request context,
+        // at which that signer's public key is resolved.
         let mut sig_inputs: Vec<ResponseShareSigInput> = Vec::new();
 
         // Check conditions on individual responses
@@ -521,12 +513,27 @@ impl CanisterHttpPayloadBuilderImpl {
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             }
-            // Reconstruct the per-signer shares from the response proof.
-            reconstructed_shares.extend(utils::reconstruct_individual_shares(&response.proof));
+            // Reconstruct the per-signer shares from the response proof, tagging
+            // each with the registry version pinned in this request's context.
+            reconstructed_shares.extend(
+                utils::reconstruct_individual_shares(&response.proof)
+                    .map(|share| (share, request_context.registry_version)),
+            );
         }
 
         // Defer signature verification of the reconstructed response shares.
-        sig_inputs.extend(response_share_sig_inputs(&reconstructed_shares));
+        sig_inputs.extend(
+            reconstructed_shares
+                .iter()
+                .map(|(share, registry_version)| {
+                    (
+                        share.signature.signer,
+                        &share.signature.signature,
+                        &share.content,
+                        *registry_version,
+                    )
+                }),
+        );
 
         for response in &payload.divergence_responses {
             // A divergence proof must contain shares for exactly one callback id.
@@ -580,7 +587,10 @@ impl CanisterHttpPayloadBuilderImpl {
                 }
 
                 // Defer signature verification.
-                sig_inputs.extend(response_share_sig_inputs(&response.shares));
+                sig_inputs.extend(response_share_sig_inputs(
+                    &response.shares,
+                    context.registry_version,
+                ));
 
                 // Enforce per-replica refund allowance for divergence shares.
                 for share in grouped_shares.values().flatten() {
@@ -664,6 +674,7 @@ impl CanisterHttpPayloadBuilderImpl {
             // Defer signature verification.
             sig_inputs.extend(response_share_sig_inputs(
                 group.responses.iter().map(|r| &r.proof),
+                context.registry_version,
             ));
         }
 
@@ -741,6 +752,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     // Defer signature verification.
                     sig_inputs.extend(response_share_sig_inputs(
                         reject_responses.iter().map(|r| &r.proof),
+                        context.registry_version,
                     ));
                 }
                 FlexibleCanisterHttpError::ResponsesTooLarge {
@@ -784,7 +796,10 @@ impl CanisterHttpPayloadBuilderImpl {
                     }
 
                     // Defer signature verification.
-                    sig_inputs.extend(response_share_sig_inputs(all_seen_shares));
+                    sig_inputs.extend(response_share_sig_inputs(
+                        all_seen_shares,
+                        context.registry_version,
+                    ));
 
                     let num_unseen = flex_committee.len().saturating_sub(all_seen_shares.len());
                     let min_known_ok_needed = min_responses.saturating_sub(num_unseen);
@@ -826,7 +841,7 @@ impl CanisterHttpPayloadBuilderImpl {
         // Batch-verify the signatures of the deferred shares.
         if !sig_inputs.is_empty() {
             self.crypto
-                .verify_basic_sig_batch_multi_msg(&sig_inputs, consensus_registry_version)
+                .verify_basic_sig_batch_multi_msg(&sig_inputs)
                 .map_err(|err| {
                     CanisterHttpPayloadValidationError::InvalidArtifact(
                         InvalidCanisterHttpPayloadReason::SignatureError(Box::new(err)),

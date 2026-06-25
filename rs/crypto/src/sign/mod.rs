@@ -212,8 +212,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
 
     fn verify_basic_sig_batch_multi_msg(
         &self,
-        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
-        registry_version: RegistryVersion,
+        inputs: &[(NodeId, &BasicSigOf<H>, &H, RegistryVersion)],
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -223,15 +222,13 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
-            crypto.signature => format!("{:?}", inputs.iter().map(|(s, sig, _)| (s, sig)).collect::<Vec<_>>()),
+            crypto.signature => format!("{:?}", inputs.iter().map(|(s, sig, _, rv)| (s, sig, rv)).collect::<Vec<_>>()),
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch_multi_msg(
             &self.csprng,
             self.registry_client.as_ref(),
             inputs,
-            registry_version,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,

@@ -483,11 +483,8 @@ mod verify_sigs_batch {
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let sig = crypto.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_1, &sig, &msg)];
-        assert_matches!(
-            crypto.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![(NODE_1, &sig, &msg, REG_V2)];
+        assert_matches!(crypto.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -499,11 +496,11 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_1), (NODE_2, &sig_2, &msg_2)];
-        assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![
+            (NODE_1, &sig_1, &msg_1, REG_V2),
+            (NODE_2, &sig_2, &msg_2, REG_V2),
+        ];
+        assert_matches!(crypto_1.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -518,11 +515,11 @@ mod verify_sigs_batch {
         let sig_1 = crypto.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_1), (NODE_1, &sig_2, &msg_2)];
-        assert_matches!(
-            crypto.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![
+            (NODE_1, &sig_1, &msg_1, REG_V2),
+            (NODE_1, &sig_2, &msg_2, REG_V2),
+        ];
+        assert_matches!(crypto.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -533,11 +530,11 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg), (NODE_2, &sig_2, &msg)];
-        assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![
+            (NODE_1, &sig_1, &msg, REG_V2),
+            (NODE_2, &sig_2, &msg, REG_V2),
+        ];
+        assert_matches!(crypto_1.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -549,10 +546,13 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_2), (NODE_2, &sig_2, &msg_1)];
+        let inputs = vec![
+            (NODE_1, &sig_1, &msg_2, REG_V2),
+            (NODE_2, &sig_2, &msg_1, REG_V2),
+        ];
 
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::SignatureVerification { .. })
         );
     }
@@ -571,10 +571,13 @@ mod verify_sigs_batch {
             BasicSigOf::new(BasicSig(bytes))
         };
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_1), (NODE_2, &sig_2_corrupted, &msg_2)];
+        let inputs = vec![
+            (NODE_1, &sig_1, &msg_1, REG_V2),
+            (NODE_2, &sig_2_corrupted, &msg_2, REG_V2),
+        ];
 
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::SignatureVerification { .. })
         );
     }
@@ -591,10 +594,15 @@ mod verify_sigs_batch {
             rng,
         );
 
-        let empty_inputs: Vec<(NodeId, &BasicSigOf<SignableMock>, &SignableMock)> = vec![];
+        let empty_inputs: Vec<(
+            NodeId,
+            &BasicSigOf<SignableMock>,
+            &SignableMock,
+            ic_types::RegistryVersion,
+        )> = vec![];
 
         assert_matches!(
-            crypto.verify_basic_sig_batch_multi_msg(&empty_inputs, REG_V2),
+            crypto.verify_basic_sig_batch_multi_msg(&empty_inputs),
             Err(CryptoError::InvalidArgument { message })
             if message.contains("Empty signature batch. At least one signature should be included in the batch.")
         );
@@ -607,10 +615,10 @@ mod verify_sigs_batch {
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let sig = crypto_1.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_3, &sig, &msg)];
+        let inputs = vec![(NODE_3, &sig, &msg, REG_V2)];
 
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::PublicKeyNotFound { .. })
         );
     }

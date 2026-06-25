@@ -65,11 +65,14 @@ impl BasicSigVerifierInternal {
         Self::verify_basic_sig_batch_internal(
             csprng,
             registry,
-            signatures
-                .signatures_map
-                .iter()
-                .map(|(signer, signature)| (*signer, signature, message_bytes.as_slice())),
-            registry_version,
+            signatures.signatures_map.iter().map(|(signer, signature)| {
+                (
+                    *signer,
+                    signature,
+                    message_bytes.as_slice(),
+                    registry_version,
+                )
+            }),
         )
     }
 
@@ -80,8 +83,7 @@ impl BasicSigVerifierInternal {
     pub fn verify_basic_sig_batch_multi_msg<H: Signable, R: CryptoComponentRng>(
         csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
-        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
-        registry_version: RegistryVersion,
+        inputs: &[(NodeId, &BasicSigOf<H>, &H, RegistryVersion)],
     ) -> CryptoResult<()> {
         if inputs.is_empty() {
             return Err(CryptoError::InvalidArgument {
@@ -92,32 +94,42 @@ impl BasicSigVerifierInternal {
         };
         // Serialize each message once and keep the owned buffers alive so we
         // can borrow them into the helper's input iterator.
-        let entries: Vec<(NodeId, &BasicSigOf<H>, Vec<u8>)> = inputs
+        let entries: Vec<(NodeId, &BasicSigOf<H>, Vec<u8>, RegistryVersion)> = inputs
             .iter()
-            .map(|(signer, signature, message)| (*signer, *signature, message.as_signed_bytes()))
+            .map(|(signer, signature, message, registry_version)| {
+                (
+                    *signer,
+                    *signature,
+                    message.as_signed_bytes(),
+                    *registry_version,
+                )
+            })
             .collect();
         Self::verify_basic_sig_batch_internal(
             csprng,
             registry,
             entries
                 .iter()
-                .map(|(signer, signature, msg_bytes)| (*signer, *signature, msg_bytes.as_slice())),
-            registry_version,
+                .map(|(signer, signature, msg_bytes, registry_version)| {
+                    (*signer, *signature, msg_bytes.as_slice(), *registry_version)
+                }),
         )
     }
 
     /// Shared implementation of batched Ed25519 basic-sig verification.
+    ///
+    /// Each input carries its own registry version, at which that signer's
+    /// public key is resolved.
     fn verify_basic_sig_batch_internal<'a, H: 'a, R: CryptoComponentRng>(
         csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
-        inputs: impl ExactSizeIterator<Item = (NodeId, &'a BasicSigOf<H>, &'a [u8])>,
-        registry_version: RegistryVersion,
+        inputs: impl ExactSizeIterator<Item = (NodeId, &'a BasicSigOf<H>, &'a [u8], RegistryVersion)>,
     ) -> CryptoResult<()> {
         let mut msgs = Vec::with_capacity(inputs.len());
         let mut sigs = Vec::with_capacity(inputs.len());
         let mut keys = Vec::with_capacity(inputs.len());
 
-        for (signer, signature, msg_bytes) in inputs {
+        for (signer, signature, msg_bytes, registry_version) in inputs {
             let pk_proto =
                 key_from_registry(registry, signer, KeyPurpose::NodeSigning, registry_version)?;
 

@@ -1,7 +1,7 @@
 use CanisterHttpResponseContent::Reject;
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    CountBytes, NodeId, NumBytes,
+    CountBytes, NodeId, NumBytes, RegistryVersion,
     batch::{
         FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
@@ -240,27 +240,34 @@ pub(crate) fn validate_response_share(
     Ok(())
 }
 
-/// A single `(signer, signature, message)` input as consumed by
-/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+/// A single `(signer, signature, message, registry_version)` input as consumed
+/// by [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`]. The registry
+/// version is the one pinned in the signer's request context, at which the
+/// signer's public key is resolved.
 pub(crate) type ResponseShareSigInput<'a> = (
     NodeId,
     &'a BasicSigOf<CanisterHttpResponseReceipt>,
     &'a CanisterHttpResponseReceipt,
+    RegistryVersion,
 );
 
-/// Maps response shares to the `(signer, signature, message)` inputs consumed by
-/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+/// Maps response shares to the `(signer, signature, message, registry_version)`
+/// inputs consumed by [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+/// All shares produced here belong to the same request, so they share the
+/// `registry_version` pinned in that request's context.
 pub(crate) fn response_share_sig_inputs<'a, I>(
     shares: I,
+    registry_version: RegistryVersion,
 ) -> impl Iterator<Item = ResponseShareSigInput<'a>>
 where
     I: IntoIterator<Item = &'a CanisterHttpResponseShare>,
 {
-    shares.into_iter().map(|share| {
+    shares.into_iter().map(move |share| {
         (
             share.signature.signer,
             &share.signature.signature,
             &share.content,
+            registry_version,
         )
     })
 }

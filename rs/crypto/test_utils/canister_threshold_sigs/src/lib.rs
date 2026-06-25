@@ -675,11 +675,10 @@ pub mod node {
 
         fn verify_basic_sig_batch_multi_msg(
             &self,
-            inputs: &[(NodeId, &BasicSigOf<T>, &T)],
-            registry_version: RegistryVersion,
+            inputs: &[(NodeId, &BasicSigOf<T>, &T, RegistryVersion)],
         ) -> CryptoResult<()> {
             self.crypto_component
-                .verify_basic_sig_batch_multi_msg(inputs, registry_version)
+                .verify_basic_sig_batch_multi_msg(inputs)
         }
     }
 
