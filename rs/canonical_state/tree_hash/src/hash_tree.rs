@@ -58,11 +58,6 @@ enum NodeKind {
     Fork,
     Leaf,
     Node,
-    /// A subtree reduced to a single root digest plus the [`SubtreeSource`] (source
-    /// `Arc`) that it was built from. When the actual subtree is needed for a
-    /// witness, it is materialized on demand from the source. When an unchanged
-    /// subtree (equal `SubtreeSource` and certification version) is found in a
-    /// baseline tree, its digest is reused instead of being recomputed.
     Stub,
 }
 
@@ -565,7 +560,7 @@ impl HashTree {
 
     /// Returns a structured representation-independent view of the node with
     /// the specified ID.
-    pub fn view(&self, node_id: NodeId) -> HashTreeView<'_> {
+    fn view(&self, node_id: NodeId) -> HashTreeView<'_> {
         let bucket = node_id.bucket() - self.bucket_offset;
         let idx = node_id.index();
         match node_id.kind() {
@@ -919,7 +914,7 @@ impl PartialEq<crypto::HashTree> for HashTree {
 }
 
 #[derive(Debug)]
-pub enum HashTreeView<'a> {
+enum HashTreeView<'a> {
     Empty,
     Leaf(&'a Digest),
     Fork(&'a Digest, NodeId, NodeId),

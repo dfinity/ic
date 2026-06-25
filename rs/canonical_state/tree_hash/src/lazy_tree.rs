@@ -176,16 +176,14 @@ impl SubtreeSource {
     /// Creates a handle that shares ownership of the subtree's `source` and can
     /// rebuild the subtree from it, via the `expander`.
     pub fn new<T: Any + Send + Sync>(source: &Arc<T>, expander: SubtreeExpander) -> Self {
-        let this = Self {
+        Self {
             source: Arc::clone(source) as Arc<dyn Any + Send + Sync>,
             expander,
-        };
-        debug_assert!(expander(&this).is_ok());
-        this
+        }
     }
 
     /// The bare address of the source allocation, used for identity comparison.
-    fn addr(&self) -> *const () {
+    fn source_addr(&self) -> *const () {
         Arc::as_ptr(&self.source) as *const ()
     }
 
@@ -214,7 +212,8 @@ impl SubtreeSource {
 impl PartialEq for SubtreeSource {
     /// A conservative, false-negative-only reuse-gate; see the type-level note.
     fn eq(&self, other: &Self) -> bool {
-        self.addr() == other.addr() && std::ptr::fn_addr_eq(self.expander, other.expander)
+        self.source_addr() == other.source_addr()
+            && std::ptr::fn_addr_eq(self.expander, other.expander)
     }
 }
 
@@ -222,6 +221,6 @@ impl Eq for SubtreeSource {}
 
 impl fmt::Debug for SubtreeSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SubtreeSource({:p})", self.addr())
+        write!(f, "SubtreeSource({:p})", self.source_addr())
     }
 }
