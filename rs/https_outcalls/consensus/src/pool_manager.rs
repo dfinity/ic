@@ -21,13 +21,13 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NumBytes, ReplicaVersion, canister_http::*, consensus::HasHeight,
-    crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
+    CountBytes, Height, NumBytes, RegistryVersion, ReplicaVersion, canister_http::*,
+    consensus::HasHeight, crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
 };
 use ic_utils::str::StrEllipsize;
 use std::{
     cell::RefCell,
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryInto,
     sync::{Arc, Mutex},
 };
@@ -248,6 +248,41 @@ impl CanisterHttpPoolManagerImpl {
     }
 
     /// Inform the HttpAdapterShim of any new requests that must be made.
+    /// Returns whether the local node belongs to the committee responsible for
+    /// the given request, evaluated at the registry version pinned in the
+    /// request context (the source of truth for the request).
+    ///
+    /// For [`Replication::FullyReplicated`] the committee is the full set of
+    /// subnet nodes at `context.registry_version`. For
+    /// [`Replication::NonReplicated`]/[`Replication::Flexible`] the authorized
+    /// signers are pinned in the context, so [`Replication::is_authorized_signer`]
+    /// suffices. Note that `is_authorized_signer` returns `true` unconditionally
+    /// for `FullyReplicated`, which is precisely why that case needs the explicit
+    /// committee lookup.
+    ///
+    /// Fails closed: a failed or empty membership lookup is treated as "not a
+    /// member". Results are cached per registry version to avoid repeated
+    /// registry lookups across requests sharing a version.
+    fn node_belongs_to_request_committee(
+        &self,
+        context: &CanisterHttpRequestContext,
+        membership_cache: &mut BTreeMap<RegistryVersion, bool>,
+    ) -> bool {
+        match &context.replication {
+            Replication::FullyReplicated => *membership_cache
+                .entry(context.registry_version)
+                .or_insert_with(|| {
+                    self.membership
+                        .node_belongs_to_canister_http_committee(
+                            context.registry_version,
+                            self.replica_config.node_id,
+                        )
+                        .unwrap_or(false)
+                }),
+            replication => replication.is_authorized_signer(&self.replica_config.node_id),
+        }
+    }
+
     fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
         let _time = self
             .metrics
@@ -283,11 +318,12 @@ impl CanisterHttpPoolManagerImpl {
 
         let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
+        let mut membership_cache = BTreeMap::new();
+
         for (id, context) in http_requests {
-            if !context
-                .replication
-                .is_authorized_signer(&self.replica_config.node_id)
-            {
+            // Only make a request if this node belongs to the request's committee
+            // at the registry version pinned in its context.
+            if !self.node_belongs_to_request_committee(context, &mut membership_cache) {
                 continue;
             }
 
@@ -333,6 +369,7 @@ impl CanisterHttpPoolManagerImpl {
             return Vec::new();
         };
         let mut change_set = Vec::new();
+        let mut membership_cache = BTreeMap::new();
 
         let active_contexts = &self
             .latest_state()
@@ -356,6 +393,13 @@ impl CanisterHttpPoolManagerImpl {
                         self.requested_id_cache.borrow_mut().remove(&response.id);
                         continue;
                     };
+
+                    // Only sign a share for requests whose committee this node
+                    // belongs to, at the registry version pinned in the context.
+                    if !self.node_belongs_to_request_committee(context, &mut membership_cache) {
+                        self.requested_id_cache.borrow_mut().remove(&response.id);
+                        continue;
+                    }
 
                     // Truncate the reject message if it's too long.
                     //
@@ -574,7 +618,7 @@ impl CanisterHttpPoolManagerImpl {
 
                 let node_is_in_committee = self
                     .membership
-                    .node_belongs_to_canister_http_committee_at_version(
+                    .node_belongs_to_canister_http_committee(
                         context.registry_version,
                         share.signature.signer,
                     )
@@ -632,17 +676,12 @@ impl CanisterHttpPoolManagerImpl {
 
         let finalized_height = self.consensus_pool_cache.finalized_block().height();
 
-        if self
-            .membership
-            .node_belongs_to_canister_http_committee(finalized_height, self.replica_config.node_id)
-            .unwrap_or(false)
-        {
-            // Make any requests that need to be made
-            self.make_new_requests(canister_http_pool);
-
-            // Create shares from any responses that are now available
-            change_set.extend(self.create_shares_from_responses(finalized_height));
-        }
+        // Make any requests that need to be made and create shares from responses
+        // that are now available. Both steps are gated per request on whether this
+        // node belongs to the request's committee at the registry version pinned in
+        // its context, so there is no node-level committee gate here.
+        self.make_new_requests(canister_http_pool);
+        change_set.extend(self.create_shares_from_responses(finalized_height));
 
         // Attempt to validate unvalidated shares
         change_set.extend(self.validate_shares(
@@ -1845,7 +1884,9 @@ pub mod test {
                 } = dependencies(pool_config.clone(), 4);
 
                 let callback_id = CallbackId::from(5);
-                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                // Delegate the request to this node so it is the authorized signer
+                // and creates a share for the injected response.
+                let delegated_node_id = replica_config.node_id;
 
                 // 2. CONTEXT: Set up a NonReplicated request context in the state manager.
                 // This ensures we test the gossiping code path.
@@ -1968,7 +2009,9 @@ pub mod test {
                 } = dependencies(pool_config.clone(), 4);
 
                 let callback_id = CallbackId::from(0); // Use ID that will pass validation filter
-                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                // Delegate the request to this node so it is the authorized signer
+                // and creates a share for the injected response.
+                let delegated_node_id = replica_config.node_id;
 
                 // 2. CONTEXT: Set up a NonReplicated request context.
                 let request_context = test_request_context(
@@ -2605,7 +2648,9 @@ pub mod test {
                     ..
                 } = dependencies(pool_config.clone(), 4);
 
-                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+                // Delegate the request to this node so it is the authorized signer
+                // and creates a share for the injected response.
+                let delegated_node_id = replica_config.node_id;
                 let callback_id = CallbackId::from(5);
 
                 // 1. Set up the state to contain a non-replicated request context.

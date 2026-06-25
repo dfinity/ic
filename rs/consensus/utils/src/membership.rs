@@ -145,9 +145,6 @@ impl Membership {
             Committee::Notarization => {
                 unreachable!("Notarization/Finalization does not use threshold committee")
             }
-            Committee::CanisterHttp => {
-                unreachable!("CanisterHttp does not use threshold committee")
-            }
         }
     }
 
@@ -162,7 +159,6 @@ impl Membership {
             Committee::HighThreshold => self.get_high_threshold_committee_threshold(height),
             Committee::LowThreshold => self.get_low_threshold_committee_threshold(height),
             Committee::Notarization => self.get_notarization_committee_threshold(height),
-            Committee::CanisterHttp => self.get_canister_http_committee_threshold(height),
         }
     }
 
@@ -185,38 +181,22 @@ impl Membership {
         })
     }
 
-    /// Get the committee to be used for canister http at the given height
-    pub fn get_canister_http_committee(
-        &self,
-        height: Height,
-    ) -> Result<Vec<NodeId>, MembershipError> {
-        // IMPORTANT: if this ever becomes something else, we should make sure that:
-        // 1. Shares from non committee nodes are not included in the payload
-        //    this should be enforced already by the pool validator, though it might
-        //    make sense for the payload builder to check too.
-        // 2. Non replicated request should only be sent to committee nodes.
-        self.get_nodes(height)
-    }
-
-    /// Return true if the given node ID is part of the canister http committee
-    /// at the given height
-    pub fn node_belongs_to_canister_http_committee(
-        &self,
-        height: Height,
-        node_id: NodeId,
-    ) -> Result<bool, MembershipError> {
-        Ok(self.get_canister_http_committee(height)?.contains(&node_id))
-    }
-
     /// Get the committee to be used for canister http at the given registry
     /// version.
     ///
-    /// In contrast to [`Self::get_canister_http_committee`], the committee is
-    /// determined by an explicit registry version rather than by the registry
-    /// version active at some block height. This is used to pin a canister http
-    /// request to the committee that was active at the registry version stored
-    /// in the request context, which is the source of truth for the request.
-    pub fn get_canister_http_committee_at_version(
+    /// The committee is determined by an explicit registry version rather than
+    /// by the registry version active at some block height. This is used to pin
+    /// a canister http request to the committee that was active at the registry
+    /// version stored in the request context, which is the source of truth for
+    /// the request.
+    ///
+    /// IMPORTANT: if this ever becomes something other than the full set of
+    /// subnet nodes, we should make sure that:
+    /// 1. Shares from non committee nodes are not included in the payload
+    ///    this should be enforced already by the pool validator, though it might
+    ///    make sense for the payload builder to check too.
+    /// 2. Non replicated request should only be sent to committee nodes.
+    pub fn get_canister_http_committee(
         &self,
         registry_version: RegistryVersion,
     ) -> Result<Vec<NodeId>, MembershipError> {
@@ -225,13 +205,13 @@ impl Membership {
 
     /// Return true if the given node ID is part of the canister http committee
     /// at the given registry version.
-    pub fn node_belongs_to_canister_http_committee_at_version(
+    pub fn node_belongs_to_canister_http_committee(
         &self,
         registry_version: RegistryVersion,
         node_id: NodeId,
     ) -> Result<bool, MembershipError> {
         Ok(self
-            .get_canister_http_committee_at_version(registry_version)?
+            .get_canister_http_committee(registry_version)?
             .contains(&node_id))
     }
 
@@ -292,14 +272,6 @@ impl Membership {
             Some((threshold, _)) => Ok(threshold),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
-    }
-
-    fn get_canister_http_committee_threshold(
-        &self,
-        height: Height,
-    ) -> Result<Threshold, MembershipError> {
-        let committee_size = self.get_canister_http_committee(height)?.len();
-        Ok(committee_size - get_faults_tolerated(committee_size))
     }
 }
 

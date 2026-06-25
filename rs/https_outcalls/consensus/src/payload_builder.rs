@@ -249,9 +249,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             match thresholds_by_version.get(&request.registry_version) {
                                 Some(values) => *values,
                                 None => {
-                                    match self.membership.get_canister_http_committee_at_version(
-                                        request.registry_version,
-                                    ) {
+                                    match self
+                                        .membership
+                                        .get_canister_http_committee(request.registry_version)
+                                    {
                                         Ok(committee) => {
                                             let faults_tolerated =
                                                 ic_types::consensus::get_faults_tolerated(
@@ -472,7 +473,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     // version pinned in the request context.
                     let committee = self
                         .membership
-                        .get_canister_http_committee_at_version(request_context.registry_version)
+                        .get_canister_http_committee(request_context.registry_version)
                         .map_err(|err| {
                             warn!(self.log, "Failed to get membership: {:?}", err);
                             CanisterHttpPayloadValidationError::ValidationFailed(
@@ -556,7 +557,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 // pinned in the request context.
                 let committee = self
                     .membership
-                    .get_canister_http_committee_at_version(context.registry_version)
+                    .get_canister_http_committee(context.registry_version)
                     .map_err(|_| {
                         CanisterHttpPayloadValidationError::ValidationFailed(
                             CanisterHttpPayloadValidationFailure::Membership,
