@@ -11,6 +11,10 @@ component_files = {
     # hostos components
     Label("hostos/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
     Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
+    Label("multi-hostos/start-guestos.sh"): "/opt/ic/bin/start-guestos.sh",
+    Label("multi-hostos/start-guestos.service"): "/etc/systemd/system/start-guestos.service",
+    Label("multi-hostos/guestos@.service"): "/etc/systemd/system/guestos@.service",
+    Label("multi-hostos/guestos.target"): "/etc/systemd/system/guestos.target",
     Label("hostos/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
@@ -42,6 +46,7 @@ component_files = {
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
+    Label("multi-hostos/skip-vsock.sh"): "/opt/ic/bin/skip-vsock.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("hostos/misc/sudoers"): "/etc/sudoers",

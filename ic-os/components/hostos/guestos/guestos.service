@@ -15,6 +15,3 @@ ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
 Restart=always
 RestartSec=60
 TimeoutStopSec=130s
-
-[Install]
-WantedBy=multi-user.target

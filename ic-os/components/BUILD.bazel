@@ -2,7 +2,6 @@ load("//bazel:defs.bzl", "write_stable_status_file_var")
 load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
 load("guestos.bzl", guestos_component_files = "component_files")
 load("hostos.bzl", hostos_component_files = "component_files")
-load("multi-hostos.bzl", multi_hostos_component_files = "component_files")
 load("setupos.bzl", setupos_component_files = "component_files")
 
 package(default_visibility = ["//ic-os:__subpackages__"])
@@ -33,7 +32,7 @@ write_stable_status_file_var(
     varname = "STABLE_COMMIT_TIMESTAMP",
 )
 
-used_components = guestos_component_files("dev") | guestos_component_files("prod") | hostos_component_files | multi_hostos_component_files | setupos_component_files
+used_components = guestos_component_files("dev") | guestos_component_files("prod") | hostos_component_files | setupos_component_files
 
 REPO_COMPONENTS = glob(
     ["**/*"],

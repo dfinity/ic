@@ -2,8 +2,7 @@
 Hold manifest common to all HostOS variants.
 """
 
-load("//ic-os/components:hostos.bzl", default_component_files = "component_files")
-load("//ic-os/components:multi-hostos.bzl", multi_component_files = "component_files")
+load("//ic-os/components:hostos.bzl", "component_files")
 load("//toolchains/sysimage:toolchain.bzl", "lvm_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -16,7 +15,7 @@ def image_deps(mode, _malicious = False):
     Define all HostOS inputs.
 
     Args:
-      mode: Variant to be built, dev or prod (or multi).
+      mode: Variant to be built, dev or prod.
       _malicious: Unused, but currently needed to fit generic build structure.
     Returns:
       A dict containing inputs to build this image.
@@ -43,7 +42,7 @@ def image_deps(mode, _malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/hostos/context:context-files"),
-        "component_files": dict(default_component_files if mode != "multi" else multi_component_files),  # Make a copy because we might update it later
+        "component_files": dict(component_files),  # Make a copy because we might update it later
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
