@@ -1,7 +1,12 @@
 //! The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
 //!
-//! GuestOS images can be accessed either through the default functions (e.g., `get_guestos_img_url()`)
-//! or through tag-based functions (e.g., `get_tagged_guestos_img_url("my_tag")`).
+//! GuestOS images can be accessed either through the default functions (e.g., `get_guestos_img_url(env)`)
+//! or through tag-based functions (e.g., `get_tagged_guestos_img_url(env, "my_tag")`).
+//!
+//! The `..._url()` getters take the [`TestEnv`] so they can adapt to the active
+//! system-test backend: under [`SystemTestBackend::Farm`] they return Farm's
+//! content-addressed URL, while under [`SystemTestBackend::Local`] they return
+//! a URL pointing at the per-group file server served by `serve_files_task`.
 //!
 //! Tags are configured in the system_test Bazel macro using a dictionary:
 //! ```starlark
@@ -11,12 +16,31 @@
 //! The "default" tag corresponds to the standard env variables (ENV_DEPS__GUESTOS_DISK_IMG, etc.).
 //! Other tags use uppercase suffixes (ENV_DEPS__GUESTOS_SEV_RECOVERY_DISK_IMG, etc.).
 
+use crate::driver::local_backend::LocalBackend;
 use crate::driver::resource::{DiskImage, ImageType};
+use crate::driver::serve_files_task::FILE_SERVER_PORT;
+use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
+use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use anyhow::{Context, Result};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_types::{ReplicaVersion, hostos_version::HostosVersion};
+use std::path::PathBuf;
 use url::Url;
+
+/// Build a URL pointing at the per-group file server run by the Local backend
+/// for the image with the given `sha256` digest. The server (see
+/// `serve_files_task`) listens on the group's IPv6 file-server address (off the
+/// node `/64`) and serves each image under its content hash, mirroring Farm's
+/// content-addressed scheme.
+fn local_image_url(env: &TestEnv, sha256: &str) -> Url {
+    let group_name = GroupSetup::read_attribute(env).infra_group_name;
+    let file_server_ip = LocalBackend::group_files_ipv6(&group_name);
+    Url::parse(&format!(
+        "http://[{file_server_ip}]:{FILE_SERVER_PORT}/{sha256}"
+    ))
+    .unwrap_or_else(|_| panic!("Invalid local image URL for '{sha256}'"))
+}
 
 /// Build the environment variable suffix for a given tag.
 /// For "default" or empty tag, returns empty string.
@@ -75,17 +99,21 @@ pub fn try_get_tagged_guestos_img_version(tag: &str) -> Result<ReplicaVersion> {
 }
 
 /// Pull the URL of the initial GuestOS image from the environment.
-pub fn get_guestos_img_url() -> Url {
-    get_tagged_guestos_img_url("")
+pub fn get_guestos_img_url(env: &TestEnv) -> Url {
+    get_tagged_guestos_img_url(env, "")
 }
 
 /// Pull the URL of a tagged GuestOS image from the environment.
-pub fn get_tagged_guestos_img_url(tag: &str) -> Url {
-    let suffix = tag_to_env_suffix(tag);
-    let env = format!("ENV_DEPS__GUESTOS{suffix}_DISK_IMG_URL");
-
-    Url::parse(&std::env::var(&env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+pub fn get_tagged_guestos_img_url(env: &TestEnv, tag: &str) -> Url {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let suffix = tag_to_env_suffix(tag);
+            let var = format!("ENV_DEPS__GUESTOS{suffix}_DISK_IMG_URL");
+            Url::parse(&std::env::var(&var).unwrap_or_else(|_| panic!("Failed to read '{var}'")))
+                .expect("Invalid Url")
+        }
+        SystemTestBackend::Local => local_image_url(env, &get_tagged_guestos_img_sha256(tag)),
+    }
 }
 
 /// Pull the hash of the initial GuestOS image from the environment.
@@ -102,20 +130,32 @@ pub fn get_tagged_guestos_img_sha256(tag: &str) -> String {
 }
 
 /// Get the initial GuestOS disk image from the environment.
-pub fn get_guestos_disk_image() -> DiskImage {
-    DiskImage {
-        image_type: ImageType::IcOsImage,
-        url: get_guestos_img_url(),
-        sha256: get_guestos_img_sha256(),
-    }
+pub fn get_guestos_disk_image(env: &TestEnv) -> DiskImage {
+    get_tagged_guestos_disk_image(env, "")
 }
 
 /// Get a tagged GuestOS disk image from the environment.
-pub fn get_tagged_guestos_disk_image(tag: &str) -> DiskImage {
-    DiskImage {
-        image_type: ImageType::IcOsImage,
-        url: get_tagged_guestos_img_url(tag),
-        sha256: get_tagged_guestos_img_sha256(tag),
+///
+/// Under the Local backend the image is already present on disk (the driver
+/// extracts it directly), so a [`DiskImage::Local`] is returned; under Farm a
+/// [`DiskImage::Url`] pointing at Farm's store is returned.
+pub fn get_tagged_guestos_disk_image(env: &TestEnv, tag: &str) -> DiskImage {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => DiskImage::Url {
+            image_type: ImageType::IcOsImage,
+            url: get_tagged_guestos_img_url(env, tag),
+            sha256: get_tagged_guestos_img_sha256(tag),
+        },
+        SystemTestBackend::Local => {
+            let suffix = tag_to_env_suffix(tag);
+            let var = format!("ENV_DEPS__GUESTOS{suffix}_DISK_IMG_PATH");
+            DiskImage::Local {
+                image_type: ImageType::IcOsImage,
+                path: PathBuf::from(
+                    std::env::var(&var).unwrap_or_else(|_| panic!("Failed to read '{var}'")),
+                ),
+            }
+        }
     }
 }
 
@@ -135,20 +175,31 @@ pub fn get_tagged_guestos_rootfs_hash(tag: &str) -> String {
 ///
 /// With the initial image, there is also a corresponding initial update image.
 /// The version is shared, so only the URL and hash are provided.
-pub fn get_guestos_initial_update_img_url() -> Url {
-    let env = "ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL";
-
-    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+pub fn get_guestos_initial_update_img_url(env: &TestEnv) -> Url {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let var = "ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL";
+            Url::parse(&std::env::var(var).unwrap_or_else(|_| panic!("Failed to read '{var}'")))
+                .expect("Invalid Url")
+        }
+        SystemTestBackend::Local => local_image_url(env, &get_guestos_initial_update_img_sha256()),
+    }
 }
 
 /// Pull the URL of a tagged GuestOS initial update image from the environment.
-pub fn get_tagged_guestos_initial_update_img_url(tag: &str) -> Option<Url> {
-    let suffix = tag_to_env_suffix(tag);
-    let env = format!("ENV_DEPS__GUESTOS{suffix}_INITIAL_UPDATE_IMG_URL");
-
-    let url = std::env::var(&env).ok()?;
-    Some(Url::parse(&url).unwrap_or_else(|_| panic!("Invalid url: {url}")))
+pub fn get_tagged_guestos_initial_update_img_url(env: &TestEnv, tag: &str) -> Option<Url> {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let suffix = tag_to_env_suffix(tag);
+            let var = format!("ENV_DEPS__GUESTOS{suffix}_INITIAL_UPDATE_IMG_URL");
+            let url = std::env::var(&var).ok()?;
+            Some(Url::parse(&url).unwrap_or_else(|_| panic!("Invalid url: {url}")))
+        }
+        SystemTestBackend::Local => Some(local_image_url(
+            env,
+            &get_tagged_guestos_initial_update_img_sha256(tag)?,
+        )),
+    }
 }
 
 /// Pull the hash of the initial GuestOS update image from the environment.
@@ -197,11 +248,15 @@ pub fn get_guestos_update_img_version() -> ReplicaVersion {
 }
 
 /// Pull the URL of the target GuestOS update image from the environment.
-pub fn get_guestos_update_img_url() -> Url {
-    let env = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
-
-    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+pub fn get_guestos_update_img_url(env: &TestEnv) -> Url {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let var = "ENV_DEPS__GUESTOS_UPDATE_IMG_URL";
+            Url::parse(&std::env::var(var).unwrap_or_else(|_| panic!("Failed to read '{var}'")))
+                .expect("Invalid Url")
+        }
+        SystemTestBackend::Local => local_image_url(env, &get_guestos_update_img_sha256()),
+    }
 }
 
 /// Pull the hash of the target GuestOS update image from the environment.
@@ -229,11 +284,15 @@ pub fn try_get_setupos_img_version() -> Result<ReplicaVersion> {
 }
 
 /// Pull the URL of the initial SetupOS image from the environment.
-pub fn get_setupos_img_url() -> Url {
-    let env = "ENV_DEPS__SETUPOS_DISK_IMG_URL";
-
-    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+pub fn get_setupos_img_url(env: &TestEnv) -> Url {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let var = "ENV_DEPS__SETUPOS_DISK_IMG_URL";
+            Url::parse(&std::env::var(var).unwrap_or_else(|_| panic!("Failed to read '{var}'")))
+                .expect("Invalid Url")
+        }
+        SystemTestBackend::Local => local_image_url(env, &get_setupos_img_sha256()),
+    }
 }
 
 /// Pull the hash of the initial SetupOS image from the environment.
@@ -278,11 +337,15 @@ pub fn get_hostos_update_img_version() -> HostosVersion {
 }
 
 /// Pull the URL of the target HostOS update image from the environment.
-pub fn get_hostos_update_img_url() -> Url {
-    let env = "ENV_DEPS__HOSTOS_UPDATE_IMG_URL";
-
-    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+pub fn get_hostos_update_img_url(env: &TestEnv) -> Url {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let var = "ENV_DEPS__HOSTOS_UPDATE_IMG_URL";
+            Url::parse(&std::env::var(var).unwrap_or_else(|_| panic!("Failed to read '{var}'")))
+                .expect("Invalid Url")
+        }
+        SystemTestBackend::Local => local_image_url(env, &get_hostos_update_img_sha256()),
+    }
 }
 
 /// Pull the hash of the target HostOS update image from the environment.
@@ -293,11 +356,15 @@ pub fn get_hostos_update_img_sha256() -> String {
 }
 
 /// Pull the URL of the initial HostOS update image from the environment.
-pub fn get_hostos_initial_update_img_url() -> Url {
-    let env = "ENV_DEPS__HOSTOS_INITIAL_UPDATE_IMG_URL";
-
-    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
-        .expect("Invalid Url")
+pub fn get_hostos_initial_update_img_url(env: &TestEnv) -> Url {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => {
+            let var = "ENV_DEPS__HOSTOS_INITIAL_UPDATE_IMG_URL";
+            Url::parse(&std::env::var(var).unwrap_or_else(|_| panic!("Failed to read '{var}'")))
+                .expect("Invalid Url")
+        }
+        SystemTestBackend::Local => local_image_url(env, &get_hostos_initial_update_img_sha256()),
+    }
 }
 
 /// Pull the hash of the initial HostOS update image from the environment.

@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:0b0e1cf7202f83a29c645a84e984aea8fc2f18c3ff61869b4fd80f30949d7aa0",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:72798a5bed36f7174d2a318efe1996ed44d598c37f8cf3c909e6dec53cb73812",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -15,6 +15,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
+  "postStartCommand": "/ic/ci/container/init.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"

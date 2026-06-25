@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -47,6 +47,16 @@ genrule(
 
 system_test_nns(
     name = "registration",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # This is a nested test (SetupOS -> HostOS -> GuestOS). The local backend does
+    # not yet implement nested VMs: `setup_and_start_nested_vms`
+    # (rs/tests/driver/src/driver/bootstrap.rs) only has a Farm code path and calls
+    # into Farm directly to upload the config image, attach the SetupOS disk image
+    # and start the nested VM. Supporting this requires adding a
+    # `SystemTestBackend::Local` branch that boots the nested VM via the local
+    # libvirt-based backend.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     env = MAINNET_ENV,
     setupos = True,
     tags = ["long_test"],  # since it takes longer than 5 minutes.
@@ -79,6 +89,16 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # This is a nested test (SetupOS -> HostOS -> GuestOS). The local backend
+    # does not yet implement nested VMs: `setup_and_start_nested_vms`
+    # (rs/tests/driver/src/driver/bootstrap.rs) only has a Farm code path and
+    # calls into Farm directly to upload the config image, attach the SetupOS
+    # disk image and start the nested VM. Supporting this requires adding a
+    # `SystemTestBackend::Local` branch that boots the nested VM via the local
+    # libvirt-based backend.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     env = MAINNET_ENV,
     guestos_update = "test",
     setupos = True,
@@ -95,6 +115,7 @@ system_test_nns(
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "guestos_upgrade_from_current_to_current_test_sev",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV HostOS node is external hardware, not a Farm VM.
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = True,
     guestos_update = "test",
@@ -112,6 +133,16 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # This is a nested test (SetupOS -> HostOS -> GuestOS). The local backend
+    # does not yet implement nested VMs: `setup_and_start_nested_vms`
+    # (rs/tests/driver/src/driver/bootstrap.rs) only has a Farm code path and
+    # calls into Farm directly to upload the config image, attach the SetupOS
+    # disk image and start the nested VM. Supporting this requires adding a
+    # `SystemTestBackend::Local` branch that boots the nested VM via the local
+    # libvirt-based backend.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
     setupos = "mainnet_latest_dev",
@@ -130,6 +161,7 @@ system_test_nns(
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current_sev",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV HostOS node is external hardware, not a Farm VM.
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
@@ -161,6 +193,16 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # This is a nested test (SetupOS -> HostOS -> GuestOS). The local backend does
+    # not yet implement nested VMs: `setup_and_start_nested_vms`
+    # (rs/tests/driver/src/driver/bootstrap.rs) only has a Farm code path and calls
+    # into Farm directly to upload the config image, attach the SetupOS disk image
+    # and start the nested VM. Supporting this requires adding a
+    # `SystemTestBackend::Local` branch that boots the nested VM via the local
+    # libvirt-based backend.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     env = MAINNET_ENV,
     hostos_update = "test",
     setupos = True,
@@ -173,6 +215,16 @@ system_test_nns(
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # This is a nested test (SetupOS -> HostOS -> GuestOS). The local backend does
+    # not yet implement nested VMs: `setup_and_start_nested_vms`
+    # (rs/tests/driver/src/driver/bootstrap.rs) only has a Farm code path and calls
+    # into Farm directly to upload the config image, attach the SetupOS disk image
+    # and start the nested VM. Supporting this requires adding a
+    # `SystemTestBackend::Local` branch that boots the nested VM via the local
+    # libvirt-based backend.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     hostos_update = True,
     setupos = "mainnet_latest_dev",
@@ -191,6 +243,7 @@ system_test_nns(
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current_sev",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV HostOS node is external hardware, not a Farm VM.
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     hostos = "mainnet_latest_dev",
     hostos_update = True,
@@ -210,6 +263,7 @@ system_test_nns(
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "sev_recovery",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each); the bare-metal SEV TEE HostOS node is external hardware, not a Farm VM.
     env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = {
         "default": True,
