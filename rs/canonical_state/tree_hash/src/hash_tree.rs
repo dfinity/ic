@@ -251,11 +251,11 @@ impl NodeIndexRange {
 /// the second number , the 3 most significant bits are used to indicate the
 /// type of the node:
 ///
-///  * (0,000) is an empty tree.
-///  * (0,001) is a leaf.
-///  * (0,010) is a labeled node.
-///  * (0,011) is a fork.
-///  * (0,100) is a reusable stub.
+///  * (0, 0x0000...) is an empty tree.
+///  * (0, 0x0010...) is a leaf.
+///  * (0, 0x0100...) is a labeled node.
+///  * (0, 0x0110...) is a fork.
+///  * (0, 0x1000...) is a reusable stub.
 ///
 ///  This means that the tree can store at most 2^29 nodes of the same type. As
 ///  each tree node has a 32-byte hash associated with it, the tree needs to
@@ -787,6 +787,9 @@ impl HashTree {
                     // Requested partial tree descends into the subtree: rebuild it from source and
                     // continue witness generation there.
                     LabeledTree::SubTree(children) if !children.is_empty() => {
+                        // Sanity check: a complete `HashTree` has no bucket offset.
+                        debug_assert_eq!(ht.bucket_offset, 0);
+
                         let expanded = ht.stubs[pos.bucket()][pos.index()]
                             .source
                             .expand()
@@ -857,6 +860,9 @@ impl HashTree {
 impl PartialEq<crypto::HashTree> for HashTree {
     fn eq(&self, other: &crypto::HashTree) -> bool {
         fn eq_recursive(ht: &HashTree, ht_root: NodeId, other: &crypto::HashTree) -> bool {
+            // Sanity check: a complete `HashTree` has no bucket offset.
+            debug_assert_eq!(ht.bucket_offset, 0);
+
             ht.digest(ht_root) == other.digest()
                 && match (ht_root.kind(), other) {
                     // A stub collapses a whole subtree to its root digest. Expand it from its
@@ -951,8 +957,7 @@ impl<'a> BaselineCursor<'a> {
             // Sanity check: a complete `HashTree` has no bucket offset.
             debug_assert_eq!(self.tree.bucket_offset, 0);
 
-            let bucket = self.node.bucket();
-            self.tree.node_children[bucket][self.node.index()]
+            self.tree.node_children[self.node.bucket()][self.node.index()]
         }
     }
 
@@ -1378,8 +1383,8 @@ fn hash_lazy_tree_impl(
     let strategy = &mut ParallelismStrategy::Concurrent;
     // The root is always materialized; only *descendants* that carry a
     // `subtree_source` are collapsed into stubs (see `build_child`). Building a
-    // stand-alone subtree is just `hash_lazy_tree` on that subtree's root, which
-    // is in turn materialized for the same reason.
+    // stand-alone subtree is just `build_tree` on that subtree's root, which is in
+    // turn materialized for the same reason.
     ht.root = build_tree(t, &mut ht, NodeId::empty(), strategy, 0, baseline)?;
     ht.check_invariants();
 
