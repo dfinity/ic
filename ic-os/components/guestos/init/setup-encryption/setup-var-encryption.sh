@@ -75,8 +75,8 @@ else
                 # device (via `readlink -f`) because /proc/mounts may name it
                 # either /dev/mapper/var_crypt or /dev/dm-N.
                 mounted_dev="$(awk '$2 == "/var" { print $1; exit }' /proc/mounts)"
-                if [ -n "${mounted_dev}" ] &&
-                    [ "$(readlink -f "${mounted_dev}")" = "$(readlink -f /dev/mapper/var_crypt)" ]; then
+                if [ -n "${mounted_dev}" ] \
+                    && [ "$(readlink -f "${mounted_dev}")" = "$(readlink -f /dev/mapper/var_crypt)" ]; then
                     var_new=/var
                     echo "var_crypt is already mounted at /var; transferring logs there"
                 else
