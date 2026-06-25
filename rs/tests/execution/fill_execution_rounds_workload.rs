@@ -6,7 +6,7 @@
 //! each concurrently call `stable_fill()` with `NUMBER_OF_BYTES_TO_WRITE` bytes.
 //!
 //! To run the benchmark, run the following command in the dev environment:
-//! ict test //rs/tests/execution:fill_execution_rounds_workload -k -- --test_tmpdir=test_tmpdir --test_timeout=60000
+//! bazel test //rs/tests/execution:fill_execution_rounds_workload --test_arg=--keepalive --test_tmpdir=test_tmpdir --test_timeout=60000
 
 use anyhow::Result;
 use futures::stream::{FuturesUnordered, StreamExt};

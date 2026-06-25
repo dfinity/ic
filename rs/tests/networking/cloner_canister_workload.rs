@@ -4,7 +4,7 @@
 //! in parallel.
 //!
 //! To run the benchmark, run the following command in the dev container:
-//! ict test //rs/tests/networking:cloner_canister -k -- --test_timeout=600000 --test_tmpdir=test_tmpdir
+//! bazel test //rs/tests/networking:cloner_canister --test_arg=--keepalive --test_timeout=600000 --test_tmpdir=test_tmpdir
 //!
 //! Wait for output to show the console links to the VMs.
 //! Use "Ctrl + F" to search for "/console"

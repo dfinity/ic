@@ -168,17 +168,6 @@ CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 ZIG_CACHE="${CACHE_DIR}/zig-cache"
 mkdir -p "${ZIG_CACHE}"
 
-# ict stores testnet metadata here, shared with the host's ict. Some docker
-# daemons (e.g. namespace.so) can't bind-mount the host's /tmp, so under
-# docker we use a different host dir.
-CTR_ICT_TESTNETS="/tmp/ict_testnets" # path inside the container
-if [ "$RUNTIME" = docker ]; then
-    HOST_ICT_TESTNETS="${CACHE_DIR}/ict_testnets"
-else
-    HOST_ICT_TESTNETS="${CTR_ICT_TESTNETS}"
-fi
-mkdir -p "${HOST_ICT_TESTNETS}"
-
 # make sure we have all bind-mounts
 # ~/.aws, ~/.ssh: credentials forwarded to the container
 # ~/.cache: used as cache persisted across containers (cargo, etc)
@@ -208,9 +197,8 @@ RUNTIME_RUN_ARGS=(
     # ensures processes are reaped correctly
     --init
 
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"     # mount the local repo checkout
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache" # C toolchain cache, persisted to speed up rebuilds
-    --mount type=bind,source="${HOST_ICT_TESTNETS}",target="${CTR_ICT_TESTNETS}"
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # mount the local repo checkout
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"   # C toolchain cache, persisted to speed up rebuilds
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings
@@ -230,18 +218,25 @@ if [ "$RUNTIME" = docker ]; then
     # CAP_SYS_ADMIN so newuidmap can set up the nested user namespace; and host
     # networking so the inner build reaches the registry. This is much narrower
     # than the --privileged podman uses below.
+    #
+    # /dev/kvm, /dev/net/tun and CAP_NET_ADMIN are additionally required by the local
+    # system-test backend (the `_local` tests; see
+    # rs/tests/driver/src/driver/local_backend.rs): it creates a per-group Linux
+    # bridge and per-VM TAP devices (`ip tuntap add`, which opens /dev/net/tun)
+    # via the baked-in `ic-net-admin` capability launcher, which can only raise
+    # CAP_NET_ADMIN into the ambient set if it is in the container's bounding
+    # set. podman's --privileged covers both; docker's defaults expose neither.
     RUNTIME_RUN_ARGS+=(
         --device /dev/fuse
+        --device /dev/kvm
+        --device /dev/net/tun
         --security-opt seccomp=unconfined
         --security-opt apparmor=unconfined
         --security-opt label=disable
         --security-opt systempaths=unconfined
         --cap-add SYS_ADMIN
+        --cap-add NET_ADMIN
         --network=host
-
-        # docker exposes /dev/fuse as 0600 root:root; this shim opens it up so
-        # the unprivileged container user (and fuse-overlayfs) can use it.
-        --entrypoint=/ic/ci/container/docker-init.sh
     )
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;

@@ -2,6 +2,7 @@
 Utilities for building IC replica and canisters.
 """
 
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
@@ -390,6 +391,44 @@ def _volatile_status_impl(ctx):
 
 volatile_status = rule(
     implementation = _volatile_status_impl,
+)
+
+def _disable_hermetic_cc_transition(_settings, _attr):
+    return {
+        "//bazel:hermetic_cc": False,
+    }
+
+disable_hermetic_cc_transition = transition(
+    implementation = _disable_hermetic_cc_transition,
+    inputs = [],
+    outputs = [
+        "//bazel:hermetic_cc",
+    ],
+)
+
+def _disable_hermetic_cc_target_impl(ctx):
+    dep = ctx.attr.target[0]
+    providers = [dep[DefaultInfo]]
+
+    if CcInfo in dep:
+        providers.append(dep[CcInfo])
+    if OutputGroupInfo in dep:
+        providers.append(dep[OutputGroupInfo])
+
+    return providers
+
+disable_hermetic_cc_target = rule(
+    implementation = _disable_hermetic_cc_target_impl,
+    attrs = {
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+        "target": attr.label(
+            mandatory = True,
+            cfg = disable_hermetic_cc_transition,
+            allow_files = True,
+        ),
+    },
 )
 
 def file_size_check(

@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:688586207f0119e428d56b710538a610533f5cb400ca527baabc0b122536ce6e
+      image: ghcr.io/dfinity/ic-build@sha256:0ed93dc568f53cce56042a86b31f98cd1bbb9cd3ea8e649532c366494b9c160a
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -84,41 +84,43 @@ jobs:
     steps:
       - *checkout
       - name: Run Bazel Launch Bare Metal
-        shell: bash
-        run: |
-          echo "$ZH2_DLL01_INI_SECRET" > file1
-          echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            echo "$ZH2_DLL01_INI_SECRET" > file1
+            echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
-          launch_bare_metal() {
+            launch_bare_metal() {
 
-            # shellcheck disable=SC2046,SC2086
-            bazel --output_base=/var/tmp/bazel-output run \
-              //ic-os/setupos/envs/dev:launch_bare_metal -- \
-                --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-                --ini_filename "$(realpath file1)" \
-                --file_share_ssh_key "$(realpath file2)" \
-                --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-                --file_share_username ci_interim \
-                --ci_mode \
-                $@
-          }
+              # shellcheck disable=SC2046,SC2086
+              bazel run \
+                //ic-os/setupos/envs/dev:launch_bare_metal -- \
+                  --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+                  --ini_filename "$(realpath file1)" \
+                  --file_share_ssh_key "$(realpath file2)" \
+                  --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+                  --file_share_username ci_interim \
+                  --ci_mode \
+                  $@
+            }
 
-          # Run bare metal installation test
-          launch_bare_metal --hsm
+            # Run bare metal installation test
+            launch_bare_metal --hsm
 
-          # Run bare metal node performance benchmarks
-          launch_bare_metal --benchmark
+            # Run bare metal node performance benchmarks
+            launch_bare_metal --benchmark
 
-          # Run bare metal node hostOS metrics check
-          launch_bare_metal --check_hostos_metrics
+            # Run bare metal node hostOS metrics check
+            launch_bare_metal --check_hostos_metrics
 
-          # Run SEV tests
-          bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            # Run SEV tests
+            bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
-          bazel clean
+            bazel clean
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         env:
           ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
