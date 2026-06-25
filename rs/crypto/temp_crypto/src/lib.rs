@@ -103,7 +103,7 @@ pub mod internal {
         CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
         UserPublicKey,
     };
-    use ic_types::signature::BasicSignatureBatch;
+    use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
     use ic_types::{NodeId, RegistryVersion, SubnetId};
     use rand::SeedableRng;
     use rand::rngs::OsRng;
@@ -875,7 +875,7 @@ pub mod internal {
 
         fn verify_basic_sig_batch_multi_msg(
             &self,
-            inputs: &[(NodeId, &BasicSigOf<T>, &T, RegistryVersion)],
+            inputs: &[BasicSigBatchEntry<'_, T>],
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_basic_sig_batch_multi_msg(inputs)

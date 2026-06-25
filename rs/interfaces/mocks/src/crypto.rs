@@ -67,7 +67,7 @@ use ic_types::crypto::{
     IndividualMultiSigOf, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::messages::{MessageId, QueryResponseHash, WebAuthnEnvelope};
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -119,11 +119,18 @@ macro_rules! impl_basic_sig_verifier {
 
             fn verify_basic_sig_batch_multi_msg(
                 &self,
-                inputs: &[(NodeId, &BasicSigOf<$t>, &$t, RegistryVersion)],
+                inputs: &[BasicSigBatchEntry<'_, $t>],
             ) -> CryptoResult<()> {
                 let owned: Vec<(NodeId, BasicSigOf<$t>, $t, RegistryVersion)> = inputs
                     .iter()
-                    .map(|(signer, sig, msg, rv)| (*signer, (*sig).clone(), (*msg).clone(), *rv))
+                    .map(|entry| {
+                        (
+                            entry.signer,
+                            entry.signature.clone(),
+                            entry.message.clone(),
+                            entry.registry_version,
+                        )
+                    })
                     .collect();
                 self.$verify_sigs_batch(owned)
             }

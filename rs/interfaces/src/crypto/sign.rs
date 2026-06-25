@@ -25,7 +25,7 @@
 use ic_types::crypto::{
     BasicSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf, Signable,
 };
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -156,7 +156,7 @@ pub trait BasicSigVerifier<T: Signable> {
     /// * `CryptoError::InvalidArgument`: if `inputs` is empty.
     fn verify_basic_sig_batch_multi_msg(
         &self,
-        inputs: &[(NodeId, &BasicSigOf<T>, &T, RegistryVersion)],
+        inputs: &[BasicSigBatchEntry<'_, T>],
     ) -> CryptoResult<()>;
 }
 

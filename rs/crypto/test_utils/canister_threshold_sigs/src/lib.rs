@@ -313,7 +313,7 @@ pub mod node {
         ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::{BasicSigOf, CryptoResult, CurrentNodePublicKeys, Signable};
-    use ic_types::signature::BasicSignatureBatch;
+    use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
     use ic_types::{NodeId, RegistryVersion};
     use rand::seq::IteratorRandom;
     use rand::{CryptoRng, Rng, RngCore, SeedableRng};
@@ -675,7 +675,7 @@ pub mod node {
 
         fn verify_basic_sig_batch_multi_msg(
             &self,
-            inputs: &[(NodeId, &BasicSigOf<T>, &T, RegistryVersion)],
+            inputs: &[BasicSigBatchEntry<'_, T>],
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_basic_sig_batch_multi_msg(inputs)

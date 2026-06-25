@@ -51,6 +51,7 @@ use ic_types::{
     },
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
+    signature::BasicSigBatchEntry,
 };
 use std::{
     collections::{BTreeMap, HashSet},
@@ -525,13 +526,11 @@ impl CanisterHttpPayloadBuilderImpl {
         sig_inputs.extend(
             reconstructed_shares
                 .iter()
-                .map(|(share, registry_version)| {
-                    (
-                        share.signature.signer,
-                        &share.signature.signature,
-                        &share.content,
-                        *registry_version,
-                    )
+                .map(|(share, registry_version)| BasicSigBatchEntry {
+                    signer: share.signature.signer,
+                    signature: &share.signature.signature,
+                    message: &share.content,
+                    registry_version: *registry_version,
                 }),
         );
 

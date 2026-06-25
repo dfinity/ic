@@ -12,9 +12,9 @@ use ic_types::{
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
         CanisterHttpResponseWithConsensus,
     },
-    crypto::{BasicSigOf, Signed, crypto_hash},
+    crypto::{Signed, crypto_hash},
     messages::CallbackId,
-    signature::BasicSignature,
+    signature::{BasicSigBatchEntry, BasicSignature},
 };
 use ic_types_cycles::Cycles;
 use std::{
@@ -240,19 +240,16 @@ pub(crate) fn validate_response_share(
     Ok(())
 }
 
-/// A single `(signer, signature, message, registry_version)` input as consumed
-/// by [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
-pub(crate) type ResponseShareSigInput<'a> = (
-    NodeId,
-    &'a BasicSigOf<CanisterHttpResponseReceipt>,
-    &'a CanisterHttpResponseReceipt,
-    RegistryVersion,
-);
+/// A single signature input as consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`]. The registry version
+/// is the one pinned in the signer's request context, at which the signer's
+/// public key is resolved.
+pub(crate) type ResponseShareSigInput<'a> = BasicSigBatchEntry<'a, CanisterHttpResponseReceipt>;
 
-/// Maps response shares to the `(signer, signature, message, registry_version)`
-/// inputs consumed by [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
-/// All shares produced here belong to the same request, so they share the
-/// `registry_version` pinned in that request's context.
+/// Maps response shares to the signature inputs consumed by
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`]. All shares produced
+/// here belong to the same request, so they share the `registry_version` pinned
+/// in that request's context.
 pub(crate) fn response_share_sig_inputs<'a, I>(
     shares: I,
     registry_version: RegistryVersion,
@@ -260,13 +257,11 @@ pub(crate) fn response_share_sig_inputs<'a, I>(
 where
     I: IntoIterator<Item = &'a CanisterHttpResponseShare>,
 {
-    shares.into_iter().map(move |share| {
-        (
-            share.signature.signer,
-            &share.signature.signature,
-            &share.content,
-            registry_version,
-        )
+    shares.into_iter().map(move |share| BasicSigBatchEntry {
+        signer: share.signature.signer,
+        signature: &share.signature.signature,
+        message: &share.content,
+        registry_version,
     })
 }
 

@@ -83,7 +83,7 @@ impl BasicSigVerifierInternal {
     pub fn verify_basic_sig_batch_multi_msg<H: Signable, R: CryptoComponentRng>(
         csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
-        inputs: &[(NodeId, &BasicSigOf<H>, &H, RegistryVersion)],
+        inputs: &[BasicSigBatchEntry<'_, H>],
     ) -> CryptoResult<()> {
         if inputs.is_empty() {
             return Err(CryptoError::InvalidArgument {
@@ -96,12 +96,12 @@ impl BasicSigVerifierInternal {
         // can borrow them into the helper's input iterator.
         let entries: Vec<(NodeId, &BasicSigOf<H>, Vec<u8>, RegistryVersion)> = inputs
             .iter()
-            .map(|(signer, signature, message, registry_version)| {
+            .map(|entry| {
                 (
-                    *signer,
-                    *signature,
-                    message.as_signed_bytes(),
-                    *registry_version,
+                    entry.signer,
+                    entry.signature,
+                    entry.message.as_signed_bytes(),
+                    entry.registry_version,
                 )
             })
             .collect();

@@ -445,6 +445,7 @@ mod verify_sigs_batch {
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_types::signature::BasicSigBatchEntry;
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 
     fn two_node_crypto_components() -> (TempCryptoComponent, TempCryptoComponent) {
@@ -473,6 +474,20 @@ mod verify_sigs_batch {
         (crypto_1, crypto_2)
     }
 
+    /// Builds a batch entry at `REG_V2` (the version these tests register keys at).
+    fn entry<'a>(
+        signer: NodeId,
+        signature: &'a BasicSigOf<SignableMock>,
+        message: &'a SignableMock,
+    ) -> BasicSigBatchEntry<'a, SignableMock> {
+        BasicSigBatchEntry {
+            signer,
+            signature,
+            message,
+            registry_version: REG_V2,
+        }
+    }
+
     #[test]
     fn should_correctly_verify_batch_with_single_signature() {
         let crypto = TempCryptoComponent::builder()
@@ -483,7 +498,7 @@ mod verify_sigs_batch {
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let sig = crypto.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_1, &sig, &msg, REG_V2)];
+        let inputs = vec![entry(NODE_1, &sig, &msg)];
         assert_matches!(crypto.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
@@ -496,10 +511,7 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![
-            (NODE_1, &sig_1, &msg_1, REG_V2),
-            (NODE_2, &sig_2, &msg_2, REG_V2),
-        ];
+        let inputs = vec![entry(NODE_1, &sig_1, &msg_1), entry(NODE_2, &sig_2, &msg_2)];
         assert_matches!(crypto_1.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
@@ -515,10 +527,7 @@ mod verify_sigs_batch {
         let sig_1 = crypto.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![
-            (NODE_1, &sig_1, &msg_1, REG_V2),
-            (NODE_1, &sig_2, &msg_2, REG_V2),
-        ];
+        let inputs = vec![entry(NODE_1, &sig_1, &msg_1), entry(NODE_1, &sig_2, &msg_2)];
         assert_matches!(crypto.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
@@ -530,10 +539,7 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg).unwrap();
 
-        let inputs = vec![
-            (NODE_1, &sig_1, &msg, REG_V2),
-            (NODE_2, &sig_2, &msg, REG_V2),
-        ];
+        let inputs = vec![entry(NODE_1, &sig_1, &msg), entry(NODE_2, &sig_2, &msg)];
         assert_matches!(crypto_1.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
@@ -546,10 +552,7 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![
-            (NODE_1, &sig_1, &msg_2, REG_V2),
-            (NODE_2, &sig_2, &msg_1, REG_V2),
-        ];
+        let inputs = vec![entry(NODE_1, &sig_1, &msg_2), entry(NODE_2, &sig_2, &msg_1)];
 
         assert_matches!(
             crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
@@ -572,8 +575,8 @@ mod verify_sigs_batch {
         };
 
         let inputs = vec![
-            (NODE_1, &sig_1, &msg_1, REG_V2),
-            (NODE_2, &sig_2_corrupted, &msg_2, REG_V2),
+            entry(NODE_1, &sig_1, &msg_1),
+            entry(NODE_2, &sig_2_corrupted, &msg_2),
         ];
 
         assert_matches!(
@@ -594,12 +597,7 @@ mod verify_sigs_batch {
             rng,
         );
 
-        let empty_inputs: Vec<(
-            NodeId,
-            &BasicSigOf<SignableMock>,
-            &SignableMock,
-            ic_types::RegistryVersion,
-        )> = vec![];
+        let empty_inputs: Vec<BasicSigBatchEntry<'_, SignableMock>> = vec![];
 
         assert_matches!(
             crypto.verify_basic_sig_batch_multi_msg(&empty_inputs),
@@ -615,7 +613,7 @@ mod verify_sigs_batch {
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let sig = crypto_1.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_3, &sig, &msg, REG_V2)];
+        let inputs = vec![entry(NODE_3, &sig, &msg)];
 
         assert_matches!(
             crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
