@@ -44,7 +44,6 @@ configure_make(
     visibility = ["//visibility:public"],
 )
 
-
 filegroup(
     name = "fatlabel",
     srcs = [":dosfstools"],
