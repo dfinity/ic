@@ -1,7 +1,10 @@
 use std::rc::Rc;
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
 };
@@ -236,6 +239,7 @@ pub fn get_system_api(
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
     SystemApiImpl::new(

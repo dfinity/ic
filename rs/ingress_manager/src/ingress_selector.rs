@@ -766,6 +766,7 @@ pub(crate) mod tests {
     };
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
     use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
     use ic_interfaces::{
@@ -1614,6 +1615,7 @@ pub(crate) mod tests {
                                         CyclesAccountManagerSubnetConfig::new(
                                             SMALL_APP_SUBNET_MAX_SIZE,
                                             CanisterCyclesCostSchedule::Normal,
+                                            DEFAULT_REFERENCE_SUBNET_SIZE,
                                         ),
                                     )
                                     .cost(),

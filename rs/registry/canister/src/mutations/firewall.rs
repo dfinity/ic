@@ -588,6 +588,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(MUTATION_ID);
         firewall_mutations_test(FirewallRulesScope::ReplicaNodes, &mut registry);
         let mut registry = invariant_compliant_registry(MUTATION_ID);
+        firewall_mutations_test(FirewallRulesScope::CloudEngines, &mut registry);
+        let mut registry = invariant_compliant_registry(MUTATION_ID);
         firewall_mutations_test(FirewallRulesScope::ApiBoundaryNodes, &mut registry);
 
         let mut registry = invariant_compliant_registry(MUTATION_ID);

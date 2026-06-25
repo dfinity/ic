@@ -549,9 +549,11 @@ async fn test_request_with_delegation<T: Identity + 'static>(
     // A delegation from identity to identity2 for the specific canister ID.
     let delegation = match delegation_targets {
         Some(targets) => {
-            Delegation::new_with_targets(
+            Delegation::new(
                 signature.public_key.clone().unwrap(), // public key of identity2
                 Time::from_nanos_since_unix_epoch(delegation_expiry),
+            )
+            .with_targets(
                 targets
                     .into_iter()
                     .map(|principal| CanisterId::try_from(principal.as_slice()).unwrap())

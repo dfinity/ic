@@ -185,6 +185,7 @@ fn main() -> Result<()> {
         //   Unexpected sandbox state for canister ...
         // Since this is expected we allow all panics in the "MR Batch Processor" thread:
         .add_unallowed_log_pattern_except("panicked", "MR Batch Processor")
+        .add_unallowed_log_pattern_except("panicked", "rs/state_manager/src/allowed_panics.rs")
         .execute_from_args()?;
     Ok(())
 }
