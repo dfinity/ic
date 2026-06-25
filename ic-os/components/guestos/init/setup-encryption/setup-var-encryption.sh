@@ -3,6 +3,9 @@
 set -e
 
 function transfer_log_state() {
+    # The mountpoint of the freshly-created /var to copy the old logs into.
+    local var_new="$1"
+
     # Obtain machine ID, as it will identify which log files to copy.
     # If machine ID is missing, something is very wrong -- but deal with
     # it gracefully by allowing the machine to continue booting anyways.
@@ -10,11 +13,11 @@ function transfer_log_state() {
     echo "Successfully mounted old /var partition, copying contents for machine id: ${MACHINE_ID}"
 
     # First, copy latest journal files.
-    mkdir -p /mnt/var_new/log/journal/"${MACHINE_ID}"
-    if cp -pv $(ls -t /mnt/var_old/log/journal/"${MACHINE_ID}"/*.journal | head -3) /mnt/var_new/log/journal/"${MACHINE_ID}"/; then
-        chown -R root.systemd-journal /mnt/var_new/log/journal/
-        chcon -R system_u:object_r:systemd_journal_t:s0 /mnt/var_new/log/journal/"${MACHINE_ID}"
-        ls -lZ /mnt/var_new/log/journal/"${MACHINE_ID}"
+    mkdir -p "${var_new}/log/journal/${MACHINE_ID}"
+    if cp -pv $(ls -t /mnt/var_old/log/journal/"${MACHINE_ID}"/*.journal | head -3) "${var_new}/log/journal/${MACHINE_ID}/"; then
+        chown -R root.systemd-journal "${var_new}/log/journal/"
+        chcon -R system_u:object_r:systemd_journal_t:s0 "${var_new}/log/journal/${MACHINE_ID}"
+        ls -lZ "${var_new}/log/journal/${MACHINE_ID}"
     else
         echo "Failed to copy previous journal files"
     fi
@@ -51,11 +54,31 @@ else
         # Try to mount the filesystem, but allow for failure.
         if mount -o ro,context=system_u:object_r:var_t:s0 /dev/mapper/old_var_crypt /mnt/var_old; then
             echo "Successfully mounted old /var partition"
-            # Mount newly created filesystem. This must never go wrong -- if it,
-            # the new filesystem is destroyed and there is no point in
-            # continuing. So, do not try to catch an error here.
-            mount /dev/mapper/var_crypt /mnt/var_new
-            if ! transfer_log_state; then
+            # Mount the newly created filesystem so we can copy the previous
+            # boot's logs into it. There is a race with the fstab `var.mount`
+            # unit, which mounts /dev/mapper/var_crypt at /var: if it wins the
+            # race, mounting the same device again at /mnt/var_new fails with
+            # "already mounted or mount point busy". As this script runs under
+            # `set -e`, a bare `mount` would then abort the script and skip the
+            # log transfer (losing e.g. the orchestrator's graceful-shutdown
+            # message from the previous boot). So mount it ourselves when we can,
+            # and otherwise copy into the location where it is already mounted.
+            var_new=""
+            var_new_mounted_by_us=0
+            if mount /dev/mapper/var_crypt /mnt/var_new; then
+                var_new=/mnt/var_new
+                var_new_mounted_by_us=1
+            elif awk '$2 == "/var" { found = 1 } END { exit !found }' /proc/mounts; then
+                # The fstab `var.mount` unit won the race and already mounted
+                # var_crypt at /var (the only mountpoint it uses), so copy the
+                # logs into that mount instead.
+                var_new=/var
+                echo "New /var is already mounted at /var; transferring logs there"
+            else
+                echo "Could not access the new /var filesystem; skipping log transfer"
+            fi
+
+            if [ -n "${var_new}" ] && ! transfer_log_state "${var_new}"; then
                 # We should never reach this code, all possible errors during
                 # log copying should have been handled inside the
                 # transfor_log_state function. Previous log messages should
@@ -66,10 +89,12 @@ else
                 echo "Uncaught error transferring log state, but continuing boot"
             fi
 
-            # Need to dispose of filesystem mounts. This should never fail,
-            # but just be safe and proceed in case of failure. It will result
-            # in stale mountpoints at runtime which is silly but not fatal.
-            umount /mnt/var_new || echo "Failed to unmount new /var in temporary location"
+            # Need to dispose of the mount we created (if any). This should never
+            # fail, but just be safe and proceed in case of failure. It will
+            # result in stale mountpoints at runtime which is silly but not fatal.
+            if [ "${var_new_mounted_by_us}" = 1 ]; then
+                umount /mnt/var_new || echo "Failed to unmount new /var in temporary location"
+            fi
             umount /mnt/var_old || echo "Failed to unmount old /var in temporary location"
         fi
         # Need to close the old encrypted /var partition, but allow for failure.
