@@ -165,6 +165,8 @@ members = [
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/build_tools/alternative_guestos",
+    "rs/ic_os/alternative_guestos",
     "rs/ic_os/command_runner",
     "rs/ic_os/config/tool",
     "rs/ic_os/config/types",

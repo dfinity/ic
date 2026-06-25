@@ -1,0 +1,24 @@
+load("//bazel:defs.bzl", "file_size_check")
+load("//ic-os:defs.bzl", "icos_build")
+load("//ic-os/guestos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "artifact_bundle")
+
+# Builds an SEV recovery image when an elected proposal is available.
+# The build requires the env variables ALTERNATIVE_GUESTOS_BASE_VERSION and ALTERNATIVE_GUESTOS_PROPOSAL_ID
+# The base version is the commit id running on the node that we we are recovering. The proposal id is the accepted
+# NNS proposal of type BlessAlternativeGuestOsVersion. It's important that the proposal corresponds to the base
+# version, i.e the launch measurements match. This is checked when building the image.
+#
+# For example:
+#
+# ALTERNATIVE_GUESTOS_BASE_VERSION=62e841d27ea12451f504e74c54843b7cbf93ca4d ALTERNATIVE_GUESTOS_PROPOSAL_ID=123 \
+#   bazel build //ic-os/guestos/envs/sev-recovery:update-img.tar.zst
+icos_images = icos_build(
+    name = "sev-recovery",
+    build_alternative_guestos_image = True,
+    image_deps_func = image_deps,
+    mode = "prod",
+    visibility = [
+        "//rs:ic-os-pkg",
+    ],
+)

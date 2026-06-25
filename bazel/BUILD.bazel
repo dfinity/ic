@@ -61,6 +61,18 @@ string_flag(
 )
 
 write_stable_status_file_var(
+    name = "alternative_guestos_proposal_id.txt",
+    varname = "STABLE_ALTERNATIVE_GUESTOS_PROPOSAL_ID",
+    visibility = ["//visibility:public"],
+)
+
+write_stable_status_file_var(
+    name = "alternative_guestos_base_version.txt",
+    varname = "STABLE_ALTERNATIVE_GUESTOS_BASE_VERSION",
+    visibility = ["//visibility:public"],
+)
+
+write_stable_status_file_var(
     name = "version.txt",
     varname = "STABLE_VERSION",
     visibility = ["//visibility:public"],
