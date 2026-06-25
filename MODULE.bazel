@@ -736,6 +736,15 @@ http_archive(
 )
 
 http_archive(
+    name = "libfuse",
+    build_file = "@//third_party:BUILD.libfuse.bazel",
+    sha256 = "f01de85717e20adf5f98aff324acd85dd73d61a5ca3834d573dcf0bd6e54a298",
+    strip_prefix = "fuse-3.18.2",
+    type = "tar.gz",
+    urls = ["https://github.com/libfuse/libfuse/releases/download/fuse-3.18.2/fuse-3.18.2.tar.gz"],
+)
+
+http_archive(
     name = "e2fsprogs",
     build_file = "@//third_party:BUILD.e2fsprogs.bazel",
     # Drops the absolute build-time install prefix that mke2fs otherwise bakes
