@@ -189,16 +189,17 @@ jobs:
 
             # creates a list of targets suitable for --target_pattern_file and list
             # the targets on the step summary
-            ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
-            ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
+            mkdir -p "$HOME/.cache/bazel-targets"
+            ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/.cache/bazel-targets/build-targets"
+            ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/.cache/bazel-targets/test-targets"
 
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: bazel-targets
           path: |
-            ${{ runner.temp }}/build-targets
-            ${{ runner.temp }}/test-targets
+            ~/.cache/bazel-targets/build-targets
+            ~/.cache/bazel-targets/test-targets
 
   bazel-test-all:
     name: Bazel Test All
