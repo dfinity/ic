@@ -456,9 +456,6 @@ pub fn get_oldest_state_registry_version(state: &ReplicatedState) -> Option<Regi
         .map(|context| context.registry_version)
         .min();
 
-    // Canister HTTP outcalls determine committee membership and verify share
-    // signatures at the registry version pinned in the request context, so that
-    // version must remain available until the request has been answered.
     let oldest_canister_http_version = call_context_manager
         .canister_http_request_contexts
         .values()

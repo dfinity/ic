@@ -117,9 +117,6 @@ impl BasicSigVerifierInternal {
     }
 
     /// Shared implementation of batched Ed25519 basic-sig verification.
-    ///
-    /// Each input carries its own registry version, at which that signer's
-    /// public key is resolved.
     fn verify_basic_sig_batch_internal<'a, H: 'a, R: CryptoComponentRng>(
         csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,

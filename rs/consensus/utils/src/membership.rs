@@ -183,23 +183,15 @@ impl Membership {
 
     /// Get the committee to be used for canister http at the given registry
     /// version.
-    ///
-    /// The committee is determined by an explicit registry version rather than
-    /// by the registry version active at some block height. This is used to pin
-    /// a canister http request to the committee that was active at the registry
-    /// version stored in the request context, which is the source of truth for
-    /// the request.
-    ///
-    /// IMPORTANT: if this ever becomes something other than the full set of
-    /// subnet nodes, we should make sure that:
-    /// 1. Shares from non committee nodes are not included in the payload
-    ///    this should be enforced already by the pool validator, though it might
-    ///    make sense for the payload builder to check too.
-    /// 2. Non replicated request should only be sent to committee nodes.
     pub fn get_canister_http_committee(
         &self,
         registry_version: RegistryVersion,
     ) -> Result<Vec<NodeId>, MembershipError> {
+        // IMPORTANT: if this ever becomes something else, we should make sure that:
+        // 1. Shares from non committee nodes are not included in the payload
+        //    this should be enforced already by the pool validator, though it might
+        //    make sense for the payload builder to check too.
+        // 2. Non replicated request should only be sent to committee nodes.
         self.get_nodes_at_version(registry_version)
     }
 

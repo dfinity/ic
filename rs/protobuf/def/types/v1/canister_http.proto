@@ -29,11 +29,9 @@ message CanisterHttpResponse {
 }
 
 message CanisterHttpResponseMetadata {
+  reserved 2, 4;
   uint64 id = 1;
-  reserved 2;
   bytes content_hash = 3;
-  reserved 4; // Previously registry_version; now sourced from the request context in replicated state.
-  reserved "registry_version";
   string replica_version = 5;
   uint32 content_size = 6;
   bool is_reject = 7;
@@ -61,14 +59,10 @@ message CanisterHttpResponseSignature {
 }
 
 message CanisterHttpResponseWithConsensus {
+  reserved 3, 4, 5, 6;
   CanisterHttpResponse response = 1;
   bytes hash = 2;
-  reserved 3; // Previously registry_version; now sourced from the request context in replicated state.
-  reserved "registry_version";
   string replica_version = 8;
-  reserved 4;
-  reserved 5;
-  reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
   bool is_reject = 10;
