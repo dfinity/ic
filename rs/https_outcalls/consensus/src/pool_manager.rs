@@ -310,7 +310,6 @@ impl CanisterHttpPoolManagerImpl {
 
         for (id, context) in http_requests {
             // Only make a request if this node belongs to the request's committee
-            // at the registry version pinned in its context/
             if !self
                 .node_belongs_to_request_committee(context, self.replica_config.node_id)
                 .unwrap_or(false)
@@ -617,9 +616,7 @@ impl CanisterHttpPoolManagerImpl {
         change_set.extend(self.purge_shares_of_processed_requests(canister_http_pool));
 
         // Make any requests that need to be made and create shares from responses
-        // that are now available. Both steps are gated per request on whether this
-        // node belongs to the request's committee at the registry version pinned in
-        // its context, so there is no node-level committee gate here.
+        // that are now available.
         self.make_new_requests(canister_http_pool);
         change_set.extend(self.create_shares_from_responses());
 
