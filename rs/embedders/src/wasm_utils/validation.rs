@@ -1330,10 +1330,10 @@ fn validate_function_section(
         // Check number of locals
         let num_locals = module
             .functions
-            .get(id)
+            .get(id) /* we retrieved the id from the same module */
             .kind()
             .unwrap_local() /* we are looping over locals only */
-            .unwrap() /* we retrieved the id from the same module */
+            .unwrap()
             .body
             .num_locals;
         max_num_locals = max_num_locals.max(num_locals);
