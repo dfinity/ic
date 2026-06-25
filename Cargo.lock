@@ -383,9 +383,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "alternative_guestos"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-certificate-verification",
+ "ic-certification 3.1.0",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "serde_cbor",
+]
+
+[[package]]
 name = "alternative_guestos_tool"
 version = "0.0.0"
 dependencies = [
+ "alternative_guestos",
  "anyhow",
  "candid",
  "clap 4.6.0",
@@ -395,7 +409,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-governance-conversions",
  "ic-protobuf",
- "ic_os_alternative_guestos",
  "serde_cbor",
  "serde_json",
  "tokio",
@@ -16324,19 +16337,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic_os_alternative_guestos"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "candid",
- "ic-certificate-verification",
- "ic-certification 3.1.0",
- "ic-nns-constants",
- "ic-nns-governance-api",
- "serde_cbor",
-]
-
-[[package]]
 name = "ic_os_logging"
 version = "0.0.0"
 dependencies = [
@@ -19160,6 +19160,7 @@ dependencies = [
 name = "open_rootfs"
 version = "0.0.0"
 dependencies = [
+ "alternative_guestos",
  "anyhow",
  "attestation",
  "candid",
@@ -19176,7 +19177,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-types",
  "ic_device",
- "ic_os_alternative_guestos",
  "ic_os_logging",
  "linux_kernel_command_line",
  "pem",
