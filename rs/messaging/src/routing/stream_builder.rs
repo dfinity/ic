@@ -700,8 +700,16 @@ impl StreamBuilderImpl {
             }) {
                 debug_assert!(
                     false,
-                    "Duplicate response: critical_error_infinite_loops was raised in a previous build_streams() call"
+                    "Already have a response enqueued for a request to be rejected"
                 );
+                error!(
+                    self.log,
+                    "{}: Already have a response enqueued for a request to be rejected",
+                    CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
+                );
+                self.metrics
+                    .critical_error_response_destination_not_found
+                    .inc();
                 continue;
             }
             let dst_canister_id = req.receiver;
