@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Added the `PATCH` variant to the `CanisterHttpMethod` enum (canister HTTPS outcalls). Note: `PATCH` outcalls are currently rejected by the execution layer until support has rolled out to all replicas.
+- The function `PocketIc::delete_subnet` to delete a subnet. Only non-named subnets (application, cloud engine, system, or verified application) can be deleted.
+
+## 14.0.0 - 2026-05-26
+
+### Added
 - The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
   should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
 - The functions `PocketIc::submit_call_with_effective_principal_and_sender_info`, `PocketIc::submit_call_with_sender_info`,

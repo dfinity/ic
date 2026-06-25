@@ -476,7 +476,8 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     let seconds_to_burn_balance = env.cycle_balance(canister_id) as u64
         / compute_percent_allocated_per_second_fee.get() as u64;
     env.advance_time(Duration::from_secs(seconds_to_burn_balance + 1));
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
 
     // Verify the original canister still exists but it's uninstalled and has a
     // zero cycle balance.
@@ -1624,7 +1625,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
         let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
-        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
+        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(400 * B))
     }
 
     fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {
@@ -1794,7 +1795,7 @@ fn current_interval_length_works_on_app_subnets() {
 
     let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
     let _canister_id = env
-        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(400 * B))
         .unwrap();
 
     // One empty round is always performed when creating a `StateMachine`
@@ -2489,7 +2490,7 @@ fn canister_create_with_default_wasm_memory_limit() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let initial_cycles = Cycles::new(301 * B);
+    let initial_cycles = Cycles::new(400 * B);
     let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
@@ -2666,16 +2667,18 @@ fn test_canister_liquid_cycle_balance() {
     // and that the accepted cycles are way more than that.
     let lost_cycles = liquid_balance - accepted_cycles;
     assert_lt!(lost_cycles, 100 * B);
-    assert_gt!(accepted_cycles, INITIAL_CYCLES_BALANCE.get() - 100 * B);
+    // The base_per_second_fee raises the freeze threshold by ~26B, reducing the liquid balance (and thus
+    // accepted cycles) by that amount relative to INITIAL_CYCLES_BALANCE; allow 150B total overhead.
+    assert_gt!(accepted_cycles, INITIAL_CYCLES_BALANCE.get() - 150 * B);
 
     // Finally, we assert that the cycles have indeed moved from one universal canister to the other one.
-    // The remaining balance of the sender is larger than the lost cycles by the unspent cycles in the execution of the ingress message,
-    // but still less than 100B.
+    // The remaining balance of the sender is approximately the freeze threshold (which is ~26B higher than
+    // before due to the base_per_second_fee) plus unspent execution budget, so allow up to 200B.
     let balance = env.cycle_balance(canister_id);
-    assert_lt!(balance, 100 * B);
+    assert_lt!(balance, 200 * B);
     // The receiver now holds the joint cycles balance of both canisters at the beginning minus some overhead.
     let receiver_balance = env.cycle_balance(callee);
-    assert_gt!(receiver_balance, 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
+    assert_gt!(receiver_balance, 2 * INITIAL_CYCLES_BALANCE.get() - 200 * B);
 }
 
 /// Test that a message which results in many calls with large payloads (2 GB in

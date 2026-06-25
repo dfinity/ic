@@ -181,6 +181,18 @@ pub struct SystemMetadata {
     /// Modifications to the state that have not been applied yet to the next checkpoint.
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
+
+    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
+    /// or from `LogMemoryStore` to `CanisterLog`, as per the
+    /// `log_memory_store_feature` flag.
+    ///
+    /// This is a (temporary) transient field tracking whether all canisters are
+    /// definitely using the log store required by the `log_memory_store_feature`
+    /// flag. It is intended to be used as a one-time trigger (when `false`) to
+    /// launch the (idempotent, if already performed) logs migration exactly once
+    /// per replica process (since the flag is hardcoded into the binary).
+    #[validate_eq(Ignore)]
+    pub logs_migrated: bool,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -323,6 +335,21 @@ impl NetworkTopology {
         self.subnets
             .get(subnet_id)
             .map(|subnet_topology| subnet_topology.cost_schedule)
+    }
+
+    /// Returns the reference subnet size of the given subnet, derived from its type and SEV status.
+    /// System subnets always use the default reference size regardless of SEV.
+    pub fn get_reference_subnet_size(&self, subnet_id: &SubnetId) -> Option<usize> {
+        use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE};
+        self.subnets.get(subnet_id).map(|subnet_topology| {
+            if subnet_topology.subnet_type != SubnetType::System
+                && subnet_topology.subnet_features.sev_enabled
+            {
+                SEV_REFERENCE_SUBNET_SIZE
+            } else {
+                DEFAULT_REFERENCE_SUBNET_SIZE
+            }
+        })
     }
 
     /// Returns the subnets map used for the certified state tree.
@@ -536,6 +563,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         }
     }
 
@@ -558,6 +586,13 @@ impl SystemMetadata {
     /// not populated.
     pub fn own_cost_schedule(&self) -> Option<CanisterCyclesCostSchedule> {
         self.network_topology.get_cost_schedule(&self.own_subnet_id)
+    }
+
+    /// Returns the reference subnet size of this subnet derived from its SEV
+    /// status, `None` if `network_topology` is not populated.
+    pub fn own_reference_subnet_size(&self) -> Option<usize> {
+        self.network_topology
+            .get_reference_subnet_size(&self.own_subnet_id)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
@@ -838,6 +873,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
+            logs_migrated: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -942,6 +978,7 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
+            logs_migrated,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1051,6 +1088,7 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
+            logs_migrated,
         })
     }
 
@@ -2152,6 +2190,7 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         };
     }
 }

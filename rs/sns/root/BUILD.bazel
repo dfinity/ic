@@ -35,7 +35,6 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        ":build_script",
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/nervous_system/clients",
@@ -48,12 +47,10 @@ rust_library(
         # TODO[NNS1-2282]
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
-        "@crate_index//:build-info",
         "@crate_index//:candid",
         "@crate_index//:comparable",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
-        "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:prost",
         "@crate_index//:serde",

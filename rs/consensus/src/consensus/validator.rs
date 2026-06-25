@@ -1808,12 +1808,9 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
 
-        let summary = match block.payload.as_ref() {
-            BlockPayload::Summary(summary_payload) => summary_payload,
-            BlockPayload::Data(_) => {
-                return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
-            }
-        };
+        if let BlockPayload::Data(_) = block.payload.as_ref() {
+            return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
+        }
 
         if &beacon != share_content.random_beacon.get_value() {
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
@@ -1823,16 +1820,12 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
-        let registry_version = if summary.idkg.is_some() {
-            // Should succeed as we already got the hash above
-            let state = self
-                .state_manager
-                .get_state_at(block.height())
-                .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_state_registry_version(state.get_ref())
-        } else {
-            None
-        };
+        // Should succeed as we already got the hash above
+        let state = self
+            .state_manager
+            .get_state_at(block.height())
+            .map_err(ValidationFailure::StateManagerError)?;
+        let registry_version = get_oldest_state_registry_version(state.get_ref());
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
             return Err(
                 InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
@@ -2084,15 +2077,19 @@ pub mod test {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        SetupInitialDkgContext, SignWithThresholdContext,
+    };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::{
         assert_changeset_matches_pattern,
+        dkg::fake_setup_initial_dkg_context,
         fake::*,
+        fake_state_with_contexts,
         idkg::{
             empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
             fake_signature_request_context_with_registry_version,
-            fake_state_with_signature_requests,
         },
     };
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
@@ -2114,7 +2111,6 @@ pub mod test {
             BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
             CombinedThresholdSigOf, CryptoHash,
         },
-        messages::CallbackId,
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
     };
@@ -2311,8 +2307,60 @@ pub mod test {
         })
     }
 
-    #[test]
-    fn test_validate_catch_up_package_shares_with_registry_version() {
+    /// Build a vector of signature contexts where the oldest matched
+    /// pre-signature is pinned at `RegistryVersion(2)`. The unmatched context
+    /// at `RegistryVersion(1)` should be ignored.
+    fn signature_contexts_with_oldest_v2() -> Vec<SignWithThresholdContext> {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        vec![
+            fake_signature_request_context_with_registry_version(
+                Some(PreSigId(1)),
+                key_id.inner(),
+                RegistryVersion::from(3),
+            ),
+            fake_signature_request_context_with_registry_version(
+                None,
+                key_id.inner(),
+                RegistryVersion::from(1),
+            ),
+            fake_signature_request_context_with_registry_version(
+                Some(PreSigId(3)),
+                key_id.inner(),
+                RegistryVersion::from(2),
+            ),
+        ]
+    }
+
+    /// A single signature context pinning `RegistryVersion(5)`.
+    fn signature_contexts_pinning_v5() -> Vec<SignWithThresholdContext> {
+        let key_id = fake_ecdsa_idkg_master_public_key_id();
+        vec![fake_signature_request_context_with_registry_version(
+            Some(PreSigId(1)),
+            key_id.inner(),
+            RegistryVersion::from(5),
+        )]
+    }
+
+    #[rstest]
+    #[case::sign_requests_only(signature_contexts_with_oldest_v2(), vec![])]
+    #[case::setup_initial_dkg_only(
+        vec![],
+        vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+    )]
+    #[case::signature_older_than_setup_initial_dkg(
+        signature_contexts_with_oldest_v2(),
+        vec![fake_setup_initial_dkg_context(RegistryVersion::from(5))],
+    )]
+    #[case::setup_initial_dkg_older_than_signature(
+        signature_contexts_pinning_v5(),
+        vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+    )]
+    fn test_validate_catch_up_package_shares_with_registry_version(
+        #[case] signature_contexts: Vec<SignWithThresholdContext>,
+        #[case] setup_initial_dkg_contexts: Vec<SetupInitialDkgContext>,
+        #[values(true, false)] with_idkg_payload: bool,
+    ) {
+        let expected_oldest_registry_version = RegistryVersion::from(2);
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let ValidatorAndDependencies {
                 validator,
@@ -2333,44 +2381,13 @@ pub mod test {
                 .return_const(Ok(state_hash.clone()));
 
             let height = Height::from(0);
-            let key_id = fake_ecdsa_idkg_master_public_key_id();
-            // Create three quadruple Ids and contexts, context "2" will remain unmatched.
-            let pre_sig_id1 = PreSigId(1);
-            let pre_sig_id3 = PreSigId(3);
-
-            let contexts = vec![
-                (
-                    CallbackId::new(1),
-                    fake_signature_request_context_with_registry_version(
-                        Some(pre_sig_id1),
-                        key_id.inner(),
-                        RegistryVersion::from(3),
-                    ),
-                ),
-                (
-                    CallbackId::new(2),
-                    fake_signature_request_context_with_registry_version(
-                        None,
-                        key_id.inner(),
-                        RegistryVersion::from(1),
-                    ),
-                ),
-                (
-                    CallbackId::new(3),
-                    fake_signature_request_context_with_registry_version(
-                        Some(pre_sig_id3),
-                        key_id.inner(),
-                        RegistryVersion::from(2),
-                    ),
-                ),
-            ];
-
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_signature_requests(
+                .return_const(Ok(fake_state_with_contexts(
                     height,
-                    contexts.clone(),
+                    signature_contexts,
+                    setup_initial_dkg_contexts,
                 )
                 .get_labeled_state()));
 
@@ -2402,15 +2419,17 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let idkg = empty_idkg_payload(subnet_test_id(0));
-            let dkg = block.payload.as_ref().as_summary().dkg.clone();
-            block.payload = Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg,
-                    idkg: Some(idkg),
-                }),
-            );
+            if with_idkg_payload {
+                let idkg = empty_idkg_payload(subnet_test_id(0));
+                let dkg = block.payload.as_ref().as_summary().dkg.clone();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload {
+                        dkg,
+                        idkg: Some(idkg),
+                    }),
+                );
+            }
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
 
             let beacon = pool.make_next_beacon();
@@ -2420,33 +2439,57 @@ pub mod test {
                 make_next_cup_share(proposal.clone(), beacon.clone(), None);
             pool.insert_unvalidated(cup_share_no_registry_version.clone());
 
+            // Pick a `wrong` registry version that is guaranteed to differ from
+            // `expected_oldest_registry_version`.
+            let wrong_registry_version =
+                expected_oldest_registry_version + RegistryVersion::from(1);
             let cup_share_wrong_registry_version = make_next_cup_share(
                 proposal.clone(),
                 beacon.clone(),
-                Some(RegistryVersion::from(1)),
+                Some(wrong_registry_version),
             );
             pool.insert_unvalidated(cup_share_wrong_registry_version.clone());
 
-            // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
-            // by the replicated state should be the registry version of quadruple 3, which is 2.
+            // The CUP share whose pinned version matches the replicated state's
+            // oldest pinned version is the only one that should validate. This
+            // must hold regardless of whether the summary block carries an iDKG
+            // payload.
             let cup_share_valid =
-                make_next_cup_share(proposal, beacon, Some(RegistryVersion::from(2)));
+                make_next_cup_share(proposal, beacon, Some(expected_oldest_registry_version));
             pool.insert_unvalidated(cup_share_valid.clone());
 
             let pool_reader = PoolReader::new(&pool);
             let change_set = validator.validate_catch_up_package_shares(&pool_reader);
 
-            // Check that the change set contains exactly the one `CatchUpPackageShare` we
-            // expect it to.
+            // The change set contains exactly one action per CUP share, but
+            // the order depends on the share hashes and is therefore
+            // sensitive to the parameter values, so we look up each share
+            // explicitly.
             assert_eq!(change_set.len(), 3);
-            assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_share_no_registry_version && m.contains("MismatchedOldestRegistryVersion")
+            let find_action = |share: &CatchUpPackageShare| {
+                change_set
+                    .iter()
+                    .find(|action| match action {
+                        ChangeAction::HandleInvalid(
+                            ConsensusMessage::CatchUpPackageShare(s),
+                            _,
+                        )
+                        | ChangeAction::MoveToValidated(
+                            ConsensusMessage::CatchUpPackageShare(s),
+                        ) => s == share,
+                        _ => false,
+                    })
+                    .unwrap_or_else(|| panic!("CUP share not found in change set"))
+            };
+            assert_matches!(find_action(&cup_share_no_registry_version),
+                ChangeAction::HandleInvalid(_, m) if m.contains("MismatchedOldestRegistryVersion")
             );
-            assert_matches!(&change_set[1], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
-                if s == &cup_share_wrong_registry_version && m.contains("MismatchedOldestRegistryVersion")
+            assert_matches!(find_action(&cup_share_wrong_registry_version),
+                ChangeAction::HandleInvalid(_, m) if m.contains("MismatchedOldestRegistryVersion")
             );
-            assert_matches!(&change_set[2], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
-                if s == &cup_share_valid
+            assert_matches!(
+                find_action(&cup_share_valid),
+                ChangeAction::MoveToValidated(_)
             );
         })
     }

@@ -19,7 +19,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
@@ -222,13 +222,11 @@ impl Upgrade {
         });
         // Determine the subnet_id using the local CUP.
         let subnet_id = match (&maybe_local_cup, &maybe_local_cup_proto) {
-            (Some(cup), _) => {
-                get_subnet_id(self.registry.get_registry_client(), cup).map_err(|err| {
-                    OrchestratorError::UpgradeError(format!(
-                        "Couldn't determine the subnet id: {err:?}"
-                    ))
-                })?
-            }
+            (Some(cup), _) => get_subnet_id(&self.registry, cup).map_err(|err| {
+                OrchestratorError::UpgradeError(format!(
+                    "Couldn't determine the subnet id: {err:?}"
+                ))
+            })?,
             (None, Some(proto)) => {
                 // We found a local CUP proto that we can't deserialize. This may only happen
                 // if this is the first CUP we are reading on a new replica version after an
@@ -758,7 +756,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
 }
 
 /// Returns the subnet id for the given CUP.
-fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<SubnetId, String> {
+fn get_subnet_id(registry: &RegistryHelper, cup: &CatchUpPackage) -> Result<SubnetId, String> {
     let dkg_summary = &cup
         .content
         .block

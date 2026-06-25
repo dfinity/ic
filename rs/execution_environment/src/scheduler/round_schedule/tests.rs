@@ -22,7 +22,7 @@ use itertools::Itertools;
 use maplit::btreeset;
 use more_asserts::{assert_gt, assert_le};
 use proptest::prelude::*;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 /// Fixture for testing `RoundSchedule` in isolation: a `RoundSchedule` and a
@@ -148,7 +148,7 @@ impl RoundScheduleFixture {
                 core.into_iter()
                     .map(|cs| {
                         let id = cs.canister_id();
-                        all_canisters.insert(id, cs);
+                        all_canisters.insert(cs);
                         id
                     })
                     .collect()
@@ -298,7 +298,6 @@ impl RoundScheduleFixture {
             SystemMethod::CanisterHeartbeat,
         )]));
         self.canister_state(&canister_id).execution_state = Some(ExecutionState::new(
-            "NOT_USED".into(),
             WasmBinary::new(CanisterModule::new(vec![])),
             exports,
             Memory::new_for_testing(),

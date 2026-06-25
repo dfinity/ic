@@ -122,7 +122,7 @@ impl TestSubnet {
         self.env
             .get_latest_state()
             .canister_states()
-            .keys()
+            .all_keys()
             .cloned()
             .collect()
     }
@@ -133,7 +133,7 @@ impl TestSubnet {
             .env
             .get_latest_state()
             .canister_states()
-            .keys()
+            .all_keys()
             .next()
             .unwrap()
     }

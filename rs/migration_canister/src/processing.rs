@@ -273,8 +273,8 @@ pub async fn process_updated(
     else {
         return ProcessingResult::NoProgress;
     };
-    if migrated_canister_subnet_version < registry_version
-        || replaced_canister_subnet_version < registry_version
+    if migrated_canister_subnet_version.is_some_and(|v| v < registry_version)
+        || replaced_canister_subnet_version.is_some_and(|v| v < registry_version)
     {
         return ProcessingResult::NoProgress;
     }

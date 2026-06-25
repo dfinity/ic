@@ -49,7 +49,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     methods::WasmMethod,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -3527,7 +3527,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(301_000_000_000);
+    let initial_cycles = Cycles::new(400_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -3540,27 +3540,24 @@ fn ic0_call_cycles_add_deducts_cycles() {
     assert_eq!(1, test.xnet_messages().len());
     let mgr = test.cycles_account_manager();
     let messaging_fee = mgr
-        .xnet_call_performed_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+        .xnet_call_performed_fee(test.get_own_subnet_cycles_config())
         .real()
         + mgr
             .xnet_call_bytes_transmitted_fee(
                 test.xnet_messages()[0].payload_size_bytes(),
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
+                test.get_own_subnet_cycles_config(),
             )
             .real()
         + mgr
             .xnet_call_bytes_transmitted_fee(
                 MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
+                test.get_own_subnet_cycles_config(),
             )
             .real()
         + mgr
             .execution_cost(
                 MAX_NUM_INSTRUCTIONS,
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
+                test.get_own_subnet_cycles_config(),
                 test.canister_wasm_execution_mode(canister_id),
             )
             .real();
@@ -3604,7 +3601,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(301_000_000_000);
+    let initial_cycles = Cycles::new(400_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -6837,8 +6834,7 @@ fn dts_abort_works_in_update_call() {
                 .cycles_account_manager()
                 .execution_cost(
                     NumInstructions::from(100_000_000),
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
+                    test.get_own_subnet_cycles_config(),
                     test.canister_wasm_execution_mode(canister_id)
                 )
                 .real(),
@@ -6874,8 +6870,7 @@ fn dts_abort_works_in_update_call() {
                 .cycles_account_manager()
                 .execution_cost(
                     NumInstructions::from(100_000_000),
-                    test.subnet_size(),
-                    CanisterCyclesCostSchedule::Normal,
+                    test.get_own_subnet_cycles_config(),
                     test.canister_wasm_execution_mode(canister_id)
                 )
                 .real(),
@@ -7876,7 +7871,7 @@ fn charge_for_dirty_pages() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7895,7 +7890,7 @@ fn stable_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn stable64_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7914,7 +7909,7 @@ fn stable64_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_update() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7939,7 +7934,7 @@ fn memory_grow_checks_freezing_threshold_in_update() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7952,7 +7947,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn stable64_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
@@ -7965,7 +7960,7 @@ fn stable64_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn memory_grow_does_not_check_freezing_threshold_in_query() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -7984,7 +7979,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_query() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_reply() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -8009,7 +8004,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reply() {
 #[test]
 fn stable_grow_does_not_check_freezing_threshold_in_reject() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -8034,7 +8029,7 @@ fn stable_grow_does_not_check_freezing_threshold_in_reject() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -8067,7 +8062,7 @@ fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -8100,7 +8095,7 @@ fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let empty_wat = "(module)";
     let wat = r#"
@@ -8130,7 +8125,7 @@ fn stable_grow_checks_freezing_threshold_in_start() {
 #[test]
 fn stable_grow_checks_freezing_threshold_in_init() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -8143,7 +8138,7 @@ fn stable_grow_checks_freezing_threshold_in_init() {
             (memory 0)
         )"#;
     let wasm = wat::parse_str(wat).unwrap();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(12_000_000_000_000));
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let err = test.install_canister(canister_id, wasm).unwrap_err();
@@ -8158,7 +8153,7 @@ fn stable_grow_checks_freezing_threshold_in_init() {
 #[test]
 fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -8179,7 +8174,7 @@ fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -8211,7 +8206,7 @@ fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_start() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let empty_wat = "(module)";
     let wat = r#"
@@ -8240,7 +8235,7 @@ fn memory_grow_checks_freezing_threshold_in_start() {
 #[test]
 fn memory_grow_checks_freezing_threshold_in_init() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(12_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -8252,7 +8247,7 @@ fn memory_grow_checks_freezing_threshold_in_init() {
             (memory 0)
         )"#;
     let wasm = wat::parse_str(wat).unwrap();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(12_000_000_000_000));
     test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
         .unwrap();
     let err = test.install_canister(canister_id, wasm).unwrap_err();
@@ -8270,7 +8265,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
         .with_initial_canister_cycles(2_500_000_000_000)
         .build();
     let canister_id = test.universal_canister().unwrap();
-    test.update_freezing_threshold(canister_id, NumSeconds::new(1_500_000_000))
+    test.update_freezing_threshold(canister_id, NumSeconds::new(212_000_000))
         .unwrap();
     let body = wasm()
         .call_simple(
@@ -8291,7 +8286,7 @@ fn call_perform_checks_freezing_threshold_in_update() {
 #[test]
 fn call_perform_does_not_check_freezing_threshold_in_reply() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(15_000_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -8325,7 +8320,7 @@ fn call_perform_does_not_check_freezing_threshold_in_reply() {
 #[test]
 fn call_perform_does_not_check_freezing_threshold_in_reject() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_500_000_000_000)
+        .with_initial_canister_cycles(15_000_000_000_000)
         .build();
     let callee = test.universal_canister().unwrap();
     let canister_id = test.universal_canister().unwrap();
@@ -8382,8 +8377,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
         NumBytes::new(memory_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
@@ -8472,8 +8466,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
             .storage_reservation_cycles(
                 memory_usage_after - memory_usage_before,
                 &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-                test.subnet_size(),
-                CanisterCyclesCostSchedule::Normal,
+                test.get_own_subnet_cycles_config(),
             )
             .real()
     );
@@ -9322,9 +9315,8 @@ fn invoke_cost_call() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test.cycles_account_manager().xnet_call_total_fee(
         (method_name.len() as u64 + argument.len() as u64).into(),
-        test.subnet_size(),
+        test.get_own_subnet_cycles_config(),
         WasmExecutionMode::Wasm32,
-        CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
@@ -9336,7 +9328,6 @@ fn invoke_cost_call() {
 #[test]
 fn invoke_cost_create_canister() {
     let mut test = ExecutionTestBuilder::new().build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_create_canister()
@@ -9346,7 +9337,7 @@ fn invoke_cost_create_canister() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .canister_creation_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .canister_creation_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9357,7 +9348,6 @@ fn invoke_cost_create_canister() {
 #[test]
 fn invoke_cost_http_request() {
     let mut test = ExecutionTestBuilder::new().build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let request_size = 1000;
     let max_res_bytes = 1_800_000;
@@ -9370,8 +9360,7 @@ fn invoke_cost_http_request() {
     let expected_cost = test.cycles_account_manager().http_request_fee(
         request_size.into(),
         Some(max_res_bytes.into()),
-        subnet_size,
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
@@ -9391,7 +9380,6 @@ fn invoke_cost_http_request_v2() {
         transform_instructions: u64,
     }
     let mut test = ExecutionTestBuilder::new().build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let request_bytes = 1000;
     let http_roundtrip_time_ms = 2_000;
@@ -9419,8 +9407,7 @@ fn invoke_cost_http_request_v2() {
         raw_response_bytes.into(),
         transform_instructions.into(),
         transformed_response_bytes.into(),
-        subnet_size,
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
     );
     let bytes = get_reply(res);
     let actual_cost = Cycles::from(&bytes);
@@ -9478,7 +9465,6 @@ fn invoke_cost_sign_with_ecdsa() {
             name: key_name.clone(),
         }))
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_sign_with_ecdsa(key_name.as_bytes(), curve_variant)
@@ -9488,7 +9474,7 @@ fn invoke_cost_sign_with_ecdsa() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .ecdsa_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .ecdsa_signature_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9558,7 +9544,6 @@ fn invoke_cost_sign_with_schnorr() {
             name: key_name.clone(),
         }))
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_sign_with_schnorr(key_name.as_bytes(), algorithm_variant)
@@ -9568,7 +9553,7 @@ fn invoke_cost_sign_with_schnorr() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .schnorr_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .schnorr_signature_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };
@@ -9638,7 +9623,6 @@ fn invoke_cost_vetkd_derive_key() {
             name: key_name.clone(),
         }))
         .build();
-    let subnet_size = test.subnet_size();
     let canister_id = test.universal_canister().unwrap();
     let payload = wasm()
         .cost_vetkd_derive_key(key_name.as_bytes(), curve_variant)
@@ -9648,7 +9632,7 @@ fn invoke_cost_vetkd_derive_key() {
     let res = test.ingress(canister_id, "update", payload);
     let expected_cost = test
         .cycles_account_manager()
-        .vetkd_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
+        .vetkd_fee(test.get_own_subnet_cycles_config());
     let Ok(WasmResult::Reply(bytes)) = res else {
         panic!("Expected reply, got {res:?}");
     };

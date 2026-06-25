@@ -22,6 +22,13 @@ const EMPTY_HASH: Digest = Digest([
     0xcf, 0xfb, 0x6c, 0x47, 0xdb, 0xab, 0x21, 0x6e, 0x79, 0x30, 0xe8, 0x2f, 0x81, 0x90, 0xd1, 0x20,
 ]);
 
+/// Hash of an empty leaf, i.e. the digest of the domain separator
+/// "ic-hashtree-leaf" with no body bytes.
+const EMPTY_LEAF_HASH: Digest = Digest([
+    0xd0, 0x01, 0xf3, 0xe7, 0xb8, 0x21, 0x66, 0xc6, 0xd3, 0x43, 0xa1, 0xef, 0xe7, 0x76, 0xe9, 0x6a,
+    0xc0, 0x2a, 0x23, 0xa5, 0x1e, 0x08, 0x98, 0xbc, 0x2c, 0x4e, 0x32, 0x3f, 0xce, 0x0e, 0x62, 0x2c,
+]);
+
 /// 30 LSBs are used to store the index
 const INDEX_MASK: u32 = 0x3fff_ffff;
 /// 2 MSBs are used to store the node kind
@@ -38,13 +45,13 @@ enum NodeKind {
     Node,
 }
 
-/// NodeId describe the position of a node in the HashTree data structure
+/// The position of a node in the HashTree data structure.
 ///
 /// HashTree consists of several parallel vectors of vectors. The kind of node
 /// is node_id.kind(), the first index is node_id.bucket(), whereas the second
 /// index is node_id.index().
 ///
-/// For example, the digest of a node_id with node_id.kind() = NodeKind::Fork can
+/// For example, the digest of a node_id with node_id.kind() = NodeKind::Fork
 /// is stored at hash_tree.fork_digests[node_id.bucket()][node_id.index()]
 ///
 /// The reason for storing vectors of vectors is because it lends itself to parallelism
@@ -67,7 +74,7 @@ impl fmt::Debug for NodeId {
 }
 
 impl NodeId {
-    /// Constructs a node id for an empty tree.
+    /// Constructs a node ID for an empty tree.
     #[inline]
     fn empty() -> Self {
         Self {
@@ -76,7 +83,7 @@ impl NodeId {
         }
     }
 
-    /// Constructs a node id for a new Fork with the specified index.
+    /// Constructs a node ID for a new `Fork` with the specified index.
     #[inline]
     fn fork(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
         if idx > INDEX_MASK as usize {
@@ -91,7 +98,7 @@ impl NodeId {
         }
     }
 
-    /// Constructs a node id for a new Leaf with the specified index.
+    /// Constructs a node ID for a new `Leaf` with the specified index.
     #[inline]
     fn leaf(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
         if idx > INDEX_MASK as usize {
@@ -106,7 +113,7 @@ impl NodeId {
         }
     }
 
-    /// Constructs a node id for a new Node with the specified index.
+    /// Constructs a node ID for a new `Node` with the specified index.
     #[inline]
     fn node(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
         if idx > INDEX_MASK as usize {
@@ -146,8 +153,8 @@ impl NodeId {
     }
 }
 
-/// A range of NodeIds that share the same bucket and have consecutive indices
-/// index_range is to be understood as a half-open range, i.e., `start <= x < end`.
+/// A range of `NodeIds` that share the same bucket and have consecutive indices.
+/// `index_range` is a half-open range, i.e., `start <= x < end`.
 #[derive(Clone, Debug, Default)]
 struct NodeIndexRange {
     bucket: usize,
@@ -235,7 +242,7 @@ pub struct HashTree {
     /// index_range.0 <= index_range.1 <= node_labels[bucket].len()
     root_labels_range: NodeIndexRange,
 
-    /// (i,j)-th element of this array contains the hash of the leaf with id
+    /// (i,j)-th element of this array contains the hash of the leaf with ID
     /// `NodeId::leaf(i,j)`.
     leaf_digests: Vec<Vec<Digest>>,
 
@@ -243,14 +250,14 @@ pub struct HashTree {
     // fork_digests.len() == fork_left_children.len() == fork_right_children.len().
     // forall i: fork_digest[i].len() == fork_left_children[i].len() ==
     // fork_right_children[i].len()
-    /// (i,j)-th element of this array contains the hash of the fork with id equal
+    /// (i,j)-th element of this array contains the hash of the fork with ID equal
     /// to `NodeId::fork(i,j)`.
     fork_digests: Vec<Vec<Digest>>,
-    /// (i,j)-th element of this array contains the node id of the left child of the
-    /// fork with id `NodeId::fork(i,j)`.
+    /// (i,j)-th element of this array contains the node ID of the left child of the
+    /// fork with ID `NodeId::fork(i,j)`.
     fork_left_children: Vec<Vec<NodeId>>,
-    /// (i,j)-th element of this array contains the node id of the right child of
-    /// the fork with id `NodeId::fork(i,j)`.
+    /// (i,j)-th element of this array contains the node ID of the right child of
+    /// the fork with ID `NodeId::fork(i,j)`.
     fork_right_children: Vec<Vec<NodeId>>,
 
     // INVARIANT:
@@ -261,19 +268,18 @@ pub struct HashTree {
     //
     // INVARIANT:
     // labels having the same parent node are stored consecutively in the same bucket.
-    /// (i,j)-th element of this array contains the hash of the labeled node with id
+    /// (i,j)-th element of this array contains the hash of the labeled node with ID
     /// `NodeId::node(i,j)`.
     node_digests: Vec<Vec<Digest>>,
     /// (i,j)-th element of this array contains the label of the labeled node with
-    /// id `NodeId::node(i,j)`.
+    /// ID `NodeId::node(i,j)`.
     node_labels: Vec<Vec<Label>>,
     /// (i,j)-th element of this array contains the direct child of the labeled node
-    /// with id `NodeId::node(i,j)`.
+    /// with ID `NodeId::node(i,j)`.
     node_children: Vec<Vec<NodeId>>,
-    /// (i,j)-th element of this array contains an IndexRange pointing to a
-    /// half-closed index interval [a, b) in of of the buckets
-    /// pointing into the node_labels array containing all the labels on edges
-    /// of the original tree going out of the node with id `NodeId::node(i,j)`.
+    /// (i,j)-th element of this array points to a bucket and a half-open index
+    /// interval `[a, b)` in the `node_labels` array, covering all labels on edges
+    /// of the original tree going out of the node with ID `NodeId::node(i,j)`.
     ///
     /// INVARIANT: bucket ≤ node_labels.len()
     /// index_range.0 <= index_range.1 <= node_labels[bucket].len()
@@ -303,7 +309,7 @@ impl HashTree {
         }
     }
 
-    /// Number of digests in the HashTree
+    /// Number of digests in the `HashTree`.
     pub fn size(&self) -> usize {
         let leaf_size: usize = self.leaf_digests.iter().map(|bucket| bucket.len()).sum();
         let fork_size: usize = self.fork_digests.iter().map(|bucket| bucket.len()).sum();
@@ -313,7 +319,7 @@ impl HashTree {
         leaf_size + fork_size + node_size
     }
 
-    /// Largest index in the HashTree
+    /// Largest index in the `HashTree`.
     pub fn max_index(&self) -> usize {
         let leaf_size = self
             .leaf_digests
@@ -820,6 +826,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         }
 
         match t {
+            LazyTree::Blob([], None) => ht.new_leaf(EMPTY_LEAF_HASH),
             LazyTree::Blob(b, None) => {
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(b);
@@ -836,12 +843,20 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
             }
             LazyTree::LazyBlob(f) => {
                 let b = f();
+                if b.is_empty() {
+                    return ht.new_leaf(EMPTY_LEAF_HASH);
+                }
+
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(&b);
                 ht.new_leaf(h.finalize())
             }
             LazyTree::LazyFork(f) => {
                 let num_children = f.len();
+                if num_children == 0 {
+                    return Ok(NodeId::empty());
+                }
+
                 let NodeIndexRange {
                     bucket,
                     index_range: range,
@@ -884,9 +899,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
                     }
                 }
 
-                if nodes.is_empty() {
-                    return Ok(NodeId::empty());
-                } else if nodes.len() == 1 {
+                if nodes.len() == 1 {
                     return Ok(nodes[0]);
                 }
 
@@ -1010,4 +1023,15 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
     ht.check_invariants();
 
     Ok(ht)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_leaf_hash_matches_hasher() {
+        let h = Hasher::for_domain("ic-hashtree-leaf");
+        assert_eq!(h.finalize(), EMPTY_LEAF_HASH);
+    }
 }

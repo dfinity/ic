@@ -27,7 +27,7 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
-use ic_consensus_system_test_utils::upgrade::bless_replica_version;
+use ic_consensus_system_test_utils::upgrade::elect_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
@@ -46,9 +46,10 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        ic::{InternetComputer, Subnet},
+        ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
+        test_setup::SystemTestBackend,
     },
     util::{MessageCanister, block_on, get_nns_node},
 };
@@ -68,29 +69,45 @@ const DKG_INTERVAL: u64 = 29;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
+// Per-VM memory used on the local backend. There all VMs run on a single host,
+// so the Farm default of 24 GiB per VM would let the 4 VMs of the System subnet
+// collectively exceed the host's RAM and thrash swap. That starves the consensus
+// finalizer, so the subnet can't finalize the upgrade CUP and the test fails with
+// `Replica was running the old version only!`. 4 GiB per VM keeps all VMs
+// comfortably within the host's RAM.
+const LOCAL_BACKEND_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024);
+
 pub fn setup(env: TestEnv) {
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(SUBNET_SIZE)
-                .with_chain_key_config(ChainKeyConfig {
-                    key_configs: make_key_ids_for_all_schemes()
-                        .into_iter()
-                        .map(|key_id| KeyConfig {
-                            max_queue_size: 20,
-                            pre_signatures_to_create_in_advance: key_id
-                                .requires_pre_signatures()
-                                .then_some(7),
-                            key_id,
-                        })
-                        .collect(),
-                    signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: None,
-                    max_parallel_pre_signature_transcripts_in_creation: None,
-                })
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-        )
-        .setup_and_start(&env)
+    let mut ic = InternetComputer::new().add_subnet(
+        Subnet::new(SubnetType::System)
+            .add_nodes(SUBNET_SIZE)
+            .with_chain_key_config(ChainKeyConfig {
+                key_configs: make_key_ids_for_all_schemes()
+                    .into_iter()
+                    .map(|key_id| KeyConfig {
+                        max_queue_size: 20,
+                        pre_signatures_to_create_in_advance: key_id
+                            .requires_pre_signatures()
+                            .then_some(7),
+                        key_id,
+                    })
+                    .collect(),
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
+            })
+            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+    );
+    // On the local backend, cap the per-VM memory so all VMs fit within the
+    // single host's RAM (see `LOCAL_BACKEND_VM_MEMORY`). On Farm, keep the
+    // generous default.
+    if SystemTestBackend::from_env() == SystemTestBackend::Local {
+        ic = ic.with_resource_overrides(VmResourceOverrides {
+            memory_kibibytes: Some(LOCAL_BACKEND_VM_MEMORY),
+            ..Default::default()
+        });
+    }
+    ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
@@ -103,12 +120,13 @@ pub fn test(env: TestEnv) {
     let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
-    // Bless target version
+    // Elect target version
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(&env);
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         &nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &log,
         sha256,

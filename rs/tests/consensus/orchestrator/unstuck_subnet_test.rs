@@ -16,7 +16,7 @@ end::catalog[] */
 use anyhow::Result;
 use anyhow::bail;
 use ic_consensus_system_test_utils::upgrade::{
-    bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
+    deploy_guestos_to_all_subnet_nodes, elect_replica_version, get_assigned_replica_version,
 };
 use ic_consensus_system_test_utils::{
     rw_message::{
@@ -69,11 +69,12 @@ fn test(test_env: TestEnv) {
     info!(logger, "Target version: {}", target_version);
 
     // Note: we're pulling a wrong URL on purpose to simulate a failed upgrade
-    let upgrade_url = get_guestos_initial_update_img_url();
+    let upgrade_url = get_guestos_initial_update_img_url(&test_env);
     let expected_sha256 = get_guestos_update_img_sha256();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         &nns_node,
+        &test_env.topology_snapshot(),
         &target_version,
         &logger,
         expected_sha256.clone(),
@@ -119,7 +120,7 @@ fn test(test_env: TestEnv) {
     }
 
     info!(logger, "Download and save the proper image file...");
-    let guestos_update_img_url = get_guestos_update_img_url();
+    let guestos_update_img_url = get_guestos_update_img_url(&test_env);
     let command = format!(
         r#"set -e
         sudo chmod 777 /var/lib/ic/data/images

@@ -540,6 +540,11 @@ pub struct ThresholdSignatureShare {
     pub signer: ::core::option::Option<NodeId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpPaymentReceipt {
+    #[prost(message, optional, tag = "1")]
+    pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -607,6 +612,8 @@ pub struct CanisterHttpResponseSignature {
     pub signer: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub payment_receipt: ::core::option::Option<CanisterHttpPaymentReceipt>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseWithConsensus {
@@ -737,8 +744,6 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
-    #[prost(bool, tag = "17")]
-    pub empty_signature_agreements_flag: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {

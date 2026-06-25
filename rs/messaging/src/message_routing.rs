@@ -52,7 +52,8 @@ use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{
-    Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
+    Gauge, Histogram, HistogramTimer, HistogramVec, IntCounter, IntCounterVec, IntGauge,
+    IntGaugeVec,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
@@ -85,6 +86,8 @@ const STATUS_QUEUE_FULL: &str = "queue_full";
 const STATUS_SUCCESS: &str = "success";
 
 const PHASE_LOAD_STATE: &str = "load_state";
+const PHASE_READ_REGISTRY: &str = "read_registry";
+const PHASE_GARBAGE_COLLECT: &str = "garbage_collect";
 const PHASE_COMMIT: &str = "commit";
 
 /// Label for message kind: "request" or "response".
@@ -127,6 +130,7 @@ const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_all
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
 pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
+pub const CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE: &str = "mr_illegal_engine_message";
 const CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS: &str = "mr_illegal_non_empty_subnet_admins";
 
 /// Records the timestamp when all messages before the given index (down to the
@@ -299,24 +303,24 @@ pub(crate) struct MessageRoutingMetrics {
     /// Most recently seen certified height, per remote subnet
     pub(crate) remote_certified_heights: IntGaugeVec,
     /// Batch processing phase durations, by phase.
-    pub(crate) process_batch_phase_duration: HistogramVec,
+    process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
-    pub(crate) timed_out_messages_total: IntCounterVec,
+    timed_out_messages_total: IntCounterVec,
     /// Number of timed out callbacks.
     pub(crate) timed_out_callbacks_total: IntCounter,
     /// Number of shed best-effort messages.
-    pub(crate) shed_messages_total: IntCounterVec,
+    shed_messages_total: IntCounterVec,
     /// Byte size of shed best-effort messages.
-    pub(crate) shed_message_bytes_total: IntCounterVec,
+    shed_message_bytes_total: IntCounterVec,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
-    pub(crate) subnet_split_height: IntGaugeVec,
+    subnet_split_height: IntGaugeVec,
     /// Number of blocks proposed.
-    pub(crate) blocks_proposed_total: IntCounter,
+    blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
-    pub(crate) blocks_not_proposed_total: IntCounter,
+    blocks_not_proposed_total: IntCounter,
     /// Number of blocks not proposed by blockmaker ID.
-    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
+    blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     subnet_info: IntGaugeVec,
     subnet_size: IntGauge,
@@ -344,6 +348,10 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// messages to/from CloudEngine subnets that carried cycles or were
+    /// guaranteed-response calls, which are not permitted on non-engine subnets.
+    pub critical_error_engine_message: IntCounter,
     /// Critical error: a non-rental subnet has a non-empty subnet admins list.
     critical_error_illegal_non_empty_subnet_admins: IntCounter,
 
@@ -487,6 +495,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
             critical_error_induct_response_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
+            critical_error_engine_message: metrics_registry
+                .error_counter(CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE),
             critical_error_illegal_non_empty_subnet_admins: metrics_registry
                 .error_counter(CRITICAL_ERROR_ILLEGAL_NON_EMPTY_SUBNET_ADMINS),
 
@@ -525,6 +535,12 @@ impl MessageRoutingMetrics {
             state_time,
             batch_time
         );
+    }
+
+    pub fn start_phase_timer(&self, phase: &str) -> HistogramTimer {
+        self.process_batch_phase_duration
+            .with_label_values(&[phase])
+            .start_timer()
     }
 }
 
@@ -697,15 +713,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             log,
             malicious_flags,
         }
-    }
-
-    /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
-    /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
-        self.metrics
-            .process_batch_phase_duration
-            .with_label_values(&[phase])
-            .observe(since.elapsed().as_secs_f64());
     }
 
     /// Reads registry contents required by `BatchProcessorImpl::process_batch()`.
@@ -1070,43 +1077,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("routing table", None, err))?
             .unwrap_or_default();
 
-        // Derive filtered subnets and routing table.
-        let (subnets, routing_table) = if own_subnet_type == SubnetType::CloudEngine {
-            // CloudEngine subnets only see themselves.
-            let subnets = all_subnets
-                .iter()
-                .filter(|(id, _)| **id == own_subnet_id)
-                .map(|(id, topo)| (*id, topo.clone()))
-                .collect();
-            let routing_table = full_routing_table
-                .iter()
-                .filter(|(_, id)| **id == own_subnet_id)
-                .map(|(range, id)| (*range, *id))
-                .collect::<BTreeMap<_, _>>()
-                .try_into()
-                .map_err(|err| {
-                    Persistent(format!(
-                        "'filtered routing table for CloudEngine subnet {}', err: {:?}",
-                        own_subnet_id, err
-                    ))
-                })?;
-            (subnets, routing_table)
-        } else {
-            // Non-engine subnets see every subnet that is *not* a CloudEngine.
-            let subnets: BTreeMap<_, _> = all_subnets
-                .iter()
-                .filter(|(_, topo)| topo.subnet_type != SubnetType::CloudEngine)
-                .map(|(id, topo)| (*id, topo.clone()))
-                .collect();
-            let routing_table = full_routing_table
-                .iter()
-                .filter(|(_, id)| subnets.contains_key(id))
-                .map(|(range, id)| (*range, *id))
-                .collect::<BTreeMap<_, _>>()
-                .try_into()
-                .map_err(|err| Persistent(format!("'filtered routing table', err: {:?}", err)))?;
-            (subnets, routing_table)
-        };
+        // All subnets see the full topology, including CloudEngine subnets.
+        let subnets: BTreeMap<_, _> = all_subnets
+            .iter()
+            .map(|(id, topo)| (*id, topo.clone()))
+            .collect();
+        let routing_table = full_routing_table
+            .iter()
+            .map(|(range, id)| (*range, *id))
+            .collect::<BTreeMap<_, _>>()
+            .try_into()
+            .map_err(|err| Persistent(format!("routing table err: {:?}", err)))?;
         let canister_migrations = self
             .registry
             .get_canister_migrations(registry_version)
@@ -1119,9 +1100,31 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .map_err(|err| registry_error("NNS subnet ID", None, err))?
             .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
 
-        // TODO(CON-1718): Populate this field once it is rolled out to all subnets.
-        let default_initial_dkg_subnet_id = None;
+        // Look up the default subnet for `SetupInitialDKG`. The key may be
+        // unset, in which case `SetupInitialDKG` requests fall back to the
+        // calling subnet.
+        let default_initial_dkg_subnet_id = self
+            .registry
+            .get_default_initial_dkg_subnet_id(registry_version)
+            .map_err(|err| registry_error("default initial DKG subnet ID", None, err))?
+            .filter(|subnet_id| subnets.contains_key(subnet_id));
 
+        // A signing subnet is only usable from here if a chain-key request can
+        // reach it without crossing the CloudEngine boundary: requests carrying
+        // cycles or guaranteed-response calls are rejected at that boundary (see
+        // `StreamBuilderImpl`/`StreamHandlerImpl`), and chain-key requests are
+        // always both. The local subnet is always reachable (loopback); any other
+        // subnet is reachable only if neither end is a CloudEngine. Pruning such
+        // subnets here means routing returns a clean `ChainKeyError` (and the cost
+        // API an `UnknownKey`) instead of routing a doomed request to the boundary.
+        let chain_key_subnet_is_reachable = |id: &SubnetId| match subnets.get(id) {
+            None => false,
+            Some(topo) => {
+                *id == own_subnet_id
+                    || (own_subnet_type != SubnetType::CloudEngine
+                        && topo.subnet_type != SubnetType::CloudEngine)
+            }
+        };
         let chain_key_enabled_subnets: BTreeMap<_, _> = self
             .registry
             .get_chain_key_enabled_subnets(registry_version)
@@ -1131,7 +1134,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .filter_map(|(key, subnet_ids)| {
                 let filtered: Vec<_> = subnet_ids
                     .into_iter()
-                    .filter(|id| subnets.contains_key(id))
+                    .filter(&chain_key_subnet_is_reachable)
                     .collect();
                 if filtered.is_empty() {
                     None
@@ -1313,7 +1316,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let since = Instant::now();
-        let _process_batch_start = since;
+        let load_state_timer = self.metrics.start_phase_timer(PHASE_LOAD_STATE);
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1372,10 +1375,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.metadata.subnet_split_from = None;
         }
-        self.observe_phase_duration(PHASE_LOAD_STATE, &since);
+        load_state_timer.observe_duration();
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
 
+        let read_registry_timer = self.metrics.start_phase_timer(PHASE_READ_REGISTRY);
         let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
@@ -1404,14 +1408,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&failed_blockmaker.to_string()])
                 .inc();
         }
-
         state
             .metadata
             .blockmaker_metrics_time_series
             .observe(batch.time, &batch.blockmaker_metrics);
+        read_registry_timer.observe_duration();
 
         let batch_summary = batch.batch_summary.clone();
-
         let batch_number = batch.batch_number;
         let mut state_after_round = self.state_machine.execute_round(
             state,
@@ -1423,6 +1426,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             node_public_keys,
             api_boundary_nodes,
         );
+
+        let garbage_collect_timer = self.metrics.start_phase_timer(PHASE_GARBAGE_COLLECT);
         // Prune any orphaned canister priorities.
         state_after_round.garbage_collect_subnet_schedule();
         // Garbage collect empty canister queue pairs before checkpointing.
@@ -1443,18 +1448,18 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         #[cfg(feature = "malicious_code")]
-        if let Some(delay) = self.malicious_flags.delay_execution(_process_batch_start) {
+        if let Some(delay) = self.malicious_flags.delay_execution(since) {
             info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
         }
+        garbage_collect_timer.observe_duration();
 
-        let phase_since = Instant::now();
-
+        let commit_timer = self.metrics.start_phase_timer(PHASE_COMMIT);
         self.state_manager.commit_and_certify(
             state_after_round,
             certification_scope,
             batch_summary,
         );
-        self.observe_phase_duration(PHASE_COMMIT, &phase_since);
+        commit_timer.observe_duration();
 
         self.metrics
             .process_batch_duration

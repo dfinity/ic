@@ -2,9 +2,7 @@ use anyhow::{Result, bail};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, GuestLaunchMeasurements};
-use ic_registry_keys::make_blessed_replica_versions_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_system_test_driver::{
     driver::{group::assert_no_critical_errors, test_env_api::*},
     nns::{
@@ -15,21 +13,16 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use ic_types::{ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
-use prost::Message;
 use slog::{Logger, info};
 use std::{convert::TryFrom, io::Read, path::Path};
 
-pub async fn get_blessed_replica_versions(
-    registry_canister: &RegistryCanister,
-) -> BlessedReplicaVersions {
-    let blessed_vers_result = registry_canister
-        .get_value(
-            make_blessed_replica_versions_key().as_bytes().to_vec(),
-            None,
-        )
-        .await
-        .unwrap();
-    BlessedReplicaVersions::decode(&*blessed_vers_result.0).unwrap()
+pub async fn get_elected_replica_versions(topology: &TopologySnapshot) -> Vec<String> {
+    topology
+        .replica_version_records()
+        .unwrap()
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect()
 }
 
 /// Reads the replica version from an unassigned node.
@@ -63,7 +56,8 @@ pub fn assert_assigned_replica_version_with_time(
 ) {
     info!(
         logger,
-        "Waiting until the node {} is healthy and running replica version {}",
+        "Waiting until the node {} with IP {} is healthy and running replica version {}",
+        node.node_id,
         node.get_ip_addr(),
         expected_version
     );
@@ -79,7 +73,8 @@ pub fn assert_assigned_replica_version_with_time(
     let mut state = State::Uninitialized;
     let result = ic_system_test_driver::retry_with_msg!(
         format!(
-            "Check if node {} is healthy and running replica version {}",
+            "Check if node {} with IP {} is healthy and running replica version {}",
+            node.node_id,
             node.get_ip_addr(),
             expected_version
         ),
@@ -136,16 +131,18 @@ pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVers
     ReplicaVersion::try_from(version).map_err(|_| "Invalid replica version".to_string())
 }
 
-pub async fn bless_replica_version(
+pub async fn elect_replica_version(
     nns_node: &IcNodeSnapshot,
+    topology: &TopologySnapshot,
     target_version: &ReplicaVersion,
     logger: &Logger,
     sha256: String,
     guest_launch_measurements: Option<GuestLaunchMeasurements>,
     upgrade_url: Vec<String>,
 ) {
-    bless_replica_version_with_urls(
+    elect_replica_version_with_urls(
         nns_node,
+        topology,
         target_version,
         upgrade_url,
         sha256,
@@ -155,8 +152,9 @@ pub async fn bless_replica_version(
     .await;
 }
 
-pub async fn bless_replica_version_with_urls(
+pub async fn elect_replica_version_with_urls(
     nns_node: &IcNodeSnapshot,
+    topology: &TopologySnapshot,
     target_version: &ReplicaVersion,
     release_package_urls: Vec<String>,
     sha256: String,
@@ -165,15 +163,14 @@ pub async fn bless_replica_version_with_urls(
 ) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = get_governance_canister(&nns);
-    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-    info!(logger, "Initial: {:?}", blessed_versions);
+    let replica_versions = get_elected_replica_versions(topology).await;
+    info!(logger, "Initial: {:?}", replica_versions);
 
     info!(
         logger,
-        "Blessing replica version {} with sha256 {}", target_version, sha256
+        "Adding replica version {} with sha256 {}", target_version, sha256
     );
 
     let proposal_id = submit_update_elected_replica_versions_proposal(
@@ -188,8 +185,8 @@ pub async fn bless_replica_version_with_urls(
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-    let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
-    info!(logger, "Updated: {:?}", blessed_versions);
+    let replica_versions = get_elected_replica_versions(topology).await;
+    info!(logger, "Updated: {:?}", replica_versions);
 }
 
 pub async fn deploy_guestos_to_all_subnet_nodes(

@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
+//   $ bazel test //rs/tests/consensus:consensus_performance_colocate --test_arg=--keepalive --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -41,7 +41,7 @@
 //
 //   $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
 //
-// Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
+// Note this script requires Nix so make sure it's installed (https://nixos.org/download/).
 // The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
 //
 // Then, on your laptop, forward the Grafana port 3000 to your devenv:
@@ -69,7 +69,6 @@ use ic_system_test_driver::driver::{
     ic::{
         AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
     },
-    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
@@ -196,24 +195,6 @@ fn test(env: TestEnv, TestParameters { message_size, rps }: TestParameters) {
     }
 }
 
-fn teardown(env: TestEnv) {
-    let should_download_prometheus_data =
-        std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    if should_download_prometheus_data {
-        env.download_prometheus_data_dir_if_exists();
-        env.emit_report(String::from(
-            "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
-            directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
-        ));
-    } else {
-        env.emit_report(String::from(
-            "Not downloading the prometheus data. \
-            If you want to download it on the next test run, \
-            please pass `--test_env DOWNLOAD_P8S_DATA=1` as an argument to the `ict` command",
-        ));
-    }
-}
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         // Since we setup VMs in sequence it takes more than the default timeout
@@ -224,7 +205,6 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestParameters { message_size: 9_500, rps: 1_000.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 1.0 }))
         .add_test(systest!(test; TestParameters { message_size: 1_999_500, rps: 5.0 }))
-        .add_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }

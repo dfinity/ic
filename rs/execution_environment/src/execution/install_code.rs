@@ -1,11 +1,10 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use std::path::{Path, PathBuf};
-
 use crate::execution::common::{log_dirty_pages, validate_controller};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges},
     wasmtime_embedder::system_api::ExecutionParameters,
@@ -23,11 +22,9 @@ use ic_replicated_state::canister_state::system_state::{
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
-use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
-    messages::CanisterCall,
+    CanisterLog, CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
 };
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmHash;
@@ -317,8 +314,7 @@ impl InstallCodeHelper {
             message_instruction_limit,
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            original.subnet_cycles_config,
             original.wasm_execution_mode,
             round.log,
         );
@@ -364,8 +360,7 @@ impl InstallCodeHelper {
             let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
                 bytes,
                 &original.execution_parameters.subnet_memory_saturation,
-                original.subnet_size,
-                round.cost_schedule,
+                original.subnet_cycles_config,
             );
 
             match self
@@ -412,8 +407,7 @@ impl InstallCodeHelper {
                     self.canister.memory_usage(),
                     self.canister.message_memory_usage(),
                     self.canister.system_state.reserved_balance(),
-                    original.subnet_size,
-                    round.cost_schedule,
+                    original.subnet_cycles_config,
                     reveal_top_up,
                 )
             {
@@ -834,14 +828,13 @@ impl InstallCodeHelper {
 pub(crate) struct OriginalContext {
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
-    pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
     pub call_id: InstallCodeCallId,
     pub prepaid_execution_cycles: CompoundCycles<Instructions>,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
-    pub subnet_size: usize,
+    pub subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
@@ -853,18 +846,6 @@ pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
         .execution_state
         .as_ref()
         .map(|execution_state| execution_state.wasm_binary.binary.module_hash())
-}
-
-#[doc(hidden)] // pub for usage in tests
-pub(crate) fn canister_layout(
-    state_path: &Path,
-    canister_id: &CanisterId,
-) -> CanisterLayout<ReadOnly> {
-    // We use ReadOnly, as CheckpointLayouts with write permissions have side effects
-    // of creating directories
-    CheckpointLayout::<ReadOnly>::new_untracked(state_path.into(), Height::from(0))
-        .and_then(|layout| layout.canister(canister_id))
-        .expect("failed to obtain canister layout")
 }
 
 /// Finishes an `install_code` execution early due to an error.
@@ -900,8 +881,7 @@ pub(crate) fn finish_err(
         message_instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
-        original.subnet_size,
-        round.cost_schedule,
+        original.subnet_cycles_config,
         original.wasm_execution_mode,
         round.log,
     );

@@ -36,6 +36,7 @@ def main():
         default=10 * 1024 * 1024 * 1024 - 128 * 1024 * 1024,
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -103,7 +104,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,

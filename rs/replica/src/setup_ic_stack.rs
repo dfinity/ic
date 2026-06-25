@@ -127,12 +127,8 @@ pub fn construct_ic_stack(
         .get_root_subnet_id(catch_up_package.content.registry_version())
         .expect("cannot read from registry")
         .expect("cannot find root subnet id");
-    let subnet_type = get_subnet_type(
-        log,
-        subnet_id,
-        registry.get_latest_version(),
-        registry.as_ref(),
-    );
+    let registry_version = registry.get_latest_version();
+    let subnet_type = get_subnet_type(log, subnet_id, registry_version, registry.as_ref());
 
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the

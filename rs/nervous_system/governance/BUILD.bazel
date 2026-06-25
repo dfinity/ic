@@ -12,7 +12,6 @@ rust_library(
         "//rs/types/base_types",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:ic_principal",
-        "@crate_index//:maplit",
         "@crate_index//:num-traits",
     ],
 )

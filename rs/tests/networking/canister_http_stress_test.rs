@@ -3,7 +3,7 @@ Title:: Stress test for the http_requests feature
 
 Goal:: Measure the qps of http_requests originating from one canister. The test should be run with the following command:
 ```
-ict test //rs/tests/networking:canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
+bazel test //rs/tests/networking:canister_http_stress_test --test_tmpdir=./canister_http_stress_test
 ```
 
 Runbook::

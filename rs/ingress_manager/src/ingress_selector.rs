@@ -552,12 +552,11 @@ impl IngressManager {
         let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
             ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
         })?;
-        let subnet_size = state.get_own_subnet_size();
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         match self.cycles_account_manager.ingress_induction_cost(
             signed_ingress,
             effective_canister_id,
-            subnet_size,
-            state.get_own_cost_schedule(),
+            subnet_cycles_config,
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -574,8 +573,7 @@ impl IngressManager {
                             canister.memory_usage(),
                             canister.message_memory_usage(),
                             canister.system_state.reserved_balance(),
-                            subnet_size,
-                            state.get_own_cost_schedule(),
+                            subnet_cycles_config,
                             false, // error here is not returned back to the user => no need to reveal top up balance
                         )
                     {
@@ -768,7 +766,9 @@ pub(crate) mod tests {
     };
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
     use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
+    use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
@@ -1612,8 +1612,11 @@ pub(crate) mod tests {
                                     .ingress_induction_cost(
                                         &m1,
                                         None,
-                                        SMALL_APP_SUBNET_MAX_SIZE,
-                                        CanisterCyclesCostSchedule::Normal,
+                                        CyclesAccountManagerSubnetConfig::new(
+                                            SMALL_APP_SUBNET_MAX_SIZE,
+                                            CanisterCyclesCostSchedule::Normal,
+                                            DEFAULT_REFERENCE_SUBNET_SIZE,
+                                        ),
                                     )
                                     .cost(),
                             )
@@ -2232,7 +2235,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// Generates a list of ingress messages with given parameters, and 500 billion cycles
+    /// Generates a list of ingress messages with given parameters, and 50 trillion cycles
     pub(crate) fn generate_ingress_messages_with_params(
         cid: CanisterId,
         msg_count: usize,
@@ -2247,7 +2250,7 @@ pub(crate) mod tests {
             msgs,
             CanisterStateBuilder::default()
                 .with_canister_id(cid)
-                .with_cycles(Cycles::new(500_000_000_000))
+                .with_cycles(Cycles::new(50_000_000_000_000))
                 .build(),
         )
     }

@@ -6,7 +6,7 @@ Goal:: Ensure IC upgrade doesn't break XNet communication
 Runbook::
 0. Deploy 1 root and 2 app subnets and install NNS canisters onto root,
    all running mainnet version.
-1. Bless current version.
+1. Elect current version.
 2. Deploy and start XNet test canisters for long running XNet test
 3. Run XNet test between two app subnets (success criteria same as for SLO test).
 4. Upgrade one app subnet to current version.
@@ -26,7 +26,7 @@ end::catalog[] */
 use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes, elect_replica_version,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -156,13 +156,14 @@ pub async fn test_async(env: TestEnv) {
 
     let (upgrade_subnet_id, _, upgrade_node) = app_subnets.first().unwrap();
 
-    info!(&logger, "Blessing upgrade version.");
+    info!(&logger, "Electing upgrade version.");
 
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(&env);
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    bless_replica_version(
+    elect_replica_version(
         &nns_node,
+        &env.topology_snapshot(),
         &branch_version,
         &logger,
         sha256,
@@ -171,7 +172,7 @@ pub async fn test_async(env: TestEnv) {
     )
     .await;
 
-    info!(&logger, "Blessed all versions.");
+    info!(&logger, "Elected all versions.");
 
     info!(&logger, "Starting long running XNet load");
     let runtimes = app_subnet_runtimes.clone().collect::<Vec<_>>();

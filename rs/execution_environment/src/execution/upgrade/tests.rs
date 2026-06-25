@@ -12,7 +12,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::IngressState;
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
@@ -217,8 +217,7 @@ fn upgrade_fails_on_not_enough_cycles() {
     // Should be enough cycles to create the canister, but not enough to upgrade it
     let balance_cycles = test.cycles_account_manager().execution_cost(
         (MAX_INSTRUCTIONS_PER_SLICE * 3).into(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         WasmExecutionMode::Wasm32,
     );
 
@@ -237,8 +236,7 @@ fn upgrade_fails_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
     let canister_id = test
@@ -258,7 +256,7 @@ fn upgrade_fails_on_not_enough_cycles() {
 fn upgrade_fails_on_no_execution_state() {
     let mut test = execution_test_with_max_rounds(1);
     // Create canister with no binary and hence no execution state
-    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_id = test.create_canister(30_000_000_000_u64.into());
     let canister_state_before = test.canister_state(canister_id).clone();
 
     let result = test.upgrade_canister(canister_id, new_empty_binary());
@@ -970,7 +968,7 @@ fn dts_uninstall_with_aborted_upgrade() {
 fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
     let mut test = execution_test_with_max_rounds(1);
     // Create canister with no binary and hence no execution state
-    let canister_id = test.create_canister(1_000_000_000_u64.into());
+    let canister_id = test.create_canister(30_000_000_000_u64.into());
     let canister_state_before = test.canister_state(canister_id).clone();
 
     let result = test.upgrade_canister_v2(

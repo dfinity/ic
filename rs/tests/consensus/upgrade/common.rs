@@ -20,7 +20,7 @@ use ic_consensus_system_test_utils::rw_message::{
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes, elect_replica_version,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_retries, run_chain_key_signature_test,
@@ -44,24 +44,25 @@ const ALLOWED_FAILURES: usize = 1;
 pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
-pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
+pub fn elect_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
     let target_version = get_guestos_update_img_version();
 
-    // Bless target version
+    // Elect target version
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(env);
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &logger,
         sha256,
         Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed target version");
+    info!(&logger, "Elected target version");
 
     target_version
 }

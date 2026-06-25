@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance  --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
+//   $ bazel test //rs/tests/consensus/tecdsa:tecdsa_performance_test_colocate --test_arg=--keepalive --test_tmpdir=./performance  --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -40,7 +40,7 @@
 //
 //   $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
 //
-// Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
+// Note this script requires Nix so make sure it's installed (https://nixos.org/download/).
 // The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
 //
 // Then, on your laptop, forward the Grafana port 3000 to your devenv:
@@ -72,7 +72,6 @@ use ic_system_test_driver::driver::{
     ic::{
         AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides,
     },
-    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
@@ -96,7 +95,6 @@ use tokio::runtime::{Builder, Runtime};
 const SUCCESS_THRESHOLD: f64 = 0.5; // If more than 50% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
-const COOLDOWN_PERIOD: Duration = Duration::from_secs(300); // sleep time before downloading p8s data
 const DKG_INTERVAL: u64 = 499;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
@@ -245,16 +243,10 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    let download_p8s_data =
-        std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    tecdsa_performance_test(env, true, download_p8s_data);
+    tecdsa_performance_test(env, true);
 }
 
-pub fn tecdsa_performance_test(
-    env: TestEnv,
-    apply_network_settings: bool,
-    download_p8s_data: bool,
-) {
+pub fn tecdsa_performance_test(env: TestEnv, apply_network_settings: bool) {
     let log = env.logger();
 
     let duration: Duration = TESTING_PERIOD;
@@ -474,14 +466,7 @@ pub fn tecdsa_performance_test(
             }
         }
 
-        if download_p8s_data {
-            info!(log, "Sleeping for {} seconds", COOLDOWN_PERIOD.as_secs());
-            std::thread::sleep(COOLDOWN_PERIOD);
-            info!(log, "Downloading prometheus data");
-            env.download_prometheus_data_dir_if_exists();
-        } else {
-            assert!(metrics.success_calls() >= min_expected_success_calls);
-        }
+        assert!(metrics.success_calls() >= min_expected_success_calls);
     });
 }
 

@@ -184,7 +184,9 @@
 
     firewall: {
         config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
-        file_template: "table filter {\n\
+        file_template: "flush ruleset\n\
+\n\
+table filter {\n\
   define icmp_v4_types_accept = {\n\
     destination-unreachable,\n\
     time-exceeded,\n\
@@ -292,7 +294,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
     meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access\n\
-    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48, 2600:3007:4401::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
 }\n",
@@ -321,15 +323,169 @@ table ip6 filter {\n\
           comment: "Default rule from template",
           direction: 1,
         }],
-        tcp_ports_for_node_whitelist: [22, 2497, 4100, 8080],
-        udp_ports_for_node_whitelist: [4100],
-        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19523, 19531],
+        whitelisted_nodes_tcp_ports_whitelist: [22, 8080],
+        whitelisted_nodes_udp_ports_whitelist: [4100],
+        all_nodes_tcp_ports_whitelist: [2497],
+        all_nodes_udp_ports_whitelist: [],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 9324, 19100, 19522, 19523, 19531],
+        max_simultaneous_connections_per_ip_address: 1000,
+    },
+
+    cloud_engine_firewall: {
+        config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
+        file_template: "flush ruleset\n\
+\n\
+table filter {\n\
+  define icmp_v4_types_accept = {\n\
+    destination-unreachable,\n\
+    time-exceeded,\n\
+    echo-request,\n\
+    echo-reply,\n\
+  }\n\
+\n\
+  set rate_limit {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set connection_limit {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  counter rate_limit_v4_counter {}\n\
+  counter connection_limit_v4_counter {}\n\
+\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v4_counter drop\n\
+    icmp type $icmp_v4_types_accept accept\n\
+    <<IPv4_TCP_RULES>>\n\
+    <<IPv4_UDP_RULES>>\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport 80 accept\n\
+    log prefix \"Drop - default policy: \"\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
+    <<IPv4_OUTBOUND_RULES>>\n\
+  }\n\
+}\n\
+\n\
+table ip6 filter {\n\
+  define icmp_v6_types_accept = {\n\
+    destination-unreachable,\n\
+    packet-too-big,\n\
+    time-exceeded,\n\
+    echo-request,\n\
+    echo-reply,\n\
+    nd-router-advert,\n\
+    nd-neighbor-solicit,\n\
+    nd-neighbor-advert,\n\
+  }\n\
+\n\
+  set rate_limit {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set connection_limit {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  counter rate_limit_v6_counter {}\n\
+  counter connection_limit_v6_counter {}\n\
+\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v6_counter drop\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
+    icmpv6 type $icmp_v6_types_accept accept\n\
+    # DHCPv6\n\
+    udp dport { 546 } accept\n\
+    # TCP ports required for GuestOS functionality\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 9314, 19531, 19100, 19522 } accept\n\
+    # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
+    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 80 accept\n\
+    # Custom templated rules\n\
+    <<IPv6_TCP_RULES>>\n\
+    <<IPv6_UDP_RULES>>\n\
+    log prefix \"Drop - default policy: \"\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter fib daddr type local ct state { new } tcp dport { 1-19999 } reject # Block restricted local addresses ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2602:fb2b:110::/48, 2602:fb2b:100::/48, 2602:fb2b:120::/48, 2600:3007:4401::/48 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    <<IPv6_OUTBOUND_RULES>>\n\
+  }\n\
+}\n",
+        ipv4_tcp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_tcp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_udp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_udp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_user_output_rule_template: "meta skuid <<USER>> ip daddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_user_output_rule_template: "meta skuid <<USER>> ip6 daddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        default_rules: [{
+          ipv4_prefixes: [],
+          ipv6_prefixes: [
+            "2602:fb2b:120::/48",
+            "2602:fb2b:100::/48",
+            "2602:fb2b:110::/48",
+            "2600:c00:2:100::/64",
+            "2001:4c08:2003:b09::/64",
+            "2600:3007:4401::/48",
+            "2a00:fb01:400::/56",
+            "2a00:fb01:400:200::/64",
+            "2a05:d01c:e2c:a700::/56",
+            "2a05:d01c:d9:2b00::/56",
+          ],
+          ports: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 19100, 19523, 19531],
+          action: 1,
+          comment: "Default rule from template",
+          direction: 1,
+        }],
+        whitelisted_nodes_tcp_ports_whitelist: [22, 8080],
+        whitelisted_nodes_udp_ports_whitelist: [4100],
+        all_nodes_tcp_ports_whitelist: [2497],
+        all_nodes_udp_ports_whitelist: [],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 9314, 9324, 19100, 19522, 19523, 19531],
         max_simultaneous_connections_per_ip_address: 1000,
     },
 
     boundary_node_firewall: {
         config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
-        file_template: "table filter {\n\
+        file_template: "flush ruleset\n\
+\n\
+table filter {\n\
   set rate_limit {\n\
     type ipv4_addr\n\
     size 65535\n\

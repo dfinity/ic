@@ -122,6 +122,9 @@ pub fn get_subnet_id(
 }
 
 /// Return the subnet type of the given subnet.
+///
+/// Retries until the registry returns a record; crashes if the record is
+/// missing or malformed.
 pub fn get_subnet_type(
     logger: &ReplicaLogger,
     subnet_id: SubnetId,

@@ -9,15 +9,17 @@ on the process that this file is part of, see
 
 ## Added
 
-## Changed
+* The firewall rule endpoints (`add_firewall_rules`, `remove_firewall_rules`, and
+  `update_firewall_rules`) now accept a new `cloud_engines` scope
+  (`FirewallRulesScope::CloudEngines`). Firewall rules registered under this scope are
+  applied by assigned cloud engine nodes.
 
-* **SEV on existing subnets:** Reverted — `sev_enabled` can once again only be set at subnet creation;
-  any update_subnet proposal that would change the effective `sev_enabled` value (in either direction,
-  including via wholesale `features` replacement with `sev_enabled` left unset) is rejected.
+## Changed
 
 ## Deprecated
 
 ## Removed
+* The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
 
 ## Fixed
 

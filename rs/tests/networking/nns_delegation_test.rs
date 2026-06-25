@@ -43,7 +43,7 @@ use ic_certification::verify_delegation_certificate;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     upgrade::{
-        assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+        assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes, elect_replica_version,
     },
 };
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
@@ -762,10 +762,11 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
 
     let nns_node = get_nns_node(&env.topology_snapshot());
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(env);
 
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         &nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &env.logger(),
         sha256,

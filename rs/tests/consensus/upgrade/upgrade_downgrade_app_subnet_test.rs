@@ -6,7 +6,7 @@ use slog::Logger;
 use tokio::runtime::{Builder, Runtime};
 
 use ic_consensus_system_test_upgrade_common::{
-    bless_target_version, get_chain_key_canister_and_public_key, upgrade,
+    elect_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
@@ -19,12 +19,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     SubnetSnapshot, get_guestos_img_version,
 };
+use ic_system_test_driver::driver::test_setup::SystemTestBackend;
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetricsProvider, RequestOutcome,
@@ -41,6 +44,14 @@ const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
 const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
+
+// Per-VM memory used on the local backend. There all VMs run on a single host,
+// so the Farm default of 24 GiB per VM would let the 5 VMs (1 System + 4
+// Application) collectively exceed the host's RAM and thrash swap. That starves
+// the consensus finalizer, so the subnet can't finalize the upgrade CUP and the
+// test fails with `Replica was running the old version only!`. 4 GiB per VM
+// keeps all 5 VMs comfortably within the host's RAM.
+const LOCAL_BACKEND_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024);
 
 fn setup(env: TestEnv) {
     let subnet_under_test = Subnet::new(SubnetType::Application)
@@ -62,10 +73,19 @@ fn setup(env: TestEnv) {
             max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
-    InternetComputer::new()
+    let mut ic = InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
-        .add_subnet(subnet_under_test)
-        .setup_and_start(&env)
+        .add_subnet(subnet_under_test);
+    // On the local backend, cap the per-VM memory so all VMs fit within the
+    // single host's RAM (see `LOCAL_BACKEND_VM_MEMORY`). On Farm, keep the
+    // generous default.
+    if SystemTestBackend::from_env() == SystemTestBackend::Local {
+        ic = ic.with_resource_overrides(VmResourceOverrides {
+            memory_kibibytes: Some(LOCAL_BACKEND_VM_MEMORY),
+            ..Default::default()
+        });
+    }
+    ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
@@ -74,7 +94,7 @@ fn setup(env: TestEnv) {
 // Tests an upgrade of the app subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let target_version = bless_target_version(&env, &nns_node);
+    let target_version = elect_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let key_ids = make_key_ids_for_all_schemes();
     let ecdsa_state = get_chain_key_canister_and_public_key(

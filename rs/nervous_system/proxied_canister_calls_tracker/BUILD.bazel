@@ -27,9 +27,7 @@ rust_test(
         # Keep sorted.
         "//rs/types/base_types",
         "@crate_index//:ic-cdk",
-        "@crate_index//:maplit",
         "@crate_index//:pretty_assertions",
-        "@crate_index//:tokio",
     ],
 )
 

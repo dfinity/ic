@@ -39,7 +39,6 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:askama",
         "@crate_index//:base64",
-        "@crate_index//:clap",
         "@crate_index//:fs_extra",
         "@crate_index//:getifs",
         "@crate_index//:ipnet",
@@ -52,6 +51,7 @@ rust_library(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )
@@ -80,7 +80,6 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:askama",
         "@crate_index//:base64",
-        "@crate_index//:clap",
         "@crate_index//:fs_extra",
         "@crate_index//:getifs",
         "@crate_index//:ipnet",
@@ -93,6 +92,7 @@ rust_library(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )
@@ -156,6 +156,7 @@ rust_binary(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )
@@ -196,6 +197,7 @@ rust_binary(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:tempfile",
+        "@crate_index//:tracing",
         "@crate_index//:url",
     ],
 )

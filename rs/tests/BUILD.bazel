@@ -1,6 +1,6 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
-load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_distroless//distroless:defs.bzl", "flatten", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
@@ -14,24 +14,25 @@ exports_files([
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information
 PACKAGES = [
-    "@noble//bash/amd64",
-    "@noble//ca-certificates/amd64",
-    "@noble//coreutils/amd64",
-    "@noble//libcryptsetup-dev/amd64",
-    "@noble//dmsetup/amd64",
-    "@noble//dosfstools/amd64",
-    "@noble//e2fsprogs/amd64",
-    "@noble//gawk/amd64",
-    "@noble//gzip/amd64",
-    "@noble//libssl3t64/amd64",
-    "@noble//libunwind8/amd64",
-    "@noble//mtools/amd64",
-    "@noble//openssh-client/amd64",
-    "@noble//rsync/amd64",
-    "@noble//tar/amd64",
-    "@noble//udev/amd64",
-    "@noble//xz-utils/amd64",
-    "@noble//zstd/amd64",
+    "@resolute//bash/amd64",
+    "@resolute//ca-certificates/amd64",
+    "@resolute//coreutils-from-uutils/amd64",
+    "@resolute//libcryptsetup-dev/amd64",
+    "@resolute//dmsetup/amd64",
+    "@resolute//dosfstools/amd64",
+    "@resolute//e2fsprogs/amd64",
+    "@resolute//gawk/amd64",
+    "@resolute//gzip/amd64",
+    "@resolute//libssl3t64/amd64",
+    "@resolute//libunwind8/amd64",
+    "@resolute//libvirt0-hwe/amd64",
+    "@resolute//mtools/amd64",
+    "@resolute//openssh-client/amd64",
+    "@resolute//rsync/amd64",
+    "@resolute//tar/amd64",
+    "@resolute//udev/amd64",
+    "@resolute//xz-utils/amd64",
+    "@resolute//zstd/amd64",
 ]
 
 tar(
@@ -94,33 +95,18 @@ UBUNTU_PACKAGES = [
     ":sh",
 ] + PACKAGES
 
-# Squash all packages into a single tarball (there are too many to make each a separate layer)
-genrule(
+flatten(
     name = "ubuntu_packages_tar",
-    srcs = UBUNTU_PACKAGES,
-    outs = ["ubuntu_packages.tar"],
-    cmd = """
-        mkdir -p squash_tmp
-        trap "rm -rf squash_tmp" EXIT
-
-        for f in $(SRCS); do
-            tar -xf $$f -C squash_tmp
-        done
-
-        tar -cf $@ -C squash_tmp .
-    """,
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+    deduplicate = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    tars = UBUNTU_PACKAGES,
 )
 
 oci_image(
     name = "ubuntu_test_runtime_image_src",
     architecture = "amd64",
     os = "linux",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+    target_compatible_with = ["@platforms//os:linux"],
     tars = [
         ":ubuntu_packages_tar",
     ],
@@ -276,4 +262,22 @@ genrule(
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
     cmd = "sed < $< 's/$$/-test/' > $@",
+)
+
+genrule(
+    name = "libvirtd",
+    outs = ["libvirtd.bin"],
+    cmd = "cp -L /usr/sbin/libvirtd $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+genrule(
+    name = "dnsmasq",
+    outs = ["dnsmasq.bin"],
+    cmd = "cp -L /usr/sbin/dnsmasq $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
 )
