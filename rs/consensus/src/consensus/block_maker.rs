@@ -577,7 +577,7 @@ impl BlockMaker {
                     info!(
                         every_n_seconds => 30,
                         self.log,
-                        "Subnet splitting schedulled at registry version {scheduled_at} \
+                        "Subnet splitting scheduled at registry version {scheduled_at} \
                         and height {next_summary_block_height}. Freezing registry version."
                     );
 

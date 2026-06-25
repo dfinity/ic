@@ -493,12 +493,16 @@ impl CertifierImpl {
         let registry_version =
             registry_version_at_height(self.consensus_pool_cache.as_ref(), certification.height)?;
 
+        // If a subnet splitting is taking place, we need to skip validating certifications (and
+        // shares). In particular because after a split, before replicas get restarted, they are
+        // still under the same P2P network and can gossip certifications for states of different
+        // subnets.
         match self.should_skip_due_to_subnet_splitting(certification.height) {
             Ok(true) => {
                 info!(
                     every_n_seconds => 30,
                     self.log,
-                    "Skipping the validation of a certification at height {} because a
+                    "Skipping the validation of a certification at height {} because a \
                     subnet splitting is taking place",
                     certification.height
                 );
@@ -553,12 +557,16 @@ impl CertifierImpl {
         let msg = CertificationMessage::CertificationShare(share.clone());
         let content = &share.signed.content;
 
+        // If a subnet splitting is taking place, we need to skip validating certifications (and
+        // shares). In particular because after a split, before replicas get restarted, they are
+        // still under the same P2P network and can gossip certifications for states of different
+        // subnets.
         match self.should_skip_due_to_subnet_splitting(share.height) {
             Ok(true) => {
                 info!(
                     every_n_seconds => 30,
                     self.log,
-                    "Skipping the validation of a certification share at height {} because a
+                    "Skipping the validation of a certification share at height {} because a \
                     subnet splitting is taking place",
                     share.height
                 );
