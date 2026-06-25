@@ -15,7 +15,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashMetadata, StateManager};
-use ic_logger::{ReplicaLogger, debug, error, trace, warn};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -493,6 +493,28 @@ impl CertifierImpl {
         let registry_version =
             registry_version_at_height(self.consensus_pool_cache.as_ref(), certification.height)?;
 
+        match self.should_skip_due_to_subnet_splitting(certification.height) {
+            Ok(true) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Skipping the validation of a certification at height {} because a
+                    subnet splitting is taking place",
+                    certification.height
+                );
+                return None;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                warn!(
+                    self.log,
+                    "Failed to check the subnet splitting status: {err}. \
+                    Skipping validation of the certificate"
+                );
+                return None;
+            }
+        }
+
         // check if the certification is indeed valid for the specified height. If
         // not, we consider the certification invalid.
         if let Err(e) = validate_height_witness(
@@ -509,31 +531,7 @@ impl CertifierImpl {
             certification,
             registry_version,
         ) {
-            Ok(()) => {
-                match self.should_skip_due_to_subnet_splitting(certification.height) {
-                    Ok(true) => {
-                        error!(
-                            self.log,
-                            "Certification at height {} should not be valid \
-                            because a subnet splitting is taking place. Still \
-                            trusting the subnet signature and validating it. \
-                            This should not happen.",
-                            certification.height
-                        );
-                    }
-                    Ok(false) => {}
-                    Err(err) => {
-                        warn!(
-                            self.log,
-                            "Failed to check the subnet splitting status: {err}. \
-                            Still trusting the subnet signature and validating the \
-                            certification."
-                        );
-                    }
-                }
-
-                Some(ChangeAction::MoveToValidated(msg))
-            }
+            Ok(()) => Some(ChangeAction::MoveToValidated(msg)),
             Err(ValidationError::InvalidArtifact(err)) => {
                 Some(ChangeAction::HandleInvalid(msg, format!("{err:?}")))
             }
