@@ -8,10 +8,10 @@
 // env var (e.g. NUM_UNASSIGNED_NODES=60 will spin up 60 unassigned nodes,
 // distributed round-robin across the 30 DCs, yielding 2 nodes per DC).
 //
-// You can setup this testnet by executing the following commands:
+// You can setup this testnet by executing the following commands (preferably from a devenv in dm1-idx1):
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create cloud_engine --output-dir=./cloud_engine -- --test_tmpdir=./cloud_engine
+//   $ ict testnet create cloud_engine --output-dir=./cloud_engine -- --test_tmpdir=./cloud_engine --test_env=DC=dm1-dmz
 //
 // The --output-dir=./cloud_engine will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./cloud_engine will store the remaining test output in the specified directory.
