@@ -13,6 +13,23 @@ export -n \
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS \
     RUN_SCRIPT_VOLATILE_STATUS_PATH
 
+if [ "${SYSTEM_TEST_BACKEND:-}" != "local" ]; then
+    # To eliminate unstable inter-DC network traffic, we want:
+    #
+    #   * Testnets of Farm-based system-tests to be allocated to the Farm DC
+    #     in which the K8s cluster is hosted that is running the test
+    #     either from CI or from a devenv
+    #     unless overridden by the DC environment variable.
+    #   * IC-OS images needed by that testnet to be served from that same K8s cluster.
+    #
+    # The name of the K8s cluster is extracted from the in-cluster K8s API server certificate SAN.
+    cluster=$(timeout 15 openssl s_client -connect kubernetes.default.svc:443 </dev/null 2>/dev/null \
+        | openssl x509 -noout -text 2>/dev/null \
+        | grep -m1 -oE 'api\.[a-z0-9][a-z0-9-]*\.dfinity\.network' \
+        | sed -E 's/^api\.(.*)\.dfinity\.network$/\1/')
+    export DC="${DC:-${cluster%%-*}}"
+fi
+
 # RUN_SCRIPT_ICOS_IMAGES:
 # For every ic-os image specified, export its HASH. When not using the local
 # backend we first ensure the image is in remote storage and also export its
@@ -35,7 +52,7 @@ if [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
             export "${image_var_prefix}_HASH=$image_download_hash"
         else
             # ensure the dep is uploaded
-            image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
+            image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename" "$cluster")
             echo "  -> $image_filename=$image_download_url" >&2
 
             # Since this is a CAS url, we assume the last URL path part is the sha256
@@ -90,10 +107,6 @@ done
 
 # Set environment variables based on volatile status variables:
 export FARM_METADATA="$(grep '^FARM_METADATA ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2-)"
-DC="$(grep '^DC ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2- || true)"
-if [ -n "$DC" ]; then
-    export DC
-fi
 
 # Optionally sync Grafana dashboards from the dfinity-ops/k8s repo so they can be
 # provisioned on the Prometheus VM (see prometheus_vm.rs). This is enabled by setting
