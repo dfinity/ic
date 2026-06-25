@@ -252,18 +252,7 @@ impl CanisterHttpPoolManagerImpl {
     /// subnet nodes at `context.registry_version`. For
     /// [`Replication::NonReplicated`]/[`Replication::Flexible`] the authorized
     /// signers are pinned in the context, so [`Replication::is_authorized_signer`]
-    /// suffices. Note that `is_authorized_signer` returns `true` unconditionally
-    /// for `FullyReplicated`, which is precisely why that case needs the explicit
-    /// committee lookup.
-    ///
-    /// This is only a local fast-path gate for producing and signing our own
-    /// shares. For `NonReplicated`/`Flexible` it intentionally does not re-check
-    /// that the pinned signers are subnet members at `context.registry_version`:
-    /// those signers are selected from the subnet node set at that version when
-    /// the request is created, so the check would be redundant here. The
-    /// authoritative committee gate for shares received from peers lives in
-    /// `validate_shares` (and ultimately in the payload builder), which verifies
-    /// every signer's membership at `context.registry_version`.
+    /// suffices.
     ///
     /// Fails closed: a failed or empty membership lookup is treated as "not a
     /// member". Results are cached per registry version to avoid repeated
