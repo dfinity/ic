@@ -4,33 +4,17 @@
 //
 // You can setup this testnet by executing the following commands:
 //
-//   $ ./ci/tools/docker-run
-//   $ ict testnet create large --output-dir=./large -- --test_tmpdir=./large
+//   $ ./ci/tools/container-run.sh
+//   $ bazel run //rs/tests/testnets:large --test_tmpdir=./large -- --keepalive
 //
-// The --output-dir=./large will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./large will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
 //   $ ssh -i large/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
-// Note that you can get the $ipv6 address of the IC node from the ict console output:
+// Note that you can get the $ipv6 address of the IC node from the farm_vm_created_events in the output.
 //
-//   {
-//     "nodes": [
-//       {
-//         "id": "y4g5e-dpl4n-swwhv-la7ec-32ngk-w7f3f-pr5bt-kqw67-2lmfy-agipc-zae",
-//         "ipv6": "2a0b:21c0:4003:2:5034:46ff:fe3c:e76f"
-//       },
-//       {
-//         "id": "df2nt-xpdbh-kekha-igdy2-t2amw-ui36p-dqrte-ojole-syd4u-sfhqz-3ae",
-//         "ipv6": "2a0b:21c0:4003:2:50d2:3ff:fe24:32fe"
-//       }
-//     ],
-//     "subnet_id": "5hv4k-srndq-xgw53-r6ldt-wtv4x-6xvbj-6lvpf-sbu5n-sqied-63bgv-eqe",
-//     "subnet_type": "application"
-//   },
-//
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     "prometheus": "Prometheus Web UI at http://prometheus.large--1692597750709.testnet.farm.dfinity.systems",
 //     "grafana": "Grafana at http://grafana.large--1692597750709.testnet.farm.dfinity.systems",
