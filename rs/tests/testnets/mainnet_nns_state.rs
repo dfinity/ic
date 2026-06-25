@@ -12,7 +12,8 @@
 // If the testnet is created with `--set-required-host-features=dmz`, the testnet will be made
 // public. External nodes can register themselves through the URL of the HTTP gateway. Note that
 // their node operator principals must be added to the registry through a proposal (with enough node
-// allowance).
+// allowance). If you do this also make sure to pass: `--test_env=DC=zh1-dmz` to force the testnet
+// to be deployed to that DC. Otherwise the testnet will try to deploy to the DC of your local cluster.
 //
 // Note that the NNS backup is over 15GB so it will require around 3 minutes to download, 15 minutes
 // to unpack and 59G of disk space.

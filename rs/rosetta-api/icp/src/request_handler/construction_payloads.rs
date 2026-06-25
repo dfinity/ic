@@ -34,6 +34,50 @@ use rosetta_core::convert::principal_id_from_public_key;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tracing::log::debug;
 
+/// Maximum permitted ingress window, mirroring the 24-hour bound documented on
+/// `ConstructionPayloadsRequestMetadata`.
+const MAX_INGRESS_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Validate the caller-provided ingress window before it is expanded into a
+/// list of ingress expiries.
+///
+/// Rejects windows that would make the expiry loop iterate an excessive (or, on
+/// arithmetic wraparound, unbounded) number of times. It enforces that:
+/// - `ingress_start` is strictly before `ingress_end` (an empty or reversed
+///   window would otherwise produce an empty/degenerate set of payloads),
+/// - the span `ingress_end - ingress_start` must not exceed 24h, and
+/// - `ingress_end` must not be more than 24h in the future, which also rejects
+///   the near-`u64::MAX` payloads that would otherwise wrap the loop counter.
+fn validate_ingress_window(
+    now: ic_types::time::Time,
+    ingress_start: ic_types::time::Time,
+    ingress_end: ic_types::time::Time,
+) -> Result<(), ApiError> {
+    let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
+    let now = now.as_nanos_since_unix_epoch();
+    let start = ingress_start.as_nanos_since_unix_epoch();
+    let end = ingress_end.as_nanos_since_unix_epoch();
+
+    if start >= end {
+        return Err(ApiError::invalid_request(
+            "ingress_start must be strictly before ingress_end.",
+        ));
+    }
+    if end.saturating_sub(start) > max_window {
+        return Err(ApiError::invalid_request(format!(
+            "The ingress window (ingress_end - ingress_start) must not exceed {} hours.",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    if end.saturating_sub(now) > max_window {
+        return Err(ApiError::invalid_request(format!(
+            "ingress_end must not be more than {} hours in the future.",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    Ok(())
+}
+
 impl RosettaRequestHandler {
     /// Generate an Unsigned Transaction and Signing Payloads.
     /// See https://www.rosetta-api.org/docs/ConstructionApi.html#constructionpayloads
@@ -95,6 +139,8 @@ impl RosettaRequestHandler {
             .and_then(|meta| meta.memo)
             .map(Memo)
             .unwrap_or_else(|| Memo(rand::thread_rng().r#gen()));
+
+        validate_ingress_window(ic_types::time::current_time(), ingress_start, ingress_end)?;
 
         let mut ingress_expiries = vec![];
         let mut now = ingress_start;
@@ -1108,5 +1154,72 @@ fn neuron_subaccount(
                 },
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_types::time::Time;
+
+    const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
+    // A realistic "now" (~2023) that is well away from the u64 boundary.
+    const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
+
+    fn t(nanos: u64) -> Time {
+        Time::from_nanos_since_unix_epoch(nanos)
+    }
+
+    // A window whose span exceeds the documented 24h bound would make the loop
+    // build a huge list of ingress expiries, so it is rejected before the loop.
+    #[test]
+    fn oversized_ingress_window_is_rejected() {
+        assert!(
+            validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + 48 * HOUR_NANOS))
+                .is_err()
+        );
+    }
+
+    // A near-zero start together with a near-`u64::MAX` end spans almost the
+    // entire u64 range; that enormous span is rejected (it would otherwise
+    // iterate billions of times).
+    #[test]
+    fn unbounded_ingress_span_is_rejected() {
+        assert!(validate_ingress_window(t(NOW_NANOS), t(0), t(u64::MAX)).is_err());
+    }
+
+    // A window ending at (near) `u64::MAX` has a small span but an end far in the
+    // future; without the future bound the loop counter would wrap past
+    // `u64::MAX` and never terminate. The future bound rejects it.
+    #[test]
+    fn near_u64_max_ingress_window_is_rejected() {
+        let start = t(u64::MAX - 50 * 1_000_000_000);
+        assert!(validate_ingress_window(t(NOW_NANOS), start, t(u64::MAX)).is_err());
+    }
+
+    // A reversed or empty window (ingress_end <= ingress_start) is rejected
+    // rather than silently producing an empty set of payloads.
+    #[test]
+    fn reversed_ingress_window_is_rejected() {
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS + 1), t(NOW_NANOS)).is_err());
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS)).is_err());
+    }
+
+    // Negative control: a realistic window (5 minutes ahead of now) is accepted.
+    #[test]
+    fn valid_ingress_window_is_accepted() {
+        let end = t(NOW_NANOS + 5 * 60 * 1_000_000_000);
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), end).is_ok());
+    }
+
+    // Boundary: a window of exactly 24h ending exactly 24h from now is accepted,
+    // one nanosecond more is rejected.
+    #[test]
+    fn ingress_window_boundary_is_inclusive() {
+        let max = MAX_INGRESS_WINDOW.as_nanos() as u64;
+        assert!(validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max)).is_ok());
+        assert!(
+            validate_ingress_window(t(NOW_NANOS), t(NOW_NANOS), t(NOW_NANOS + max + 1)).is_err()
+        );
     }
 }

@@ -6,6 +6,8 @@
 // `USE_MAINNET_STATE` environment variable to true, which makes the testnet use mainnet state.
 //
 // You can pass `--set-required-host-features=dmz` to make the testnet open to the Internet.
+// If you do, also pass: `--test_env=DC=zh1-dmz` to force the testnet to be deployed to that DC.
+// Otherwise the testnet will try to deploy to the DC of your local cluster.
 //
 // Then SUBNET_SIZE VMs are deployed and started booting SetupOS which will install HostOS to their virtual disks
 // and eventually boot the GuestOS in a VM nested inside the host VM.
