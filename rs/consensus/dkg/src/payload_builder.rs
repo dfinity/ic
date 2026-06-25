@@ -535,14 +535,14 @@ pub(super) fn create_summary_payload(
     // )
     // .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?
     // {
-    //     subnet_splitting::Status::NotScheduled => Some(SubnetSplittingStatus::NotScheduled),
+    //     subnet_splitting::Status::NotScheduled => SubnetSplittingStatus::NotScheduled,
     //     subnet_splitting::Status::Scheduled {
     //         destination_subnet_id,
     //         scheduled_at: _,
-    //     } => Some(SubnetSplittingStatus::Scheduled(SplittingArgs {
+    //     } => SubnetSplittingStatus::Scheduled(SplittingArgs {
     //         destination_subnet_id,
     //         source_subnet_id: subnet_id,
-    //     })),
+    //     }),
     // };
 
     // New configs are created using the new stable registry version proposed by this
@@ -601,7 +601,7 @@ pub fn get_dkg_summary_from_cup_contents(
         subnet_id,
         registry,
         registry_version,
-        /*subnet_splitting_status=*/ None,
+        SubnetSplittingStatus::default(),
     )
 }
 
@@ -610,7 +610,7 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-    _subnet_splitting_status: Option<SubnetSplittingStatus>,
+    _subnet_splitting_status: SubnetSplittingStatus,
 ) -> Result<DkgSummary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
@@ -935,7 +935,7 @@ pub fn get_post_split_dkg_summary(
         new_subnet_id,
         registry,
         registry_version,
-        Some(SubnetSplittingStatus::PostSplit { new_subnet_id }),
+        SubnetSplittingStatus::PostSplit { new_subnet_id },
     )
     .map_err(|err| format!("Failed to create post-split dkg summary from contents: {err}"))
 }
