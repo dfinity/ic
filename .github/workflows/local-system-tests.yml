@@ -31,6 +31,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
+      # GitHub runners override the container's entrypoint which is ci/container/init.sh
+      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
       - run: ci/container/init.sh
       - name: Run Local System Tests
         uses: ./.github/actions/bazel
