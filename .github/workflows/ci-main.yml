@@ -163,7 +163,8 @@ jobs:
 
   infer-bazel-targets:
     name: Infer Bazel Targets
-    runs-on: ubuntu-latest
+    runs-on: *dind-large-setup
+    container: *container-setup
     needs: [config]
     steps:
       # calculate which bazel targets may need to be rebuilt
