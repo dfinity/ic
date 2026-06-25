@@ -160,15 +160,6 @@ build_container_filesystem = _icos_build_rule(
     },
 )
 
-# rules_foreign_cc exposes a tool's binaries (plus an include dir) under a single
-# target; pick out the binary we need by name. Mirrors the lookup done for
-# //:mkfs.ext4 in the ext4_image rule.
-def _find_tool(files, basename):
-    for f in files:
-        if f.basename == basename:
-            return f
-    fail("could not locate '{}' binary among tool outputs".format(basename))
-
 def _vfat_image_impl(ctx):
     args = []
     inputs = []
@@ -183,9 +174,7 @@ def _vfat_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
-    mkfs_fat = _find_tool(ctx.files._dosfstools, "mkfs.fat")
-    mtools = _find_tool(ctx.files._mtools, "mtools")
-    inputs.extend(ctx.files._dosfstools + ctx.files._mtools)
+    inputs.extend([ctx.file._mkfs_fat, ctx.file._mtools])
 
     args.extend([
         "-s",
@@ -197,9 +186,9 @@ def _vfat_image_impl(ctx):
         "--zstd",
         ctx.executable._zstd.path,
         "--mkfs-fat",
-        mkfs_fat.path,
+        ctx.file._mkfs_fat.path,
         "--mtools",
-        mtools.path,
+        ctx.file._mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -247,15 +236,15 @@ vfat_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
-        "_dosfstools": attr.label(
+        "_mkfs_fat": attr.label(
             default = "//:mkfs.fat",
             cfg = "exec",
-            allow_files = True,
+            allow_single_file = True,
         ),
         "_mtools": attr.label(
             default = "//:mtools",
             cfg = "exec",
-            allow_files = True,
+            allow_single_file = True,
         ),
     },
 )
@@ -274,10 +263,7 @@ def _fat32_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
-    mkfs_fat = _find_tool(ctx.files._dosfstools, "mkfs.fat")
-    fatlabel = _find_tool(ctx.files._dosfstools, "fatlabel")
-    mtools = _find_tool(ctx.files._mtools, "mtools")
-    inputs.extend(ctx.files._dosfstools + ctx.files._mtools)
+    inputs.extend([ctx.file._mkfs_fat, ctx.file._mtools, ctx.file._fatlabel])
 
     args.extend([
         "-s",
@@ -288,12 +274,12 @@ def _fat32_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
-        "--mkfs-fat",
-        mkfs_fat.path,
         "--fatlabel",
-        fatlabel.path,
+        ctx.file._fatlabel.path,
+        "--mkfs-fat",
+        ctx.file._mkfs_fat.path,
         "--mtools",
-        mtools.path,
+        ctx.file._mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -345,15 +331,20 @@ fat32_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
-        "_dosfstools": attr.label(
+        "_fatlabel": attr.label(
+            default = "//:fatlabel",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_mkfs_fat": attr.label(
             default = "//:mkfs.fat",
             cfg = "exec",
-            allow_files = True,
+            allow_single_file = True,
         ),
         "_mtools": attr.label(
             default = "//:mtools",
             cfg = "exec",
-            allow_files = True,
+            allow_single_file = True,
         ),
     },
 )
@@ -372,19 +363,8 @@ def _ext4_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
-    # Locate the mke2fs binary among the //:mkfs.ext4 outputs (configure_make
-    # also exposes an include/ dir, so filter by name).
-    mke2fs = None
-    for f in ctx.files._mkfs_ext4:
-        if f.basename == "mke2fs":
-            mke2fs = f
-            break
-    if not mke2fs:
-        fail("could not locate mke2fs binary among //:mkfs.ext4 outputs")
-    inputs.extend(ctx.files._mkfs_ext4)
-
-    e2fsdroid = _find_tool(ctx.files._e2fsdroid, "e2fsdroid")
-    inputs.extend(ctx.files._e2fsdroid)
+    inputs.extend([ctx.file._mke2fs])
+    inputs.extend([ctx.file._e2fsdroid])
 
     args.extend([
         "-s",
@@ -398,9 +378,9 @@ def _ext4_image_impl(ctx):
         "--zstd",
         ctx.executable._zstd.path,
         "--mkfs-ext4",
-        mke2fs.path,
+        ctx.file._mke2fs.path,
         "--e2fsdroid",
-        e2fsdroid.path,
+        ctx.file._e2fsdroid.path,
     ])
 
     if ctx.attr.file_contexts:
@@ -451,15 +431,15 @@ ext4_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
-        "_mkfs_ext4": attr.label(
-            default = "//:mkfs.ext4",
+        "_mke2fs": attr.label(
+            default = "//:mke2fs",
             cfg = "exec",
-            allow_files = True,
+            allow_single_file = True,
         ),
         "_e2fsdroid": attr.label(
             default = "//:e2fsdroid",
             cfg = "exec",
-            allow_files = True,
+            allow_single_file = True,
         ),
         "_diroid": attr.label(
             default = "//rs/ic_os/build_tools/diroid",
