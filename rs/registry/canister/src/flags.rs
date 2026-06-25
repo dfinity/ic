@@ -6,7 +6,7 @@ use ic_nervous_system_temporary::Temporary;
 use ic_types::{PrincipalId, SubnetId};
 
 thread_local! {
-    static IS_SUBNET_SPLITTING_ENABLED: Cell<bool> = const { Cell::new(false) };
+    static IS_SUBNET_SPLITTING_ENABLED: Cell<bool> = const { Cell::new(true) };
     static IS_CHUNKIFYING_LARGE_VALUES_ENABLED: Cell<bool> = const { Cell::new(true) };
     static IS_NODE_SWAPPING_ENABLED: Cell<bool> = const { Cell::new(true) };
 

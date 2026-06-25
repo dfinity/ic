@@ -526,24 +526,23 @@ pub(super) fn create_summary_payload(
         subnet_id,
     )?;
 
-    // TODO(CON-1565): uncomment this when ready
-    // let subnet_splitting_status = match subnet_splitting::get_status(
-    //     registry_client,
-    //     subnet_id,
-    //     registry_version,
-    //     validation_context.registry_version,
-    // )
-    // .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?
-    // {
-    //     subnet_splitting::Status::NotScheduled => SubnetSplittingStatus::NotScheduled,
-    //     subnet_splitting::Status::Scheduled {
-    //         destination_subnet_id,
-    //         scheduled_at: _,
-    //     } => SubnetSplittingStatus::Scheduled(SplittingArgs {
-    //         destination_subnet_id,
-    //         source_subnet_id: subnet_id,
-    //     }),
-    // };
+    let subnet_splitting_status = match subnet_splitting::get_status(
+        registry_client,
+        subnet_id,
+        registry_version,
+        validation_context.registry_version,
+    )
+    .map_err(|err| DkgPayloadCreationError::SubnetSplittingStatusError(err.to_string()))?
+    {
+        subnet_splitting::Status::NotScheduled => SubnetSplittingStatus::NotScheduled,
+        subnet_splitting::Status::Scheduled {
+            destination_subnet_id,
+            scheduled_at: _,
+        } => SubnetSplittingStatus::Scheduled(SplittingArgs {
+            destination_subnet_id,
+            source_subnet_id: subnet_id,
+        }),
+    };
 
     // New configs are created using the new stable registry version proposed by this
     // block, which determines receivers of the dealings.
@@ -569,6 +568,7 @@ pub(super) fn create_summary_payload(
         next_interval_length,
         height,
         remote_dkg_attempts,
+        subnet_splitting_status,
     ))
 }
 
@@ -610,7 +610,7 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
-    _subnet_splitting_status: SubnetSplittingStatus,
+    subnet_splitting_status: SubnetSplittingStatus,
 ) -> Result<DkgSummary, String> {
     // If we're in a NNS subnet recovery case with failover nodes, we extract the registry of the
     // NNS we're recovering.
@@ -701,7 +701,6 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
             format!("Could not retrieve the interval length for the genesis summary: {err:?}")
         })?;
     let next_interval_length = interval_length;
-    // TODO(CON-1565): pass `subnet_splitting_status`
     Ok(DkgSummary::new(
         configs,
         transcripts,
@@ -713,6 +712,7 @@ fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
         next_interval_length,
         height,
         BTreeMap::new(), // remote_dkg_attempts
+        subnet_splitting_status,
     ))
 }
 
