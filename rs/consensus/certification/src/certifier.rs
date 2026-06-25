@@ -555,16 +555,14 @@ impl CertifierImpl {
 
         match self.should_skip_due_to_subnet_splitting(share.height) {
             Ok(true) => {
-                warn!(
+                info!(
+                    every_n_seconds => 30,
                     self.log,
-                    "Invalidating certification share at height {} because a \
+                    "Skipping the validation of a certification share at height {} because a
                     subnet splitting is taking place",
                     share.height
                 );
-                return Some(ChangeAction::HandleInvalid(
-                    msg,
-                    "Subnet splitting in progress".to_string(),
-                ));
+                return None;
             }
             Ok(false) => {}
             Err(err) => {
