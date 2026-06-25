@@ -220,9 +220,9 @@ impl RegistryHelper {
         node_id: NodeId,
         version: RegistryVersion,
     ) -> OrchestratorResult<Option<SubnetId>> {
-        Ok(self
-            .get_subnet_id_and_type_from_node_id(node_id, version)?
-            .map(|(subnet_id, _subnet_type)| subnet_id))
+        self.registry_client
+            .get_subnet_id_from_node_id(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
     }
 
     /// Get the replica version of the given subnet in the given registry
