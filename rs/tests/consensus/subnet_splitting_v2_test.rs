@@ -166,11 +166,16 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
     let source_subnet = get_source_subnet(&env);
     let original_source_subnet_canister_ranges = source_subnet.subnet_canister_ranges();
     let nns_canister_ranges = nns_subnet.subnet_canister_ranges();
+    let initial_dkg_canister_ranges = initial_dkg_subnet.subnet_canister_ranges();
 
     let mut source_subnet_nodes: Vec<_> = source_subnet.nodes().map(|node| node.node_id).collect();
     let destination_subnet_nodes: Vec<_> =
         source_subnet_nodes.split_off(INITIAL_SOURCE_SUBNET_NODES / 2);
     let nns_subnet_nodes: Vec<_> = nns_subnet.nodes().map(|node| node.node_id).collect();
+    let initial_dkg_subnet_nodes: Vec<_> = initial_dkg_subnet
+        .nodes()
+        .map(|node| node.node_id)
+        .collect();
 
     info!(env.logger(), "Proposing to split the source subnet.");
     propose_to_split_subnet(
@@ -191,6 +196,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         source_subnet.subnet_id,
         &original_source_subnet_canister_ranges,
         &nns_canister_ranges,
+        &initial_dkg_canister_ranges,
         &test_params.canister_migration_list,
     );
     check_subnet_membership(
@@ -199,6 +205,7 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         &source_subnet_nodes,
         &destination_subnet_nodes,
         &nns_subnet_nodes,
+        &initial_dkg_subnet_nodes,
     )
     .await;
     check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
@@ -626,6 +633,7 @@ async fn check_subnet_membership(
     source_subnet_nodes: &[NodeId],
     destination_subnet_nodes: &[NodeId],
     nns_subnet_nodes: &[NodeId],
+    initial_dkg_subnet_nodes: &[NodeId],
 ) {
     let topology = env.topology_snapshot();
 
@@ -637,10 +645,16 @@ async fn check_subnet_membership(
         let nodes: Vec<_> = subnet.nodes().map(|node| node.node_id).collect();
 
         match subnet.subnet_type() {
-            SubnetType::System => {
+            SubnetType::System if subnet.subnet_id == topology.root_subnet_id() => {
                 assert_eq!(
                     nodes, nns_subnet_nodes,
                     "The NNS subnet membership shouldn't change"
+                );
+            }
+            SubnetType::System => {
+                assert_eq!(
+                    nodes, initial_dkg_subnet_nodes,
+                    "The initial DKG subnet membership shouldn't change"
                 );
             }
             SubnetType::Application if subnet.subnet_id == source_subnet_id => {
@@ -678,8 +692,11 @@ async fn check_subnet_membership(
     );
     for subnet in topology.subnets() {
         match subnet.subnet_type() {
-            SubnetType::System => {
+            SubnetType::System if subnet.subnet_id == topology.root_subnet_id() => {
                 info!(env.logger(), "Checking the NNS subnet");
+            }
+            SubnetType::System => {
+                info!(env.logger(), "Checking the initial DKG subnet");
             }
             SubnetType::Application if subnet.subnet_id == source_subnet_id => {
                 info!(env.logger(), "Checking the source subnet");
@@ -728,6 +745,7 @@ fn check_routing_table(
     source_subnet_id: SubnetId,
     original_source_canister_ranges: &[CanisterIdRange],
     original_nns_canister_ranges: &[CanisterIdRange],
+    original_initial_dkg_canister_ranges: &[CanisterIdRange],
     migrated_canister_ranges: &[CanisterIdRange],
 ) {
     info!(
@@ -741,11 +759,20 @@ fn check_routing_table(
 
     for subnet in env.topology_snapshot().subnets() {
         match subnet.subnet_type() {
-            SubnetType::System => {
+            // NNS subnet
+            SubnetType::System if subnet.subnet_id == env.topology_snapshot().root_subnet_id() => {
                 assert_eq!(
                     subnet.subnet_canister_ranges(),
                     original_nns_canister_ranges,
                     "The NNS subnet canister id assignment shouldn't change"
+                );
+            }
+            // Initial DKG subnet
+            SubnetType::System => {
+                assert_eq!(
+                    subnet.subnet_canister_ranges(),
+                    original_initial_dkg_canister_ranges,
+                    "The initial DKG subnet canister id assignment shouldn't change"
                 );
             }
             // Source subnet
