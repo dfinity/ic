@@ -68,14 +68,20 @@ else
             if mount /dev/mapper/var_crypt /mnt/var_new; then
                 var_new=/mnt/var_new
                 var_new_mounted_by_us=1
-            elif awk '$2 == "/var" { found = 1 } END { exit !found }' /proc/mounts; then
-                # The fstab `var.mount` unit won the race and already mounted
-                # var_crypt at /var (the only mountpoint it uses), so copy the
-                # logs into that mount instead.
-                var_new=/var
-                echo "New /var is already mounted at /var; transferring logs there"
             else
-                echo "Could not access the new /var filesystem; skipping log transfer"
+                # The fstab `var.mount` unit won the race and already mounted
+                # var_crypt. Confirm that it really is var_crypt that is mounted
+                # at /var before copying the logs there. We compare the canonical
+                # device (via `readlink -f`) because /proc/mounts may name it
+                # either /dev/mapper/var_crypt or /dev/dm-N.
+                mounted_dev="$(awk '$2 == "/var" { print $1; exit }' /proc/mounts)"
+                if [ -n "${mounted_dev}" ] &&
+                    [ "$(readlink -f "${mounted_dev}")" = "$(readlink -f /dev/mapper/var_crypt)" ]; then
+                    var_new=/var
+                    echo "var_crypt is already mounted at /var; transferring logs there"
+                else
+                    echo "Could not access the new /var filesystem; skipping log transfer"
+                fi
             fi
 
             if [ -n "${var_new}" ] && ! transfer_log_state "${var_new}"; then
