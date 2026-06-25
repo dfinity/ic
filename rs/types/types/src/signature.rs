@@ -43,7 +43,7 @@ impl<T> CountBytes for BasicSignatureBatch<T> {
 }
 
 /// A single entry in a batch of basic signatures to be verified together via
-/// [`crate::crypto::BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
+/// `BasicSigVerifier::verify_basic_sig_batch_multi_msg`.
 ///
 /// Each entry pairs a `signer`, their `signature`, and the `message` that was
 /// signed with the `registry_version` at which that signer's public key is

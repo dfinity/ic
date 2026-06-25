@@ -363,7 +363,6 @@ impl CanisterHttpPayloadBuilderImpl {
 
     pub fn validate_canister_http_payload_impl(
         &self,
-        _height: Height,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
         mut delivered_ids: HashSet<CallbackId>,
@@ -888,7 +887,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
     fn validate_payload(
         &self,
-        height: Height,
+        _height: Height,
         proposal_context: &ProposalContext,
         payload: &[u8],
         past_payloads: &[PastPayload],
@@ -924,7 +923,6 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             )
         })?;
         self.validate_canister_http_payload_impl(
-            height,
             &payload,
             proposal_context.validation_context,
             delivered_ids,

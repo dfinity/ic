@@ -244,7 +244,6 @@ impl CanisterHttpPoolManagerImpl {
             .collect::<Vec<String>>()
     }
 
-    /// Inform the HttpAdapterShim of any new requests that must be made.
     /// Returns whether the local node belongs to the committee responsible for
     /// the given request, evaluated at the registry version pinned in the
     /// request context (the source of truth for the request).
@@ -256,6 +255,15 @@ impl CanisterHttpPoolManagerImpl {
     /// suffices. Note that `is_authorized_signer` returns `true` unconditionally
     /// for `FullyReplicated`, which is precisely why that case needs the explicit
     /// committee lookup.
+    ///
+    /// This is only a local fast-path gate for producing and signing our own
+    /// shares. For `NonReplicated`/`Flexible` it intentionally does not re-check
+    /// that the pinned signers are subnet members at `context.registry_version`:
+    /// those signers are selected from the subnet node set at that version when
+    /// the request is created, so the check would be redundant here. The
+    /// authoritative committee gate for shares received from peers lives in
+    /// `validate_shares` (and ultimately in the payload builder), which verifies
+    /// every signer's membership at `context.registry_version`.
     ///
     /// Fails closed: a failed or empty membership lookup is treated as "not a
     /// member". Results are cached per registry version to avoid repeated
@@ -276,10 +284,13 @@ impl CanisterHttpPoolManagerImpl {
                         )
                         .unwrap_or(false)
                 }),
-            replication => replication.is_authorized_signer(&self.replica_config.node_id),
+            replication @ (Replication::NonReplicated(_) | Replication::Flexible { .. }) => {
+                replication.is_authorized_signer(&self.replica_config.node_id)
+            }
         }
     }
 
+    /// Inform the HttpAdapterShim of any new requests that must be made.
     fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
         let _time = self
             .metrics

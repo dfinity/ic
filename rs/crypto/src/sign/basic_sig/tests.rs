@@ -440,7 +440,7 @@ mod verify_sigs_batch {
     use crate::common::test_utils::basic_sig;
     use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
     use crate::common::test_utils::crypto_component::crypto_component_with_csp;
-    use crate::sign::tests::REG_V2;
+    use crate::sign::tests::{REG_V1, REG_V2};
     use ic_crypto_temp_crypto::NodeKeysToGenerate;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -618,6 +618,83 @@ mod verify_sigs_batch {
         assert_matches!(
             crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::PublicKeyNotFound { .. })
+        );
+    }
+
+    #[test]
+    fn should_resolve_each_signers_public_key_at_its_own_registry_version() {
+        // Register NODE_1's signing key at REG_V1 and NODE_2's at the later
+        // REG_V2, sharing a single registry. NODE_2's key is therefore present
+        // at REG_V2 but absent at REG_V1.
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+        let crypto_1 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V1)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_1)
+            .build();
+        let crypto_2 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_2)
+            .build();
+        registry_client.reload();
+
+        let msg_1 = SignableMock::new(b"Hello World!".to_vec());
+        let msg_2 = SignableMock::new(b"Goodbye World!".to_vec());
+        let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
+        let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
+
+        // Each entry resolves its signer's key at its OWN registry version:
+        // NODE_1 at REG_V1 and NODE_2 at REG_V2 both resolve, so the batch
+        // verifies successfully.
+        let inputs_ok = vec![
+            BasicSigBatchEntry {
+                signer: NODE_1,
+                signature: &sig_1,
+                message: &msg_1,
+                registry_version: REG_V1,
+            },
+            BasicSigBatchEntry {
+                signer: NODE_2,
+                signature: &sig_2,
+                message: &msg_2,
+                registry_version: REG_V2,
+            },
+        ];
+        assert_matches!(
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs_ok),
+            Ok(())
+        );
+
+        // Pinning NODE_2's entry to the earlier REG_V1 (where its key is not yet
+        // registered) must fail with `PublicKeyNotFound`, even though NODE_1's
+        // entry still resolves at REG_V2.
+        let inputs_err = vec![
+            BasicSigBatchEntry {
+                signer: NODE_1,
+                signature: &sig_1,
+                message: &msg_1,
+                registry_version: REG_V2,
+            },
+            BasicSigBatchEntry {
+                signer: NODE_2,
+                signature: &sig_2,
+                message: &msg_2,
+                registry_version: REG_V1,
+            },
+        ];
+        assert_matches!(
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs_err),
+            Err(CryptoError::PublicKeyNotFound { node_id, registry_version, .. })
+            if node_id == NODE_2 && registry_version == REG_V1
         );
     }
 }

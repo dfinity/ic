@@ -241,15 +241,12 @@ pub(crate) fn validate_response_share(
 }
 
 /// A single signature input as consumed by
-/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`]. The registry version
-/// is the one pinned in the signer's request context, at which the signer's
-/// public key is resolved.
+/// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`].
 pub(crate) type ResponseShareSigInput<'a> = BasicSigBatchEntry<'a, CanisterHttpResponseReceipt>;
 
 /// Maps response shares to the signature inputs consumed by
 /// [`BasicSigVerifier::verify_basic_sig_batch_multi_msg`]. All shares produced
-/// here belong to the same request, so they share the `registry_version` pinned
-/// in that request's context.
+/// here belong to the same request, so they share the `registry_version`.
 pub(crate) fn response_share_sig_inputs<'a, I>(
     shares: I,
     registry_version: RegistryVersion,
