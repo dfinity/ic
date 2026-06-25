@@ -26,6 +26,7 @@ use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
+use ic_replicated_state::metrics::instructions_buckets;
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
     page_map::allocated_pages_count,
@@ -155,6 +156,7 @@ struct SandboxedExecutionMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     sigsegv_handler_duration: HistogramVec,
+    dmt_projected_message_cost: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -408,6 +410,12 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type", "memory_type"],
             ),
+            dmt_projected_message_cost: metrics_registry.histogram_vec(
+                "sandboxed_execution_dmt_projected_message_cost",
+                "Cost of a message when the DMT charges for all page accesses.",
+                instructions_buckets(), /* same as scheduler_instructions_consumed_per_message for comparison */
+                &["api_type", "memory_type"],
+            ),
         }
     }
 
@@ -492,6 +500,10 @@ impl SandboxedExecutionMetrics {
         self.sigsegv_handler_duration
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_handler_duration.as_secs_f64());
+
+        self.dmt_projected_message_cost
+            .with_label_values(&[api_type_label, "both"])
+            .observe(instance_stats.dmt_projected_message_cost as f64);
 
         self.allocated_pages.set(allocated_pages_count() as i64);
     }
@@ -1692,7 +1704,7 @@ impl SandboxedExecutionController {
                 });
                 return WasmExecutionResult::Paused(slice, paused);
             }
-            CompletionResult::Finished(exec_output) => {
+            CompletionResult::Finished(mut exec_output) => {
                 let execution_status = match exec_output.wasm.wasm_result.clone() {
                     Ok(Some(WasmResult::Reply(_))) => "Success",
                     Ok(Some(WasmResult::Reject(_))) => "Reject",
@@ -1704,6 +1716,18 @@ impl SandboxedExecutionController {
                     execution_status,
                     execution_state.wasm_execution_mode.as_str(),
                 );
+                // Temporary metric: How much will the message cost when we charge via DMT.
+                let instructions_used = message_instruction_limit
+                    .saturating_sub(&exec_output.wasm.num_instructions_left);
+                let stable_writes = exec_output.wasm.instance_stats.stable_dirty_pages;
+                let stable_reads = exec_output.wasm.instance_stats.stable_accessed_pages;
+                let heap_reads_and_writes = exec_output.wasm.instance_stats.wasm_accessed_pages;
+                // we currently charge 1000 for stable writes and 0 for everything else.
+                let additional_cost =
+                    stable_writes * 4000 + (stable_reads + heap_reads_and_writes) * 5000;
+                exec_output.wasm.instance_stats.dmt_projected_message_cost =
+                    instructions_used.get() as usize + additional_cost;
+
                 self.metrics
                     .observe_instance_stats(&exec_output.wasm.instance_stats, api_type_label);
                 exec_output
