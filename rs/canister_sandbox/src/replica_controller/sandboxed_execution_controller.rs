@@ -1721,10 +1721,11 @@ impl SandboxedExecutionController {
                     .saturating_sub(&exec_output.wasm.num_instructions_left);
                 let stable_writes = exec_output.wasm.instance_stats.stable_dirty_pages;
                 let stable_reads = exec_output.wasm.instance_stats.stable_accessed_pages;
-                let heap_reads_and_writes = exec_output.wasm.instance_stats.wasm_accessed_pages;
-                // we currently charge 1000 for stable writes and 0 for everything else.
+                let heap_writes = exec_output.wasm.instance_stats.wasm_dirty_pages;
+                let heap_reads = exec_output.wasm.instance_stats.wasm_accessed_pages - heap_writes;
+                // we currently charge 1000 for stable and heap writes (plus 3000 for copy overhead, which remains separate), and 0 for everything else.
                 let additional_cost =
-                    stable_writes * 4000 + (stable_reads + heap_reads_and_writes) * 5000;
+                    (stable_writes + heap_writes) * 4000 + (stable_reads + heap_reads) * 5000;
                 exec_output.wasm.instance_stats.dmt_projected_message_cost =
                     instructions_used.get() as usize + additional_cost;
 
