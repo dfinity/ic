@@ -94,4 +94,3 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         target_compatible_with = target_compatible_with,
         tools = ["//:fuse2fs"],
     )
-

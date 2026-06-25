@@ -1,7 +1,7 @@
+use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use anyhow::{Context, Result};
 use candid::{Encode, Principal};
 use ic_agent::Agent;
-use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use ic_certification::Certificate;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use std::fs;

@@ -1,10 +1,10 @@
 use crate::partitions::get_boot_partition_uuid;
+use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use anyhow::{Context, Result};
 use attestation::attestation_package::AttestationPackageVerifier;
 use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
 use command_runner::CommandRunner;
 use config_types::GuestOSConfig;
-use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use ic_device::mount::{
     FileSystem, MountOptions, MountedPartition, PartitionProvider, PartitionSelector,
 };

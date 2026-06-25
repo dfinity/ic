@@ -1,8 +1,8 @@
 use crate::download::download_signed_proposal;
 use crate::proposal_build::validate_measurements;
+use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use std::fs;
 use std::path::PathBuf;
 

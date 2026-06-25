@@ -247,11 +247,11 @@ def icos_build(
                 extra_files = {
                     k: v
                     for k, v in (
-                      image_deps["bootfs"].items() + [
-                          (version_txt, "/version.txt:0644"),
-                          (boot_args, "/boot_args:0644"),
-                          (image_deps["grub_config"], "/grub.cfg:0644"),
-                      ]
+                        image_deps["bootfs"].items() + [
+                            (version_txt, "/version.txt:0644"),
+                            (boot_args, "/boot_args:0644"),
+                            (image_deps["grub_config"], "/grub.cfg:0644"),
+                        ]
                     )
                 },
                 tags = ["manual", "no-cache"],

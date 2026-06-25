@@ -1,7 +1,5 @@
-load("//bazel:defs.bzl", "file_size_check")
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/guestos:defs.bzl", "image_deps")
-load("//publish:defs.bzl", "artifact_bundle")
 
 # Builds an SEV recovery image when an elected proposal is available.
 # The build requires the env variables ALTERNATIVE_GUESTOS_BASE_VERSION and ALTERNATIVE_GUESTOS_PROPOSAL_ID
