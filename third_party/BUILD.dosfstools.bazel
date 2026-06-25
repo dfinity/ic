@@ -43,3 +43,18 @@ configure_make(
     ],
     visibility = ["//visibility:public"],
 )
+
+
+filegroup(
+    name = "fatlabel",
+    srcs = [":dosfstools"],
+    output_group = "fatlabel",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mkfs.fat",
+    srcs = [":dosfstools"],
+    output_group = "mkfs.fat",
+    visibility = ["//visibility:public"],
+)
