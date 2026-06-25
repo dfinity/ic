@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
@@ -58,6 +58,7 @@ rust_library(
 
 system_test_nns(
     name = "ckbtc_minter_basics_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -74,6 +75,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_deposit_and_withdrawal",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -90,6 +92,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_checker",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -106,6 +109,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_update_balance",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -122,6 +126,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_retrieve_btc",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -138,6 +143,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckbtc_minter_batching",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -154,6 +160,7 @@ system_test_nns(
 
 system_test_nns(
     name = "ckdoge_minter_basics_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs + 1 bitcoind UVM, 6 vCPUs each.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

@@ -50,10 +50,19 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
        even if it seems the commit is not about fixing flakiness.
        It's better to pick a test which has no other work being done on it to avoid conflicts.
 
-2. Get the last flaky runs of the test named `label` in the last week by running the following command, replacing `<label>` with the label of the test:
-   ```
-   bazel run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
-   ```
+2. Get the last flaky runs of the test named `label` in the last week by running one of the following commands, replacing `<label>` with the label of the test:
+
+   - For most system-tests, which run via Farm, also download their journald logs from ElasticSearch and their console logs from Farm:
+     ```
+     bazel run //ci/githubstats:query -- last --flaky --week --download-ic-logs --download-console-logs <label>
+     ```
+
+   - For `_local` system-tests, i.e. targets matching the regex `//rs/tests/.*_local$`, omit the `--download-ic-logs` and `--download-console-logs` options:
+     ```
+     bazel run //ci/githubstats:query -- last --flaky --week <label>
+     ```
+     These tests use the `Local` backend which doesn't run via Farm and doesn't upload its journald logs to ElasticSearch. Instead the journald and console logs are streamed to the test log itself (the `FAILED.log`/`PASSED.log` files), so there's nothing to download from ElasticSearch or Farm.
+
    Note the command will print `Downloading logs to: <LOG_DIR>`.
 
    Read `<LOG_DIR>/README.md` to understand how the logs are organized.

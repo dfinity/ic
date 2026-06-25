@@ -7,7 +7,6 @@
 /buf.yaml                 @dfinity/core-protocol
 /cpp/                     @dfinity/node
 /licenses/                @dfinity/idx
-/bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
 /bin/fuzzing/             @dfinity/product-security
 

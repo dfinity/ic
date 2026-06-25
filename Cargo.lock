@@ -2521,7 +2521,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -10279,6 +10279,7 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
+ "ic-registry-keys",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -10298,6 +10299,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -14697,6 +14699,7 @@ dependencies = [
  "ic-messaging",
  "ic-metrics",
  "ic-protobuf",
+ "ic-query-stats",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -14920,8 +14923,10 @@ name = "ic-system-test-driver"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "askama",
  "assert_matches",
  "async-trait",
+ "axum 0.8.8",
  "bare_metal_deployment",
  "bincode",
  "candid",
@@ -14990,8 +14995,10 @@ dependencies = [
  "ic-utils 0.45.0",
  "icp-ledger",
  "icrc-ledger-types",
+ "inotify",
  "itertools 0.12.1",
  "lazy_static",
+ "libc",
  "macaddr",
  "nix 0.24.3",
  "num_cpus",
@@ -14999,6 +15006,7 @@ dependencies = [
  "phantom_newtype",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rcgen 0.13.2",
  "regex",
  "registry-canister",
  "reqwest",
@@ -15018,7 +15026,9 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tokio",
+ "tokio-util",
  "url",
+ "virt",
  "walkdir",
  "wat",
  "zstd",
@@ -15165,6 +15175,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-registry-subnet-type",
@@ -15302,6 +15313,7 @@ version = "0.9.0"
 dependencies = [
  "ic-base-types",
  "ic-btc-replica-types",
+ "ic-certification-version",
  "ic-interfaces",
  "ic-management-canister-types-private",
  "ic-registry-routing-table",
@@ -16790,6 +16802,28 @@ dependencies = [
  "quick-xml 0.39.2",
  "rgb",
  "str_stack",
+]
+
+[[package]]
+name = "inotify"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "533e68a5842e734946fe159fb03fc9bbbb254f590dd0d8ad321ae5ff7beca2c1"
+dependencies = [
+ "bitflags 2.11.0",
+ "futures-util",
+ "inotify-sys",
+ "libc",
+ "tokio",
+]
+
+[[package]]
+name = "inotify-sys"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -18460,8 +18494,10 @@ dependencies = [
  "ic-canonical-state",
  "ic-cdk",
  "ic-certification 0.9.0",
+ "ic-config",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-cycles-account-manager",
  "ic-http-endpoints-public",
  "ic-http-endpoints-test-agent",
  "ic-limits",
@@ -22220,7 +22256,7 @@ dependencies = [
  "errno 0.3.14",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -23727,7 +23763,6 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.52.0",
  "windows-sys 0.59.0",
 ]
 
@@ -25919,6 +25954,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",

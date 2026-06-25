@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_canonical_state::LabelLike;
+use ic_canonical_state::{CURRENT_CERTIFICATION_VERSION, LabelLike};
 use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
@@ -40,6 +40,7 @@ fn slice_unpack_roundtrip(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -63,6 +64,7 @@ fn slice_garbage_collect(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -140,6 +142,7 @@ fn slice_take_prefix(
         100, // max_size
         0, // min_signal_count
         100, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -284,6 +287,7 @@ fn invalid_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -421,6 +425,7 @@ fn slice_accurate_count_bytes(
         100, // max_size
         0, // min_signal_count
         100, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -491,6 +496,7 @@ fn matching_count_bytes(
         100, // max_size
         0, // min_signal_count
         100, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -524,6 +530,7 @@ fn pool(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -790,6 +797,7 @@ fn pool_append_same_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -907,6 +915,7 @@ fn pool_append_non_empty_to_empty(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -975,6 +984,7 @@ fn pool_append_non_empty_to_non_empty(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1096,6 +1106,7 @@ fn pool_put_invalid_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1151,6 +1162,7 @@ fn pool_append_invalid_slice(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1240,6 +1252,7 @@ fn pool_append_invalid_slice_to_empty(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1299,6 +1312,7 @@ fn pool_take_slice_respects_signal_limit(
         2 * MAX_SIGNALS, // max_size
         0, // min_signal_count
         0, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
 ) {
@@ -1340,5 +1354,55 @@ fn pool_take_slice_respects_signal_limit(
             messages_end,
             max_message_index(stream_begin),
         );
+    });
+}
+
+/// Tests that a pooled certified stream slice from a subnet that has been
+/// deleted (i.e., removed from the subnet list) is garbage collected when
+/// `garbage_collect()` is called without that subnet.
+#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+fn pool_garbage_collect_deleted_subnet(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, from, msg_count) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let stream_position = ExpectedIndices {
+            message_index: from,
+            signal_index: stream.signals_end(),
+        };
+
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
+
+        let mut certified_stream_store = MockCertifiedStreamStore::new();
+        certified_stream_store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
+        let mut pool =
+            CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &MetricsRegistry::new());
+
+        // Register SRC_SUBNET as a known peer and pool a slice from it.
+        pool.garbage_collect(btreemap! {SRC_SUBNET => stream_position});
+        pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log).unwrap();
+
+        // Sanity check: SRC_SUBNET is a known peer with a pooled slice.
+        assert!(pool.peers().any(|&id| id == SRC_SUBNET));
+        assert!(!matches!(pool.slice_stats(SRC_SUBNET), (_, None, 0, 0)));
+
+        // Simulate subnet deletion: call garbage_collect without SRC_SUBNET.
+        pool.garbage_collect(Default::default());
+
+        // Both the stream position and the slice should have been dropped.
+        assert!(pool.peers().next().is_none());
+        assert_eq!((None, None, 0, 0), pool.slice_stats(SRC_SUBNET));
     });
 }

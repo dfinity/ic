@@ -53,8 +53,12 @@ impl BootstrapOptions {
         self.populate_bootstrap_dir(&bootstrap_dir)?;
 
         let dir_size = fs_extra::dir::get_size(&bootstrap_dir)?;
-        // image size = 2 * directory size + 1 MB
-        let image_size = dir_size * 2 + 1024 * 1024;
+        // image size = 2 * directory size + 1 MB, rounded up to a 4 KiB multiple
+        // so the raw image is block-aligned: QEMU opened with cache='none'
+        // (O_DIRECT) refuses a writable raw image whose size is not a multiple of
+        // the host block size. This keeps the image usable in environments that
+        // require block alignment.
+        let image_size = (dir_size * 2 + 1024 * 1024).next_multiple_of(4096);
 
         let file = File::create(out_file).context("Failed to create output file")?;
         file.set_len(image_size)

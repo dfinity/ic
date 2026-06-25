@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "node_assign_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 1 System + 1 Application + 3 unassigned = 5 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -28,6 +29,7 @@ system_test_nns(
 
 system_test_nns(
     name = "node_reassignment_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 4 NNS + 1 Application = 5 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -46,6 +48,10 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_with_max_rewardable_nodes_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The reason it fails is the same as is documented for //rs/tests/node:ipv4_integration_test.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 1 unassigned = 2 IC Node VMs * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//rs/tests/consensus:node_registration_test_common",
@@ -57,6 +63,10 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_with_node_allowance_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The reason it fails is the same as is documented for //rs/tests/node:ipv4_integration_test.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 1 unassigned = 2 IC Node VMs * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//rs/tests/consensus:node_registration_test_common",
@@ -68,6 +78,14 @@ system_test_nns(
 
 system_test(
     name = "cup_compatibility_test",
+    # TODO: support this test on the local backend (drop `backend = "farm"`).
+    # The test downloads the mainnet `types-test` tool from:
+    # https://download.dfinity.systems/ic/{hash}/release/types-test.gz
+    # which requires external network access which is only available on the farm backend.
+    # Provide this dependency as a bazel dependency. Also see the same TODO in:
+    # rs/tests/consensus/orchestrator/cup_compatibility_test.rs.
+    backend = "farm",
+    cpus = MIN_LOCAL_CPUS,  # Empty setup (|_| ()), no VMs deployed.
     env = MAINNET_ENV,
     runtime_deps = {
         "TYPES_TEST_PATH": "//rs/types/types:types_test",
@@ -86,6 +104,7 @@ system_test(
 
 system_test_nns(
     name = "ssh_access_to_nodes_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 1 fast single-node System + 2 Application + 1 unassigned = 4 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -104,6 +123,7 @@ system_test_nns(
 
 system_test_nns(
     name = "unstuck_subnet_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 System IC Node VMs * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "long_test",
@@ -140,6 +160,7 @@ system_test(
 
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 System IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

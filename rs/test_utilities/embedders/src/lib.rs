@@ -4,8 +4,8 @@ use std::{convert::TryFrom, rc::Rc};
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SchedulerConfig;
-use ic_cycles_account_manager::ResourceSaturation;
+use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig};
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::compile,
@@ -20,6 +20,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory, SystemApi,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -176,7 +177,11 @@ impl WasmtimeInstanceBuilder {
             Default::default(),
             self.api_type.caller(),
             self.api_type.call_context_id(),
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                DEFAULT_REFERENCE_SUBNET_SIZE,
+            ),
         );
 
         let subnet_memory_capacity = i64::MAX / 2;

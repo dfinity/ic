@@ -1,6 +1,9 @@
 use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+};
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, MAX_ENV_VAR_NAME_SIZE, SystemApiImpl,
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
@@ -1437,10 +1440,11 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
     let initial_cycles = cycles_account_manager
-        .xnet_call_performed_fee(
+        .xnet_call_performed_fee(CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
-        )
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ))
         .real()
         - Cycles::from(10_u128);
     let mut system_state = SystemStateBuilder::new()
@@ -1573,7 +1577,11 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1636,7 +1644,11 @@ fn push_output_request_respects_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let own_canister_id = system_state.canister_id();
     let mut api = SystemApiImpl::new(
@@ -1729,7 +1741,11 @@ fn push_output_request_oversized_request_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let own_canister_id = system_state.canister_id();
     let mut api = SystemApiImpl::new(
@@ -2141,7 +2157,11 @@ fn get_system_api_for_best_effort_response(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
 
     SystemApiImpl::new(

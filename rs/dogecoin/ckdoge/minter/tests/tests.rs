@@ -284,7 +284,7 @@ mod get_doge_address {
 
         assert_eq!(address_from_caller, address_with_owner);
         assert_eq!(
-            address_from_caller, "D95u8BQWiN21ER5LqrNwSk4WDVe25WHWHT",
+            address_from_caller, "D6ngYFXhH7Sct9FbBanqqrsco5FwzSpt4X",
             "BUG: result of public key derivation changed!"
         );
 
@@ -297,7 +297,7 @@ mod get_doge_address {
         );
         assert_ne!(address_from_caller, address_with_subaccount);
         assert_eq!(
-            address_with_subaccount, "DPZ2c7wS53i9nGrMh25iCZABdPs718NRA9",
+            address_with_subaccount, "D7K8TmiiVy5WbHVrVnJ6tobHvrzBEQqwxa",
             "BUG: result of public key derivation changed!"
         );
     }

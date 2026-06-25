@@ -815,6 +815,9 @@ pub fn instructions_buckets() -> Vec<f64> {
         buckets.push(NumInstructions::from(value));
     }
 
+    // Add bucket for 40B, which is the max number of instructions in a message.
+    buckets.push(NumInstructions::from(40_000_000_000));
+
     // Add buckets for counting install_code messages
     for value in (100_000_000_000..=1_000_000_000_000).step_by(100_000_000_000) {
         buckets.push(NumInstructions::from(value));
@@ -823,8 +826,8 @@ pub fn instructions_buckets() -> Vec<f64> {
     // Ensure that all buckets are unique.
     buckets.sort_unstable();
     buckets.dedup();
-    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B] + [100B,
-    // 200B, 300B, ..., 900B].
+    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B] +
+    // [40B] + [100B, 200B, 300B, ..., 900B].
     buckets.into_iter().map(|x| x.get() as f64).collect()
 }
 

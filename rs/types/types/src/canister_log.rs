@@ -245,7 +245,16 @@ impl CanisterLog {
             return; // Don't append if delta is empty.
         }
 
-        // Assume records sorted cronologically (with increasing idx) and
+        // If the delta overflowed and evicted records, there is a gap between the
+        // aggregate's next expected index and the delta's first record. Drop all
+        // aggregate records to maintain index continuity.
+        if let Some(first) = delta_log.records.get().front()
+            && first.idx > self.next_idx
+        {
+            self.records.clear();
+        }
+
+        // Assume records sorted chronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
         if let Some(last) = delta_log.records.get().back() {
             self.next_idx = last.idx + 1;
@@ -417,16 +426,11 @@ mod tests {
         // Act.
         main.append_delta_log(&mut delta);
 
-        // Assert main log had data loss.
+        // Assert main log was cleared due to the gap (delta evicted records 3 and 4,
+        // so delta starts at idx 5 > next_idx 3; aggregate records are dropped).
         assert_eq!(
             main.records(),
-            &VecDeque::from(canister_log_records(&[
-                (0, 100, b"main #0"),
-                (1, 101, b"main #1"),
-                (2, 102, b"main #2"),
-                // Expected data loss.
-                (5, 202, b"delta #2"),
-            ]))
+            &VecDeque::from(canister_log_records(&[(5, 202, b"delta #2"),]))
         );
     }
 

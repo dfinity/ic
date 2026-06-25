@@ -175,7 +175,7 @@ async fn resume_killed_instance_impl(
 #[tokio::test]
 async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
+    assert!(err.contains("The state of subnet with seed c75e6e3e57387b40c79cb9503f7c18518284981467d26ccfa7097343fa8bb808 is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
@@ -184,7 +184,7 @@ async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(IncompleteStateFlag::Disabled))
         .await
         .unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
+    assert!(err.contains("The state of subnet with seed c75e6e3e57387b40c79cb9503f7c18518284981467d26ccfa7097343fa8bb808 is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
@@ -717,7 +717,7 @@ fn create_subnet_in_registry_canister() {
     let add_node_operator_payload = AddNodeOperatorPayload {
         node_operator_principal_id: Some(PrincipalId(node_operator)),
         node_provider_principal_id: Some(PrincipalId(node_operator)),
-        max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 1 }),
+        max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 2 }),
         ..Default::default()
     };
     update_candid_as::<_, ()>(
@@ -729,35 +729,44 @@ fn create_subnet_in_registry_canister() {
     )
     .unwrap();
 
-    // Add a node (every subnet must have a node)
-    let add_node_payload = prepare_add_node_payload(1, NodeRewardType::Type1);
-    let node_id = update_candid_as::<_, (Principal,)>(
+    // Add two nodes, one for each subnet.
+    let node_id_1 = update_candid_as::<_, (Principal,)>(
         &pic,
         registry_canister_id,
         node_operator,
         "add_node",
-        (add_node_payload,),
+        (prepare_add_node_payload(1, NodeRewardType::Type1),),
+    )
+    .unwrap()
+    .0;
+    let node_id_2 = update_candid_as::<_, (Principal,)>(
+        &pic,
+        registry_canister_id,
+        node_operator,
+        "add_node",
+        (prepare_add_node_payload(2, NodeRewardType::Type1),),
     )
     .unwrap()
     .0;
 
-    // Add a subnet
-    let node_ids = vec![NodeId::new(PrincipalId(node_id))];
-    let create_subnet_payload = CreateSubnetPayload {
-        node_ids,
-        replica_version_id: ReplicaVersion::default().to_string(),
-        ..Default::default()
-    };
-    update_candid_as::<_, (Result<NewSubnet, String>,)>(
-        &pic,
-        registry_canister_id,
-        governance_canister_id,
-        "create_subnet",
-        (create_subnet_payload,),
-    )
-    .unwrap()
-    .0
-    .unwrap();
+    // Create two subnets, each with one node.
+    for node_id in [node_id_1, node_id_2] {
+        let create_subnet_payload = CreateSubnetPayload {
+            node_ids: vec![NodeId::new(PrincipalId(node_id))],
+            replica_version_id: ReplicaVersion::default().to_string(),
+            ..Default::default()
+        };
+        update_candid_as::<_, (Result<NewSubnet, String>,)>(
+            &pic,
+            registry_canister_id,
+            governance_canister_id,
+            "create_subnet",
+            (create_subnet_payload,),
+        )
+        .unwrap()
+        .0
+        .unwrap();
+    }
 }
 
 fn deploy_universal_canister(pic: &PocketIc) -> Principal {
