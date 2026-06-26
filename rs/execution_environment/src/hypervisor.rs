@@ -405,7 +405,6 @@ impl Hypervisor {
             system_state,
             *self.cycles_account_manager,
             network_topology,
-            self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             available_callbacks,
             request_metadata,

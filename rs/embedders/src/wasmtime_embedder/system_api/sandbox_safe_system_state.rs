@@ -1427,7 +1427,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
 
     use ic_base_types::NumSeconds;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
