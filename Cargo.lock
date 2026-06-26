@@ -1146,6 +1146,7 @@ dependencies = [
  "anyhow",
  "clap 4.6.0",
  "deterministic_ips",
+ "grub",
  "http 1.4.0",
  "macaddr",
  "rand 0.8.5",
