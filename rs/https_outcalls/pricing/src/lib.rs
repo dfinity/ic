@@ -23,7 +23,7 @@ use payg::PayAsYouGoTracker;
 pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
-    /// Deducts the actual network resources consumed.
+    /// Deducts the cost of the network resources consumed by the request.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if `network_usage <= get_adapter_limits()`.
@@ -33,7 +33,7 @@ pub trait BudgetTracker: Send {
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
     /// Returns the maximum instructions allowed for the transformation function.
     fn get_transform_limit(&self) -> NumInstructions;
-    /// Deducts the actual instructions consumed by the transformation.
+    /// Deducts the cost of the instructions consumed by the transformation.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
@@ -98,7 +98,7 @@ impl PricingFactory {
                 Box::new(LegacyTracker::new(context.max_response_bytes)),
                 Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
                 context.request.sender,
-                matches!(context.replication, Replication::NonReplicated(_)),
+                replication_label(&context.replication),
                 self.metrics.clone(),
                 self.log.clone(),
             )),
@@ -106,5 +106,14 @@ impl PricingFactory {
                 Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
             }
         }
+    }
+}
+
+/// Returns the metric label for a request's replication type.
+fn replication_label(replication: &Replication) -> &'static str {
+    match replication {
+        Replication::FullyReplicated => "fully_replicated",
+        Replication::Flexible { .. } => "flexible",
+        Replication::NonReplicated(_) => "non_replicated",
     }
 }

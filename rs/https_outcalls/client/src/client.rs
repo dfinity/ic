@@ -529,6 +529,12 @@ async fn transform_adapter_response(
     if let Err(PricingError::InsufficientCycles) =
         budget.subtract_transform_usage(NumInstructions::from(instructions_used))
     {
+        // NOTE: This assertion assumes a tracker whose transform charge fails
+        // only when the transform itself failed. That holds for the legacy
+        // tracker (used as the "real" tracker today, which never returns an
+        // error), but NOT for a bare `PayAsYouGoTracker`, where a successful
+        // transform can still overrun the per-replica budget. Revisit before
+        // enabling pay-as-you-go pricing on the live path.
         debug_assert!(
             execution_result.is_err(),
             "Transform should fail if insufficient cycles"

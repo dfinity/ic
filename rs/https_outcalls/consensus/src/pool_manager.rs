@@ -317,19 +317,30 @@ impl CanisterHttpPoolManagerImpl {
             }
 
             if !request_ids_already_made.contains(id) {
-                let Some((subnet_size, cost_schedule)) =
-                    self.pricing_inputs(context.registry_version)
-                else {
-                    warn!(
-                        every_n_seconds => 10,
-                        self.log,
-                        "Skipping canister http request {} because the subnet size or cost \
-                         schedule could not be determined at registry version {}",
-                        id,
-                        context.registry_version
-                    );
-                    continue;
-                };
+                // The subnet size and cost schedule are only consumed by the
+                // dark-launch shadow tracker, which is observability-only. If
+                // they cannot be read from the registry we must NOT skip the
+                // request: that would alter the real (legacy) charging flow.
+                // Instead, fall back to defaults so the request is still
+                // dispatched; only the shadow comparison for this request is
+                // affected.
+                let (subnet_size, cost_schedule) = self
+                    .pricing_inputs(context.registry_version)
+                    .unwrap_or_else(|| {
+                        warn!(
+                            every_n_seconds => 10,
+                            self.log,
+                            "Using default pricing inputs for canister http request {} because \
+                             the subnet size or cost schedule could not be determined at registry \
+                             version {}",
+                            id,
+                            context.registry_version
+                        );
+                        (
+                            NumberOfNodes::from(FALLBACK_SHADOW_SUBNET_SIZE),
+                            CanisterCyclesCostSchedule::Normal,
+                        )
+                    });
 
                 if let Err(err) = self
                     .http_adapter_shim

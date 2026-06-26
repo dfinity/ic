@@ -27,7 +27,7 @@ use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
 // Fully-replicated per replica:
 //   50 * downloaded_bytes_i + 300 * request_ms_i + transform_instructions_i / 13
 //
-// None-replicated/Flexible per replica:
+// Non-replicated/Flexible per replica:
 //   50 * downloaded_bytes_i + 300 * request_ms_i
 //     + 50 * transformed_response_bytes_i * N + transform_instructions_i / 13
 const PER_DOWNLOADED_BYTE_FEE: u128 = 50;
@@ -38,7 +38,7 @@ const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 pub struct PayAsYouGoTracker {
     /// Number of nodes (`N`) on the subnet.
     subnet_size: NumberOfNodes,
-    /// Whether this is outcall uses flexible pricing.
+    /// Whether this outcall uses flexible pricing.
     is_flexible_pricing: bool,
     /// Whether the subnet uses a free cost schedule. When `true` the tracker
     /// charges nothing and refunds the full allowance.
@@ -61,7 +61,7 @@ impl PayAsYouGoTracker {
         Self {
             subnet_size,
             is_flexible_pricing: match context.replication {
-                // Non-replicated outcalls gossip the reponse, so thay are charged
+                // Non-replicated outcalls gossip the response, so they are charged
                 // the same way as flexible outcalls.
                 Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
                 Replication::FullyReplicated => false,
@@ -278,6 +278,30 @@ mod tests {
         );
         let expected =
             FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE * transformed_size as u128 * n as u128;
+        assert_eq!(tracker.spent, expected);
+    }
+
+    #[test]
+    fn charges_gossip_usage_for_non_replicated() {
+        // Non-replicated outcalls use the same (flexible) pricing as flexible
+        // outcalls, so the gossip term is charged over the full subnet size.
+        let allowance = 1_000_000_000_u128;
+        let subnet_size = 13_u32;
+        let node = NodeId::from(PrincipalId::new_node_test_id(0));
+        let ctx = context(Replication::NonReplicated(node), allowance);
+        let mut tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(subnet_size),
+            CanisterCyclesCostSchedule::Normal,
+        );
+
+        let transformed_size = 500_u64;
+        assert_eq!(
+            tracker.subtract_gossip_usage(NumBytes::from(transformed_size)),
+            Ok(())
+        );
+        let expected =
+            FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE * transformed_size as u128 * subnet_size as u128;
         assert_eq!(tracker.spent, expected);
     }
 
