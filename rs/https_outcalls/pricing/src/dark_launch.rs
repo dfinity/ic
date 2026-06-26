@@ -1,5 +1,8 @@
 use ic_logger::{ReplicaLogger, warn};
-use ic_types::{CanisterId, NumBytes, NumInstructions, canister_http::CanisterHttpPaymentReceipt};
+use ic_types::{
+    CanisterId, NumBytes, NumInstructions,
+    canister_http::{CanisterHttpPaymentReceipt, ReplicationKind},
+};
 
 use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError, metrics::PricingMetrics};
 
@@ -15,7 +18,7 @@ pub struct DarkLaunchTracker {
     real: Box<dyn BudgetTracker>,
     shadow: Box<dyn BudgetTracker>,
     canister_id: CanisterId,
-    replication: &'static str,
+    replication: ReplicationKind,
     metrics: PricingMetrics,
     log: ReplicaLogger,
     /// Whether an incompatibility has already been recorded for this request.
@@ -28,7 +31,7 @@ impl DarkLaunchTracker {
         real: Box<dyn BudgetTracker>,
         shadow: Box<dyn BudgetTracker>,
         canister_id: CanisterId,
-        replication: &'static str,
+        replication: ReplicationKind,
         metrics: PricingMetrics,
         log: ReplicaLogger,
     ) -> Self {
@@ -60,7 +63,7 @@ impl DarkLaunchTracker {
         self.error_reported = true;
         self.metrics
             .shadow_incompatible_total
-            .with_label_values(&[step, self.replication])
+            .with_label_values(&[step, self.replication.as_str()])
             .inc();
         warn!(
             self.log,
@@ -68,7 +71,7 @@ impl DarkLaunchTracker {
              canister_id {}, step {}, replication {}, real_result {:?}, shadow_result {:?}",
             self.canister_id,
             step,
-            self.replication,
+            self.replication.as_str(),
             real,
             shadow,
         );
@@ -109,12 +112,6 @@ impl BudgetTracker for DarkLaunchTracker {
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
-        // Count every request that reaches the final accounting step so the
-        // incompatible counter can be expressed as a fraction of the total.
-        self.metrics
-            .shadow_requests_total
-            .with_label_values(&[self.replication])
-            .inc();
         self.real.create_payment_receipt()
     }
 }
@@ -170,7 +167,7 @@ mod tests {
     fn dark_launch(
         real: FakeTracker,
         shadow: FakeTracker,
-        replication: &'static str,
+        replication: ReplicationKind,
         metrics: PricingMetrics,
     ) -> DarkLaunchTracker {
         DarkLaunchTracker::new(
@@ -213,7 +210,7 @@ mod tests {
         let mut tracker = dark_launch(
             FakeTracker::ok(),
             shadow,
-            "fully_replicated",
+            ReplicationKind::FullyReplicated,
             metrics.clone(),
         );
 
@@ -223,15 +220,6 @@ mod tests {
             metrics
                 .shadow_incompatible_total
                 .with_label_values(&["network_usage", "fully_replicated"])
-                .get(),
-            1
-        );
-
-        let _ = tracker.create_payment_receipt();
-        assert_eq!(
-            metrics
-                .shadow_requests_total
-                .with_label_values(&["fully_replicated"])
                 .get(),
             1
         );
@@ -245,7 +233,12 @@ mod tests {
             transform: Err(PricingError::InsufficientCycles),
             transformed: Err(PricingError::InsufficientCycles),
         };
-        let mut tracker = dark_launch(FakeTracker::ok(), shadow, "flexible", metrics.clone());
+        let mut tracker = dark_launch(
+            FakeTracker::ok(),
+            shadow,
+            ReplicationKind::Flexible,
+            metrics.clone(),
+        );
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
         assert_eq!(
@@ -264,7 +257,7 @@ mod tests {
         let mut tracker = dark_launch(
             FakeTracker::ok(),
             FakeTracker::ok(),
-            "fully_replicated",
+            ReplicationKind::FullyReplicated,
             metrics.clone(),
         );
 
@@ -273,16 +266,7 @@ mod tests {
             tracker.subtract_transform_usage(NumInstructions::from(0)),
             Ok(())
         );
-        let _ = tracker.create_payment_receipt();
-
         assert_eq!(incompatible_count(&metrics), 0);
-        assert_eq!(
-            metrics
-                .shadow_requests_total
-                .with_label_values(&["fully_replicated"])
-                .get(),
-            1
-        );
     }
 
     #[test]
@@ -292,7 +276,12 @@ mod tests {
             network: Err(PricingError::InsufficientCycles),
             ..FakeTracker::ok()
         };
-        let mut tracker = dark_launch(FakeTracker::ok(), shadow, "non_replicated", metrics.clone());
+        let mut tracker = dark_launch(
+            FakeTracker::ok(),
+            shadow,
+            ReplicationKind::NonReplicated,
+            metrics.clone(),
+        );
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
 
@@ -308,23 +297,6 @@ mod tests {
             metrics
                 .shadow_incompatible_total
                 .with_label_values(&["network_usage", "fully_replicated"])
-                .get(),
-            0
-        );
-
-        // The total is attributed to the same label, so per-type rates are exact.
-        let _ = tracker.create_payment_receipt();
-        assert_eq!(
-            metrics
-                .shadow_requests_total
-                .with_label_values(&["non_replicated"])
-                .get(),
-            1
-        );
-        assert_eq!(
-            metrics
-                .shadow_requests_total
-                .with_label_values(&["fully_replicated"])
                 .get(),
             0
         );

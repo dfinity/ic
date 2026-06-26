@@ -9,9 +9,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
-    canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion, Replication,
-    },
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion},
 };
 pub use ic_types_cycles::CanisterCyclesCostSchedule;
 
@@ -105,7 +103,7 @@ impl PricingFactory {
                 Box::new(LegacyTracker::new(context.max_response_bytes)),
                 Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
                 context.request.sender,
-                replication_label(&context.replication),
+                context.replication.kind(),
                 self.metrics.clone(),
                 self.log.clone(),
             )),
@@ -113,14 +111,5 @@ impl PricingFactory {
                 Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
             }
         }
-    }
-}
-
-/// Returns the metric label for a request's replication type.
-fn replication_label(replication: &Replication) -> &'static str {
-    match replication {
-        Replication::FullyReplicated => "fully_replicated",
-        Replication::Flexible { .. } => "flexible",
-        Replication::NonReplicated(_) => "non_replicated",
     }
 }

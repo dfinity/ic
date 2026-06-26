@@ -158,6 +158,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 http_method: request_http_method,
                 transform: request_transform,
                 pricing_version: request_pricing_version,
+                replication: request_replication,
                 ..
             } = request_context;
 
@@ -306,6 +307,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             // Create the payment receipt after all processing is complete.
             let receipt = budget.create_payment_receipt();
 
+            let replication = request_replication.kind();
             permit.send((
                 CanisterHttpResponse {
                     id: request_id,
@@ -314,7 +316,11 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         Ok(resp) => {
                             metrics
                                 .request_total
-                                .with_label_values(&["success", request_http_method.as_str()])
+                                .with_label_values(&[
+                                    "success",
+                                    request_http_method.as_str(),
+                                    replication.as_str(),
+                                ])
                                 .inc();
                             CanisterHttpResponseContent::Success(resp)
                         }
@@ -324,6 +330,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 .with_label_values(&[
                                     reject.reject_code.as_str(),
                                     request_http_method.as_str(),
+                                    replication.as_str(),
                                 ])
                                 .inc();
                             CanisterHttpResponseContent::Reject(reject)

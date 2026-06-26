@@ -194,6 +194,33 @@ impl Replication {
             Replication::Flexible { committee, .. } => committee.contains(signer),
         }
     }
+
+    /// Returns the [`ReplicationKind`] of this request.
+    pub fn kind(&self) -> ReplicationKind {
+        match self {
+            Replication::FullyReplicated => ReplicationKind::FullyReplicated,
+            Replication::Flexible { .. } => ReplicationKind::Flexible,
+            Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
+        }
+    }
+}
+
+/// The kind of replication of a request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplicationKind {
+    FullyReplicated,
+    Flexible,
+    NonReplicated,
+}
+
+impl ReplicationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ReplicationKind::FullyReplicated => "fully_replicated",
+            ReplicationKind::Flexible => "flexible",
+            ReplicationKind::NonReplicated => "non_replicated",
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
