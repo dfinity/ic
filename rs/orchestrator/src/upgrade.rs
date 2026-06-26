@@ -661,16 +661,7 @@ impl Upgrade {
             return;
         }
 
-        let cup_type_str = match cup
-            .content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg
-            .subnet_splitting_status()
-        {
+        let cup_type_str = match cup.subnet_splitting_status() {
             SubnetSplittingStatus::NotScheduled => {
                 if cup.is_signed() {
                     // Regular subnet CUP
@@ -1649,6 +1640,7 @@ mod tests {
         }
         let cup_provider = CatchUpPackageProvider::new(
             registry.clone(),
+            metrics.clone(),
             LocalCUPReader::new(cup_dir, logger.clone()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),

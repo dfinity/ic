@@ -257,6 +257,7 @@ impl Orchestrator {
         // Create the cup_provider for the Upgrade module
         let cup_provider = CatchUpPackageProvider::new(
             Arc::clone(&registry),
+            Arc::clone(&metrics),
             local_cup_reader.clone(),
             Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
