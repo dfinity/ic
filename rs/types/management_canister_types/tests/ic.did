@@ -25,6 +25,7 @@ type canister_settings = record {
     memory_allocation : opt nat;
     freezing_threshold : opt nat;
     reserved_cycles_limit : opt nat;
+    minimum_incoming_canister_call_cycles : opt nat;
     log_visibility : opt log_visibility;
     snapshot_visibility : opt snapshot_visibility;
     log_memory_limit : opt nat;
@@ -40,6 +41,7 @@ type definite_canister_settings = record {
     memory_allocation : nat;
     freezing_threshold : nat;
     reserved_cycles_limit : nat;
+    minimum_incoming_canister_call_cycles : nat;
     log_visibility : log_visibility;
     snapshot_visibility : snapshot_visibility;
     log_memory_limit : nat;

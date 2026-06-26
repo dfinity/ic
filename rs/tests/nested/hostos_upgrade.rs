@@ -33,7 +33,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     let original_version = get_hostos_version();
     let target_version = get_hostos_update_img_version();
-    let update_image_url = get_hostos_update_img_url();
+    let update_image_url = get_hostos_update_img_url(&env);
     let update_image_sha256 = get_hostos_update_img_sha256();
 
     info!(logger, "Image configuration:");

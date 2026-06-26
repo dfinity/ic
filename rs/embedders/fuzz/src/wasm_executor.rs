@@ -1,7 +1,8 @@
 use crate::ic_wasm::{ICWasmModule, get_system_api_type_for_wasm_method};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig,
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
@@ -168,6 +169,7 @@ pub(crate) fn get_sandbox_safe_system_state(
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     )
 }

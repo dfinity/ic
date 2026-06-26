@@ -1,7 +1,8 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, SchedulerConfig},
+    n,
+    subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
@@ -119,6 +120,7 @@ fn test_api_for_update(
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
     );
     let canister_current_memory_usage = NumBytes::from(0);

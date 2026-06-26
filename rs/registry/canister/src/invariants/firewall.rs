@@ -46,11 +46,14 @@ pub(crate) fn check_firewall_invariants(
         validate_firewall_ruleset(subnet_ruleset)?;
     }
 
-    let replica_node_ruleset = get_replica_nodes_firewall_rules(snapshot);
-    validate_firewall_ruleset(replica_node_ruleset)?;
-
     let boundary_node_ruleset = get_boundary_nodes_firewall_rules(snapshot);
     validate_firewall_ruleset(boundary_node_ruleset)?;
+
+    let cloud_engine_ruleset = get_cloud_engines_firewall_rules(snapshot);
+    validate_firewall_ruleset(cloud_engine_ruleset)?;
+
+    let replica_node_ruleset = get_replica_nodes_firewall_rules(snapshot);
+    validate_firewall_ruleset(replica_node_ruleset)?;
 
     let global_ruleset = get_global_firewall_rules(snapshot);
     validate_firewall_ruleset(global_ruleset)?;
@@ -235,6 +238,13 @@ fn get_global_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRule
 /// nodes (if it exists).
 fn get_replica_nodes_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRuleSet> {
     let firewall_record_key = make_firewall_rules_record_key(&FirewallRulesScope::ReplicaNodes);
+    get_firewall_rules(snapshot, firewall_record_key)
+}
+
+/// A helper function that returns the firewall ruleset specific for the cloud
+/// engine nodes (if it exists).
+fn get_cloud_engines_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRuleSet> {
+    let firewall_record_key = make_firewall_rules_record_key(&FirewallRulesScope::CloudEngines);
     get_firewall_rules(snapshot, firewall_record_key)
 }
 
