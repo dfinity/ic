@@ -583,6 +583,7 @@ mod tests {
     fn fake_state_with_contexts(
         sign_with_threshold: Vec<SignWithThresholdContext>,
         setup_initial_dkg: Vec<SetupInitialDkgContext>,
+        canister_http: Vec<CanisterHttpRequestContext>,
     ) -> ReplicatedState {
         let mut state = ReplicatedStateBuilder::default().build();
         state
@@ -604,12 +605,21 @@ mod tests {
                 .map(|(i, c)| (CallbackId::from(i as u64), c)),
         );
         state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts = BTreeMap::from_iter(
+            canister_http
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (CallbackId::from(i as u64), c)),
+        );
+        state
     }
 
     fn fake_state_with_signature_contexts(
         contexts: Vec<SignWithThresholdContext>,
     ) -> ReplicatedState {
-        fake_state_with_contexts(contexts, vec![])
+        fake_state_with_contexts(contexts, vec![], vec![])
     }
 
     fn fake_setup_initial_dkg_context(registry_version: RegistryVersion) -> SetupInitialDkgContext {
@@ -625,7 +635,7 @@ mod tests {
     fn fake_state_with_setup_initial_dkg_contexts(
         contexts: Vec<SetupInitialDkgContext>,
     ) -> ReplicatedState {
-        fake_state_with_contexts(vec![], contexts)
+        fake_state_with_contexts(vec![], contexts, vec![])
     }
 
     fn fake_key_ids() -> Vec<MasterPublicKeyId> {
@@ -730,26 +740,18 @@ mod tests {
         }
     }
 
-    fn fake_state_with_canister_http_contexts(versions: Vec<RegistryVersion>) -> ReplicatedState {
-        let mut state = ReplicatedStateBuilder::default().build();
-        state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts = BTreeMap::from_iter(
-            versions
-                .into_iter()
-                .enumerate()
-                .map(|(i, v)| (CallbackId::from(i as u64), fake_canister_http_context(v))),
-        );
-        state
+    fn fake_state_with_canister_http_contexts(
+        contexts: Vec<CanisterHttpRequestContext>,
+    ) -> ReplicatedState {
+        fake_state_with_contexts(vec![], vec![], contexts)
     }
 
     #[test]
     fn test_get_oldest_state_registry_version_canister_http_only() {
         let state = fake_state_with_canister_http_contexts(vec![
-            RegistryVersion::from(8),
-            RegistryVersion::from(4),
-            RegistryVersion::from(6),
+            fake_canister_http_context(RegistryVersion::from(8)),
+            fake_canister_http_context(RegistryVersion::from(4)),
+            fake_canister_http_context(RegistryVersion::from(6)),
         ]);
         assert_eq!(
             Some(RegistryVersion::from(4)),
@@ -762,21 +764,15 @@ mod tests {
         // Sign and setup-dkg contexts at v5, canister http at v2: the canister
         // http version must be reflected as the oldest.
         let key_id = fake_key_ids().into_iter().next().unwrap();
-        let mut state = fake_state_with_contexts(
+        let state = fake_state_with_contexts(
             vec![fake_signature_request_context_with_registry_version(
                 Some(PreSigId(0)),
                 &key_id,
                 RegistryVersion::from(5),
             )],
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(5))],
+            vec![fake_canister_http_context(RegistryVersion::from(2))],
         );
-        state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts = BTreeMap::from([(
-            CallbackId::from(0),
-            fake_canister_http_context(RegistryVersion::from(2)),
-        )]);
         assert_eq!(
             Some(RegistryVersion::from(2)),
             get_oldest_state_registry_version(&state)
@@ -799,6 +795,7 @@ mod tests {
         let state = fake_state_with_contexts(
             signature_contexts,
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+            vec![],
         );
         assert_eq!(
             Some(RegistryVersion::from(2)),
@@ -822,6 +819,7 @@ mod tests {
         let state = fake_state_with_contexts(
             signature_contexts,
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(11))],
+            vec![],
         );
         assert_eq!(
             Some(RegistryVersion::from(2)),
