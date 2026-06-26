@@ -110,7 +110,13 @@ jobs:
     # block the production container image reference update.
     runs-on: namespace-profile-amd64-linux-32x64
     needs: [build-image-prep, ic-build-image]
-    if: ${{ needs.build-image-prep.outputs.build_image == 'true' && github.repository == 'dfinity/ic' }}
+    # Restricted to the dfinity/ic repo and, for pull_request events, to non-fork
+    # PRs -- this job runs on a privileged Namespace runner with pre-authenticated
+    # 'nsc', so it must never run untrusted code from a fork.
+    if: |
+      needs.build-image-prep.outputs.build_image == 'true' &&
+      github.repository == 'dfinity/ic' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 30
     outputs:
       worker-imageid: ${{ steps.worker.outputs.worker-imageid }}
@@ -127,13 +133,16 @@ jobs:
           src="ghcr.io/dfinity/ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
           worker_repo="nscr.io/dfinity/ic-build-worker"
           worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
+          # Use the same fully-qualified ref for the upload destination and the
+          # digest lookup so the tag we inspect is guaranteed to be the one we pushed.
+          worker_ref="$worker_repo:$worker_tag"
 
           nsc docker login
-          nsc base-image upload "$src" "ic-build-worker:$worker_tag"
+          nsc base-image upload "$src" "$worker_ref"
 
           # BRE requires an immutable digest (mutable tags are rejected). Resolve the
           # digest produced in nscr.io. (Alternatives: 'crane digest' or 'nsc'.)
-          worker_digest="$(docker buildx imagetools inspect "$worker_repo:$worker_tag" --format '{{.Manifest.Digest}}')"
+          worker_digest="$(docker buildx imagetools inspect "$worker_ref" --format '{{.Manifest.Digest}}')"
           echo "Resolved worker image digest: $worker_digest"
 
           # Optimize the pinned digest into a fast-booting worker variant. This blocks
@@ -235,10 +244,13 @@ jobs:
   update-worker-reference:
     name: Update BRE Worker Image Reference in Repo
     runs-on: ubuntu-latest
-    # Runs after (and independently of) 'update-image-references'. Pins the BRE
-    # worker image reference used by bre-namespace-test.yml to the freshly mirrored
-    # and optimized digest. Skipped automatically if 'bre-worker-image' failed.
-    needs: [build-image-prep, bre-worker-image, update-image-references]
+    # Decoupled from 'update-image-references': a failure there must not prevent
+    # pinning a successfully-produced worker digest, so it is intentionally not in
+    # 'needs'. Pins the BRE worker image reference used by bre-namespace-test.yml to
+    # the freshly mirrored and optimized digest. Skipped automatically if
+    # 'bre-worker-image' failed (which also blocks fork PRs). The 'git pull --rebase'
+    # below absorbs any concurrent push from 'update-image-references'.
+    needs: [build-image-prep, bre-worker-image]
     if: ${{ needs.build-image-prep.outputs.build_image == 'true' && github.repository == 'dfinity/ic' }}
     steps:
       - name: Create GitHub App Token

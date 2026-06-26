@@ -35,12 +35,15 @@ jobs:
     runs-on: namespace-profile-amd64-linux-32x64
     timeout-minutes: 120
     # Opt-in while experimental: manual dispatch, pushes to dev-gh-* branches, or
-    # pull requests labeled 'CI_BRE'. Only on the public repo, where Namespace
-    # runners are configured (otherwise the job would get stuck).
+    # non-fork pull requests labeled 'CI_BRE'. Only on the public repo, where
+    # Namespace runners are configured (otherwise the job would get stuck). Fork
+    # PRs are excluded because this job runs on a privileged Namespace runner with
+    # pre-authenticated 'nsc' and must never execute untrusted PR code.
     if: >-
       github.repository == 'dfinity/ic' &&
       ( github.event_name != 'pull_request' ||
-        contains(github.event.pull_request.labels.*.name, 'CI_BRE') )
+        ( github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'CI_BRE') ) )
     steps:
       - name: Set up Bazel Remote Execution
         run: |
