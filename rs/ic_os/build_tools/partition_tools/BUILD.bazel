@@ -23,10 +23,6 @@ rust_library(
 rust_test(
     name = "partition_tools_test",
     crate = ":partition_tools",
-    proc_macro_deps = [
-        # Keep sorted.
-        "@crate_index//:indoc",
-    ],
     data = [
         "@dosfstools//:mkfs.fat",
         "@mtools//:mcopy",
@@ -35,6 +31,10 @@ rust_test(
         "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
         "MCOPY": "$(rootpath @mtools//:mcopy)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:indoc",
+    ],
     deps = [
         # Keep sorted.
         "@crate_index//:anyhow",
