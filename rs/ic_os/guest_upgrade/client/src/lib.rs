@@ -191,6 +191,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         .verify_measurement(&elected_measurements)
         .verify_custom_data(&custom_data)
         .verify_chip_id(&[my_attestation_report.chip_id])
+        .verify_guest_debug_disallowed()
         .context("Server attestation report verification failed")?;
 
         let disk_encryption_key = disk_encryption_data

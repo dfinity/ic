@@ -1,9 +1,10 @@
 use crate::attestation_report::{AttestationReportBuilder, FakeAttestationReportSigner};
-use attestation::SevCertificateChain;
 use attestation::attestation_package::{
     ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use attestation::custom_data::EncodeSevCustomData;
+use attestation::SevCertificateChain;
+use sev::firmware::guest::GuestPolicy;
 use std::fmt::Debug;
 
 /// Helper for building SEV attestation packages for testing.
@@ -62,6 +63,13 @@ impl ParsedSevAttestationPackageBuilder {
         self
     }
 
+    pub fn with_guest_policy(mut self, guest_policy: GuestPolicy) -> Self {
+        self.attestation_report_builder = self
+            .attestation_report_builder
+            .with_guest_policy(guest_policy);
+        self
+    }
+
     pub fn with_signer(mut self, signer: FakeAttestationReportSigner) -> Self {
         self.signer = signer;
         self
@@ -86,9 +94,9 @@ impl ParsedSevAttestationPackageBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use attestation::SevAttestationPackage;
     use attestation::attestation_package::AttestationPackageVerifier;
     use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
+    use attestation::SevAttestationPackage;
     use rand::SeedableRng;
 
     #[test]

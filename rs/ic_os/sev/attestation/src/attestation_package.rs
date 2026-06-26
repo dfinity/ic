@@ -21,7 +21,7 @@ pub enum SevRootCertificateVerification {
 pub trait AttestationPackageVerifier: Sized {
     type Target: AttestationPackageVerifier<Target = Self::Target>;
 
-    /// Verify all attestation report fields.
+    /// Verifies all attestation report fields.
     fn verify_all<T: EncodeSevCustomData + Debug>(
         self,
         expected_custom_data: &T,
@@ -31,26 +31,30 @@ pub trait AttestationPackageVerifier: Sized {
         self.verify_custom_data(expected_custom_data)
             .verify_measurement(elected_guest_launch_measurements)
             .verify_chip_id(expected_chip_ids)
+            .verify_guest_debug_disallowed()
     }
 
-    /// Verify that the attestation report chip ID matches one of the expected chip IDs.
+    /// Verifies that the attestation report chip ID matches one of the expected chip IDs.
     fn verify_chip_id(
         self,
         expected_chip_ids: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError>;
 
-    /// Verify that the attestation report custom data matches the expected custom data.
+    /// Verifies that the attestation report custom data matches the expected custom data.
     fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
         expected_custom_data: &T,
     ) -> Result<Self::Target, VerificationError>;
 
-    /// Verify that the attestation report launch measurement matches one of the elected guest
+    /// Verifies that the attestation report launch measurement matches one of the elected guest
     /// launch measurements.
     fn verify_measurement(
         self,
         elected_guest_launch_measurements: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError>;
+
+    /// Verifies that debugging the guest is disallowed.
+    fn verify_guest_debug_disallowed(self) -> Result<Self::Target, VerificationError>;
 }
 
 /// A parsed attestation package with the attestation report and certificate chain
@@ -251,6 +255,14 @@ impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
 
         Ok(self)
     }
+
+    fn verify_guest_debug_disallowed(self) -> Result<Self::Target, VerificationError> {
+        if self.borrow().attestation_report().policy.debug_allowed() {
+            return Err(VerificationError::invalid_policy("Debugging must be disallowed"));
+        }
+
+        Ok(self)
+    }
 }
 
 /// Allows chaining verification methods
@@ -276,6 +288,10 @@ impl<T: AttestationPackageVerifier> AttestationPackageVerifier for Result<T, Ver
         elected_guest_launch_measurements: &[impl AsRef<[u8]>],
     ) -> Result<Self::Target, VerificationError> {
         self?.verify_measurement(elected_guest_launch_measurements)
+    }
+
+    fn verify_guest_debug_disallowed(self) -> Result<Self::Target, VerificationError> {
+        self?.verify_guest_debug_disallowed()
     }
 }
 

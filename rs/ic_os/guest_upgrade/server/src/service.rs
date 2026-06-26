@@ -147,6 +147,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         .verify_measurement(&self.expected_measurements)
         .verify_custom_data(&custom_data)
         .verify_chip_id(&[my_attestation_report.chip_id])
+        .verify_guest_debug_disallowed()
         .map_err(|e| {
             Status::invalid_argument(format!("Attestation report verification failed: {e:?}"))
         })?;
