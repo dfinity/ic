@@ -298,7 +298,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let payload = budget
                 .subtract_gossip_usage(NumBytes::from(response_size as u64))
                 .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
-                    reject_code: RejectCode::SysFatal,
+                    reject_code: RejectCode::CanisterReject,
                     message: "Insufficient cycles".to_string(),
                 })
                 .and(payload);
@@ -413,7 +413,7 @@ async fn execute_http_request(
             response_time: elapsed,
         })
         .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
-            reject_code: RejectCode::SysFatal,
+            reject_code: RejectCode::CanisterReject,
             message: "Insufficient cycles".to_string(),
         })?;
 
@@ -555,7 +555,7 @@ async fn transform_adapter_response(
         );
         (
             Err(CanisterHttpReject {
-                reject_code: RejectCode::SysFatal,
+                reject_code: RejectCode::CanisterReject,
                 message: "Insufficient cycles".to_string(),
             }),
             instructions_used,
