@@ -237,7 +237,7 @@ vfat_image = _icos_build_rule(
             cfg = "exec",
         ),
         "_mkfs_fat": attr.label(
-            default = "//:mkfs.fat",
+            default = "@dosfstools//:mkfs.fat",
             cfg = "exec",
             allow_single_file = True,
         ),
@@ -332,12 +332,12 @@ fat32_image = _icos_build_rule(
             cfg = "exec",
         ),
         "_fatlabel": attr.label(
-            default = "//:fatlabel",
+            default = "@dosfstools//:fatlabel",
             cfg = "exec",
             allow_single_file = True,
         ),
         "_mkfs_fat": attr.label(
-            default = "//:mkfs.fat",
+            default = "@dosfstools//:mkfs.fat",
             cfg = "exec",
             allow_single_file = True,
         ),
