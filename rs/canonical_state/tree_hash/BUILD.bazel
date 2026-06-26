@@ -10,6 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/tree_hash",
+        "//rs/utils",
         "@crate_index//:itertools",
         "@crate_index//:leb128",
         "@crate_index//:scoped_threadpool",

@@ -1,8 +1,8 @@
+use criterion::measurement::Measurement;
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box};
-use criterion_time::ProcessTime;
-use ic_base_types::NumBytes;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_canonical_state::{lazy_tree_conversion::replicated_state_as_lazy_tree, traverse};
-use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
+use ic_canonical_state_tree_hash::hash_tree::{hash_lazy_tree, hash_lazy_tree_with_baseline};
 use ic_canonical_state_tree_hash_test_utils::{build_witness_gen, crypto_hash_lazy_tree};
 use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator, flatmap};
@@ -15,7 +15,7 @@ use ic_replicated_state::{
 };
 use ic_state_manager::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
-use ic_test_utilities_state::{get_initial_state, get_running_canister};
+use ic_test_utilities_state::{get_initial_state, new_canister_state_with_execution};
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
@@ -30,9 +30,9 @@ use ic_types_cycles::Cycles;
 use maplit::btreemap;
 use std::sync::Arc;
 
-fn bench_traversal(c: &mut Criterion<ProcessTime>) {
+fn bench_traversal<M: Measurement + 'static>(c: &mut Criterion<M>) {
     const NUM_STREAM_MESSAGES: u64 = 1_000;
-    const NUM_CANISTERS: u64 = 10_000;
+    const NUM_CANISTERS: u64 = 500_000;
     const NUM_STATUSES: u64 = 30_000;
 
     let subnet_type = SubnetType::Application;
@@ -72,7 +72,12 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     for i in 0..NUM_CANISTERS {
-        state.put_canister_state(get_running_canister(canister_test_id(i)));
+        state.put_canister_state(new_canister_state_with_execution(
+            canister_test_id(i),
+            canister_test_id(i).get(),
+            Cycles::zero(),
+            NumSeconds::from(1000),
+        ));
     }
 
     let user_id = user_test_id(1);
@@ -135,8 +140,25 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/hash_tree_new", |b| {
+        let mut tree = None;
         b.iter(|| {
-            black_box(hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap())
+            tree = Some(black_box(
+                hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap(),
+            ));
+        });
+        std::mem::drop(tree);
+    });
+
+    let baseline = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap();
+    c.bench_function("traverse/hash_tree_cached", |b| {
+        b.iter(|| {
+            black_box(
+                hash_lazy_tree_with_baseline(
+                    &replicated_state_as_lazy_tree(&state, height),
+                    &baseline,
+                )
+                .unwrap(),
+            )
         })
     });
 
@@ -278,10 +300,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 }
 
 fn main() {
-    let mut c = Criterion::default()
-        .with_measurement(ProcessTime::UserTime)
-        .sample_size(20)
-        .configure_from_args();
+    let mut c = Criterion::default().sample_size(20).configure_from_args();
     bench_traversal(&mut c);
     c.final_summary();
 }
