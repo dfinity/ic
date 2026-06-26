@@ -325,6 +325,13 @@ pub struct HashTree {
     /// they are rebuilt on demand from the `SubtreeSource` (see
     /// [`HashTree::witness`]).
     stubs: Vec<Vec<StubNode>>,
+
+    /// Number of digests (stubs) reused from a baseline during the construction of
+    /// this [`HashTree`].
+    reused_stubs: usize,
+    /// Number of children built in parallel during the construction of this
+    /// [`HashTree`].
+    parallel_built_children: usize,
 }
 
 /// A reusable subtree collapsed to a single digest ("stub"), stored in a
@@ -368,6 +375,8 @@ impl HashTree {
             node_children: vec![Default::default()],
             node_children_labels_ranges: vec![Default::default()],
             stubs: vec![Default::default()],
+            reused_stubs: 0,
+            parallel_built_children: 0,
         }
     }
 
@@ -412,6 +421,18 @@ impl HashTree {
             .unwrap_or(0);
 
         leaf_size.max(fork_size).max(node_size).max(stub_size)
+    }
+
+    /// Number of subtree digests reused from a baseline `HashTree` during this
+    /// tree's construction (rather than recomputed).
+    pub fn reused_stubs(&self) -> usize {
+        self.reused_stubs
+    }
+
+    /// Number of labeled nodes (fork children) built in parallel during this
+    /// tree's construction.
+    pub fn parallel_built_children(&self) -> usize {
+        self.parallel_built_children
     }
 
     /// Number of [`NodeKind::Stub`] nodes in this tree.
@@ -848,6 +869,12 @@ impl HashTree {
 
         // Reusable stubs
         self.stubs.extend(subtree.stubs);
+
+        // Roll up the worker's build statistics. (`parallel_built_children` is
+        // always 0 in a worker, which builds sequentially, but is folded in for
+        // symmetry.)
+        self.reused_stubs += subtree.reused_stubs;
+        self.parallel_built_children += subtree.parallel_built_children;
     }
 }
 
@@ -1081,7 +1108,10 @@ pub fn hash_lazy_tree<'a>(
                     // Unchanged: the baseline carries an equal `SubtreeSource` — same source
                     // allocation *and* same expander (hence same certification version) — so its
                     // digest is reused without materializing the child.
-                    Some(stub) if stub.source == source => (stub.digest.clone(), false),
+                    Some(stub) if stub.source == source => {
+                        ht.reused_stubs += 1;
+                        (stub.digest.clone(), false)
+                    }
 
                     // New, changed, or built under a different version: rebuild the subtree from
                     // its (current) `source` only to capture its root digest; if later needed for
@@ -1292,6 +1322,8 @@ pub fn hash_lazy_tree<'a>(
         mut tail: impl Iterator<Item = (usize, (Label, Child<'a>, Option<BaselineCursor<'a>>))>,
         tail_len: usize,
     ) -> Result<(), HashTreeError> {
+        ht.parallel_built_children += tail_len;
+
         let bucket_offset = ht.node_children.len();
         let threads = thread_pool.thread_count() as usize;
         debug_assert!(threads > 0);
