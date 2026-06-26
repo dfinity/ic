@@ -14248,6 +14248,112 @@ async fn test_follow_private_neuron_neuron_management() {
     );
 }
 
+#[test]
+fn test_claim_neuron_does_not_leave_zombie_neurons_behind_when_ledger_is_unavailable() {
+    // Step 1: Prepare the world.
+    // This consists of putting 10 ICP into a bunch of Governance subaccounts, all
+    // for neurons having TEST_NEURON_1_OWNER_PRINCIPAL as controller.
+
+    // Step 1.1: Gather the various pieces that will be assembled into a Governance.
+    let now_timestamp_seconds = 1782480488; // This value is not special, just realistic.
+    let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let stake = Tokens::from_tokens(10_u64).unwrap();
+    let attempts = (MAX_NEURON_CREATION_SPIKE + 1) as usize;
+    let first_memo = 10_000_u64;
+    let memos = (first_memo..first_memo + attempts as u64).collect::<Vec<_>>();
+    let ledger_accounts = memos
+        .iter()
+        .map(|memo| fake::FakeAccount {
+            id: AccountIdentifier::new(
+                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                Some(ledger::compute_neuron_staking_subaccount(controller, *memo)),
+            ),
+            amount_e8s: stake.get_e8s(),
+        })
+        .collect();
+    let driver = fake::FakeDriver::default()
+        .at(now_timestamp_seconds)
+        .with_ledger_accounts(ledger_accounts)
+        .with_supply(Tokens::from_tokens(400_000_000).unwrap());
+
+    // Step 1.2: Assemble Governance.
+    let mut gov = Governance::new(
+        empty_fixture(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
+
+    let neuron_ids = |gov: &Governance| {
+        gov.neuron_store
+            .list_all_neurons_paginated(
+                NeuronId { id: 0 },
+                u32::MAX,
+                controller,
+                now_timestamp_seconds,
+                &VotingPowerEconomics::with_default_values(),
+            )
+            .into_iter()
+            .map(|neuron| neuron.id.unwrap())
+            .collect::<Vec<NeuronId>>()
+    };
+    // This will be used during verification.
+    let original_neuron_ids = neuron_ids(&gov);
+
+    for memo in memos {
+        // Step 1.3: Make Ledger fail. The whole point of this test is to make sure
+        // that Governance handles this properly, and in particular, does not
+        // leave any zombie neurons lying around.
+        driver.fail_next_ledger_call();
+
+        // Step 2: Call code under test.
+        // Here, the controller (TEST_NEURON_1_OWNER_PRINCIPAL) tries to claim
+        // all their neurons, but on each attempt, Ledger is unavailable.
+        let claim_neuron_response = claim_neuron_by_memo(&mut gov, controller, memo)
+            .command
+            .unwrap();
+
+        // Step 3: Verify results.
+
+        // Step 3.1: First of all, Err returned.
+        match claim_neuron_response {
+            CommandResponse::Error(err) => {
+                let api::GovernanceError {
+                    error_type,
+                    error_message,
+                } = err;
+
+                // Step 3.1.1: Inspect error type.
+                assert_eq!(error_type, ErrorType::External as i32);
+
+                // Step 3.1.2: Inspect message.
+                for expected_substring in ["failed", "balance"] {
+                    assert!(
+                        error_message.to_lowercase().contains(expected_substring),
+                        "{:?} not in {:?}",
+                        expected_substring,
+                        error_message,
+                    );
+                }
+            }
+
+            _ => panic!("{:?}", claim_neuron_response),
+        }
+
+        // Step 3.2: Most interestingly, no new (zombie) neuron(s).
+        assert_eq!(neuron_ids(&gov), original_neuron_ids);
+
+        // Step 3.3: No neuron (yet) with the subaccount. The above is probably
+        // sufficient, but in tests, we are extra cautious.
+        let subaccount = ledger::compute_neuron_staking_subaccount(controller, memo);
+        assert_eq!(
+            gov.neuron_store.get_neuron_id_for_subaccount(subaccount),
+            None
+        );
+    }
+}
+
 /// Fixture for testing grandfathering behavior.
 /// It creates 2 neurons. Neuron 2 follows neuron 1, which according
 /// to the restrictions should not be allowed. However, since

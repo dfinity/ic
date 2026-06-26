@@ -22,4 +22,6 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* Delete zombie neuron during claim_neuron when Ledger is unavailable.
+
 ## Security
