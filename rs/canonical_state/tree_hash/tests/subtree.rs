@@ -76,7 +76,7 @@ struct CanisterFork<'a> {
 
 impl<'a> CanisterFork<'a> {
     fn children_map(&self) -> &'a FlatMap<Label, LabeledTree<Vec<u8>>> {
-        match &*self.canister {
+        match self.canister {
             LabeledTree::SubTree(cs) => cs,
             LabeledTree::Leaf(_) => panic!("a canister must be a subtree"),
         }
@@ -262,7 +262,7 @@ fn witnesses_into_canisters_expand_from_source() {
 
     // Whole-canister witnesses across both the sequential and parallel ranges.
     for i in [
-        0usize,
+        0,
         1,
         PARALLEL_MIN_CHILDREN - 1,
         PARALLEL_MIN_CHILDREN + 1,
@@ -317,7 +317,7 @@ fn absence_witnesses_expand_from_source() {
     );
 
     // Absent label *inside* a canister (descends into the subtree stub).
-    for i in [3usize, 110] {
+    for i in [3, 110] {
         let partial = canister_query(
             i,
             LabeledTree::SubTree(flatmap! {
