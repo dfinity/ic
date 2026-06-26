@@ -260,9 +260,6 @@ impl CanisterHttpPoolManagerImpl {
             .ok()
             .flatten()?;
         let subnet_size = u32::try_from(record.membership.len()).ok()?;
-        if subnet_size == 0 {
-            return None;
-        }
         let cost_schedule =
             CanisterCyclesCostScheduleProto::try_from(record.canister_cycles_cost_schedule)
                 .ok()
