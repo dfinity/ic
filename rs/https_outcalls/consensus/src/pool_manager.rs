@@ -270,7 +270,7 @@ impl CanisterHttpPoolManagerImpl {
                     warn!(
                         every_n_seconds => 10,
                         self.log,
-                        "Unable to check committee membership at registry version {}, {:?}",
+                        "Unable to check HTTP committee membership at registry version {}, {:?}",
                         context.registry_version,
                         e
                     );

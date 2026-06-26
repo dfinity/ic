@@ -16,7 +16,7 @@ use crate::{
 use candid::{Decode, Encode};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    membership::{Membership, MembershipError},
+    membership::{CanisterHttpCommittee, Membership},
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::{
@@ -52,7 +52,6 @@ use ic_types::{
         CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseShare,
         Replication,
     },
-    consensus::get_faults_tolerated,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSigBatchEntry,
@@ -83,19 +82,6 @@ pub struct CanisterHttpBatchStats {
     pub flexible_errors: usize,
     pub flexible_errors_candid_failures: usize,
     pub payload_bytes: usize,
-}
-
-/// The canister http committee for a fully-replicated request, together with
-/// the BFT parameters derived from its size.
-struct CanisterHttpCommittee {
-    /// The subnet node set at the registry version pinned in the request
-    /// context.
-    committee: Vec<NodeId>,
-    /// The number of matching shares required to form a response
-    /// (`committee.len() - faults_tolerated`).
-    threshold: usize,
-    /// The number of faults tolerated for a committee of this size.
-    faults_tolerated: usize,
 }
 
 /// Implementation of the [`BatchPayloadBuilder`] for the canister http feature.
@@ -144,26 +130,6 @@ impl CanisterHttpPayloadBuilderImpl {
         self.registry
             .get_features(self.subnet_id, validation_context.registry_version)
             .map(|features| features.unwrap_or_default().http_requests)
-    }
-
-    /// Returns the canister http committee at the given registry version,
-    /// along with the [`threshold`](CanisterHttpCommittee::threshold) and
-    /// [`faults_tolerated`](CanisterHttpCommittee::faults_tolerated) derived
-    /// from its size.
-    fn get_canister_http_committee(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Result<CanisterHttpCommittee, MembershipError> {
-        let committee = self
-            .membership
-            .get_canister_http_committee(registry_version)?;
-        let faults_tolerated = get_faults_tolerated(committee.len());
-        let threshold = committee.len() - faults_tolerated;
-        Ok(CanisterHttpCommittee {
-            committee,
-            threshold,
-            faults_tolerated,
-        })
     }
 
     fn get_canister_http_payload_impl(
@@ -277,7 +243,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             threshold,
                             faults_tolerated,
                             ..
-                        } = match self.get_canister_http_committee(request.registry_version) {
+                        } = match self
+                            .membership
+                            .get_canister_http_committee(request.registry_version)
+                        {
                             Ok(committee) => committee,
                             Err(err) => {
                                 warn!(self.log, "Failed to get canister http committee: {:?}", err);
@@ -476,6 +445,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         threshold,
                         ..
                     } = self
+                        .membership
                         .get_canister_http_committee(request_context.registry_version)
                         .map_err(|err| {
                             warn!(self.log, "Failed to get membership: {:?}", err);
@@ -573,6 +543,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     faults_tolerated,
                     ..
                 } = self
+                    .membership
                     .get_canister_http_committee(context.registry_version)
                     .map_err(|_| {
                         CanisterHttpPayloadValidationError::ValidationFailed(

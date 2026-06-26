@@ -22,6 +22,18 @@ pub enum MembershipError {
     UnableToRetrieveDkgSummary(Height),
 }
 
+/// The canister http committee at a given registry version, together with the
+/// BFT parameters derived from its size.
+pub struct CanisterHttpCommittee {
+    /// The subnet node set acting as the canister http committee.
+    pub committee: Vec<NodeId>,
+    /// The number of matching shares required to form a response
+    /// (`committee.len() - faults_tolerated`).
+    pub threshold: Threshold,
+    /// The number of faults tolerated for a committee of this size.
+    pub faults_tolerated: usize,
+}
+
 /// Allow a node to determine what its roles are for the current round, e.g.
 /// what its rank is and what committees it belongs to.
 pub struct Membership {
@@ -182,17 +194,26 @@ impl Membership {
     }
 
     /// Get the committee to be used for canister http at the given registry
-    /// version.
+    /// version, along with the [`threshold`](CanisterHttpCommittee::threshold)
+    /// and [`faults_tolerated`](CanisterHttpCommittee::faults_tolerated)
+    /// derived from its size.
     pub fn get_canister_http_committee(
         &self,
         registry_version: RegistryVersion,
-    ) -> Result<Vec<NodeId>, MembershipError> {
+    ) -> Result<CanisterHttpCommittee, MembershipError> {
         // IMPORTANT: if this ever becomes something else, we should make sure that:
         // 1. Shares from non committee nodes are not included in the payload
         //    this should be enforced already by the pool validator, though it might
         //    make sense for the payload builder to check too.
         // 2. Non replicated request should only be sent to committee nodes.
-        self.get_nodes_at_version(registry_version)
+        let committee = self.get_nodes_at_version(registry_version)?;
+        let faults_tolerated = get_faults_tolerated(committee.len());
+        let threshold = committee.len() - faults_tolerated;
+        Ok(CanisterHttpCommittee {
+            committee,
+            threshold,
+            faults_tolerated,
+        })
     }
 
     /// Return true if the given node ID is part of the canister http committee
@@ -204,6 +225,7 @@ impl Membership {
     ) -> Result<bool, MembershipError> {
         Ok(self
             .get_canister_http_committee(registry_version)?
+            .committee
             .contains(&node_id))
     }
 
