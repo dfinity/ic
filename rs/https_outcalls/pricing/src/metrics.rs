@@ -1,8 +1,8 @@
 use ic_metrics::MetricsRegistry;
 use prometheus::IntCounterVec;
 
-/// Label identifying the accounting step at which the shadow tracker diverged
-/// from the real one.
+/// Label identifying the accounting step at which the shadow tracker ran out of cycles
+/// before the real one.
 pub const LABEL_STEP: &str = "step";
 
 /// Label identifying the replication type of the request.
@@ -13,8 +13,8 @@ pub struct PricingMetrics {
     /// Total number of requests evaluated by the dark-launch budget tracker,
     /// by replication type.
     pub shadow_requests_total: IntCounterVec,
-    /// Number of requests for which the shadow tracker disagreed with the real
-    /// tracker, by the accounting step at which the divergence was first
+    /// Number of requests for which the shadow tracker ran out of cycles before the
+    /// real tracker, by the accounting step at which the divergence was first
     /// observed and by replication type.
     ///
     /// The fraction `shadow_incompatible_total / shadow_requests_total` is the
