@@ -3,10 +3,28 @@ use std::time::Duration;
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
     NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse,
+        MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    },
 };
+use ic_types_cycles::Cycles;
 
-use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
+use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingCalculator, PricingError};
+
+pub struct LegacyCalculator;
+
+impl PricingCalculator for LegacyCalculator {
+    fn consensus_cost(&self, _response: &CanisterHttpResponse, _subnet_size: u32) -> Cycles {
+        // Note: the legacy pricing calculator does not calculate the cost of the response.
+        Cycles::zero()
+    }
+
+    fn base_cost(&self, _context: &CanisterHttpRequestContext, _subnet_size: u32) -> Cycles {
+        // Note: the legacy pricing calculator does not calculate the cost of the request.
+        Cycles::zero()
+    }
+}
 
 pub struct LegacyTracker {
     max_response_size: NumBytes,
@@ -42,6 +60,14 @@ impl BudgetTracker for LegacyTracker {
     }
 
     fn subtract_transform_usage(&mut self, _usage: NumInstructions) -> Result<(), PricingError> {
+        Ok(())
+    }
+
+    fn get_gossip_limit(&self) -> NumBytes {
+        self.max_response_size
+    }
+
+    fn subtract_gossip_usage(&mut self, _response_size: usize) -> Result<(), PricingError> {
         Ok(())
     }
 

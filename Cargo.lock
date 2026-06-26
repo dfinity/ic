@@ -10307,6 +10307,7 @@ version = "0.9.0"
 dependencies = [
  "ic-config",
  "ic-types",
+ "ic-types-cycles",
 ]
 
 [[package]]

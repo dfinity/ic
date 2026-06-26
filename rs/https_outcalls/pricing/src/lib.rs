@@ -4,13 +4,26 @@ use std::time::Duration;
 
 use ic_types::{
     NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext},
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpResponse},
 };
+use ic_types_cycles::Cycles;
 use legacy::LegacyTracker;
+
+use crate::legacy::LegacyCalculator;
+
+pub trait PricingCalculator {
+    /// Returns the number of cycles that the replica should charge for the given HTTP response,
+    /// in order to include it in a block payload.
+    fn consensus_cost(&self, response: &CanisterHttpResponse, subnet_size: u32) -> Cycles;
+
+    /// Returns the base cost that should be charged for the given HTTP request.
+    fn base_cost(&self, context: &CanisterHttpRequestContext, subnet_size: u32) -> Cycles;
+}
 
 pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
+
     /// Deducts the actual network resources consumed.
     ///
     /// # Invariants
@@ -19,13 +32,25 @@ pub trait BudgetTracker: Send {
     ///
     /// Note that "<=" is used here to mean field-wise less than or equal to.
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
+
     /// Returns the maximum instructions allowed for the transformation function.
     fn get_transform_limit(&self) -> NumInstructions;
+
     /// Deducts the actual instructions consumed by the transformation.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
+
+    /// Returns the maximum number of bytes the response may have in order to be gossiped.
+    fn get_gossip_limit(&self) -> NumBytes;
+
+    /// Deducts the actual number of bytes of the response that were gossiped.
+    ///
+    /// # Invariants
+    ///  - This method returns `Ok(())` if and only if `response_size <= get_gossip_limit()`.
+    fn subtract_gossip_usage(&mut self, response_size: usize) -> Result<(), PricingError>;
+
     /// Produces the per-replica payment receipt that summarizes the cycles
     /// accounting outcome of the outcall, given the resources consumed so
     /// far via the `subtract_*` methods.
@@ -57,5 +82,11 @@ impl PricingFactory {
         // TODO(IC-1937): This should take into account context.pricing_version and a replica config.
         // Currently, we only support the legacy pricing version.
         Box::new(LegacyTracker::new(context.max_response_bytes))
+    }
+
+    pub fn new_calculator(_context: &CanisterHttpRequestContext) -> Box<dyn PricingCalculator> {
+        // TODO(IC-1937): This should take into account context.pricing_version and a replica config.
+        // Currently, we only support the legacy pricing version.
+        Box::new(LegacyCalculator {})
     }
 }
