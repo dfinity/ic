@@ -15,7 +15,7 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId, NumBytes, NumInstructions,
+    CanisterId, CountBytes, NumBytes, NumInstructions,
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
@@ -293,7 +293,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             // response to peers before creating the receipt.
             let response_size = match &payload {
                 Ok(response) => response.len(),
-                Err(reject) => reject.message.len(),
+                Err(reject) => reject.count_bytes(),
             };
             let payload = budget
                 .subtract_gossip_usage(NumBytes::from(response_size as u64))
