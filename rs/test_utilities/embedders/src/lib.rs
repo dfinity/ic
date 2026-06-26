@@ -4,7 +4,7 @@ use std::{convert::TryFrom, rc::Rc};
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig};
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -137,6 +137,11 @@ impl WasmtimeInstanceBuilder {
         self
     }
 
+    pub fn with_dirty_page_overhead(mut self, dirty_page_overhead: NumInstructions) -> Self {
+        self.config.dirty_page_overhead = dirty_page_overhead;
+        self
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
@@ -155,13 +160,6 @@ impl WasmtimeInstanceBuilder {
             .environment_variables(self.environment_variables)
             .log_memory_limit(TEST_DEFAULT_LOG_MEMORY_LIMIT)
             .build();
-        let dirty_page_overhead = match self.subnet_type {
-            SubnetType::Application => SchedulerConfig::application_subnet(),
-            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
-            SubnetType::System => SchedulerConfig::system_subnet(),
-            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
-        }
-        .dirty_page_overhead;
         let subnet_available_callbacks =
             HypervisorConfig::default().subnet_callback_soft_limit as u64;
         let canister_callback_quota =
@@ -171,7 +169,6 @@ impl WasmtimeInstanceBuilder {
             &system_state,
             cycles_account_manager,
             &self.network_topology,
-            dirty_page_overhead,
             ComputeAllocation::default(),
             subnet_available_callbacks,
             Default::default(),

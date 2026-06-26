@@ -18,7 +18,6 @@ use crate::{
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
-use ic_types::NumInstructions;
 use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
 
 use ic_types::NumBytes;
@@ -54,7 +53,6 @@ pub(super) fn replacement_functions(
     injected_functions: &InjectedFunctions,
     injected_counters: &InjectedCounters,
     stable_memory_index: u32,
-    dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, ReplacementFunction)> {

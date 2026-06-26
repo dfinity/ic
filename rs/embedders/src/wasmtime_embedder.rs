@@ -642,8 +642,6 @@ impl WasmtimeEmbedder {
             main_memory_type = WasmMemoryType::Wasm64;
         }
 
-        let dirty_page_overhead = self.config.dirty_page_overhead;
-
         let memory_trackers = sigsegv_memory_tracker(
             memories,
             &mut *store,
@@ -661,7 +659,6 @@ impl WasmtimeEmbedder {
             instance_stats: InstanceStats::default(),
             store,
             modification_tracking,
-            dirty_page_overhead,
             #[cfg(debug_assertions)]
             stable_memory_dirty_page_limit: current_dirty_page_limit,
             stable_memory_page_access_limit: current_accessed_limit,
@@ -936,7 +933,6 @@ pub struct WasmtimeInstance {
     instance_stats: InstanceStats,
     store: Pin<Box<wasmtime::Store<StoreData>>>,
     modification_tracking: ModificationTracking,
-    dirty_page_overhead: NumInstructions,
     #[cfg(debug_assertions)]
     #[allow(dead_code)]
     stable_memory_dirty_page_limit: ic_types::NumOsPages,
@@ -1208,12 +1204,12 @@ impl WasmtimeInstance {
         self.set_instance_stats(&access);
 
         // Charge for dirty wasm heap pages.
-        let x = self.instruction_counter().saturating_sub_unsigned(
-            self.dirty_page_overhead
-                .get()
-                .saturating_mul(access.wasm_dirty_pages.len() as u64),
-        );
-        self.set_instruction_counter(x);
+        // let x = self.instruction_counter().saturating_sub_unsigned(
+        //     self.dirty_page_overhead
+        //         .get()
+        //         .saturating_mul(access.wasm_dirty_pages.len() as u64),
+        // );
+        // self.set_instruction_counter(x);
 
         match result {
             Ok(_) => Ok(InstanceRunResult {

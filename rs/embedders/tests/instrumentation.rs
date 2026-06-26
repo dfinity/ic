@@ -824,7 +824,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
     // Function is 1 instruction.
     assert_eq!(
         instructions_used,
-        1 + 5 * cc + cg + 2 * cs + cl + 2 * cd + overhead * dirty_page_overhead
+        1 + 5 * cc + cg + 2 * cs + cl + overhead * dirty_page_overhead
     );
 
     // Now run the same with insufficient instructions
@@ -867,7 +867,7 @@ fn run_charge_for_dirty_stable64_test() {
             (memory (export "memory") 10)
         )"#;
 
-    let mut instance = new_instance_for_stable_write(wat, 1_000_000);
+    let mut instance = new_instance_for_stable_write(wat, 10_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -935,25 +935,8 @@ fn run_charge_for_dirty_stable64_test() {
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop
-            + ccall * 4
-            + csg
-            + cc * 15
-            + cs * 2
-            + cd
-            + csw * 2
-            + csr
-            + cl
-            + cg
-            + overhead * cd
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + overhead * cd
     );
-
-    // Now run the same with insufficient instructions
-    // We should still succeed (to avoid potentially failing pre-upgrades
-    // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1);
-
-    instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
@@ -1052,25 +1035,8 @@ fn run_charge_for_dirty_stable_test() {
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop
-            + ccall * 4
-            + csg
-            + cc * 15
-            + cs * 2
-            + cd
-            + csw * 2
-            + csr
-            + cl
-            + cg
-            + overhead * cd
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + overhead * cd
     );
-
-    // Now run the same with insufficient instructions
-    // We should still succeed (to avoid potentially failing pre-upgrades
-    // of canisters that did not adjust their code to new metering)
-    let mut instance = new_instance_for_stable_write(wat, instructions_used - 1);
-
-    instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
@@ -1165,11 +1131,9 @@ fn metering_wasm64_load_store_canister() {
             (memory i64 1000)
         )"#;
 
-    let mut embedder_config = EmbeddersConfig::default();
-    embedder_config.dirty_page_overhead = NumInstructions::new(1);
-
+    let dirty_page_overhead = NumInstructions::new(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_config(embedder_config)
+        .with_dirty_page_overhead(dirty_page_overhead)
         .with_wat(wat)
         .with_num_instructions(NumInstructions::new(10000))
         .build();
@@ -1220,9 +1184,15 @@ fn metering_wasm64_load_store_canister() {
     // Both stores hit Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
     let overhead = deterministic_tracker_overhead(1, 0);
-    println!("overhead {}", overhead);
-    let total_cost =
-        1 + 2 * const_0 + const_17 + const_117 + const_4096 + 2 * store + load + drop + overhead;
+    let total_cost = 1
+        + 2 * const_0
+        + const_17
+        + const_117
+        + const_4096
+        + 2 * store
+        + load
+        + drop
+        + overhead * dirty_page_overhead.get();
     assert_eq!(instr_used_wasm64, total_cost);
 
     // Compute cost in Wasm32 mode and compare.
@@ -1237,7 +1207,7 @@ fn metering_wasm64_load_store_canister() {
             (memory 1000)
         )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_config(EmbeddersConfig::default())
+        .with_dirty_page_overhead(dirty_page_overhead)
         .with_wat(wat_wasm32)
         .with_num_instructions(NumInstructions::new(10000))
         .build();
@@ -1292,7 +1262,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store_wasm32
         + load_wasm32
         + drop_wasm32
-        + overhead;
+        + overhead * dirty_page_overhead.get();
     assert_eq!(wasm_32_instructions, total_cost_wasm32);
 
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.
