@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
@@ -10,7 +8,7 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
-use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
+use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, PricingError};
 
 // Per-replica fee constants.
 //
@@ -98,9 +96,7 @@ impl BudgetTracker for PayAsYouGoTracker {
     fn get_adapter_limits(&self) -> AdapterLimits {
         AdapterLimits {
             max_response_size: self.max_response_size,
-            // Mirror the legacy limit: the server enforces a 30s timeout, so 60s
-            // here is just a safety margin.
-            max_response_time: Duration::from_secs(60),
+            max_response_time: MAX_RESPONSE_TIME,
         }
     }
 
