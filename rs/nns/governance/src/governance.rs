@@ -6064,12 +6064,12 @@ impl Governance {
             // Before returning Err, clean up the incomplete neuron.
             match self.remove_neuron(neuron) {
                 Ok(()) => (),
-                Err(err) => {
+                Err(cleanup_err) => {
                     // For similar reasons as above, just log remove_neuron failure.
                     println!(
                         "{}ERROR: Failed to clean up neuron {:?} during claim_neuron after \
                          noticing insufficient funds (in Governance subaccount {}): {}",
-                        LOG_PREFIX, nid, subaccount, err
+                        LOG_PREFIX, nid, subaccount, cleanup_err
                     );
                 }
             }
