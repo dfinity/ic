@@ -1749,7 +1749,7 @@ impl Validator {
         let dkg_summary_block = pool_reader.get_highest_finalized_summary_block();
         let dkg_summary = &dkg_summary_block.payload.as_ref().as_summary().dkg;
 
-        let (block, beacon, hash) = match catchup_package_maker::get_catch_up_package_type(
+        let (block, beacon, state_height) = match catchup_package_maker::get_catch_up_package_type(
             self.registry_client.as_ref(),
             self.replica_config.node_id,
             &dkg_summary_block,
@@ -1773,12 +1773,9 @@ impl Validator {
                     catchup_package_maker::create_post_split_random_beacon(&post_split_block)
                         .map_err(ValidationFailure::SubnetSplittingError)?;
 
-                let hash = self
-                    .state_manager
-                    .get_state_hash_at(dkg_summary_block.height())
-                    .map_err(ValidationFailure::StateHashError)?;
+                let state_height = dkg_summary.height;
 
-                (post_split_block, post_split_random_beacon, hash)
+                (post_split_block, post_split_random_beacon, state_height)
             }
             // We don't produce CUPs for the height at which a subnet splitting is happening.
             CatchUpPackageType::PostSplit { .. } if dkg_summary.height == share_height => {
@@ -1795,12 +1792,9 @@ impl Validator {
                     .get_random_beacon(share_height)
                     .ok_or(ValidationFailure::RandomBeaconNotFound(share_height))?;
 
-                let hash = self
-                    .state_manager
-                    .get_state_hash_at(share_height)
-                    .map_err(ValidationFailure::StateHashError)?;
+                let state_height = share_height;
 
-                (block, beacon, hash)
+                (block, beacon, state_height)
             }
         };
 
@@ -1816,14 +1810,18 @@ impl Validator {
             return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
-        if hash != share_content.state_hash {
+        let state_hash = self
+            .state_manager
+            .get_state_hash_at(state_height)
+            .map_err(ValidationFailure::StateHashError)?;
+        if state_hash != share_content.state_hash {
             return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
         // Should succeed as we already got the hash above
         let state = self
             .state_manager
-            .get_state_at(block.height())
+            .get_state_at(state_height)
             .map_err(ValidationFailure::StateManagerError)?;
         let registry_version = get_oldest_state_registry_version(state.get_ref());
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
