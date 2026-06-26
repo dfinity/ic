@@ -13,6 +13,7 @@ use ic_types::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion, Replication,
     },
 };
+pub use ic_types_cycles::CanisterCyclesCostSchedule;
 
 use dark_launch::DarkLaunchTracker;
 use legacy::LegacyTracker;
@@ -91,17 +92,20 @@ impl PricingFactory {
         &self,
         context: &CanisterHttpRequestContext,
         subnet_size: u32,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Box<dyn BudgetTracker> {
         match context.pricing_version {
             PricingVersion::Legacy => Box::new(DarkLaunchTracker::new(
                 Box::new(LegacyTracker::new(context.max_response_bytes)),
-                Box::new(PayAsYouGoTracker::new(context, subnet_size)),
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
                 context.request.sender,
                 matches!(context.replication, Replication::NonReplicated(_)),
                 self.metrics.clone(),
                 self.log.clone(),
             )),
-            PricingVersion::PayAsYouGo => Box::new(PayAsYouGoTracker::new(context, subnet_size)),
+            PricingVersion::PayAsYouGo => {
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
+            }
         }
     }
 }

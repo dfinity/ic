@@ -2,7 +2,8 @@ use crate::metrics::Metrics;
 use candid::Encode;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_pricing::{
-    AdapterLimits, BudgetTracker, NetworkUsage, PricingError, PricingFactory,
+    AdapterLimits, BudgetTracker, CanisterCyclesCostSchedule, NetworkUsage, PricingError,
+    PricingFactory,
 };
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
@@ -137,8 +138,13 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 socks_proxy_addrs,
             } = canister_http_request;
 
-            // TODO: thread through the actual subnet size; 13 is a placeholder.
-            let mut budget = pricing_factory.new_tracker(&request_context, 13);
+            // TODO: thread through the actual subnet size and cost schedule;
+            // 13 and Normal are placeholders.
+            let mut budget = pricing_factory.new_tracker(
+                &request_context,
+                13,
+                CanisterCyclesCostSchedule::Normal,
+            );
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {

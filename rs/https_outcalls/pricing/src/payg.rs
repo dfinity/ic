@@ -8,7 +8,7 @@ use ic_types::{
         Replication,
     },
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
 use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
 
@@ -40,6 +40,9 @@ pub struct PayAsYouGoTracker {
     n: u64,
     /// Whether this is outcall uses flexible pricing.
     is_flexible_pricing: bool,
+    /// Whether the subnet uses a free cost schedule. When `true` the tracker
+    /// charges nothing and refunds the full allowance.
+    is_free: bool,
     /// The cycles budget available to this replica (already net of the base
     /// cost, which was subtracted when the context was created).
     allowance: u128,
@@ -50,12 +53,20 @@ pub struct PayAsYouGoTracker {
 }
 
 impl PayAsYouGoTracker {
-    pub fn new(context: &CanisterHttpRequestContext, subnet_size: u32) -> Self {
+    pub fn new(
+        context: &CanisterHttpRequestContext,
+        subnet_size: u32,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Self {
         Self {
             n: subnet_size as u64,
             is_flexible_pricing: match context.replication {
                 Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
                 Replication::FullyReplicated => false,
+            },
+            is_free: match cost_schedule {
+                CanisterCyclesCostSchedule::Free => true,
+                CanisterCyclesCostSchedule::Normal => false,
             },
             allowance: context.refund_status.per_replica_allowance.get(),
             max_response_size: context
@@ -68,6 +79,10 @@ impl PayAsYouGoTracker {
     /// Charges `amount` against the budget. Returns an error if the total spent
     /// now exceeds the available allowance.
     fn charge(&mut self, amount: u128) -> Result<(), PricingError> {
+        // A free cost schedule means the subnet charges nothing for resources.
+        if self.is_free {
+            return Ok(());
+        }
         self.spent = self.spent.saturating_add(amount);
         if self.spent > self.allowance {
             Err(PricingError::InsufficientCycles)
@@ -191,7 +206,7 @@ mod tests {
         // The base cost is handled at context creation, so a freshly created
         // tracker has spent nothing and a zero-usage request refunds everything.
         let ctx = context(Replication::FullyReplicated, 1_000_000);
-        let tracker = PayAsYouGoTracker::new(&ctx, 13);
+        let tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Normal);
         assert_eq!(tracker.spent, 0);
         assert_eq!(
             tracker.create_payment_receipt().refund,
@@ -203,7 +218,7 @@ mod tests {
     fn charges_per_replica_cost_fully_replicated() {
         let allowance = 1_000_000_000_u128;
         let ctx = context(Replication::FullyReplicated, allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13);
+        let mut tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Normal);
 
         let response_size = 1_000_u64;
         let response_ms = 2_000_u128;
@@ -240,7 +255,8 @@ mod tests {
         let allowance = 1_000_000_000_u128;
         let n = 13;
         let ctx = context(flexible(n), allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, n as u32);
+        let mut tracker =
+            PayAsYouGoTracker::new(&ctx, n as u32, CanisterCyclesCostSchedule::Normal);
 
         let transformed_size = 500_u64;
         assert_eq!(
@@ -255,7 +271,7 @@ mod tests {
     #[test]
     fn returns_pricing_error_when_budget_is_exceeded() {
         let ctx = context(Replication::FullyReplicated, 100);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13);
+        let mut tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Normal);
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
                 response_size: NumBytes::from(1_000),
@@ -264,5 +280,38 @@ mod tests {
             Err(PricingError::InsufficientCycles)
         );
         assert_eq!(tracker.create_payment_receipt().refund, Cycles::zero());
+    }
+
+    #[test]
+    fn charges_nothing_on_free_cost_schedule() {
+        // On a free subnet the tracker charges nothing, even for usage that
+        // would otherwise exceed the allowance, so the full allowance is
+        // refunded. A flexible request is used so the gossip term (which would
+        // normally be charged) is also exercised.
+        let allowance = 1_000_000_u128;
+        let ctx = context(flexible(13), allowance);
+        let mut tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Free);
+
+        assert_eq!(
+            tracker.subtract_network_usage(NetworkUsage {
+                response_size: NumBytes::from(1_000_000),
+                response_time: Duration::from_secs(30),
+            }),
+            Ok(())
+        );
+        assert_eq!(
+            tracker.subtract_transform_usage(NumInstructions::from(1_000_000_000)),
+            Ok(())
+        );
+        assert_eq!(
+            tracker.subtract_gossip_usage(NumBytes::from(1_000_000)),
+            Ok(())
+        );
+
+        assert_eq!(tracker.spent, 0);
+        assert_eq!(
+            tracker.create_payment_receipt().refund,
+            Cycles::new(allowance)
+        );
     }
 }
