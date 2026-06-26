@@ -261,7 +261,7 @@ def system_test(
     # network namespace, where the user-namespaced sandbox process lacks effective
     # CAP_NET_ADMIN and bridge creation fails with
     #`RTNETLINK answers: Operation not permitted`.
-    farm_tags = tags + ["requires-network"]
+    farm_tags = tags + ["requires-network", "farm_system_test"]
 
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
