@@ -14305,7 +14305,7 @@ fn test_claim_neuron_does_not_leave_zombie_neurons_behind_when_ledger_is_unavail
                 for expected_substring in ["failed", "balance"] {
                     assert!(
                         error_message.to_lowercase().contains(expected_substring),
-                        "{:?} not in {:?}'",
+                        "{:?} not in {:?}",
                         expected_substring,
                         error_message,
                     );
