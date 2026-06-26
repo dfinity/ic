@@ -307,7 +307,7 @@ mod tests {
         // On a free subnet the tracker charges nothing, even for usage that
         // would otherwise exceed the allowance, so the full allowance is
         // refunded. A flexible request is used so the gossip term (which would
-        // normally be charged) is also exercised.
+        // not be charged for fully-replicated requests) is also exercised.
         let allowance = 1_000_000_u128;
         let ctx = context(flexible(13), allowance);
         let mut tracker = PayAsYouGoTracker::new(
