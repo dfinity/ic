@@ -1,5 +1,5 @@
 {
-  "checksum": "214d5049b6f56247f577b1547e36010178733acb0869b42e0d1525f919cb3c93",
+  "checksum": "9de450b401c350147b3306021b1596fe9d9475fe1fcb4cf4f4afd63e2849a0ad",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14583,99 +14583,6 @@
       "license": "BSD-2-Clause",
       "license_ids": [
         "BSD-2-Clause"
-      ],
-      "license_file": null
-    },
-    "cloudflare 0.14.0": {
-      "name": "cloudflare",
-      "version": "0.14.0",
-      "package_url": "https://github.com/cloudflare/cloudflare-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cloudflare/0.14.0/download",
-          "sha256": "1678b3295890df5895480a7c080430e73df2b7101f1763f62a3b32dd532f1d37"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cloudflare",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cloudflare",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "rustls-tls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "chrono 0.4.42",
-              "target": "chrono"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "reqwest 0.12.24",
-              "target": "reqwest"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_urlencoded 0.7.1",
-              "target": "serde_urlencoded"
-            },
-            {
-              "id": "serde_with 3.16.0",
-              "target": "serde_with"
-            },
-            {
-              "id": "thiserror 2.0.18",
-              "target": "thiserror"
-            },
-            {
-              "id": "url 2.5.4",
-              "target": "url"
-            },
-            {
-              "id": "urlencoding 2.1.3",
-              "target": "urlencoding"
-            },
-            {
-              "id": "uuid 1.12.1",
-              "target": "uuid"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.14.0"
-      },
-      "license": "BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause"
       ],
       "license_file": null
     },
@@ -35706,24 +35613,7 @@
             "tls12",
             "webpki-roots"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "ring",
-              "webpki-tokio"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "ring",
-              "webpki-tokio"
-            ],
-            "x86_64-apple-darwin": [
-              "ring",
-              "webpki-tokio"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "ring",
-              "webpki-tokio"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -38739,7 +38629,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-gateway",
           "commitish": {
-            "Rev": "5f7f9fc1891fc0c832de059199090228bc441b3c"
+            "Rev": "6f117f24b7046adef13ced255e0f42274d19fac1"
           }
         }
       },
@@ -38809,10 +38699,6 @@
               "target": "clap"
             },
             {
-              "id": "cloudflare 0.14.0",
-              "target": "cloudflare"
-            },
-            {
               "id": "ctrlc 3.4.5",
               "target": "ctrlc"
             },
@@ -38873,7 +38759,7 @@
               "target": "isbot"
             },
             {
-              "id": "itertools 0.14.0",
+              "id": "itertools 0.15.0",
               "target": "itertools"
             },
             {
@@ -38929,6 +38815,10 @@
               "target": "strum"
             },
             {
+              "id": "thiserror 2.0.18",
+              "target": "thiserror"
+            },
+            {
               "id": "tikv-jemalloc-ctl 0.7.0",
               "target": "tikv_jemalloc_ctl"
             },
@@ -38953,7 +38843,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.6.11",
+              "id": "tower-http 0.7.0",
               "target": "tower_http"
             },
             {
@@ -43934,6 +43824,62 @@
         },
         "edition": "2018",
         "version": "0.14.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "itertools 0.15.0": {
+      "name": "itertools",
+      "version": "0.15.0",
+      "package_url": "https://github.com/rust-itertools/itertools",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/itertools/0.15.0/download",
+          "sha256": "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "itertools",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "use_alloc",
+            "use_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.14.0",
+              "target": "either"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.15.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -65511,12 +65457,6 @@
                 "id": "web-time 1.1.0",
                 "target": "web_time"
               }
-            ],
-            "wasm32-unknown-unknown": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
             ]
           }
         },
@@ -69259,260 +69199,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.24": {
-      "name": "reqwest",
-      "version": "0.12.24",
-      "package_url": "https://github.com/seanmonstar/reqwest",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.24/download",
-          "sha256": "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "reqwest",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "reqwest",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "__rustls",
-            "__rustls-ring",
-            "__tls",
-            "json",
-            "multipart",
-            "rustls-tls",
-            "rustls-tls-webpki-roots",
-            "rustls-tls-webpki-roots-no-provider"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.22.1",
-              "target": "base64"
-            },
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-core 0.3.31",
-              "target": "futures_core"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "mime_guess 2.0.4",
-              "target": "mime_guess"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_urlencoded 0.7.1",
-              "target": "serde_urlencoded"
-            },
-            {
-              "id": "sync_wrapper 1.0.2",
-              "target": "sync_wrapper"
-            },
-            {
-              "id": "url 2.5.4",
-              "target": "url"
-            }
-          ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "hyper-rustls 0.27.7",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.23.27",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-pki-types 1.12.0",
-                "target": "rustls_pki_types"
-              },
-              {
-                "id": "tokio-rustls 0.26.0",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "webpki-roots 1.0.6",
-                "target": "webpki_roots"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "hyper-rustls 0.27.7",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.23.27",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-pki-types 1.12.0",
-                "target": "rustls_pki_types"
-              },
-              {
-                "id": "tokio-rustls 0.26.0",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "webpki-roots 1.0.6",
-                "target": "webpki_roots"
-              }
-            ],
-            "cfg(not(target_arch = \"wasm32\"))": [
-              {
-                "id": "http-body 1.0.1",
-                "target": "http_body"
-              },
-              {
-                "id": "http-body-util 0.1.3",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper 1.8.1",
-                "target": "hyper"
-              },
-              {
-                "id": "hyper-util 0.1.20",
-                "target": "hyper_util"
-              },
-              {
-                "id": "log 0.4.28",
-                "target": "log"
-              },
-              {
-                "id": "percent-encoding 2.3.1",
-                "target": "percent_encoding"
-              },
-              {
-                "id": "pin-project-lite 0.2.17",
-                "target": "pin_project_lite"
-              },
-              {
-                "id": "tokio 1.50.0",
-                "target": "tokio"
-              },
-              {
-                "id": "tower 0.5.2",
-                "target": "tower"
-              },
-              {
-                "id": "tower-http 0.6.11",
-                "target": "tower_http"
-              },
-              {
-                "id": "tower-service 0.3.3",
-                "target": "tower_service"
-              }
-            ],
-            "cfg(target_arch = \"wasm32\")": [
-              {
-                "id": "js-sys 0.3.103",
-                "target": "js_sys"
-              },
-              {
-                "id": "wasm-bindgen 0.2.126",
-                "target": "wasm_bindgen"
-              },
-              {
-                "id": "wasm-bindgen-futures 0.4.76",
-                "target": "wasm_bindgen_futures"
-              },
-              {
-                "id": "web-sys 0.3.103",
-                "target": "web_sys"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "hyper-rustls 0.27.7",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.23.27",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-pki-types 1.12.0",
-                "target": "rustls_pki_types"
-              },
-              {
-                "id": "tokio-rustls 0.26.0",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "webpki-roots 1.0.6",
-                "target": "webpki_roots"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "hyper-rustls 0.27.7",
-                "target": "hyper_rustls"
-              },
-              {
-                "id": "rustls 0.23.27",
-                "target": "rustls"
-              },
-              {
-                "id": "rustls-pki-types 1.12.0",
-                "target": "rustls_pki_types"
-              },
-              {
-                "id": "tokio-rustls 0.26.0",
-                "target": "tokio_rustls"
-              },
-              {
-                "id": "webpki-roots 1.0.6",
-                "target": "webpki_roots"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.12.24"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "reqwest 0.13.4": {
       "name": "reqwest",
       "version": "0.13.4",
@@ -72626,20 +72312,7 @@
             "std",
             "tls12"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "ring"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "ring"
-            ],
-            "x86_64-apple-darwin": [
-              "ring"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "ring"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -72685,32 +72358,7 @@
               "target": "zeroize"
             }
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.23.27"
@@ -72732,32 +72380,7 @@
               "target": "aws_lc_rs"
             }
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ]
-          }
+          "selects": {}
         }
       },
       "license": "Apache-2.0 OR ISC OR MIT",
@@ -73639,20 +73262,7 @@
             "aws-lc-rs",
             "std"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "ring"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "ring"
-            ],
-            "x86_64-apple-darwin": [
-              "ring"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "ring"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -73670,32 +73280,7 @@
               "target": "untrusted"
             }
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "ring 0.17.14",
-                "target": "ring"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.103.13"
@@ -76849,7 +76434,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "base64",
             "default",
             "macros",
             "std"
@@ -76858,10 +76442,6 @@
         },
         "deps": {
           "common": [
-            {
-              "id": "base64 0.22.1",
-              "target": "base64"
-            },
             {
               "id": "serde_core 1.0.228",
               "target": "serde_core"
@@ -86372,20 +85952,7 @@
             "logging",
             "tls12"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "ring"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "ring"
-            ],
-            "x86_64-apple-darwin": [
-              "ring"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "ring"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -88209,6 +87776,111 @@
         },
         "edition": "2018",
         "version": "0.6.11"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tower-http 0.7.0": {
+      "name": "tower-http",
+      "version": "0.7.0",
+      "package_url": "https://github.com/tower-rs/tower-http",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tower-http/0.7.0/download",
+          "sha256": "b11f75e912b0c2be01b63d8cf8057b8c3f97cf34abb3d431a3a4c8675498e233"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tower_http",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tower_http",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "compression-br",
+            "compression-deflate",
+            "compression-full",
+            "compression-gzip",
+            "compression-zstd",
+            "cors",
+            "default",
+            "futures-core",
+            "tokio-util"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-compression 0.4.3",
+              "target": "async_compression"
+            },
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "percent-encoding 2.3.1",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "pin-project-lite 0.2.17",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "tokio 1.50.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.17",
+              "target": "tokio_util"
+            },
+            {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.0"
       },
       "license": "MIT",
       "license_ids": [
