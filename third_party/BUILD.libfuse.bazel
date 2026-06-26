@@ -1,0 +1,35 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "meson")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(
+        include = ["**"],
+        exclude = ["*.bazel"],
+    ),
+)
+
+# This only builds with --hermetic_cc=false or the disable_hermetic_cc transition.
+meson(
+    name = "libfuse",
+    env = {
+        "CFLAGS": "-O2",
+    },
+    lib_source = ":all_srcs",
+    options = {
+        "default_library": "static",
+        "disable-mtab": "true",
+        "examples": "false",
+        "tests": "false",
+        "useroot": "false",
+        "utils": "false",
+        "bindir": "/bin",
+    },
+    out_shared_libs = [],
+    out_static_libs = ["libfuse3.a"],
+    postfix_script = (
+        "libfuse_archive=$$(find $$INSTALLDIR/lib -name libfuse3.a -print -quit)" +
+        " && test -n \"$$libfuse_archive\"" +
+        " && cp \"$$libfuse_archive\" $$INSTALLDIR/lib/libfuse3.a"
+    ),
+    visibility = ["//visibility:public"],
+)

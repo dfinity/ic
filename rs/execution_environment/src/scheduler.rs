@@ -2143,14 +2143,11 @@ fn filter_canister_log_records(
     let warn_drop = |record: &CanisterLogRecord, reason: &str| {
         warn!(
             log,
-            "Canister {}: dropping log record with idx {} ({} next_idx {}), \
-             timestamp {}, content \"{}\"",
+            "Canister {}: dropping log record with idx {} ({} next_idx {})",
             canister_id,
             record.idx,
             reason,
             next_idx,
-            record.timestamp_nanos,
-            String::from_utf8_lossy(&record.content),
         );
     };
     for record in records.iter().filter(|r| r.idx >= next_idx) {

@@ -52,6 +52,7 @@ pub struct WasmValidationDetails {
     pub largest_function_instruction_count: NumInstructions,
     pub max_complexity: Complexity,
     pub code_section_size: NumBytes,
+    pub max_num_locals: u64,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -251,6 +252,7 @@ fn compile_inner(
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
     let code_section_size = wasm_validation_details.code_section_size;
+    let max_num_locals = wasm_validation_details.max_num_locals;
 
     let is_wasm64 = module
         .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
@@ -269,6 +271,7 @@ fn compile_inner(
             compilation_time: timer.elapsed(),
             max_complexity,
             code_section_size,
+            max_num_locals,
         },
         serialized_module,
     ))

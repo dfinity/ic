@@ -1381,7 +1381,9 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
 ///   memory_allocation : nat;
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
+///   minimum_incoming_canister_call_cycles : nat;
 ///   log_visibility : log_visibility;
+///   snapshot_visibility : snapshot_visibility;
 ///   log_memory_limit : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
@@ -1396,6 +1398,7 @@ pub struct DefiniteCanisterSettingsArgs {
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
+    minimum_incoming_canister_call_cycles: candid::Nat,
     log_visibility: LogVisibilityV2,
     snapshot_visibility: SnapshotVisibility,
     log_memory_limit: candid::Nat,
@@ -1405,6 +1408,7 @@ pub struct DefiniteCanisterSettingsArgs {
 }
 
 impl DefiniteCanisterSettingsArgs {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1412,6 +1416,7 @@ impl DefiniteCanisterSettingsArgs {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         log_memory_limit: u64,
@@ -1421,6 +1426,8 @@ impl DefiniteCanisterSettingsArgs {
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
+        let minimum_incoming_canister_call_cycles =
+            candid::Nat::from(minimum_incoming_canister_call_cycles);
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
         let environment_variables = environment_variables
             .iter()
@@ -1436,6 +1443,7 @@ impl DefiniteCanisterSettingsArgs {
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles,
             log_visibility,
             snapshot_visibility,
             log_memory_limit: candid::Nat::from(log_memory_limit),
@@ -1451,6 +1459,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn reserved_cycles_limit(&self) -> candid::Nat {
         self.reserved_cycles_limit.clone()
+    }
+
+    pub fn minimum_incoming_canister_call_cycles(&self) -> candid::Nat {
+        self.minimum_incoming_canister_call_cycles.clone()
     }
 
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
@@ -1519,6 +1531,7 @@ pub struct QueryStats {
 ///     canister_history_size : nat;
 ///     wasm_chunk_store_size : nat;
 ///     snapshots_size : nat;
+///     log_memory_store_size : nat;
 ///   };
 ///   cycles : nat;
 ///   balance : vec record { blob; nat };
@@ -1589,6 +1602,7 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
         log_memory_limit: u64,
@@ -1631,6 +1645,7 @@ impl CanisterStatusResultV2 {
                 memory_allocation,
                 freezing_threshold,
                 reserved_cycles_limit,
+                minimum_incoming_canister_call_cycles,
                 log_visibility,
                 snapshot_visibility,
                 log_memory_limit,
@@ -2360,7 +2375,9 @@ pub struct EnvironmentVariable {
 ///   memory_allocation : opt nat;
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
+///   minimum_incoming_canister_call_cycles : opt nat;
 ///   log_visibility : opt log_visibility;
+///   snapshot_visibility : opt snapshot_visibility;
 ///   log_memory_limit : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
@@ -2374,6 +2391,7 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
+    pub minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
     pub snapshot_visibility: Option<SnapshotVisibility>,
     pub log_memory_limit: Option<candid::Nat>,
@@ -2394,6 +2412,7 @@ impl CanisterSettingsArgs {
             memory_allocation: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
+            minimum_incoming_canister_call_cycles: None,
             log_visibility: None,
             snapshot_visibility: None,
             log_memory_limit: None,
@@ -2411,6 +2430,7 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
+    minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
     snapshot_visibility: Option<SnapshotVisibility>,
     log_memory_limit: Option<candid::Nat>,
@@ -2432,6 +2452,7 @@ impl CanisterSettingsArgsBuilder {
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
             log_visibility: self.log_visibility,
             snapshot_visibility: self.snapshot_visibility,
             log_memory_limit: self.log_memory_limit,
@@ -2507,6 +2528,19 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: u128) -> Self {
         Self {
             reserved_cycles_limit: Some(candid::Nat::from(reserved_cycles_limit)),
+            ..self
+        }
+    }
+
+    /// Sets the minimum number of cycles required for an incoming call from a different canister.
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: u128,
+    ) -> Self {
+        Self {
+            minimum_incoming_canister_call_cycles: Some(candid::Nat::from(
+                minimum_incoming_canister_call_cycles,
+            )),
             ..self
         }
     }

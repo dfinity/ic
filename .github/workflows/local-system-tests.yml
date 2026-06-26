@@ -1,0 +1,43 @@
+name: local-system-tests
+
+on:
+  schedule:
+    - cron: "0 21 * * *" # 21:00 UTC
+  workflow_dispatch:
+
+env:
+  CI_JOB_NAME: ${{ github.job }}
+
+jobs:
+  # We currently don't run system-tests using their `Local` backend on PRs for now since that would be too slow.
+  # These tests reserve a significant number of CPUs from Bazel causing them to effectively spend most of their time waiting
+  # to get a share of the only 64 CPUs of the GitHub runner. To run them fast we need to run them on a
+  # Bazel Remote Execution cluster such that the tests can be distributed across many 64-CPU builders. That's still work in progress.
+  # So to test the `_local` system-tests we run them daily via this job.
+  local-system-tests:
+    name: Bazel Test Local System Tests
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:0ed93dc568f53cce56042a86b31f98cd1bbb9cd3ea8e649532c366494b9c160a
+      options: >-
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+    timeout-minutes: 600
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/netrc
+      # GitHub runners override the container's entrypoint which is ci/container/init.sh
+      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
+      - run: ci/container/init.sh
+      - name: Run Local System Tests
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              --config=flaky_retry \
+              --test_tag_filters=local_system_test \
+              //rs/tests/... \
+              --keep_going
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

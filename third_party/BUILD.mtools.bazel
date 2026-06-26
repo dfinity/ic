@@ -52,3 +52,10 @@ configure_make(
     ],
     visibility = ["//visibility:public"],
 )
+
+filegroup(
+    name = "mtools",
+    srcs = [":mtools_build"],
+    output_group = "mtools",
+    visibility = ["//visibility:public"],
+)
