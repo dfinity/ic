@@ -91,7 +91,7 @@ fn test_valid_attestation_package() {
     .verify_measurement(&[MEASUREMENT])
     .verify_custom_data(&CUSTOM_DATA)
     .verify_chip_id(&[CHIP_ID])
-    .verify_guest_debug_disallowed()
+    .verify_guest_policy()
     .expect("Failed to verify attestation package")
     .attestation_report();
 

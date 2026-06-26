@@ -31,7 +31,7 @@ pub trait AttestationPackageVerifier: Sized {
         self.verify_custom_data(expected_custom_data)
             .verify_measurement(elected_guest_launch_measurements)
             .verify_chip_id(expected_chip_ids)
-            .verify_guest_debug_disallowed()
+            .verify_guest_policy()
     }
 
     /// Verifies that the attestation report chip ID matches one of the expected chip IDs.
@@ -55,6 +55,15 @@ pub trait AttestationPackageVerifier: Sized {
 
     /// Verifies that debugging the guest is disallowed.
     fn verify_guest_debug_disallowed(self) -> Result<Self::Target, VerificationError>;
+
+    /// Verifies that migration of the guest is disallowed.
+    fn verify_migration_disallowed(self) -> Result<Self::Target, VerificationError>;
+
+    /// Verifies the guest policy.
+    fn verify_guest_policy(self) -> Result<Self::Target, VerificationError> {
+        self.verify_guest_debug_disallowed()
+            .verify_migration_disallowed()
+    }
 }
 
 /// A parsed attestation package with the attestation report and certificate chain
@@ -265,6 +274,21 @@ impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
 
         Ok(self)
     }
+
+    fn verify_migration_disallowed(self) -> Result<Self::Target, VerificationError> {
+        if self
+            .borrow()
+            .attestation_report()
+            .policy
+            .migrate_ma_allowed()
+        {
+            return Err(VerificationError::invalid_policy(
+                "Migration must be disallowed",
+            ));
+        }
+
+        Ok(self)
+    }
 }
 
 /// Allows chaining verification methods
@@ -294,6 +318,10 @@ impl<T: AttestationPackageVerifier> AttestationPackageVerifier for Result<T, Ver
 
     fn verify_guest_debug_disallowed(self) -> Result<Self::Target, VerificationError> {
         self?.verify_guest_debug_disallowed()
+    }
+
+    fn verify_migration_disallowed(self) -> Result<Self::Target, VerificationError> {
+        self?.verify_migration_disallowed()
     }
 }
 
