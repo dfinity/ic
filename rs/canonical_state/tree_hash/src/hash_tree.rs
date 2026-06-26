@@ -1124,11 +1124,14 @@ fn hash_lazy_tree_impl<'a>(
         }
     }
 
-    /// Builds the hash tree for `t`, returning the [`NodeId`] of its root.
+    /// Materializes the hash tree for `t`, returning the [`NodeId`] of its root.
     ///
-    /// The hash tree is always materialized; collapsing a fork's children into
-    /// digest-only [`NodeKind::Stub`] nodes happens here, driven by the parent
-    /// fork's [`LazyFork::stub_sources`], via [`build_child`].
+    /// This is different from [`build_child`] in that it always materializes the
+    /// tree, so this is invoked for building throwaway subtrees for stub nodes.
+    ///
+    /// Collapsing a fork's children into digest-only [`NodeKind::Stub`] nodes
+    /// happens here, driven by the parent fork's [`LazyFork::stub_sources`], via
+    /// [`build_child`].
     fn build_tree<'a>(
         t: &LazyTree<'a>,
         ht: &mut HashTree,
@@ -1350,9 +1353,6 @@ fn hash_lazy_tree_impl<'a>(
                         // and fix the link from `root` to the parent later. A `Child::Stub` is
                         // collapsed to a stub here.
                         //
-                        // A stub has no materialized labeled children of its own, so its
-                        // `children_range` is empty (and is never consulted: stubs are descended into
-                        // via their source during witness generation).
                         match build_child(
                             child,
                             &mut ht,
@@ -1365,7 +1365,11 @@ fn hash_lazy_tree_impl<'a>(
                             base,
                         ) {
                             Ok((root, _was_built)) => {
+                                // Since the node had no parent (i.e. it was "the root"), its children have been
+                                // added to `root_labels_range`. Use it as the subtree's `children_range`.
                                 let children_range = if root.kind() == NodeKind::Stub {
+                                    // A stub has no materialized labeled children of its own, so its
+                                    // `children_range` is empty.
                                     NodeIndexRange::default()
                                 } else {
                                     ht.root_labels_range.clone()
@@ -1426,10 +1430,7 @@ fn hash_lazy_tree_impl<'a>(
 
     let mut ht = HashTree::new();
     let strategy = &mut ParallelismStrategy::Concurrent;
-    // The root is always materialized; only the children of a fork that declares
-    // `stub_sources` are collapsed into stubs (see `build_child`). Building a
-    // stand-alone subtree is just `hash_lazy_tree` on that subtree's root, which
-    // is in turn materialized for the same reason.
+    // Always materialize the root, avoiding infinite recursion for stub subtrees.
     ht.root = build_tree(t, &mut ht, NodeId::empty(), strategy, 0, baseline)?;
     ht.check_invariants();
 
