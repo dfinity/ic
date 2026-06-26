@@ -242,7 +242,7 @@ vfat_image = _icos_build_rule(
             allow_single_file = True,
         ),
         "_mtools": attr.label(
-            default = "//:mtools",
+            default = "@mtools//:mtools",
             cfg = "exec",
             allow_single_file = True,
         ),
@@ -342,7 +342,7 @@ fat32_image = _icos_build_rule(
             allow_single_file = True,
         ),
         "_mtools": attr.label(
-            default = "//:mtools",
+            default = "@mtools//:mtools",
             cfg = "exec",
             allow_single_file = True,
         ),
