@@ -138,6 +138,15 @@ def system_test(
 
     _runtime_deps["TEST_BIN"] = test_driver_target
 
+    # Bazel-built FAT tools the driver uses to assemble config images for
+    # universal VMs / SetupOS / GuestOS, instead of system dosfstools/mtools
+    # (the build container no longer ships them). These are set on the test
+    # process and read (by name) from the driver and the config-image scripts it
+    # spawns; see run_systest.sh (symlink handling) and colocate_test.rs.
+    _runtime_deps["MKFS_FAT"] = "@dosfstools//:mkfs.fat"
+    _runtime_deps["MCOPY"] = "@mtools//:mcopy"
+    _runtime_deps["MLABEL"] = "@mtools//:mlabel"
+
     env_var_files = {}
     icos_images = dict()
 

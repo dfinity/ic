@@ -62,6 +62,12 @@ if [[ -z "${INPUT_DIR:-}" || -z "${OUTPUT_FILE:-}" || -z "${LABEL:-}" ]]; then
     usage
 fi
 
+# The Bazel-built mkfs.fat / mcopy binaries, set in the environment by the
+# system_test rule (the build container no longer ships dosfstools/mtools). Fall
+# back to the system tools when run outside that environment.
+mkfs_fat="${MKFS_FAT:-/usr/sbin/mkfs.fat}"
+mcopy="${MCOPY:-mcopy}"
+
 tmp=$(mktemp)
 
 finalize() {
@@ -79,6 +85,6 @@ size=$((2 * size + 1048576))
 size=$(((size + 4095) / 4096 * 4096))
 echo "image size: $size"
 truncate -s $size "$tmp"
-/usr/sbin/mkfs.fat -n "$LABEL" "$tmp"
-mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
+"$mkfs_fat" -n "$LABEL" "$tmp"
+"$mcopy" -i "$tmp" -sQ "$INPUT_DIR"/* ::
 zstd --threads=0 -10 -i "$tmp" -o "$OUTPUT_FILE" --force

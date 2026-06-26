@@ -44,6 +44,12 @@ fn mkfs_fat_bin() -> String {
     )
 }
 
+fn mcopy_bin() -> String {
+    std::env::var("MCOPY").unwrap_or(
+        "/usr/bin/mcopy".to_string(), /* default to system binary */
+    )
+}
+
 impl BootstrapOptions {
     /// Create a FAT-formatted disk image containing bootstrap configuration.
     ///
@@ -134,7 +140,7 @@ impl BootstrapOptions {
             .collect::<Result<Vec<_>>>()
             .context("Failed to collect config directory entries")?;
 
-        let output = Command::new("/usr/bin/mcopy")
+        let output = Command::new(mcopy_bin())
             .arg("-i")
             .arg(vfat_image)
             .arg("-s")
