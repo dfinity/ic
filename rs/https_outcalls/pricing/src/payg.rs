@@ -61,6 +61,8 @@ impl PayAsYouGoTracker {
         Self {
             subnet_size,
             is_flexible_pricing: match context.replication {
+                // Non-replicated outcalls gossip the reponse, so thay are charged
+                // the same way as flexible outcalls.
                 Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
                 Replication::FullyReplicated => false,
             },
