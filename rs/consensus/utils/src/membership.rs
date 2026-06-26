@@ -221,12 +221,12 @@ impl Membership {
     pub fn node_belongs_to_canister_http_committee(
         &self,
         registry_version: RegistryVersion,
-        node_id: NodeId,
+        node_id: &NodeId,
     ) -> Result<bool, MembershipError> {
         Ok(self
             .get_canister_http_committee(registry_version)?
             .committee
-            .contains(&node_id))
+            .contains(node_id))
     }
 
     /// Return true if the given node ID is in the low threshold committee at

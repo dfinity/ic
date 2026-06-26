@@ -260,7 +260,7 @@ impl CanisterHttpPoolManagerImpl {
     fn node_belongs_to_request_committee(
         &self,
         context: &CanisterHttpRequestContext,
-        node_id: NodeId,
+        node_id: &NodeId,
     ) -> Result<bool, MembershipError> {
         match &context.replication {
             Replication::FullyReplicated => self
@@ -275,9 +275,8 @@ impl CanisterHttpPoolManagerImpl {
                         e
                     );
                 }),
-            replication @ (Replication::NonReplicated(_) | Replication::Flexible { .. }) => {
-                Ok(replication.is_authorized_signer(&node_id))
-            }
+            Replication::NonReplicated(delegated_node_id) => Ok(node_id == delegated_node_id),
+            Replication::Flexible { committee, .. } => Ok(committee.contains(node_id)),
         }
     }
 
@@ -320,7 +319,7 @@ impl CanisterHttpPoolManagerImpl {
         for (id, context) in http_requests {
             // Only make a request if this node belongs to the request's committee
             if !self
-                .node_belongs_to_request_committee(context, self.replica_config.node_id)
+                .node_belongs_to_request_committee(context, &self.replica_config.node_id)
                 .unwrap_or(false)
             {
                 continue;
@@ -573,7 +572,7 @@ impl CanisterHttpPoolManagerImpl {
                 }
 
                 let node_is_in_committee = self
-                    .node_belongs_to_request_committee(context, share.signature.signer)
+                    .node_belongs_to_request_committee(context, &share.signature.signer)
                     .ok()?;
                 if !node_is_in_committee {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
