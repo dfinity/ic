@@ -104,11 +104,11 @@ pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "14.0.0";
-const MAX_SERVER_VERSION: &str = "15";
+const MIN_SERVER_VERSION: &str = "15.0.0";
+const MAX_SERVER_VERSION: &str = "16";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "14.0.0";
+pub const LATEST_SERVER_VERSION: &str = "15.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -2517,25 +2517,25 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 14.0.0")
+            check_pocketic_server_version("pocket-ic 15.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 14 0 0")
+            check_pocketic_server_version("pocket-ic-server 15 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 13.0.0")
+            check_pocketic_server_version("pocket-ic-server 14.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
-        check_pocketic_server_version("pocket-ic-server 14.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 14.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 14.1.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 15.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 15.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 15.1.0").unwrap();
         assert!(
-            check_pocketic_server_version("pocket-ic-server 15.0.0")
+            check_pocketic_server_version("pocket-ic-server 16.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
