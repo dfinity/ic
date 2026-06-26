@@ -8,6 +8,10 @@ partitions.
 - `store` is shared persistent state that must survive upgrades.
 - In TEE mode, `store` is the partition that needs explicit key migration during
   upgrade because its key continuity matters across GuestOS versions.
+- `store` uses a **detached LUKS2 header** (persisted at
+  `DEFAULT_STORE_LUKS_HEADER_PATH`, `/var/store_luks_header.bin`) so the 
+  non-encrypted *store* header is itself stored on the encrypted var partition. 
+  This provides some protection against tampering with the header.
 
 Outside TEE mode the crate falls back to a persisted random key instead of a
 measurement-derived one.
@@ -33,10 +37,10 @@ measurement, and the target device path. This ensures that:
 
 ## Rollback and key migration
 During an upgrade, the new GuestOS eventually adds its own derived passphrase to
-the shared `store` partition's LUKS header without removing the previous one.
-Keeping both passphrases is intentional: if the node rolls back to the previous
-GuestOS slot, the old GuestOS can still derive its original passphrase and
-regain access to the shared data.
+the shared `store` partition's detached LUKS header without removing the
+previous one. Keeping both passphrases is intentional: if the node rolls back to
+the previous GuestOS slot, the old GuestOS can still derive its original
+passphrase and regain access to the shared data.
 
 The intended steady state is exactly two retained passphrases:
 one for the current GuestOS and one for the previous version.

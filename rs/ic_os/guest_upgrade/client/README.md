@@ -12,10 +12,11 @@ Client side of the GuestOS upgrade disk-encryption key exchange.
   necessary key material from an earlier run. Rarer cases, such as some
   downgrade paths, can also trigger this fallback.
 - Otherwise it sends its attestation package, verifies the server's attestation
-  against blessed measurements and matching custom data, then writes the
-  received key to the previous-key path.
+  against the elected launch measurements and matching custom data, then
+  persists the received key and Store LUKS header.
 
-The previous-key file is temporary upgrade state: the Upgrade VM writes it to
-its private `var` partition, then after reboot the new default GuestOS uses it
-once to update the LUKS header and deletes it after the new passphrase has been
-added successfully.
+The received artifacts are temporary: the Upgrade VM writes the
+previous key and the detached Store LUKS header to its private `var` partition.
+After reboot the new default GuestOS uses the
+previous key and detached header once to update the LUKS header and deletes the
+temporary previous-key file after the new passphrase has been added successfully.

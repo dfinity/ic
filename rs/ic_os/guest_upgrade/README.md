@@ -4,8 +4,8 @@ This crate implements the disk encryption key exchange that occurs during
 GuestOS upgrades when SEV-SNP is enabled. Because the store partition's
 encryption key is derived from the SEV launch measurement, a new GuestOS
 version (with a different measurement) cannot derive the old key. This crate
-transfers the key from the old VM to the new one over a mutually attested
-channel.
+transfers the key and the detached Store LUKS header from the old VM to the
+new one over a mutually attested channel.
 
 The launch measurement captures the GuestOS launch inputs, including the kernel,
 initrd, and kernel command line. Since the kernel command line also carries the
@@ -22,13 +22,13 @@ physical host:
 The flow is:
 1. HostOS launches the low-resource Upgrade VM.
 2. The Upgrade VM and the active GuestOS mutually attest over TLS.
-3. The active GuestOS releases the current `store` key only if the Upgrade VM
-   proves it is an approved GuestOS running on the same physical host.
-4. The Upgrade VM stores that previous key in its private `var` partition and
-   shuts down.
+3. The active GuestOS shares the current `store` key and the detached Store
+   LUKS header only if the Upgrade VM proves it is an approved GuestOS running
+   on the same physical host.
+4. The Upgrade VM stores the previous key and the Store LUKS header in its
+   private `var` partition and shuts down.
 5. After reboot into the new default GuestOS, that VM uses the previous key to
-   reopen `store`, adds its own new passphrase, and deletes the temporary
-   previous-key file.
+   reopen `store`, adds its own new passphrase, and deletes the temporary previous-key file.
 
 The Upgrade VM is intentionally low‑resource because the old GuestOS continues
 to run concurrently. CPU and memory allocated to the Upgrade VM are
@@ -54,11 +54,12 @@ host claims.
 │  │    ▼                 │   │    │                    │  │
 │  │  guest_upgrade_server│◄──┼────┘                    │  │
 │  │    │                 │   │                        │  │
-│  │    │ derive_key()    │   │  writes key to         │  │
-│  │    │ from SEV        │   │  /var/alternative_      │  │
-│  │    │ measurement     │   │  store.keyfile          │  │
+│  │    │ derive_key()    │   │  writes key + LUKS     │  │
+│  │    │ from SEV        │   │  header to /var/       │  │
+│  │    │ measurement     │   │  alternative_store.*   │  │
 │  │    ▼                 │   │                        │  │
-│  │  sends key ─────────►│───┼──► receives key         │  │
+│  │  sends key + ───────►│───┼──► receives key +      │  │
+│  │  LUKS header         │   │  LUKS header           │  │
 │  └──────────────────────┘   └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -71,7 +72,8 @@ Both VMs attest to each other over TLS using SEV-SNP attestation reports:
 2. Both TLS public keys are hashed together and used as the attestation report's custom data field.
 3. Each side generates an SEV-SNP attestation report with this custom data.
 4. Each side verifies the other's report against three properties:
-   - **Measurement** matches approved launch measurements from the registry.
+   - **Measurement** matches the elected (approved) launch measurements from the
+     registry.
    - **Custom data** matches the expected TLS key binding, proving that both
      ends of the TLS channel are the TEEs that generated the reports and
      preventing replay or MITM attacks.
@@ -85,22 +87,24 @@ state rather than in the host. The old GuestOS verifies the new GuestOS
 directly before releasing any shared-disk secret.
 
 ## Why the client sometimes skips transfer
-Sometimes the Upgrade VM can already open the store partition without fetching a
-key from the active GuestOS. The most common reason is that the same Upgrade VM
-was started more than once and already has the necessary key material from an
-earlier run. In that case the client short-circuits the transfer and only
-reports success so the server-side flow can complete cleanly.
+Sometimes the Upgrade VM can already open the store partition (using the
+detached LUKS header and either the previous key or its own derived key) without
+fetching a key from the active GuestOS. The most common reason is that the same
+Upgrade VM was started more than once and already has the necessary key material
+from an earlier run. In that case the client short-circuits the transfer and
+only reports success so the server-side flow can complete cleanly.
 
 There can also be rarer cases, such as some downgrade paths, where the Upgrade
 VM can already open the store with its own derived key.
 
-## Previous-key lifecycle
+## Previous-key and LUKS-header lifecycle
 The Upgrade VM does **not** add its own derived passphrase to the LUKS header
 while the old GuestOS is still running, because two VMs writing to the same disk
 state in parallel could corrupt it. Instead, the Upgrade VM stores the previous
-key in its private `var` partition. After reboot, when that VM becomes the
-default GuestOS, it uses the previous key to open the LUKS header, adds its own
-passphrase, and then deletes the temporary previous-key file.
+key and a detached copy of the Store LUKS header in its private `var` partition.
+After reboot, when that VM becomes the default GuestOS, it uses the previous key
+together with the detached LUKS header to open `store`, adds its own passphrase,
+and then deletes the temporary previous-key file.
 
 After this migration step, both the previous and new passphrases remain present
 in the LUKS header. This is intentional and supports rollback: if the new

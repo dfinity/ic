@@ -28,9 +28,17 @@ The recovery flow has two phases that intentionally span HostOS and GuestOS.
 upgrade path that:
 
 - stages artifacts for node operator confirmation,
-- writes the new GuestOS boot/root images into the inactive slot,
-- wipes the target `var` header so the recovered GuestOS can reinitialize it,
+- writes the new GuestOS boot/root images into the selected target slot
+  (`target-boot-alternative=A|B`),
+- optionally wipes the target `var` partition header (when `wipe-var-partition`
+  is passed) so the recovered GuestOS can reinitialize it,
 - updates `grubenv` to boot that slot as `first_boot`.
+
+The launcher accepts `mode=<install|prep|run>`. In `install` mode only
+`target-boot-alternative` and `wipe-var-partition` are relevant; in `prep`/`run`
+mode a `version` and `target-boot-alternative` are required and
+`recovery-hash-prefix` is optional (it may be omitted or empty in TEE mode,
+where no recovery artifact is needed).
 
 Because it writes `first_boot`, the recovered slot is still probationary until
 GuestOS later confirms it as stable.
