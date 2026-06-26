@@ -47,8 +47,9 @@ jobs:
           # Provisions the Namespace RBE cluster and writes a bazelrc fragment with
           # the remote executor, remote cache, credentials and recommended defaults.
           # 'nsc' is pre-authenticated on Namespace runners.
+          # NOTE: do not print this bazelrc -- it contains short-lived credentials
+          # that would leak into the Actions logs.
           nsc bazel execution setup --bazelrc=/tmp/bazel-rbe.bazelrc
-          cat /tmp/bazel-rbe.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Bazel Test with BRE
