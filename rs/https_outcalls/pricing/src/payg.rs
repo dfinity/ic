@@ -38,8 +38,8 @@ const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 pub struct PayAsYouGoTracker {
     /// Number of nodes (`N`) on the subnet.
     subnet_size: NumberOfNodes,
-    /// Whether this outcall uses flexible pricing.
-    is_flexible_pricing: bool,
+    /// Whether this responses to this outcalls are gossiped (only flexible and non-replicated).
+    is_gossiping: bool,
     /// Whether the subnet uses a free cost schedule. When `true` the tracker
     /// charges nothing and refunds the full allowance.
     is_free: bool,
@@ -60,7 +60,7 @@ impl PayAsYouGoTracker {
     ) -> Self {
         Self {
             subnet_size,
-            is_flexible_pricing: match context.replication {
+            is_gossiping: match context.replication {
                 // Non-replicated outcalls gossip the response, so they are charged
                 // the same way as flexible outcalls.
                 Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
@@ -131,7 +131,7 @@ impl BudgetTracker for PayAsYouGoTracker {
         // For fully replicated outcalls the gossip term is a
         // consensus cost (ignored here for now). For flexible outcalls each
         // replica is charged 50 * transformed_response_bytes_i * N.
-        if !self.is_flexible_pricing {
+        if !self.is_gossiping {
             return Ok(());
         }
         let cost = FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
