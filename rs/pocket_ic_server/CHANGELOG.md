@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 15.0.0 - 2026-06-24
+## 15.0.0 - 2026-06-26
 
 ### Added
 - The endpoint `/instances/<instance_id>/update/delete_subnet` to delete a subnet (non-named subnets only: application, cloud engine, system, or verified application subnets).
