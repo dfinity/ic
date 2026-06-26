@@ -2,8 +2,7 @@ use crate::metrics::Metrics;
 use candid::Encode;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_pricing::{
-    AdapterLimits, BudgetTracker, CanisterCyclesCostSchedule, NetworkUsage, PricingError,
-    PricingFactory,
+    AdapterLimits, BudgetTracker, NetworkUsage, PricingError, PricingFactory,
 };
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
@@ -136,15 +135,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 id: request_id,
                 context: request_context,
                 socks_proxy_addrs,
+                cost_schedule,
+                subnet_size,
             } = canister_http_request;
 
-            // TODO: thread through the actual subnet size and cost schedule;
-            // 13 and Normal are placeholders.
-            let mut budget = pricing_factory.new_tracker(
-                &request_context,
-                13,
-                CanisterCyclesCostSchedule::Normal,
-            );
+            let mut budget =
+                pricing_factory.new_tracker(&request_context, subnet_size, cost_schedule);
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {
@@ -578,6 +574,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_https_outcalls_pricing::CanisterCyclesCostSchedule;
     use ic_https_outcalls_service::{
         HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult,
         https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
@@ -586,7 +583,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{
-        RegistryVersion,
+        NumberOfNodes, RegistryVersion,
         canister_http::{
             MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
         },
@@ -685,6 +682,8 @@ mod tests {
                 registry_version: RegistryVersion::from(1),
             },
             socks_proxy_addrs: vec![],
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_size: NumberOfNodes::from(13),
         }
     }
 

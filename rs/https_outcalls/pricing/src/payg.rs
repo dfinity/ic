@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use ic_config::subnet_config::MAX_INSTRUCTIONS_PER_QUERY_MESSAGE;
 use ic_types::{
-    NumBytes, NumInstructions,
+    NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES,
         Replication,
@@ -37,7 +37,7 @@ const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 
 pub struct PayAsYouGoTracker {
     /// Number of nodes (`N`) on the subnet.
-    n: u64,
+    subnet_size: NumberOfNodes,
     /// Whether this is outcall uses flexible pricing.
     is_flexible_pricing: bool,
     /// Whether the subnet uses a free cost schedule. When `true` the tracker
@@ -55,11 +55,11 @@ pub struct PayAsYouGoTracker {
 impl PayAsYouGoTracker {
     pub fn new(
         context: &CanisterHttpRequestContext,
-        subnet_size: u32,
+        subnet_size: NumberOfNodes,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         Self {
-            n: subnet_size as u64,
+            subnet_size,
             is_flexible_pricing: match context.replication {
                 Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
                 Replication::FullyReplicated => false,
@@ -134,7 +134,7 @@ impl BudgetTracker for PayAsYouGoTracker {
         }
         let cost = FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
             .saturating_mul(transformed_response_size.get() as u128)
-            .saturating_mul(self.n as u128);
+            .saturating_mul(self.subnet_size.get() as u128);
         self.charge(cost)
     }
 
@@ -206,7 +206,11 @@ mod tests {
         // The base cost is handled at context creation, so a freshly created
         // tracker has spent nothing and a zero-usage request refunds everything.
         let ctx = context(Replication::FullyReplicated, 1_000_000);
-        let tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Normal);
+        let tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(13),
+            CanisterCyclesCostSchedule::Normal,
+        );
         assert_eq!(tracker.spent, 0);
         assert_eq!(
             tracker.create_payment_receipt().refund,
@@ -218,7 +222,11 @@ mod tests {
     fn charges_per_replica_cost_fully_replicated() {
         let allowance = 1_000_000_000_u128;
         let ctx = context(Replication::FullyReplicated, allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Normal);
+        let mut tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(13),
+            CanisterCyclesCostSchedule::Normal,
+        );
 
         let response_size = 1_000_u64;
         let response_ms = 2_000_u128;
@@ -255,8 +263,11 @@ mod tests {
         let allowance = 1_000_000_000_u128;
         let n = 13;
         let ctx = context(flexible(n), allowance);
-        let mut tracker =
-            PayAsYouGoTracker::new(&ctx, n as u32, CanisterCyclesCostSchedule::Normal);
+        let mut tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(n as u32),
+            CanisterCyclesCostSchedule::Normal,
+        );
 
         let transformed_size = 500_u64;
         assert_eq!(
@@ -271,7 +282,11 @@ mod tests {
     #[test]
     fn returns_pricing_error_when_budget_is_exceeded() {
         let ctx = context(Replication::FullyReplicated, 100);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Normal);
+        let mut tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(13),
+            CanisterCyclesCostSchedule::Normal,
+        );
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
                 response_size: NumBytes::from(1_000),
@@ -290,7 +305,11 @@ mod tests {
         // normally be charged) is also exercised.
         let allowance = 1_000_000_u128;
         let ctx = context(flexible(13), allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx, 13, CanisterCyclesCostSchedule::Free);
+        let mut tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(13),
+            CanisterCyclesCostSchedule::Free,
+        );
 
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {

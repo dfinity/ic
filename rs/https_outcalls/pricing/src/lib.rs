@@ -8,7 +8,7 @@ use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    NumBytes, NumInstructions,
+    NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion, Replication,
     },
@@ -87,11 +87,10 @@ impl PricingFactory {
         }
     }
 
-    /// Creates the tracker for a request.
     pub fn new_tracker(
         &self,
         context: &CanisterHttpRequestContext,
-        subnet_size: u32,
+        subnet_size: NumberOfNodes,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Box<dyn BudgetTracker> {
         match context.pricing_version {

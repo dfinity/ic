@@ -15,15 +15,17 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NumBytes, ReplicaVersion, canister_http::*, consensus::HasHeight,
-    crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
+    CountBytes, Height, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, canister_http::*,
+    consensus::HasHeight, crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_utils::str::StrEllipsize;
 use std::{
     cell::RefCell,
@@ -248,6 +250,29 @@ impl CanisterHttpPoolManagerImpl {
             .collect::<Vec<String>>()
     }
 
+    /// Reads the subnet's pricing inputs (number of nodes and cycles cost
+    /// schedule) from the registry at `registry_version`. Returns `None` if
+    /// they cannot be determined.
+    fn pricing_inputs(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Option<(NumberOfNodes, CanisterCyclesCostSchedule)> {
+        let record = self
+            .registry_client
+            .get_subnet_record(self.replica_config.subnet_id, registry_version)
+            .ok()
+            .flatten()?;
+        let subnet_size = u32::try_from(record.membership.len()).ok()?;
+        if subnet_size == 0 {
+            return None;
+        }
+        let cost_schedule =
+            CanisterCyclesCostScheduleProto::try_from(record.canister_cycles_cost_schedule)
+                .ok()
+                .map(CanisterCyclesCostSchedule::from)?;
+        Some((NumberOfNodes::from(subnet_size), cost_schedule))
+    }
+
     /// Inform the HttpAdapterShim of any new requests that must be made.
     fn make_new_requests(&self, canister_http_pool: &dyn CanisterHttpPool) {
         let _time = self
@@ -293,6 +318,20 @@ impl CanisterHttpPoolManagerImpl {
             }
 
             if !request_ids_already_made.contains(id) {
+                let Some((subnet_size, cost_schedule)) =
+                    self.pricing_inputs(context.registry_version)
+                else {
+                    warn!(
+                        every_n_seconds => 10,
+                        self.log,
+                        "Skipping canister http request {} because the subnet size or cost \
+                         schedule could not be determined at registry version {}",
+                        id,
+                        context.registry_version
+                    );
+                    continue;
+                };
+
                 if let Err(err) = self
                     .http_adapter_shim
                     .lock()
@@ -301,6 +340,8 @@ impl CanisterHttpPoolManagerImpl {
                         id: *id,
                         context: context.clone(),
                         socks_proxy_addrs: socks_proxy_addrs.clone(),
+                        cost_schedule,
+                        subnet_size,
                     })
                 {
                     warn!(
@@ -2729,6 +2770,8 @@ pub mod test {
                         id: CallbackId::from(7),
                         context: request.clone(),
                         socks_proxy_addrs: vec![],
+                        cost_schedule: CanisterCyclesCostSchedule::Normal,
+                        subnet_size: NumberOfNodes::from(4),
                     }))
                     .times(1)
                     .return_const(Ok(()));
