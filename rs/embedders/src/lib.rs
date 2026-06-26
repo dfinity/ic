@@ -65,6 +65,8 @@ pub struct CompilationResult {
     pub max_complexity: u64,
     /// The size of this Wasm module's code section.
     pub code_section_size: NumBytes,
+    /// The maximum number of Wasm function locals.
+    pub max_num_locals: u64,
 }
 
 impl CompilationResult {
@@ -74,6 +76,7 @@ impl CompilationResult {
             compilation_time: Duration::from_millis(1),
             max_complexity: 0,
             code_section_size: NumBytes::from(0),
+            max_num_locals: 0,
         }
     }
 }

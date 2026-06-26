@@ -15,10 +15,15 @@ on the process that this file is part of, see
   applied by assigned cloud engine nodes.
 
 ## Changed
+* Tightened chain-key config validation and invariants:
+  `pre_signatures_to_create_in_advance` must be non-zero for keys that require pre-signatures,
+  and must be `None` for keys that do not.
 
 ## Deprecated
 
 ## Removed
+* Removed the completed `fix_vetkd_pre_signatures_field` post-upgrade data migration and its
+  migration-specific unit test.
 * The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
 
 ## Fixed

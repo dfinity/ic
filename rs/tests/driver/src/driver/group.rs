@@ -16,13 +16,15 @@ use crate::driver::{
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
+    log_consoles_task::{LOG_CONSOLES_TASK_NAME, log_consoles_task},
+    logs_stream_task::{LOGS_STREAM_TASK_NAME, logs_stream_task},
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
+    serve_files_task::{SERVE_FILES_TASK_NAME, serve_files_task},
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
-    uvms_logs_stream_task::{UVMS_LOGS_STREAM_TASK_NAME, uvms_logs_stream_task},
     vector_logging_task::{VECTOR_LOGGING_TASK_NAME, vector_logging_task},
 };
 use crate::driver::{
@@ -30,7 +32,7 @@ use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},
     prometheus_vm::HasPrometheus,
     test_env::{TestEnv, TestEnvAttribute},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use crate::util::block_on;
 use anyhow::{Result, bail};
@@ -135,6 +137,18 @@ pub struct CliArgs {
     )]
     pub exclude_logs: Vec<Regex>,
 
+    #[clap(
+        long = "stream-ic-node-logs",
+        help = "If set, the journald logs of all IC nodes are streamed to the test log. Used by the local backend which has no Vector VM to ship logs to ElasticSearch."
+    )]
+    pub stream_ic_node_logs: bool,
+
+    #[clap(
+        long = "stream-console-logs",
+        help = "If set, the serial console logs of all VMs are streamed to the test log. Used by the local backend which captures each VM's console to a file on disk."
+    )]
+    pub stream_console_logs: bool,
+
     #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
     pub quiet: bool,
 }
@@ -216,10 +230,12 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
         TaskId::Test(task_name)
         if task_name.ne(REPORT_TASK_NAME)
            && task_name.ne(KEEPALIVE_TASK_NAME)
-           && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME)
+           && task_name.ne(LOGS_STREAM_TASK_NAME)
+           && task_name.ne(LOG_CONSOLES_TASK_NAME)
            && task_name.ne(METRICS_SETUP_TASK_NAME)
            && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
+           && task_name.ne(SERVE_FILES_TASK_NAME)
            && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
            && !task_name.starts_with("dummy(")
     )
@@ -648,6 +664,8 @@ impl SystemTestSubGroup {
     }
 }
 
+// Replica metrics to check by default. Including a prefix is supported and will match on all
+// metrics with that prefix. For that reason, keep the list prefix-free.
 fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
     BTreeMap::from([
         ("critical_errors", 0),
@@ -659,12 +677,14 @@ fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
     ])
 }
 
+// Orchestrator metrics to check by default. Including a prefix is supported and will match on all
+// metrics with that prefix. For that reason, keep the list prefix-free.
 fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
     BTreeMap::from([
         ("orchestrator_cup_deserialization_failed_total", 0),
         ("orchestrator_state_removal_failed_total", 0),
         ("orchestrator_tasks_failed_total", 0),
-        ("orchestrator_replica_process_start_attempts_total", 1),
+        ("orchestrator_processes_start_attempts_total", 1),
     ])
 }
 
@@ -993,19 +1013,24 @@ impl SystemTestGroup {
             timeout_per_test: self.effective_timeout_per_test(),
         };
 
-        let uvms_logs_stream_task_id = TaskId::Test(String::from(UVMS_LOGS_STREAM_TASK_NAME));
-        let uvms_logs_stream_task = Box::from(subproc(
-            uvms_logs_stream_task_id,
+        let logs_stream_task_id = TaskId::Test(String::from(LOGS_STREAM_TASK_NAME));
+        let logs_stream_task = Box::from(subproc(
+            logs_stream_task_id,
             {
                 let group_ctx = group_ctx.clone();
-                move || uvms_logs_stream_task(group_ctx)
+                move || logs_stream_task(group_ctx)
             },
             &mut compose_ctx,
             false,
         )) as Box<dyn Task>;
 
+        // The Local backend has no TTL; libvirt resources live for the lifetime of the
+        // libvirtd subprocess owned by the LocalBackend instance, so the keepalive task
+        // (which refreshes the Farm group TTL) is not needed there.
+        let use_local_backend = SystemTestBackend::from_env() == SystemTestBackend::Local;
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !use_local_backend
+        {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -1017,6 +1042,45 @@ impl SystemTestGroup {
             )) as Box<dyn Task>
         } else {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
+        };
+
+        // Under the Local backend there is no external network, so IC nodes
+        // cannot download `icos_images` (e.g. GuestOS/HostOS update images used
+        // by upgrade tests) from Farm's content-addressed HTTP store. Spawn a
+        // small per-group file server that serves those images from local disk;
+        // the `..._url` helpers in `ic_images` point nodes at it. On Farm this
+        // is a no-op (the images are served by Farm).
+        let serve_files_task_id = TaskId::Test(String::from(SERVE_FILES_TASK_NAME));
+        let serve_files_task = if use_local_backend {
+            Box::from(subproc(
+                serve_files_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || serve_files_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(serve_files_task_id)) as Box<dyn Task>
+        };
+
+        // Stream each VM's serial console (captured to a file on disk by the
+        // Local backend) to the test log. Opt-in via `--stream-console-logs`,
+        // which only the Local backend sets; on Farm this is an `EmptyTask`.
+        let log_consoles_task_id = TaskId::Test(String::from(LOG_CONSOLES_TASK_NAME));
+        let log_consoles_task = if group_ctx.stream_console_logs {
+            Box::from(subproc(
+                log_consoles_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || log_consoles_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(log_consoles_task_id)) as Box<dyn Task>
         };
 
         // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
@@ -1221,17 +1285,31 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
-            let uvms_stream_plan = compose(
-                Some(uvms_logs_stream_task),
+            let serve_files_plan = compose(
+                Some(serve_files_task),
                 EvalOrder::Sequential,
                 vec![keepalive_plan],
+                &mut compose_ctx,
+            );
+
+            let logs_stream_plan = compose(
+                Some(logs_stream_task),
+                EvalOrder::Sequential,
+                vec![serve_files_plan],
+                &mut compose_ctx,
+            );
+
+            let log_consoles_plan = compose(
+                Some(log_consoles_task),
+                EvalOrder::Sequential,
+                vec![logs_stream_plan],
                 &mut compose_ctx,
             );
 
             let logs_plan = compose(
                 Some(vector_logging_task),
                 EvalOrder::Sequential,
-                vec![uvms_stream_plan],
+                vec![log_consoles_plan],
                 &mut compose_ctx,
             );
 
@@ -1272,17 +1350,31 @@ impl SystemTestGroup {
             )),
         };
 
-        let uvms_stream_plan = compose(
-            Some(uvms_logs_stream_task),
+        let serve_files_plan = compose(
+            Some(serve_files_task),
             EvalOrder::Sequential,
             vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
+        let logs_stream_plan = compose(
+            Some(logs_stream_task),
+            EvalOrder::Sequential,
+            vec![serve_files_plan],
+            &mut compose_ctx,
+        );
+
+        let log_consoles_plan = compose(
+            Some(log_consoles_task),
+            EvalOrder::Sequential,
+            vec![logs_stream_plan],
             &mut compose_ctx,
         );
 
         let logs_plan = compose(
             Some(vector_logging_task),
             EvalOrder::Sequential,
-            vec![uvms_stream_plan],
+            vec![log_consoles_plan],
             &mut compose_ctx,
         );
 
@@ -1345,6 +1437,8 @@ impl SystemTestGroup {
             args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
+            args.stream_ic_node_logs,
+            args.stream_console_logs,
             args.quiet,
         )?;
 
@@ -1356,7 +1450,10 @@ impl SystemTestGroup {
             if let Some(required_args) = args.required_host_features {
                 required_args.write_attribute(&root_env);
             }
-            InfraProvider::Farm.write_attribute(&root_env);
+            let backend = SystemTestBackend::from_env();
+            backend.write_attribute(&root_env);
+            crate::driver::process::enable_child_subreaper(group_ctx.log());
+            crate::driver::process::spawn_descendant_reaper(group_ctx.log());
             if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
@@ -1456,6 +1553,12 @@ impl SystemTestGroup {
                 if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
+                // Final safety net: SIGKILL and reap every descendant that
+                // outlived teardown. Because this process is a child-subreaper
+                // (see `enable_child_subreaper` above), any orphaned daemon
+                // (libvirtd/dnsmasq/QEMU) has been reparented here and would
+                // otherwise hang the bazel test process-wrapper.
+                crate::driver::process::kill_all_descendants(group_ctx.log());
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
@@ -1490,13 +1593,30 @@ impl SystemTestGroup {
     }
 
     fn delete_farm_group(ctx: GroupContext) {
-        info!(ctx.log(), "Deleting farm group.");
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
-        let farm_url = env.get_farm_url().unwrap();
-        let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name)
-            .expect("failed to delete the farm group");
+        match SystemTestBackend::read_attribute(&env) {
+            SystemTestBackend::Farm => {
+                info!(env.logger(), "Deleting farm group.");
+                let farm_url = env.get_farm_url().unwrap();
+                let farm = Farm::new(farm_url, env.logger());
+                farm.delete_group(&group_name)
+                    .expect("failed to delete the farm group");
+            }
+            SystemTestBackend::Local => {
+                info!(env.logger(), "Deleting local libvirt group.");
+                match crate::driver::local_backend::LocalBackend::from_test_env(&env) {
+                    Ok(backend) => {
+                        if let Err(e) = backend.delete_group(&group_name) {
+                            slog::warn!(env.logger(), "LocalBackend::delete_group failed: {e:?}");
+                        }
+                    }
+                    Err(e) => {
+                        slog::warn!(env.logger(), "LocalBackend::from_test_env failed: {e:?}");
+                    }
+                }
+            }
+        }
     }
 }
