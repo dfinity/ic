@@ -19,11 +19,13 @@ use ic_types::{
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, Transform, validate_http_headers_and_body,
+        CanisterHttpResponseContent, MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, Transform,
+        validate_http_headers_and_body,
     },
     ingress::WasmResult,
     messages::{Query, QuerySource, Request},
 };
+use ic_utils::str::StrEllipsize;
 use std::{
     sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
@@ -184,7 +186,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 return;
             }
 
-            let payload = async {
+            let mut payload = async {
                 // Execute the HTTP request and get the adapter response.
                 let (adapter_response, downloaded_bytes, elapsed) = execute_http_request(
                     &mut http_adapter_client,
@@ -268,6 +270,24 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 transformed_payload
             }
             .await;
+
+            // Truncate an oversized reject message before pricing and gossiping
+            // it, so the gossip cost reflects what is actually gossiped.
+            if let Err(reject) = &mut payload
+                && reject.message.len() > MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES
+            {
+                warn!(
+                    log,
+                    "Pruning oversized reject message for request {}: \
+                     original size {}, new size {}",
+                    request_id,
+                    reject.message.len(),
+                    MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES,
+                );
+                reject.message = reject
+                    .message
+                    .ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
+            }
 
             // Account for the cost of gossiping the final (post-transform)
             // response to peers before creating the receipt.
@@ -1150,6 +1170,71 @@ mod tests {
             }
         }
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
+    }
+
+    // Test that an oversized reject message is truncated (char-boundary-safe)
+    // before being returned, so that what is priced and gossiped is bounded.
+    #[tokio::test]
+    async fn test_oversized_reject_message_is_truncated() {
+        // Adapter mock setup. Not relevant; the transform produces the reject.
+        let response = HttpsOutcallResponse {
+            status: 200,
+            headers: Vec::new(),
+            content: Vec::new(),
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
+        let (svc, mut handle) = setup_system_query_mock();
+
+        // A multi-byte message whose 1200 bytes exceed the 1024-byte limit, with
+        // emoji straddling the truncation boundary to exercise char safety.
+        let oversized_message = "😀".repeat(300);
+        let oversized_len = oversized_message.len();
+        assert!(oversized_len > MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES);
+        // The client must apply exactly this truncation before pricing the response.
+        let expected_message = oversized_message.ellipsize(MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES, 90);
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(Ok((
+                Ok(WasmResult::Reject(oversized_message)),
+                current_time(),
+            )));
+        });
+
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+            MetricsRegistry::default(),
+            no_op_logger(),
+        );
+
+        assert_eq!(
+            client.send(build_mock_canister_http_request(
+                420,
+                Some("transform".to_string())
+            )),
+            Ok(())
+        );
+        loop {
+            match client.try_receive() {
+                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Ok((r, _payment_receipt)) => {
+                    let CanisterHttpResponseContent::Reject(reject) = r.content else {
+                        panic!("expected a reject response");
+                    };
+                    // Ellipsized exactly as the limit dictates: this pins the size,
+                    // the ellipsize parameters, and char-boundary safety in one check.
+                    assert_eq!(
+                        reject.message, expected_message,
+                        "reject message should be ellipsized to the allowed size"
+                    );
+                    assert!(reject.message.len() <= MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES);
+                    assert!(reject.message.len() < oversized_len);
+                    break;
+                }
+            }
+        }
     }
 
     // Test client capacity. The capicity of the client is specified by the channel size.
