@@ -2533,25 +2533,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cloudflare"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1678b3295890df5895480a7c080430e73df2b7101f1763f62a3b32dd532f1d37"
-dependencies = [
- "chrono",
- "http 1.4.0",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 3.18.0",
- "thiserror 2.0.18",
- "url",
- "urlencoding",
- "uuid",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2726,7 +2707,7 @@ dependencies = [
  "network",
  "once_cell",
  "regex",
- "reqwest 0.13.4",
+ "reqwest",
  "rust-ini",
  "securefmt",
  "serde",
@@ -2846,7 +2827,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_json",
  "slog",
  "tokio",
@@ -4124,7 +4105,7 @@ dependencies = [
  "k256 0.11.6",
  "keyring",
  "lazy_static",
- "reqwest 0.13.4",
+ "reqwest",
  "ring",
  "schemars 0.8.22",
  "sec1 0.3.0",
@@ -4894,7 +4875,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_cbor",
  "slog",
@@ -5687,7 +5668,7 @@ dependencies = [
  "tokio-util",
  "tonic 0.12.3",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.8",
  "vsock_lib",
  "x509-parser 0.16.0",
 ]
@@ -6716,7 +6697,7 @@ dependencies = [
  "pkcs8 0.10.2",
  "rand 0.10.1",
  "rangemap",
- "reqwest 0.13.4",
+ "reqwest",
  "sec1 0.7.3",
  "serde",
  "serde_bytes",
@@ -6851,7 +6832,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-types",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "rstest",
  "serde",
  "serde_json",
@@ -6924,9 +6905,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3286b4c6224aa495f5e499b8535157018cbf3637aa956d3808fdb920dd6e0bb2"
+checksum = "eea2c1f3aad0a4402aecc624cda39efbafc7dd6645c7f8ab68fe0b99620dcf02"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -6941,7 +6922,6 @@ dependencies = [
  "candid",
  "chacha20poly1305",
  "clap 4.6.0",
- "cloudflare",
  "derive-new",
  "flate2",
  "fqdn",
@@ -6972,7 +6952,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen 0.14.7",
  "regex",
- "reqwest 0.13.4",
+ "reqwest",
  "rustls 0.23.37",
  "rustls-acme",
  "rustls-pemfile",
@@ -7012,16 +6992,15 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib-common"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "549faca5c1a58b591e4fdf7742454aede9ec6ad508761d5bb052ccebddffcd2e"
+checksum = "9ddfc3775a8bd5aff225bc20aaadb4da46fd9087363c7c510bb264fa6a1f480f"
 dependencies = [
  "anyhow",
  "async-trait",
  "axum 0.8.9",
  "candid",
  "clap 4.6.0",
- "cloudflare",
  "derive-new",
  "fqdn",
  "hickory-proto 0.26.1",
@@ -7035,7 +7014,7 @@ dependencies = [
  "parse-size",
  "prometheus",
  "rcgen 0.14.7",
- "reqwest 0.13.4",
+ "reqwest",
  "rustls 0.23.37",
  "serde",
  "socket2 0.6.3",
@@ -7104,7 +7083,7 @@ dependencies = [
  "rate-limits-api",
  "ratelimit",
  "regex",
- "reqwest 0.13.4",
+ "reqwest",
  "rustls 0.23.37",
  "salt-sharing-api",
  "serde",
@@ -7122,7 +7101,7 @@ dependencies = [
  "tokio-tungstenite 0.26.2",
  "tokio-util",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.8",
  "tower_governor 0.7.0",
  "tracing",
  "tracing-serde 0.1.3",
@@ -7142,7 +7121,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-system-test-driver",
  "ic-types",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_cbor",
  "slog",
@@ -7166,7 +7145,7 @@ dependencies = [
  "ic-system-test-driver",
  "prost 0.13.5",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "slog",
  "tokio",
 ]
@@ -9582,9 +9561,9 @@ dependencies = [
 
 [[package]]
 name = "ic-custom-domains-backend"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "970d5702f22fce9f3f5dc3b8ffd989e4f12529c991d46bd07d90c4244b7775c4"
+checksum = "962142d708266188d2be60dd6a6e27704c3c4363ac4c4a3af843b310a70e3731"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9607,16 +9586,16 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
- "tower-http",
+ "tower-http 0.6.8",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "ic-custom-domains-base"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6927820a8979ae5d4bbf5c2b48e254d1455a99e5ac7a8b49d2f78837ddf40f4b"
+checksum = "74464dd81ad40870fa648b41a771f0f6f4ce4b2f824fe9194fe6857d293d8ef2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9645,9 +9624,9 @@ dependencies = [
 
 [[package]]
 name = "ic-custom-domains-canister-api"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd62cd6225d8751c4150387e0c78ff819ea0fe559989a4ebef8b90fa15236cb5"
+checksum = "268df6565445943a8cf4bd1c2d6d86c33c65e23b32e7d3f155a7be8d90a07166"
 dependencies = [
  "candid",
  "derive-new",
@@ -9658,9 +9637,9 @@ dependencies = [
 
 [[package]]
 name = "ic-custom-domains-canister-client"
-version = "0.2.0"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eba2c92f418999fbc7d6bed7f589afa64766fe6a2c037da99deaeb7ee7ccdb8"
+checksum = "52850559b366e2095d912b5f57a97cd0288c422e6e24f84a5514988ba2bd84ff"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -10053,7 +10032,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=5f7f9fc1891fc0c832de059199090228bc441b3c#5f7f9fc1891fc0c832de059199090228bc441b3c"
+source = "git+https://github.com/dfinity/ic-gateway?rev=6f117f24b7046adef13ced255e0f42274d19fac1#6f117f24b7046adef13ced255e0f42274d19fac1"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -10064,7 +10043,6 @@ dependencies = [
  "bytes",
  "candid",
  "clap 4.6.0",
- "cloudflare",
  "ctrlc",
  "derive-new",
  "fqdn",
@@ -10081,27 +10059,28 @@ dependencies = [
  "ic-http-gateway-protocol",
  "ic-transport-types",
  "isbot",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "lazy_static",
  "maxminddb 0.28.1",
  "moka",
  "prometheus",
  "rand 0.8.5",
  "regex",
- "reqwest 0.13.4",
+ "reqwest",
  "rustls 0.23.37",
  "serde",
  "serde_cbor",
  "serde_json",
  "sha2 0.11.0",
  "strum 0.28.0",
+ "thiserror 2.0.18",
  "tikv-jemalloc-ctl",
  "tikv-jemallocator",
  "time",
  "tokio",
  "tokio-util",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.7.0",
  "tracing",
  "tracing-core",
  "tracing-serde 0.2.0",
@@ -10184,7 +10163,7 @@ dependencies = [
  "ic-metrics",
  "ic-test-utilities-logger",
  "prometheus",
- "reqwest 0.13.4",
+ "reqwest",
  "slog",
  "tokio",
  "tower 0.5.3",
@@ -10258,7 +10237,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "prost 0.13.5",
- "reqwest 0.13.4",
+ "reqwest",
  "rstest",
  "rustls 0.23.37",
  "serde",
@@ -10271,7 +10250,7 @@ dependencies = [
  "tokio-rustls 0.26.4",
  "tokio-util",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.8",
  "tower-test",
  "tracing-flame",
  "tracing-subscriber",
@@ -10285,7 +10264,7 @@ dependencies = [
  "ic-http-endpoints-public",
  "ic-types",
  "ic-validator",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_cbor",
  "tokio",
  "url",
@@ -10320,7 +10299,7 @@ dependencies = [
  "maplit",
  "prometheus",
  "prost 0.13.5",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_json",
  "slog",
@@ -10369,7 +10348,7 @@ dependencies = [
  "ic-logger",
  "ic-test-utilities-in-memory-logger",
  "mockito",
- "reqwest 0.13.4",
+ "reqwest",
  "slog",
  "tar",
  "tempfile",
@@ -10584,7 +10563,7 @@ dependencies = [
  "icrc-ledger-types",
  "num-bigint 0.4.6",
  "pocket-ic",
- "reqwest 0.13.4",
+ "reqwest",
  "rosetta-core",
  "serde",
  "tempfile",
@@ -10601,7 +10580,7 @@ dependencies = [
  "ic-rosetta-test-utils",
  "icp-ledger",
  "pocket-ic",
- "reqwest 0.13.4",
+ "reqwest",
  "tempfile",
  "tokio",
 ]
@@ -10668,7 +10647,7 @@ dependencies = [
  "prometheus-parse",
  "proptest",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "rolling-file",
  "rosetta-core",
  "rusqlite",
@@ -10681,7 +10660,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-rusqlite",
- "tower-http",
+ "tower-http 0.6.8",
  "tower-request-id",
  "tracing",
  "tracing-appender",
@@ -10707,7 +10686,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "pocket-ic",
  "prometheus-parse",
- "reqwest 0.13.4",
+ "reqwest",
  "rosetta-core",
  "serde",
  "serde_json",
@@ -10723,7 +10702,7 @@ dependencies = [
  "candid",
  "icrc-ledger-types",
  "pocket-ic",
- "reqwest 0.13.4",
+ "reqwest",
  "tempfile",
  "tokio",
 ]
@@ -11155,7 +11134,7 @@ dependencies = [
  "indicatif",
  "on_wire",
  "proptest",
- "reqwest 0.13.4",
+ "reqwest",
  "rosetta-core",
  "rusqlite",
  "serde",
@@ -11424,7 +11403,7 @@ dependencies = [
  "futures",
  "hex",
  "maplit",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -11640,7 +11619,7 @@ dependencies = [
  "prometheus-parse",
  "rand 0.8.5",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -13074,7 +13053,7 @@ dependencies = [
  "pretty_assertions",
  "prost 0.13.5",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_json",
  "slog",
@@ -13253,7 +13232,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "prost 0.13.5",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -13838,7 +13817,7 @@ dependencies = [
  "ic-types",
  "slog",
  "tokio",
- "tower-http",
+ "tower-http 0.6.8",
 ]
 
 [[package]]
@@ -14045,7 +14024,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "rolling-file",
  "rosetta-core",
  "rusqlite",
@@ -14077,7 +14056,7 @@ dependencies = [
  "icp-ledger",
  "nix 0.24.3",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "rosetta-core",
  "serde",
  "serde_json",
@@ -14737,7 +14716,7 @@ dependencies = [
  "pocket-ic",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "reqwest 0.13.4",
+ "reqwest",
  "rust_decimal",
  "serde",
  "slog",
@@ -15130,7 +15109,7 @@ dependencies = [
  "askama",
  "assert_matches",
  "async-trait",
- "axum 0.8.8",
+ "axum 0.8.9",
  "bare_metal_deployment",
  "bincode",
  "candid",
@@ -15213,7 +15192,7 @@ dependencies = [
  "rcgen 0.13.2",
  "regex",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "ring",
  "serde",
  "serde_bytes",
@@ -15251,7 +15230,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic_consensus_system_test_utils",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "slog",
  "tokio",
  "url",
@@ -15591,7 +15570,7 @@ dependencies = [
  "once_cell",
  "rand 0.8.5",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "slog",
  "ssh2",
@@ -15680,7 +15659,7 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "icrc-ledger-types",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_json",
  "slog",
 ]
@@ -16146,7 +16125,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "slog",
  "tempfile",
  "test-strategy 0.4.5",
@@ -16335,7 +16314,7 @@ dependencies = [
  "prost 0.13.5",
  "rand 0.8.5",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "rsa",
  "serde_json",
  "slog",
@@ -16385,7 +16364,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_cbor",
  "serde_json",
  "slog",
@@ -16462,7 +16441,7 @@ dependencies = [
  "leb128",
  "p256",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "rsa",
  "serde",
  "serde_bytes",
@@ -16860,7 +16839,7 @@ dependencies = [
  "ic-types",
  "ic-universal-canister",
  "itertools 0.12.1",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_json",
  "slog",
  "ssh2",
@@ -17259,6 +17238,15 @@ name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
 dependencies = [
  "either",
 ]
@@ -18775,7 +18763,7 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "prost 0.13.5",
  "regex",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_cbor",
  "slog",
  "tempfile",
@@ -18847,7 +18835,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "registry-canister",
  "rejoin-test-lib",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -19013,7 +19001,7 @@ dependencies = [
  "on_wire",
  "prost 0.13.5",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "serde_cbor",
  "slog",
@@ -19807,7 +19795,7 @@ dependencies = [
  "ic-utils 0.47.3",
  "ic_consensus_system_test_utils",
  "itertools 0.12.1",
- "reqwest 0.13.4",
+ "reqwest",
  "serde",
  "slog",
  "tempfile",
@@ -20390,7 +20378,7 @@ dependencies = [
  "maplit",
  "prost 0.13.5",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -20501,7 +20489,7 @@ dependencies = [
  "prometheus",
  "rcgen 0.13.2",
  "registry-canister",
- "reqwest 0.13.4",
+ "reqwest",
  "rustls 0.23.37",
  "serde",
  "serde_cbor",
@@ -20514,7 +20502,7 @@ dependencies = [
  "tokio-util",
  "tonic 0.12.3",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.8",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -22050,46 +22038,6 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
-dependencies = [
- "base64 0.22.1",
- "bytes",
- "futures-core",
- "futures-util",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.8.1",
- "hyper-rustls",
- "hyper-util",
- "js-sys",
- "log",
- "mime_guess",
- "percent-encoding",
- "pin-project-lite",
- "quinn",
- "rustls 0.23.37",
- "rustls-pki-types",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "sync_wrapper",
- "tokio",
- "tokio-rustls 0.26.4",
- "tower 0.5.3",
- "tower-http",
- "tower-service",
- "url",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "webpki-roots 1.0.6",
-]
-
-[[package]]
-name = "reqwest"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
@@ -22119,12 +22067,13 @@ dependencies = [
  "rustls-platform-verifier 0.7.0",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls 0.26.4",
  "tokio-util",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.8",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -22370,7 +22319,7 @@ dependencies = [
  "serde_with 1.14.0",
  "tokio",
  "tower 0.5.3",
- "tower-http",
+ "tower-http 0.6.8",
  "tracing",
 ]
 
@@ -22430,7 +22379,7 @@ dependencies = [
  "icp-ledger",
  "on_wire",
  "rand 0.8.5",
- "reqwest 0.13.4",
+ "reqwest",
  "rosetta-core",
  "serde",
  "serde_cbor",
@@ -22668,7 +22617,6 @@ dependencies = [
  "brotli-decompressor",
  "log",
  "once_cell",
- "ring",
  "rustls-pki-types",
  "rustls-webpki 0.103.13",
  "subtle",
@@ -23043,7 +22991,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic_consensus_system_test_utils",
- "reqwest 0.13.4",
+ "reqwest",
  "serde_json",
  "slog",
 ]
@@ -23572,7 +23520,7 @@ dependencies = [
  "mockall 0.13.1",
  "pem",
  "rcgen 0.13.2",
- "reqwest 0.13.4",
+ "reqwest",
  "sev",
  "tempfile",
  "tokio",
@@ -24468,7 +24416,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
- "reqwest 0.13.4",
+ "reqwest",
  "rgb",
  "serde",
  "serde_json",
@@ -25372,6 +25320,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tower-http"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b11f75e912b0c2be01b63d8cf8057b8c3f97cf34abb3d431a3a4c8675498e233"
+dependencies = [
+ "async-compression",
+ "bitflags 2.11.0",
+ "bytes",
+ "futures-core",
+ "http 1.4.0",
+ "http-body 1.0.1",
+ "percent-encoding",
+ "pin-project-lite",
+ "tokio",
+ "tokio-util",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
 name = "tower-layer"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -26062,7 +26030,7 @@ dependencies = [
  "ic-http-utils",
  "mockall 0.13.1",
  "procfs",
- "reqwest 0.13.4",
+ "reqwest",
  "rusb",
  "serde",
  "serde_json",
