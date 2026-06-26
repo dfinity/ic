@@ -111,7 +111,10 @@ impl BudgetTracker for DarkLaunchTracker {
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
         // Count every request that reaches the final accounting step so the
         // incompatible counter can be expressed as a fraction of the total.
-        self.metrics.shadow_requests_total.inc();
+        self.metrics
+            .shadow_requests_total
+            .with_label_values(&[&self.non_replicated.to_string()])
+            .inc();
         self.real.create_payment_receipt()
     }
 }
@@ -220,7 +223,13 @@ mod tests {
         );
 
         let _ = tracker.create_payment_receipt();
-        assert_eq!(metrics.shadow_requests_total.get(), 1);
+        assert_eq!(
+            metrics
+                .shadow_requests_total
+                .with_label_values(&["false"])
+                .get(),
+            1
+        );
     }
 
     #[test]
@@ -257,7 +266,13 @@ mod tests {
         let _ = tracker.create_payment_receipt();
 
         assert_eq!(incompatible_count(&metrics), 0);
-        assert_eq!(metrics.shadow_requests_total.get(), 1);
+        assert_eq!(
+            metrics
+                .shadow_requests_total
+                .with_label_values(&["false"])
+                .get(),
+            1
+        );
     }
 
     #[test]
@@ -283,6 +298,23 @@ mod tests {
             metrics
                 .shadow_incompatible_total
                 .with_label_values(&["network_usage", "false"])
+                .get(),
+            0
+        );
+
+        // The total is attributed to the same label, so per-type rates are exact.
+        let _ = tracker.create_payment_receipt();
+        assert_eq!(
+            metrics
+                .shadow_requests_total
+                .with_label_values(&["true"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .shadow_requests_total
+                .with_label_values(&["false"])
                 .get(),
             0
         );

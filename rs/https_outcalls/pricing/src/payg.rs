@@ -19,15 +19,15 @@ use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
 //      (and therefore reflected in `per_replica_allowance`);
 //   2. the per-replica cost, accounted for here as-you-go;
 //   3. the consensus cost, computed from the aggregated response in the block
-//      payload (ignored for now).
+//      payload.
 //
-// This tracker only implements the per-replica part. The formula differs
-// between fully/non-replicated and flexible outcalls:
+// This tracker implements the per-replica part. The formula differs
+// between fully-replicated and non-replicated/flexible outcalls:
 //
-// Fully/non-replicated per replica:
+// Fully-replicated per replica:
 //   50 * downloaded_bytes_i + 300 * request_ms_i + transform_instructions_i / 13
 //
-// Flexible per replica:
+// None-replicated/Flexible per replica:
 //   50 * downloaded_bytes_i + 300 * request_ms_i
 //     + 50 * transformed_response_bytes_i * N + transform_instructions_i / 13
 const PER_DOWNLOADED_BYTE_FEE: u128 = 50;
@@ -38,8 +38,8 @@ const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 pub struct PayAsYouGoTracker {
     /// Number of nodes (`N`) on the subnet.
     n: u64,
-    /// Whether this is a flexible outcall (different per-replica formula).
-    is_flexible: bool,
+    /// Whether this is outcall uses flexible pricing.
+    is_flexible_pricing: bool,
     /// The cycles budget available to this replica (already net of the base
     /// cost, which was subtracted when the context was created).
     allowance: u128,
@@ -53,7 +53,10 @@ impl PayAsYouGoTracker {
     pub fn new(context: &CanisterHttpRequestContext, subnet_size: u32) -> Self {
         Self {
             n: subnet_size as u64,
-            is_flexible: matches!(context.replication, Replication::Flexible { .. }),
+            is_flexible_pricing: match context.replication {
+                Replication::Flexible { .. } | Replication::NonReplicated(_) => true,
+                Replication::FullyReplicated => false,
+            },
             allowance: context.refund_status.per_replica_allowance.get(),
             max_response_size: context
                 .max_response_bytes
@@ -111,7 +114,7 @@ impl BudgetTracker for PayAsYouGoTracker {
         // For fully replicated outcalls the gossip term is a
         // consensus cost (ignored here for now). For flexible outcalls each
         // replica is charged 50 * transformed_response_bytes_i * N.
-        if !self.is_flexible {
+        if !self.is_flexible_pricing {
             return Ok(());
         }
         let cost = FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
@@ -233,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn charges_transformed_response_for_flexible() {
+    fn charges_gossip_usage_for_flexible() {
         let allowance = 1_000_000_000_u128;
         let n = 13;
         let ctx = context(flexible(n), allowance);
