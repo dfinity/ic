@@ -51,7 +51,7 @@ pub fn elect_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> Replica
 
     // Elect target version
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(env);
     let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(elect_replica_version(
         nns_node,

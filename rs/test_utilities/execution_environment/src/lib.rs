@@ -5,7 +5,7 @@ use ic_config::{
     execution_environment::Config,
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
+    subnet_config::SubnetConfig,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_cycles_account_manager::{
@@ -74,6 +74,7 @@ use ic_types::messages::{Blob, RawSignedSenderInfo, SignedIngressContent, Signed
 use ic_types::{
     CanisterId, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
+    canister_http::Replication,
     crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -570,6 +571,18 @@ impl ExecutionTest {
         )
     }
 
+    pub fn http_request_base_fee(
+        &self,
+        request_size: NumBytes,
+        replication: &Replication,
+    ) -> CompoundCycles<HTTPOutcalls> {
+        self.cycles_account_manager.http_request_base_fee(
+            request_size,
+            replication,
+            self.get_own_subnet_cycles_config(),
+        )
+    }
+
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
         let cost = wasm_compilation_cost(wasm);
         self.convert_instructions_to_cycles(
@@ -808,6 +821,22 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(wasm_memory_limit.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
                 .build(),
             sender_canister_version: None,
         }
@@ -2378,7 +2407,7 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+        let mut subnet_config = SubnetConfig::new(subnet_type);
         subnet_config.scheduler_config.scheduler_cores = 2;
         Self {
             execution_config: Config {
@@ -2471,7 +2500,7 @@ impl ExecutionTestBuilder {
         self.subnet_type = subnet_type;
         // If `subnet_type` is updated, then we need to update the subnet config
         // to match it.
-        self.subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+        self.subnet_config = SubnetConfig::new(subnet_type);
         self
     }
 
@@ -2653,6 +2682,11 @@ impl ExecutionTestBuilder {
 
     pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
         self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
+        self
+    }
+
+    pub fn with_flexible_http_requests_enabled(mut self) -> Self {
+        self.execution_config.flexible_http_requests = FlagStatus::Enabled;
         self
     }
 

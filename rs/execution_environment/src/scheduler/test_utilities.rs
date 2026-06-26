@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig, SubnetSecurity},
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::{
@@ -832,8 +832,7 @@ pub(crate) struct SchedulerTestBuilder {
 impl Default for SchedulerTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config =
-            SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
         let mut hypervisor_config = config.embedders_config;
         hypervisor_config.create_execution_state_base_cost = NumInstructions::from(0);
@@ -872,8 +871,7 @@ impl SchedulerTestBuilder {
     }
 
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        let scheduler_config =
-            SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         Self {
             subnet_type,
             scheduler_config,
@@ -1006,7 +1004,7 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
-        let mut subnet_config = SubnetConfig::new(self.subnet_type, SubnetSecurity::None);
+        let mut subnet_config = SubnetConfig::new(self.subnet_type);
         subnet_config.scheduler_config = self.scheduler_config.clone();
 
         for key_id in &self.master_public_key_ids {
@@ -1507,8 +1505,11 @@ impl TestWasmExecutorCore {
         let call_message_id = self.next_message_id();
         let response_message_id = self.next_message_id();
         let closure = WasmClosure::new(0, response_message_id.into());
-        let subnet_cycles_config =
-            CyclesAccountManagerSubnetConfig::new(self.subnet_size, system_state.cost_schedule());
+        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
+            self.subnet_size,
+            system_state.cost_schedule(),
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        );
         let prepayment_for_response_execution = self
             .cycles_account_manager
             .prepayment_for_response_execution(

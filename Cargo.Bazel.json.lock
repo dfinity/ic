@@ -1,5 +1,5 @@
 {
-  "checksum": "1fdc9fcc1235b42a941a88d97f04946e1171bc698fb85d77a66dbe2ff5a5d6dd",
+  "checksum": "214d5049b6f56247f577b1547e36010178733acb0869b42e0d1525f919cb3c93",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11845,7 +11845,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -11932,14 +11932,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.29": {
+    "candid 0.10.31": {
       "name": "candid",
-      "version": "0.10.29",
+      "version": "0.10.31",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.29/download",
-          "sha256": "f8f781afa4a1303e3eab4ada0720a874942bcfa936ce01b816ac6378945c43a9"
+          "url": "https://static.crates.io/crates/candid/0.10.31/download",
+          "sha256": "1347fd6b24f5ad23e4ab16d49551a03d396410dcb086e8f969c21efdf4b1dbd8"
         }
       },
       "targets": [
@@ -12036,7 +12036,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "candid_derive 0.10.29",
+              "id": "candid_derive 0.10.31",
               "target": "candid_derive"
             },
             {
@@ -12071,7 +12071,7 @@
             ]
           }
         },
-        "version": "0.10.29"
+        "version": "0.10.31"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -12079,14 +12079,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_derive 0.10.29": {
+    "candid_derive 0.10.31": {
       "name": "candid_derive",
-      "version": "0.10.29",
+      "version": "0.10.31",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_derive/0.10.29/download",
-          "sha256": "ad6ae8e7944dd0035651bc0e7b3a3e4cb16f5fc43f8ae4fd76b36ff2cd52759f"
+          "url": "https://static.crates.io/crates/candid_derive/0.10.31/download",
+          "sha256": "ad381629d2d2940899c3a784ccd4fe59e255b5714e7520f016f839f07d2236e7"
         }
       },
       "targets": [
@@ -12130,7 +12130,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.29"
+        "version": "0.10.31"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -12186,7 +12186,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -12305,7 +12305,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -12426,7 +12426,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -13054,7 +13054,7 @@
                 "target": "serde_wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ],
@@ -13586,11 +13586,11 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ],
@@ -15584,7 +15584,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "wasm_bindgen"
             }
           ],
@@ -21942,7 +21942,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -22606,7 +22606,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -22883,11 +22883,11 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib 0.2.1",
+              "id": "ic-bn-lib 0.2.2",
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.2.1",
+              "id": "ic-bn-lib-common 0.2.2",
               "target": "ic_bn_lib_common"
             },
             {
@@ -22935,15 +22935,15 @@
               "target": "ic_certified_map"
             },
             {
-              "id": "ic-custom-domains-backend 0.2.1",
+              "id": "ic-custom-domains-backend 0.2.4",
               "target": "ic_custom_domains_backend"
             },
             {
-              "id": "ic-custom-domains-base 0.2.1",
+              "id": "ic-custom-domains-base 0.2.4",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-client 0.2.1",
+              "id": "ic-custom-domains-canister-client 0.2.4",
               "target": "ic_custom_domains_canister_client"
             },
             {
@@ -23050,6 +23050,10 @@
             {
               "id": "inferno 0.12.0",
               "target": "inferno"
+            },
+            {
+              "id": "inotify 0.11.2",
+              "target": "inotify"
             },
             {
               "id": "insta 1.31.0",
@@ -23348,7 +23352,7 @@
               "target": "quickcheck"
             },
             {
-              "id": "quinn 0.11.9",
+              "id": "quinn 0.11.11",
               "target": "quinn"
             },
             {
@@ -27500,7 +27504,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -27576,7 +27580,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -30873,11 +30877,11 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ]
@@ -31019,7 +31023,7 @@
             ],
             "wasm32-unknown-unknown": [
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ]
@@ -36108,11 +36112,11 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ],
@@ -36290,7 +36294,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -36455,14 +36459,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib 0.2.1": {
+    "ic-bn-lib 0.2.2": {
       "name": "ic-bn-lib",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "package_url": "https://github.com/dfinity/ic-bn-lib",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib/0.2.1/download",
-          "sha256": "3286b4c6224aa495f5e499b8535157018cbf3637aa956d3808fdb920dd6e0bb2"
+          "url": "https://static.crates.io/crates/ic-bn-lib/0.2.2/download",
+          "sha256": "eea2c1f3aad0a4402aecc624cda39efbafc7dd6645c7f8ab68fe0b99620dcf02"
         }
       },
       "targets": [
@@ -36536,7 +36540,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -36546,10 +36550,6 @@
             {
               "id": "clap 4.5.53",
               "target": "clap"
-            },
-            {
-              "id": "cloudflare 0.14.0",
-              "target": "cloudflare"
             },
             {
               "id": "flate2 1.1.5",
@@ -36616,7 +36616,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-bn-lib-common 0.2.1",
+              "id": "ic-bn-lib-common 0.2.2",
               "target": "ic_bn_lib_common"
             },
             {
@@ -36828,7 +36828,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36836,14 +36836,14 @@
       ],
       "license_file": null
     },
-    "ic-bn-lib-common 0.2.1": {
+    "ic-bn-lib-common 0.2.2": {
       "name": "ic-bn-lib-common",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "package_url": null,
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-bn-lib-common/0.2.1/download",
-          "sha256": "549faca5c1a58b591e4fdf7742454aede9ec6ad508761d5bb052ccebddffcd2e"
+          "url": "https://static.crates.io/crates/ic-bn-lib-common/0.2.2/download",
+          "sha256": "9ddfc3775a8bd5aff225bc20aaadb4da46fd9087363c7c510bb264fa6a1f480f"
         }
       },
       "targets": [
@@ -36876,16 +36876,12 @@
               "target": "axum"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
               "id": "clap 4.5.53",
               "target": "clap"
-            },
-            {
-              "id": "cloudflare 0.14.0",
-              "target": "cloudflare"
             },
             {
               "id": "fqdn 0.5.2",
@@ -36992,7 +36988,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37032,7 +37028,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37138,7 +37134,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37212,7 +37208,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37299,7 +37295,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37362,7 +37358,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37454,7 +37450,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37617,7 +37613,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37680,7 +37676,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37743,7 +37739,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -37906,7 +37902,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38078,14 +38074,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-custom-domains-backend 0.2.1": {
+    "ic-custom-domains-backend 0.2.4": {
       "name": "ic-custom-domains-backend",
-      "version": "0.2.1",
+      "version": "0.2.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-backend/0.2.1/download",
-          "sha256": "e6655ea076ea14144139cc38e0a75907016bd68b9af4a795ac2e3da712bf6084"
+          "url": "https://static.crates.io/crates/ic-custom-domains-backend/0.2.4/download",
+          "sha256": "962142d708266188d2be60dd6a6e27704c3c4363ac4c4a3af843b310a70e3731"
         }
       },
       "targets": [
@@ -38130,7 +38126,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38146,19 +38142,19 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.2.1",
+              "id": "ic-bn-lib 0.2.2",
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.2.1",
+              "id": "ic-bn-lib-common 0.2.2",
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-base 0.2.1",
+              "id": "ic-custom-domains-base 0.2.4",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-client 0.2.1",
+              "id": "ic-custom-domains-canister-client 0.2.4",
               "target": "ic_custom_domains_canister_client"
             },
             {
@@ -38214,7 +38210,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.2.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38222,14 +38218,14 @@
       ],
       "license_file": null
     },
-    "ic-custom-domains-base 0.2.1": {
+    "ic-custom-domains-base 0.2.4": {
       "name": "ic-custom-domains-base",
-      "version": "0.2.1",
+      "version": "0.2.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-base/0.2.1/download",
-          "sha256": "78a38ca829cb19a17ba4041a30299db3473c3d43fb1079bf5115047d33032f80"
+          "url": "https://static.crates.io/crates/ic-custom-domains-base/0.2.4/download",
+          "sha256": "74464dd81ad40870fa648b41a771f0f6f4ce4b2f824fe9194fe6857d293d8ef2"
         }
       },
       "targets": [
@@ -38262,7 +38258,7 @@
               "target": "axum"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38286,15 +38282,15 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.2.1",
+              "id": "ic-bn-lib 0.2.2",
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.2.1",
+              "id": "ic-bn-lib-common 0.2.2",
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-canister-api 0.2.1",
+              "id": "ic-custom-domains-canister-api 0.2.4",
               "target": "ic_custom_domains_canister_api"
             },
             {
@@ -38354,7 +38350,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.2.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38362,14 +38358,14 @@
       ],
       "license_file": null
     },
-    "ic-custom-domains-canister-api 0.2.1": {
+    "ic-custom-domains-canister-api 0.2.4": {
       "name": "ic-custom-domains-canister-api",
-      "version": "0.2.1",
+      "version": "0.2.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.2.1/download",
-          "sha256": "9bf7c8f8bcf2b8661db6ec0e4c4d834343c54d3245c9677be8da1e333a509eac"
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-api/0.2.4/download",
+          "sha256": "268df6565445943a8cf4bd1c2d6d86c33c65e23b32e7d3f155a7be8d90a07166"
         }
       },
       "targets": [
@@ -38394,7 +38390,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38422,7 +38418,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.2.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38430,14 +38426,14 @@
       ],
       "license_file": null
     },
-    "ic-custom-domains-canister-client 0.2.1": {
+    "ic-custom-domains-canister-client 0.2.4": {
       "name": "ic-custom-domains-canister-client",
-      "version": "0.2.1",
+      "version": "0.2.4",
       "package_url": "https://github.com/dfinity/custom-domains",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-custom-domains-canister-client/0.2.1/download",
-          "sha256": "d025de4e47c44c0462057c9b71f1b1a8110536f0ef479d413376ff022ebcdf77"
+          "url": "https://static.crates.io/crates/ic-custom-domains-canister-client/0.2.4/download",
+          "sha256": "52850559b366e2095d912b5f57a97cd0288c422e6e24f84a5514988ba2bd84ff"
         }
       },
       "targets": [
@@ -38470,7 +38466,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38478,19 +38474,19 @@
               "target": "fqdn"
             },
             {
-              "id": "ic-bn-lib 0.2.1",
+              "id": "ic-bn-lib 0.2.2",
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.2.1",
+              "id": "ic-bn-lib-common 0.2.2",
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-base 0.2.1",
+              "id": "ic-custom-domains-base 0.2.4",
               "target": "ic_custom_domains_base"
             },
             {
-              "id": "ic-custom-domains-canister-api 0.2.1",
+              "id": "ic-custom-domains-canister-api 0.2.4",
               "target": "ic_custom_domains_canister_api"
             },
             {
@@ -38522,7 +38518,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.2.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38562,7 +38558,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38759,6 +38755,18 @@
               ]
             }
           }
+        },
+        {
+          "Binary": {
+            "crate_name": "ic-gateway",
+            "crate_root": "src/main.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
         }
       ],
       "library_target_name": "ic_gateway",
@@ -38793,7 +38801,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -38837,19 +38845,19 @@
               "target": "humantime"
             },
             {
-              "id": "ic-bn-lib 0.2.1",
+              "id": "ic-bn-lib 0.2.2",
               "target": "ic_bn_lib"
             },
             {
-              "id": "ic-bn-lib-common 0.2.1",
+              "id": "ic-bn-lib-common 0.2.2",
               "target": "ic_bn_lib_common"
             },
             {
-              "id": "ic-custom-domains-backend 0.2.1",
+              "id": "ic-custom-domains-backend 0.2.4",
               "target": "ic_custom_domains_backend"
             },
             {
-              "id": "ic-custom-domains-base 0.2.1",
+              "id": "ic-custom-domains-base 0.2.4",
               "target": "ic_custom_domains_base"
             },
             {
@@ -39035,7 +39043,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39117,7 +39125,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39267,7 +39275,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39322,7 +39330,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39470,7 +39478,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39764,7 +39772,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39823,7 +39831,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -39917,7 +39925,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -40107,7 +40115,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -40262,7 +40270,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -40349,7 +40357,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -40619,7 +40627,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -40690,7 +40698,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.29",
+              "id": "candid 0.10.31",
               "target": "candid"
             },
             {
@@ -42478,6 +42486,124 @@
       "license": "CDDL-1.0",
       "license_ids": [
         "CDDL-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "inotify 0.11.2": {
+      "name": "inotify",
+      "version": "0.11.2",
+      "package_url": "https://github.com/hannobraun/inotify-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/inotify/0.11.2/download",
+          "sha256": "533e68a5842e734946fe159fb03fc9bbbb254f590dd0d8ad321ae5ff7beca2c1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "inotify",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "inotify",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "futures-util",
+            "stream",
+            "tokio"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "inotify-sys 0.1.5",
+              "target": "inotify_sys"
+            },
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            },
+            {
+              "id": "tokio 1.50.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.11.2"
+      },
+      "license": "ISC",
+      "license_ids": [
+        "ISC"
+      ],
+      "license_file": "LICENSE"
+    },
+    "inotify-sys 0.1.5": {
+      "name": "inotify-sys",
+      "version": "0.1.5",
+      "package_url": "https://github.com/hannobraun/inotify-sys",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/inotify-sys/0.1.5/download",
+          "sha256": "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "inotify_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "inotify_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.186",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.5"
+      },
+      "license": "ISC",
+      "license_ids": [
+        "ISC"
       ],
       "license_file": "LICENSE"
     },
@@ -44335,14 +44461,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "js-sys 0.3.102": {
+    "js-sys 0.3.103": {
       "name": "js-sys",
-      "version": "0.3.102",
+      "version": "0.3.103",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/js-sys/0.3.102/download",
-          "sha256": "03d04c30968dffe80775bd4d7fb676131cd04a1fb46d2686dbffbaec2d9dfd31"
+          "url": "https://static.crates.io/crates/js-sys/0.3.103/download",
+          "sha256": "53b44bfcdb3f8d5837a46dae1ca9660a837176eee74a28b229bc626816589102"
         }
       },
       "targets": [
@@ -44383,14 +44509,14 @@
               "target": "futures_util"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.102"
+        "version": "0.3.103"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -56205,7 +56331,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               }
             ]
@@ -56285,7 +56411,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               }
             ]
@@ -56662,7 +56788,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               }
             ]
@@ -60405,11 +60531,11 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "web-sys 0.3.102",
+                "id": "web-sys 0.3.103",
                 "target": "web_sys"
               }
             ]
@@ -64903,7 +65029,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", target_os = \"unknown\"))": [
               {
-                "id": "web-sys 0.3.102",
+                "id": "web-sys 0.3.103",
                 "target": "web_sys"
               }
             ],
@@ -65147,14 +65273,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "quinn 0.11.9": {
+    "quinn 0.11.11": {
       "name": "quinn",
-      "version": "0.11.9",
+      "version": "0.11.11",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn/0.11.9/download",
-          "sha256": "b9e20a958963c291dc322d98411f541009df2ced7b5a4f2bd52337638cfccf20"
+          "url": "https://static.crates.io/crates/quinn/0.11.11/download",
+          "sha256": "0c1a41e437b6bbd489372cd4971de128e85c855f56c57f283d20ff016cf7c0a8"
         }
       },
       "targets": [
@@ -65208,11 +65334,11 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "quinn 0.11.9",
+              "id": "quinn 0.11.11",
               "target": "build_script_build"
             },
             {
-              "id": "quinn-proto 0.11.14",
+              "id": "quinn-proto 0.11.15",
               "target": "quinn_proto",
               "alias": "proto"
             },
@@ -65258,7 +65384,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.11.9"
+        "version": "0.11.11"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -65287,14 +65413,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quinn-proto 0.11.14": {
+    "quinn-proto 0.11.15": {
       "name": "quinn-proto",
-      "version": "0.11.14",
+      "version": "0.11.15",
       "package_url": "https://github.com/quinn-rs/quinn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quinn-proto/0.11.14/download",
-          "sha256": "434b42fec591c96ef50e21e886936e66d3cc3f737104fdb9b737c40ffb94c098"
+          "url": "https://static.crates.io/crates/quinn-proto/0.11.15/download",
+          "sha256": "4fcb935c5bec503c2f0e306bdd3e58bb9029dcb14fa8d9ac76e3a5256ac0763e"
         }
       },
       "targets": [
@@ -65395,7 +65521,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.11.14"
+        "version": "0.11.15"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69045,7 +69171,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
@@ -69053,15 +69179,15 @@
                 "target": "serde_json"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.75",
+                "id": "wasm-bindgen-futures 0.4.76",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.102",
+                "id": "web-sys 0.3.103",
                 "target": "web_sys"
               }
             ],
@@ -69315,19 +69441,19 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.75",
+                "id": "wasm-bindgen-futures 0.4.76",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.102",
+                "id": "web-sys 0.3.103",
                 "target": "web_sys"
               }
             ],
@@ -69427,6 +69553,7 @@
             "http2",
             "json",
             "multipart",
+            "query",
             "rustls",
             "stream"
           ],
@@ -69465,6 +69592,10 @@
             {
               "id": "serde_json 1.0.145",
               "target": "serde_json"
+            },
+            {
+              "id": "serde_urlencoded 0.7.1",
+              "target": "serde_urlencoded"
             },
             {
               "id": "sync_wrapper 1.0.2",
@@ -69562,19 +69693,19 @@
             ],
             "cfg(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\")))": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen-futures 0.4.75",
+                "id": "wasm-bindgen-futures 0.4.76",
                 "target": "wasm_bindgen_futures"
               },
               {
-                "id": "web-sys 0.3.102",
+                "id": "web-sys 0.3.103",
                 "target": "web_sys"
               }
             ],
@@ -70126,7 +70257,7 @@
             ],
             "cfg(all(target_arch = \"wasm32\", target_vendor = \"unknown\", target_os = \"unknown\", target_env = \"\"))": [
               {
-                "id": "web-sys 0.3.102",
+                "id": "web-sys 0.3.103",
                 "target": "web_sys"
               }
             ],
@@ -75839,7 +75970,7 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.102",
+              "id": "js-sys 0.3.103",
               "target": "js_sys"
             },
             {
@@ -75847,7 +75978,7 @@
               "target": "serde"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "wasm_bindgen"
             }
           ],
@@ -85261,7 +85392,7 @@
           "selects": {
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ]
@@ -89019,7 +89150,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
@@ -93029,14 +93160,14 @@
       ],
       "license_file": null
     },
-    "wasm-bindgen 0.2.125": {
+    "wasm-bindgen 0.2.126": {
       "name": "wasm-bindgen",
-      "version": "0.2.125",
+      "version": "0.2.126",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.125/download",
-          "sha256": "8ddb3f79143bced6de84270411622a2699cee572fc0875aeaf1e7867cf9fca1a"
+          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.126/download",
+          "sha256": "4b067c0c11094aef6b7a801c1e34a26affafdf3d051dba08456b868789aaf9a4"
         }
       },
       "targets": [
@@ -93088,11 +93219,11 @@
               "target": "once_cell"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "build_script_build"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.125",
+              "id": "wasm-bindgen-shared 0.2.126",
               "target": "wasm_bindgen_shared"
             }
           ],
@@ -93102,13 +93233,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-macro 0.2.125",
+              "id": "wasm-bindgen-macro 0.2.126",
               "target": "wasm_bindgen_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.2.125"
+        "version": "0.2.126"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -93123,7 +93254,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-shared 0.2.125",
+              "id": "wasm-bindgen-shared 0.2.126",
               "target": "wasm_bindgen_shared"
             }
           ],
@@ -93147,14 +93278,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-futures 0.4.75": {
+    "wasm-bindgen-futures 0.4.76": {
       "name": "wasm-bindgen-futures",
-      "version": "0.4.75",
+      "version": "0.4.76",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/futures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-futures/0.4.75/download",
-          "sha256": "503b14d284f2c8dac03b819967e155ea753f573586193b2b2c95990cb5d69280"
+          "url": "https://static.crates.io/crates/wasm-bindgen-futures/0.4.76/download",
+          "sha256": "c62df1340f32221cb9c54d6a27b030e3dba64361d4a95bed55f9aacb44da291d"
         }
       },
       "targets": [
@@ -93186,18 +93317,18 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.102",
+              "id": "js-sys 0.3.103",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.75"
+        "version": "0.4.76"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -93206,14 +93337,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro 0.2.125": {
+    "wasm-bindgen-macro 0.2.126": {
       "name": "wasm-bindgen-macro",
-      "version": "0.2.125",
+      "version": "0.2.126",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.125/download",
-          "sha256": "4e21a184b13fb19e157296e2c46056aec9092264fab83e4ba59e68c61b323c3d"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.126/download",
+          "sha256": "167ce5e579f6bcf889c4f7175a8a5a585de84e8ff93976ce393efa5f2837aab1"
         }
       },
       "targets": [
@@ -93242,14 +93373,14 @@
               "target": "quote"
             },
             {
-              "id": "wasm-bindgen-macro-support 0.2.125",
+              "id": "wasm-bindgen-macro-support 0.2.126",
               "target": "wasm_bindgen_macro_support"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.125"
+        "version": "0.2.126"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -93258,14 +93389,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro-support 0.2.125": {
+    "wasm-bindgen-macro-support 0.2.126": {
       "name": "wasm-bindgen-macro-support",
-      "version": "0.2.125",
+      "version": "0.2.126",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.125/download",
-          "sha256": "fecefd9c35bd935a20fc3fc344b5f29138961e4f47fb03297d88f2587afb5ebd"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.126/download",
+          "sha256": "f3997c7839262f4ef12cf90b818d6340c18e80f263f1a94bf157d0ec4420380e"
         }
       },
       "targets": [
@@ -93306,14 +93437,14 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.125",
+              "id": "wasm-bindgen-shared 0.2.126",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.125"
+        "version": "0.2.126"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -93322,14 +93453,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-shared 0.2.125": {
+    "wasm-bindgen-shared 0.2.126": {
       "name": "wasm-bindgen-shared",
-      "version": "0.2.125",
+      "version": "0.2.126",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.125/download",
-          "sha256": "23939e44bb9a5d7576fa2b563dc2e136628f1224e88a8deed09e04858b77871f"
+          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.126/download",
+          "sha256": "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
         }
       },
       "targets": [
@@ -93370,14 +93501,14 @@
               "target": "unicode_ident"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.125",
+              "id": "wasm-bindgen-shared 0.2.126",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.125"
+        "version": "0.2.126"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -93896,19 +94027,19 @@
               "target": "futures_util"
             },
             {
-              "id": "js-sys 0.3.102",
+              "id": "js-sys 0.3.103",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-bindgen-futures 0.4.75",
+              "id": "wasm-bindgen-futures 0.4.76",
               "target": "wasm_bindgen_futures"
             },
             {
-              "id": "web-sys 0.3.102",
+              "id": "web-sys 0.3.103",
               "target": "web_sys"
             }
           ],
@@ -95898,14 +96029,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "web-sys 0.3.102": {
+    "web-sys 0.3.103": {
       "name": "web-sys",
-      "version": "0.3.102",
+      "version": "0.3.103",
       "package_url": "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/web-sys/0.3.102/download",
-          "sha256": "a6430a72df5eb332242960fe84b3002a241163998241eb596d4f739b9757061d"
+          "url": "https://static.crates.io/crates/web-sys/0.3.103/download",
+          "sha256": "8622dcb61c0bcc9fffa6938bed81210af2da9a7e4a1a834b2e37a59b6dfb6141"
         }
       },
       "targets": [
@@ -95985,18 +96116,18 @@
         "deps": {
           "common": [
             {
-              "id": "js-sys 0.3.102",
+              "id": "js-sys 0.3.103",
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.125",
+              "id": "wasm-bindgen 0.2.126",
               "target": "wasm_bindgen"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.102"
+        "version": "0.3.103"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -96039,11 +96170,11 @@
           "selects": {
             "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
               {
-                "id": "js-sys 0.3.102",
+                "id": "js-sys 0.3.103",
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.125",
+                "id": "wasm-bindgen 0.2.126",
                 "target": "wasm_bindgen"
               }
             ]
@@ -103148,6 +103279,7 @@
     }
   },
   "binary_crates": [
+    "ic-gateway 0.2.0",
     "ic-wasm 0.9.11",
     "metrics-proxy 0.1.0"
   ],
@@ -103510,7 +103642,7 @@
     "bytes 1.11.1",
     "cached 0.49.2",
     "canbench-rs 0.6.0",
-    "candid 0.10.29",
+    "candid 0.10.31",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.2.48",
@@ -103582,8 +103714,8 @@
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.20",
     "ic-agent 0.47.3",
-    "ic-bn-lib 0.2.1",
-    "ic-bn-lib-common 0.2.1",
+    "ic-bn-lib 0.2.2",
+    "ic-bn-lib-common 0.2.2",
     "ic-btc-interface 0.4.0",
     "ic-canister-log 0.2.0",
     "ic-canister-runtime 0.2.0",
@@ -103595,9 +103727,9 @@
     "ic-certificate-verification 3.1.0",
     "ic-certification 3.1.0",
     "ic-certified-map 0.3.4",
-    "ic-custom-domains-backend 0.2.1",
-    "ic-custom-domains-base 0.2.1",
-    "ic-custom-domains-canister-client 0.2.1",
+    "ic-custom-domains-backend 0.2.4",
+    "ic-custom-domains-base 0.2.4",
+    "ic-custom-domains-canister-client 0.2.4",
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
@@ -103625,6 +103757,7 @@
     "indicatif 0.17.5",
     "indoc 1.0.9",
     "inferno 0.12.0",
+    "inotify 0.11.2",
     "insta 1.31.0",
     "intmap 1.1.0",
     "ipnet 2.10.1",
@@ -103701,7 +103834,7 @@
     "publicsuffix 2.2.3",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
-    "quinn 0.11.9",
+    "quinn 0.11.11",
     "quinn-udp 0.5.5",
     "quote 1.0.42",
     "rand 0.8.5",

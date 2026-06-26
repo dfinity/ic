@@ -768,7 +768,7 @@ fn upgrade_non_nns_subnets_if_necessary(env: &TestEnv) {
 
     let nns_node = get_nns_node(&env.topology_snapshot());
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(env);
 
     block_on(elect_replica_version(
         &nns_node,

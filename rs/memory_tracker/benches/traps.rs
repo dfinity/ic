@@ -59,6 +59,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                         DirtyPageTracking::Track,
                         page_map.clone(),
                         MemoryLimits::default(),
+                        /* prefetching does not use this anyway */ 0,
                         Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),
@@ -109,6 +110,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                         DirtyPageTracking::Track,
                         page_map.clone(),
                         MemoryLimits::default(),
+                        /* prefetching does not use this anyway */ 0,
                         Arc::new(SignalMutex::new(|_| {})),
                     )
                     .unwrap(),

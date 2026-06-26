@@ -367,6 +367,14 @@ impl CanisterManager {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
 
+        // Minimum incoming canister call cycles: apply.
+        if let Some(minimum_incoming_canister_call_cycles) =
+            settings.minimum_incoming_canister_call_cycles()
+        {
+            canister.system_state.minimum_incoming_canister_call_cycles =
+                minimum_incoming_canister_call_cycles;
+        }
+
         // Environment variables: validate and apply.
         if let Some(environment_variables) = settings.environment_variables() {
             self.validate_environment_variables(environment_variables)?;
@@ -1091,6 +1099,8 @@ impl CanisterManager {
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
+        let minimum_incoming_canister_call_cycles =
+            canister.system_state.minimum_incoming_canister_call_cycles;
         let log_visibility = canister.system_state.log_visibility.clone();
         let snapshot_visibility = canister.system_state.snapshot_visibility.clone();
         let log_memory_limit = canister.log_memory_limit().get();
@@ -1122,6 +1132,7 @@ impl CanisterManager {
             Some(memory_allocation.pre_allocated_bytes().get()),
             freeze_threshold.get(),
             reserved_cycles_limit.map(|x| x.get()),
+            minimum_incoming_canister_call_cycles.get(),
             log_visibility,
             snapshot_visibility,
             log_memory_limit,
