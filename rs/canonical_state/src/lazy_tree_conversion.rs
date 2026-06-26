@@ -863,7 +863,7 @@ fn expand_canister<const V: u32>(source: &SubtreeSource) -> Result<HashTree, Has
     let canister = source.downcast::<CanisterState>();
     let version = CertificationVersion::try_from(V)
         .expect("const version parameter is a valid certification version");
-    hash_lazy_tree(&fork(CanisterFork { canister, version }))
+    hash_lazy_tree(&fork(CanisterFork { canister, version }), None)
 }
 
 /// Selects the [`expand_canister`] monomorphization for `version`, so the

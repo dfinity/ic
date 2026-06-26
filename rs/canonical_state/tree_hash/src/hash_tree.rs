@@ -996,31 +996,16 @@ impl<'a> BaselineCursor<'a> {
 /// The resulting tree has the exact same root hash as a fully materialized
 /// build; witnesses that descend into a stubbed subtree rebuild it on demand
 /// from the [`SubtreeSource`] held in the stub (see [`HashTree::witness`]).
-pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
-    hash_lazy_tree_impl(t, None)
-}
-
-/// Like [`hash_lazy_tree`], but reuses the [`NodeKind::Stub`] nodes of
-/// unchanged subtrees from `baseline`.
 ///
-/// The new lazy tree and the baseline tree are traversed in lockstep (children
-/// merge-joined by label). Wherever a child carries a [`SubtreeSource`] equal
-/// to the one the baseline stores under the same label the baseline's stored
-/// digest is reused instead of building and hashing the subtree.
-///
-/// The result is identical (same root hash, same witnesses) to a full
-/// [`hash_lazy_tree`] build, regardless of `baseline`. In particular, a
-/// `baseline` built under a different certification version is safe to pass:
-/// its subtrees carry a different expander, so none of them are reused (they
-/// are simply rebuilt).
-pub fn hash_lazy_tree_with_baseline<'a>(
-    t: &LazyTree<'a>,
-    baseline: &'a HashTree,
-) -> Result<HashTree, HashTreeError> {
-    hash_lazy_tree_impl(t, Some(baseline))
-}
-
-fn hash_lazy_tree_impl<'a>(
+/// If a `baseline` tree is provided, the [`NodeKind::Stub`] nodes of unchanged
+/// subtrees are reused from it: the lazy tree and the baseline are traversed in
+/// lockstep (children merge-joined by label), and wherever a child carries an
+/// equal [`SubtreeSource`], it is reused instead of rebuilt. The result is
+/// identical (same root hash, same witnesses) regardless of `baseline`; in
+/// particular, a `baseline` built under a different certification version is
+/// safe to pass: its subtrees carry a different expander, so none of them are
+/// reused (they are simply rebuilt).
+pub fn hash_lazy_tree<'a>(
     t: &LazyTree<'a>,
     baseline: Option<&'a HashTree>,
 ) -> Result<HashTree, HashTreeError> {

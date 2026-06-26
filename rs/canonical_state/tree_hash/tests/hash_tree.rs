@@ -75,7 +75,7 @@ fn test_too_many_recursions_error() {
         });
     }
 
-    assert!(hash_lazy_tree(&as_lazy(&tree)).is_ok());
+    assert!(hash_lazy_tree(&as_lazy(&tree), None).is_ok());
 
     // Error with one extra depth
     tree = LabeledTree::SubTree(flatmap! {
@@ -83,7 +83,7 @@ fn test_too_many_recursions_error() {
     });
 
     assert_matches!(
-        hash_lazy_tree(&as_lazy(&tree)),
+        hash_lazy_tree(&as_lazy(&tree), None),
         Err(HashTreeError::RecursionTooDeep(MAX_RECURSION_DEPTH))
     );
 }
@@ -100,7 +100,7 @@ fn test_non_existence_proof() {
         }),
     });
 
-    let hash_tree = hash_lazy_tree(&as_lazy(&t)).unwrap();
+    let hash_tree = hash_lazy_tree(&as_lazy(&t), None).unwrap();
     let ht_witness = hash_tree
         .witness::<MixedHashTree>(&LabeledTree::SubTree(
             flatmap! { Label::from("Z") => LabeledTree::Leaf(b"12345".to_vec()) },
