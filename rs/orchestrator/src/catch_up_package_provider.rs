@@ -178,38 +178,25 @@ impl CatchUpPackageProvider {
         // Randomize the order of peer_urls
         nodes.shuffle(&mut rand::thread_rng());
 
-        if current_cup.is_none() {
-            // If we don't have a local CUP, we try not to fall back to the registry CUP. Therefore,
-            // we select all nodes.
-            return nodes;
-        }
+        let current_node_index = nodes.iter().position(|t| t.0 == self.node_id);
 
-        let mut selected_peers = vec![];
-        // Otherwise, move our own data to the front, so that we first try to fetch the CUP from our
-        // own replica. This improves the upgrade behaviour of a healthy subnet, as we decrease the
-        // probability of hitting peers who already started the upgrade process and will not serve a
-        // CUP until they're online again.
-        // Note that our own replica might not be in the subnet record at that moment in time,
-        // either because we are leaving the subnet, or there is an ongoing subnet split. Though, we
-        // still have a local CUP, meaning that our replica is still running.
-        if let Some(current_node) = self
-            .registry
-            .get_node_record(self.node_id, registry_version)
-            .ok()
-            .flatten()
-            .map(|record| (self.node_id, record))
-        {
-            selected_peers.push(current_node);
-        }
+        let max_num_peers_to_try = match (current_node_index, current_cup) {
+            // If we don't have a local CUP, we try not to fall back to the registry CUP.
+            // Therefore, we select all nodes.
+            (_, None) => nodes.len(),
+            (Some(index), _) => {
+                // If we are still a member of the subnet, move our own data to the front, so that we
+                // first try to fetch the CUP from our own replica. This improves the upgrade behaviour
+                // of a healthy subnet, as we decrease the probability of hitting peers who already
+                // started the upgrade process and will not serve a CUP until they're online again.
+                nodes.swap(0, index);
+                2
+            }
+            // Try only one peer at-a-time if there is already a local CUP,
+            (None, _) => 1,
+        };
 
-        if let Some(random_other_node) = nodes
-            .into_iter()
-            .find(|(node_id, _)| *node_id != self.node_id)
-        {
-            selected_peers.push(random_other_node);
-        }
-
-        selected_peers
+        nodes.into_iter().take(max_num_peers_to_try).collect()
     }
 
     /// Randomly selects a peer from the subnet and pulls its CUP. If this CUP is
@@ -227,6 +214,20 @@ impl CatchUpPackageProvider {
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
     ) -> Option<pb::CatchUpPackage> {
+        let subnet_id = self
+            .registry
+            .get_subnet_id_from_node_id(self.node_id, registry_version)
+            .unwrap_or_default()
+            .inspect(|new_subnet_id| {
+                if *new_subnet_id != subnet_id {
+                    info!(
+                        self.logger,
+                        "Subnet assignment changed from {subnet_id} to {new_subnet_id}"
+                    )
+                }
+            })
+            .unwrap_or(subnet_id);
+
         let peers = self.select_peers(subnet_id, registry_version, current_cup);
 
         if peers.is_empty() {
