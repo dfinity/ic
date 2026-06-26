@@ -258,7 +258,9 @@ impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
 
     fn verify_guest_debug_disallowed(self) -> Result<Self::Target, VerificationError> {
         if self.borrow().attestation_report().policy.debug_allowed() {
-            return Err(VerificationError::invalid_policy("Debugging must be disallowed"));
+            return Err(VerificationError::invalid_policy(
+                "Debugging must be disallowed",
+            ));
         }
 
         Ok(self)

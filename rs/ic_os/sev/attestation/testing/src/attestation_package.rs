@@ -1,9 +1,9 @@
 use crate::attestation_report::{AttestationReportBuilder, FakeAttestationReportSigner};
+use attestation::SevCertificateChain;
 use attestation::attestation_package::{
     ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use attestation::custom_data::EncodeSevCustomData;
-use attestation::SevCertificateChain;
 use sev::firmware::guest::GuestPolicy;
 use std::fmt::Debug;
 
@@ -94,9 +94,9 @@ impl ParsedSevAttestationPackageBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use attestation::SevAttestationPackage;
     use attestation::attestation_package::AttestationPackageVerifier;
     use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
-    use attestation::SevAttestationPackage;
     use rand::SeedableRng;
 
     #[test]
