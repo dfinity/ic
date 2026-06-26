@@ -16,6 +16,7 @@ fn mcopy_bin() -> String {
     std::env::var("MCOPY").unwrap_or("mcopy".to_string() /* default to PATH lookup */)
 }
 
+#[cfg(test)]
 fn mkfs_fat_bin() -> String {
     std::env::var("MKFS_FAT").unwrap_or(
         "/usr/sbin/mkfs.fat".to_string(), /* default to system binary */
