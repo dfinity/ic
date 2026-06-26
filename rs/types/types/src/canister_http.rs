@@ -91,7 +91,7 @@ pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
 pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 
 /// Maximum size of a canister http reject message.
-pub const MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
+pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 
 /// Maximum number of bytes to represent URL for a canister http request.
 pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
