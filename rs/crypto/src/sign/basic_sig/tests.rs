@@ -652,47 +652,41 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        // Each entry resolves its signer's key at its OWN registry version:
-        // NODE_1 at REG_V1 and NODE_2 at REG_V2 both resolve, so the batch
-        // verifies successfully.
-        let inputs_ok = vec![
-            BasicSigBatchEntry {
-                signer: NODE_1,
-                signature: &sig_1,
-                message: &msg_1,
-                registry_version: REG_V1,
-            },
-            BasicSigBatchEntry {
-                signer: NODE_2,
-                signature: &sig_2,
-                message: &msg_2,
-                registry_version: REG_V2,
-            },
-        ];
+        let node_1_entry = |registry_version| BasicSigBatchEntry {
+            signer: NODE_1,
+            signature: &sig_1,
+            message: &msg_1,
+            registry_version,
+        };
+        let node_2_entry = |registry_version| BasicSigBatchEntry {
+            signer: NODE_2,
+            signature: &sig_2,
+            message: &msg_2,
+            registry_version,
+        };
+
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs_ok),
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V1), node_2_entry(REG_V2)]),
             Ok(())
         );
 
-        // Pinning NODE_2's entry to the earlier REG_V1 (where its key is not yet
-        // registered) must fail with `PublicKeyNotFound`, even though NODE_1's
-        // entry still resolves at REG_V2.
-        let inputs_err = vec![
-            BasicSigBatchEntry {
-                signer: NODE_1,
-                signature: &sig_1,
-                message: &msg_1,
-                registry_version: REG_V2,
-            },
-            BasicSigBatchEntry {
-                signer: NODE_2,
-                signature: &sig_2,
-                message: &msg_2,
-                registry_version: REG_V1,
-            },
-        ];
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs_err),
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V2), node_2_entry(REG_V2)]),
+            Ok(())
+        );
+
+        assert_matches!(
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V2), node_2_entry(REG_V1)]),
+            Err(CryptoError::PublicKeyNotFound { node_id, registry_version, .. })
+            if node_id == NODE_2 && registry_version == REG_V1
+        );
+
+        assert_matches!(
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V1), node_2_entry(REG_V1)]),
             Err(CryptoError::PublicKeyNotFound { node_id, registry_version, .. })
             if node_id == NODE_2 && registry_version == REG_V1
         );

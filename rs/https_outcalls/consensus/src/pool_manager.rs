@@ -265,7 +265,16 @@ impl CanisterHttpPoolManagerImpl {
         match &context.replication {
             Replication::FullyReplicated => self
                 .membership
-                .node_belongs_to_canister_http_committee(context.registry_version, node_id),
+                .node_belongs_to_canister_http_committee(context.registry_version, node_id)
+                .inspect_err(|e| {
+                    warn!(
+                        every_n_seconds => 10,
+                        self.log,
+                        "Unable to check committee membership at registry version {}, {:?}",
+                        context.registry_version,
+                        e
+                    );
+                }),
             replication @ (Replication::NonReplicated(_) | Replication::Flexible { .. }) => {
                 Ok(replication.is_authorized_signer(&node_id))
             }
@@ -565,14 +574,6 @@ impl CanisterHttpPoolManagerImpl {
 
                 let node_is_in_committee = self
                     .node_belongs_to_request_committee(context, share.signature.signer)
-                    .inspect_err(|e| {
-                        warn!(
-                            self.log,
-                            "Unable to check membership for share at registry version {}, {:?}",
-                            context.registry_version,
-                            e
-                        );
-                    })
                     .ok()?;
                 if !node_is_in_committee {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
