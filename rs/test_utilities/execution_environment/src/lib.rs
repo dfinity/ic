@@ -828,6 +828,22 @@ impl ExecutionTest {
         self.subnet_message(Method::UpdateSettings, payload)
     }
 
+    pub fn canister_update_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
     pub fn canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         &mut self,
         canister_id: CanisterId,
