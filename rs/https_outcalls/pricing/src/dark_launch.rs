@@ -20,7 +20,7 @@ pub struct DarkLaunchTracker {
     log: ReplicaLogger,
     /// Whether an incompatibility has already been recorded for this request.
     /// Ensures we count and log at most once per request.
-    reported: bool,
+    error_reported: bool,
 }
 
 impl DarkLaunchTracker {
@@ -39,7 +39,7 @@ impl DarkLaunchTracker {
             replication,
             metrics,
             log,
-            reported: false,
+            error_reported: false,
         }
     }
 
@@ -54,10 +54,10 @@ impl DarkLaunchTracker {
         if real.is_ok() == shadow.is_ok() {
             return;
         }
-        if self.reported {
+        if self.error_reported {
             return;
         }
-        self.reported = true;
+        self.error_reported = true;
         self.metrics
             .shadow_incompatible_total
             .with_label_values(&[step, self.replication])
