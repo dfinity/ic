@@ -740,19 +740,17 @@ mod tests {
         }
     }
 
-    fn fake_state_with_canister_http_contexts(
-        contexts: Vec<CanisterHttpRequestContext>,
-    ) -> ReplicatedState {
-        fake_state_with_contexts(vec![], vec![], contexts)
-    }
-
     #[test]
     fn test_get_oldest_state_registry_version_canister_http_only() {
-        let state = fake_state_with_canister_http_contexts(vec![
-            fake_canister_http_context(RegistryVersion::from(8)),
-            fake_canister_http_context(RegistryVersion::from(4)),
-            fake_canister_http_context(RegistryVersion::from(6)),
-        ]);
+        let state = fake_state_with_contexts(
+            vec![],
+            vec![],
+            vec![
+                fake_canister_http_context(RegistryVersion::from(8)),
+                fake_canister_http_context(RegistryVersion::from(4)),
+                fake_canister_http_context(RegistryVersion::from(6)),
+            ],
+        );
         assert_eq!(
             Some(RegistryVersion::from(4)),
             get_oldest_state_registry_version(&state)
