@@ -125,7 +125,7 @@ impl BudgetTracker for PayAsYouGoTracker {
         transformed_response_size: NumBytes,
     ) -> Result<(), PricingError> {
         // For fully replicated outcalls the gossip term is a
-        // consensus cost (ignored here for now). For flexible outcalls each
+        // consensus cost (ignored here). For flexible outcalls each
         // replica is charged 50 * transformed_response_bytes_i * N.
         if !self.is_gossiping {
             return Ok(());
@@ -153,6 +153,7 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use std::collections::BTreeSet;
+    use std::time::Duration;
 
     fn context(
         replication: Replication,
