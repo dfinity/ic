@@ -38,7 +38,10 @@ configure_make(
     # mtools compiles in its built-in codepage tables instead of calling iconv.
     env = {"ac_cv_header_iconv_h": "no"},
     lib_source = ":all_srcs",
-    out_binaries = ["mtools", "mcopy"],
+    out_binaries = [
+        "mtools",
+        "mcopy",
+    ],
     # We don't ship any libs out of this build.
     out_shared_libs = [],
     out_static_libs = [],
