@@ -14312,7 +14312,7 @@ fn test_claim_neuron_does_not_leave_zombie_neurons_behind_when_ledger_is_unavail
                 }
             }
 
-            _ => panic!(claim_neuron_response),
+            _ => panic!("{:?}", claim_neuron_response),
         }
 
         // Step 3.2: Most interestingly, no new (zombie) neuron(s).
