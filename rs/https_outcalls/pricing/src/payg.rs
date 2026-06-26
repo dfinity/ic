@@ -50,9 +50,9 @@ pub struct PayAsYouGoTracker {
 }
 
 impl PayAsYouGoTracker {
-    pub fn new(context: &CanisterHttpRequestContext) -> Self {
+    pub fn new(context: &CanisterHttpRequestContext, subnet_size: u32) -> Self {
         Self {
-            n: 13,
+            n: subnet_size as u64,
             is_flexible: matches!(context.replication, Replication::Flexible { .. }),
             allowance: context.refund_status.per_replica_allowance.get(),
             max_response_size: context
@@ -188,7 +188,7 @@ mod tests {
         // The base cost is handled at context creation, so a freshly created
         // tracker has spent nothing and a zero-usage request refunds everything.
         let ctx = context(Replication::FullyReplicated, 1_000_000);
-        let tracker = PayAsYouGoTracker::new(&ctx);
+        let tracker = PayAsYouGoTracker::new(&ctx, 13);
         assert_eq!(tracker.spent, 0);
         assert_eq!(
             tracker.create_payment_receipt().refund,
@@ -200,7 +200,7 @@ mod tests {
     fn charges_per_replica_cost_fully_replicated() {
         let allowance = 1_000_000_000_u128;
         let ctx = context(Replication::FullyReplicated, allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx);
+        let mut tracker = PayAsYouGoTracker::new(&ctx, 13);
 
         let response_size = 1_000_u64;
         let response_ms = 2_000_u128;
@@ -237,7 +237,7 @@ mod tests {
         let allowance = 1_000_000_000_u128;
         let n = 13;
         let ctx = context(flexible(n), allowance);
-        let mut tracker = PayAsYouGoTracker::new(&ctx);
+        let mut tracker = PayAsYouGoTracker::new(&ctx, n as u32);
 
         let transformed_size = 500_u64;
         assert_eq!(
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn returns_pricing_error_when_budget_is_exceeded() {
         let ctx = context(Replication::FullyReplicated, 100);
-        let mut tracker = PayAsYouGoTracker::new(&ctx);
+        let mut tracker = PayAsYouGoTracker::new(&ctx, 13);
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
                 response_size: NumBytes::from(1_000),

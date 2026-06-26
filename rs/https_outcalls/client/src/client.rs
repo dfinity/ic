@@ -137,7 +137,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 socks_proxy_addrs,
             } = canister_http_request;
 
-            let mut budget = pricing_factory.new_tracker(&request_context);
+            // TODO: thread through the actual subnet size; 13 is a placeholder.
+            let mut budget = pricing_factory.new_tracker(&request_context, 13);
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {

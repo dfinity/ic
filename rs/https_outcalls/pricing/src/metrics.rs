@@ -5,6 +5,9 @@ use prometheus::{IntCounter, IntCounterVec};
 /// from the real one.
 pub const LABEL_STEP: &str = "step";
 
+/// Label indicating whether the diverging request was non-replicated.
+pub const LABEL_NON_REPLICATED: &str = "non_replicated";
+
 #[derive(Clone)]
 pub struct PricingMetrics {
     /// Total number of requests evaluated by the dark-launch budget tracker.
@@ -28,8 +31,9 @@ impl PricingMetrics {
             shadow_incompatible_total: metrics_registry.int_counter_vec(
                 "canister_http_pricing_shadow_incompatible_total",
                 "Canister http requests that would be rejected (pricing error) under the shadow \
-                 pricing while succeeding under the real pricing, by accounting step.",
-                &[LABEL_STEP],
+                 pricing while succeeding under the real pricing, by accounting step and whether \
+                 the request is non-replicated.",
+                &[LABEL_STEP, LABEL_NON_REPLICATED],
             ),
         }
     }

@@ -10,13 +10,12 @@ use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError, metrics::P
 ///
 /// Whenever the shadow tracker disagrees with the real tracker (e.g. it returns
 /// a pricing error where the real tracker succeeded), the divergence is counted
-/// in a metric and logged together with the canister id, so we can measure what
-/// fraction of requests would not be backwards compatible under the shadow
-/// pricing and which canisters would break.
+/// in a metric.
 pub struct DarkLaunchTracker {
     real: Box<dyn BudgetTracker>,
     shadow: Box<dyn BudgetTracker>,
     canister_id: CanisterId,
+    non_replicated: bool,
     metrics: PricingMetrics,
     log: ReplicaLogger,
     /// Whether an incompatibility has already been recorded for this request.
@@ -29,6 +28,7 @@ impl DarkLaunchTracker {
         real: Box<dyn BudgetTracker>,
         shadow: Box<dyn BudgetTracker>,
         canister_id: CanisterId,
+        non_replicated: bool,
         metrics: PricingMetrics,
         log: ReplicaLogger,
     ) -> Self {
@@ -36,6 +36,7 @@ impl DarkLaunchTracker {
             real,
             shadow,
             canister_id,
+            non_replicated,
             metrics,
             log,
             reported: false,
@@ -59,14 +60,15 @@ impl DarkLaunchTracker {
         self.reported = true;
         self.metrics
             .shadow_incompatible_total
-            .with_label_values(&[step])
+            .with_label_values(&[step, &self.non_replicated.to_string()])
             .inc();
         warn!(
             self.log,
-            "Canister http request would not be backwards compatible under shadow pricing: \
-             canister_id {}, step {}, real_result {:?}, shadow_result {:?}",
+            "Canister http request would not be compatible under shadow pricing: \
+             canister_id {}, step {}, non_replicated {}, real_result {:?}, shadow_result {:?}",
             self.canister_id,
             step,
+            self.non_replicated,
             real,
             shadow,
         );
@@ -75,7 +77,6 @@ impl DarkLaunchTracker {
 
 impl BudgetTracker for DarkLaunchTracker {
     fn get_adapter_limits(&self) -> AdapterLimits {
-        // Only the real tracker drives observable behaviour.
         self.real.get_adapter_limits()
     }
 
@@ -103,7 +104,7 @@ impl BudgetTracker for DarkLaunchTracker {
     ) -> Result<(), PricingError> {
         let real = self.real.subtract_gossip_usage(transformed_response_size);
         let shadow = self.shadow.subtract_gossip_usage(transformed_response_size);
-        self.compare("transformed_response_usage", &real, &shadow);
+        self.compare("gossip_usage", &real, &shadow);
         real
     }
 
@@ -166,12 +167,14 @@ mod tests {
     fn dark_launch(
         real: FakeTracker,
         shadow: FakeTracker,
+        non_replicated: bool,
         metrics: PricingMetrics,
     ) -> DarkLaunchTracker {
         DarkLaunchTracker::new(
             Box::new(real),
             Box::new(shadow),
             CanisterId::from_u64(7),
+            non_replicated,
             metrics,
             no_op_logger(),
         )
@@ -185,19 +188,16 @@ mod tests {
     }
 
     fn incompatible_count(metrics: &PricingMetrics) -> u64 {
-        [
-            "network_usage",
-            "transform_usage",
-            "transformed_response_usage",
-        ]
-        .iter()
-        .map(|step| {
-            metrics
-                .shadow_incompatible_total
-                .with_label_values(&[*step])
-                .get()
-        })
-        .sum()
+        let mut total = 0;
+        for step in ["network_usage", "transform_usage", "gossip_usage"] {
+            for non_replicated in ["true", "false"] {
+                total += metrics
+                    .shadow_incompatible_total
+                    .with_label_values(&[step, non_replicated])
+                    .get();
+            }
+        }
+        total
     }
 
     #[test]
@@ -207,14 +207,14 @@ mod tests {
             network: Err(PricingError::InsufficientCycles),
             ..FakeTracker::ok()
         };
-        let mut tracker = dark_launch(FakeTracker::ok(), shadow, metrics.clone());
+        let mut tracker = dark_launch(FakeTracker::ok(), shadow, false, metrics.clone());
 
         // The real (always-Ok) result is returned even though the shadow fails.
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
         assert_eq!(
             metrics
                 .shadow_incompatible_total
-                .with_label_values(&["network_usage"])
+                .with_label_values(&["network_usage", "false"])
                 .get(),
             1
         );
@@ -231,7 +231,7 @@ mod tests {
             transform: Err(PricingError::InsufficientCycles),
             transformed: Err(PricingError::InsufficientCycles),
         };
-        let mut tracker = dark_launch(FakeTracker::ok(), shadow, metrics.clone());
+        let mut tracker = dark_launch(FakeTracker::ok(), shadow, false, metrics.clone());
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
         assert_eq!(
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn no_divergence_when_results_agree() {
         let metrics = PricingMetrics::new(&MetricsRegistry::new());
-        let mut tracker = dark_launch(FakeTracker::ok(), FakeTracker::ok(), metrics.clone());
+        let mut tracker = dark_launch(FakeTracker::ok(), FakeTracker::ok(), false, metrics.clone());
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
         assert_eq!(
@@ -258,5 +258,33 @@ mod tests {
 
         assert_eq!(incompatible_count(&metrics), 0);
         assert_eq!(metrics.shadow_requests_total.get(), 1);
+    }
+
+    #[test]
+    fn labels_divergence_by_replication_type() {
+        let metrics = PricingMetrics::new(&MetricsRegistry::new());
+        let shadow = FakeTracker {
+            network: Err(PricingError::InsufficientCycles),
+            ..FakeTracker::ok()
+        };
+        let mut tracker = dark_launch(FakeTracker::ok(), shadow, true, metrics.clone());
+
+        assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
+
+        // The divergence is attributed to the non-replicated label.
+        assert_eq!(
+            metrics
+                .shadow_incompatible_total
+                .with_label_values(&["network_usage", "true"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .shadow_incompatible_total
+                .with_label_values(&["network_usage", "false"])
+                .get(),
+            0
+        );
     }
 }
