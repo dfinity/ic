@@ -266,6 +266,20 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             }
             .await;
 
+            // Account for the cost of gossiping the final (post-transform)
+            // response to peers before creating the receipt.
+            let response_size = match &payload {
+                Ok(response) => response.len(),
+                Err(reject) => reject.message.len(),
+            };
+            let payload = budget
+                .subtract_gossip_usage(NumBytes::from(response_size as u64))
+                .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
+                    reject_code: RejectCode::SysFatal,
+                    message: "Insufficient cycles".to_string(),
+                })
+                .and(payload);
+
             // Create the payment receipt after all processing is complete.
             let receipt = budget.create_payment_receipt();
 

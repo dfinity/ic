@@ -97,16 +97,12 @@ impl BudgetTracker for DarkLaunchTracker {
         real
     }
 
-    fn subtract_transformed_response_usage(
+    fn subtract_gossip_usage(
         &mut self,
         transformed_response_size: NumBytes,
     ) -> Result<(), PricingError> {
-        let real = self
-            .real
-            .subtract_transformed_response_usage(transformed_response_size);
-        let shadow = self
-            .shadow
-            .subtract_transformed_response_usage(transformed_response_size);
+        let real = self.real.subtract_gossip_usage(transformed_response_size);
+        let shadow = self.shadow.subtract_gossip_usage(transformed_response_size);
         self.compare("transformed_response_usage", &real, &shadow);
         real
     }
@@ -159,7 +155,7 @@ mod tests {
         fn subtract_transform_usage(&mut self, _: NumInstructions) -> Result<(), PricingError> {
             self.transform
         }
-        fn subtract_transformed_response_usage(&mut self, _: NumBytes) -> Result<(), PricingError> {
+        fn subtract_gossip_usage(&mut self, _: NumBytes) -> Result<(), PricingError> {
             self.transformed
         }
         fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
@@ -242,10 +238,7 @@ mod tests {
             tracker.subtract_transform_usage(NumInstructions::from(0)),
             Ok(())
         );
-        assert_eq!(
-            tracker.subtract_transformed_response_usage(NumBytes::from(0)),
-            Ok(())
-        );
+        assert_eq!(tracker.subtract_gossip_usage(NumBytes::from(0)), Ok(()));
 
         // Only the first divergence is recorded for the request.
         assert_eq!(incompatible_count(&metrics), 1);

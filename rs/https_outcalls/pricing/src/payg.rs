@@ -104,11 +104,11 @@ impl BudgetTracker for PayAsYouGoTracker {
         self.charge(cost)
     }
 
-    fn subtract_transformed_response_usage(
+    fn subtract_gossip_usage(
         &mut self,
         transformed_response_size: NumBytes,
     ) -> Result<(), PricingError> {
-        // For fully/non-replicated outcalls the transformed-response term is a
+        // For fully replicated outcalls the gossip term is a
         // consensus cost (ignored here for now). For flexible outcalls each
         // replica is charged 50 * transformed_response_bytes_i * N.
         if !self.is_flexible {
@@ -221,12 +221,9 @@ mod tests {
         );
         let transform = instructions as u128 / TRANSFORM_INSTRUCTION_DIVISOR;
 
-        // For fully-replicated requests the transformed-response term is a
+        // For fully-replicated requests the gossip term is a
         // consensus cost and must not be charged here.
-        assert_eq!(
-            tracker.subtract_transformed_response_usage(NumBytes::from(5_000)),
-            Ok(())
-        );
+        assert_eq!(tracker.subtract_gossip_usage(NumBytes::from(5_000)), Ok(()));
 
         assert_eq!(tracker.spent, network + transform);
         assert_eq!(
@@ -244,7 +241,7 @@ mod tests {
 
         let transformed_size = 500_u64;
         assert_eq!(
-            tracker.subtract_transformed_response_usage(NumBytes::from(transformed_size)),
+            tracker.subtract_gossip_usage(NumBytes::from(transformed_size)),
             Ok(())
         );
         let expected =

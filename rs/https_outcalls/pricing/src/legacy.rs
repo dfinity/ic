@@ -45,7 +45,7 @@ impl BudgetTracker for LegacyTracker {
         Ok(())
     }
 
-    fn subtract_transformed_response_usage(
+    fn subtract_gossip_usage(
         &mut self,
         _transformed_response_size: NumBytes,
     ) -> Result<(), PricingError> {

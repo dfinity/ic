@@ -36,11 +36,11 @@ pub trait BudgetTracker: Send {
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
     /// Deducts the cost of the final (post-transform) response that this replica
-    /// produced and that will be handed back to the caller.
+    /// produced and that will be gossiped to peers.
     ///
     /// This is the last accounting step and is invoked once the size of the
     /// response is known.
-    fn subtract_transformed_response_usage(
+    fn subtract_gossip_usage(
         &mut self,
         transformed_response_size: NumBytes,
     ) -> Result<(), PricingError>;
