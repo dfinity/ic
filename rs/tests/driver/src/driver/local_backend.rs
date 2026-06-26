@@ -885,6 +885,103 @@ impl LocalBackend {
         Ok(())
     }
 
+    /// Extract `src` into a shared base location exactly once, then materialize
+    /// `dst` as a copy-on-write (where supported) copy of that base.
+    ///
+    /// [`start_vm`](Self::start_vm) extracts the *same* primary GuestOS image
+    /// for every IC node in a testnet. Decompressing a multi-gibibyte
+    /// `*.tar.zst` / `*.img.zst` once per node is wasteful, so the first caller
+    /// for a given `src` extracts it to `image_cache/<key>.img` under
+    /// `working_dir`, while concurrent callers (other setup threads, or a forked
+    /// task subprocess running `vm.start()`) block on a per-key file lock,
+    /// observe the finished base, and skip straight to the copy. This mirrors
+    /// Farm's `cp --reflink=auto` base-image trick.
+    ///
+    /// The cache lives under `working_dir` so the base shares a filesystem with
+    /// the per-VM disks (making the publish `rename` atomic and letting
+    /// `cp --reflink` share blocks) and is torn down with the group.
+    ///
+    /// The base is keyed by a hash of the `src` *path*, not its contents: within
+    /// a single bazel invocation a given image always resolves to the same
+    /// immutable runfiles path, so the path identifies the content without
+    /// reading the (large) file to hash it. Distinct paths to identical content
+    /// merely cache twice (correct, marginally less optimal).
+    fn extract_image_cached(&self, src: &Path, dst: &Path) -> Result<()> {
+        use ic_crypto_sha2::Sha256;
+        use std::os::unix::io::AsRawFd;
+
+        let cache_dir = self.active_local_backend.working_dir.join("image_cache");
+        std::fs::create_dir_all(&cache_dir)
+            .with_context(|| format!("creating image cache dir {}", cache_dir.display()))?;
+
+        let key = hex::encode(&Sha256::hash(src.to_string_lossy().as_bytes())[0..16]);
+        let base = cache_dir.join(format!("{key}.img"));
+
+        // Serialize extraction of a given `src` across threads *and* processes
+        // with a blocking, exclusive advisory lock on a per-key lock file. Only
+        // the first holder extracts; others wake to find `base` already present.
+        // The lock is released (dropped) before the copy below: a finished base
+        // is immutable, so any number of callers may copy from it concurrently.
+        {
+            let lock_path = cache_dir.join(format!("{key}.lock"));
+            // `append` (rather than `write`) gives the open a defined,
+            // non-truncating behavior; the file is only a lock holder, never
+            // written to.
+            let lock = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&lock_path)
+                .with_context(|| format!("opening image cache lock {}", lock_path.display()))?;
+            nix::fcntl::flock(lock.as_raw_fd(), nix::fcntl::FlockArg::LockExclusive)
+                .with_context(|| format!("locking image cache lock {}", lock_path.display()))?;
+
+            if !base.exists() {
+                // Extract to a temp file on the same filesystem, then atomically
+                // rename it into place, so a crash never leaves a partial base
+                // that a later caller would mistake for a complete one.
+                let tmp = cache_dir.join(format!("{key}.tmp.{}", std::process::id()));
+                extract_image(src, &tmp, &self.logger)?;
+                // The base is shared and read-only; each VM gets its own
+                // writable copy below.
+                std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o444))
+                    .with_context(|| format!("chmod base image {}", tmp.display()))?;
+                std::fs::rename(&tmp, &base).with_context(|| {
+                    format!(
+                        "publishing base image {} -> {}",
+                        tmp.display(),
+                        base.display()
+                    )
+                })?;
+            }
+        }
+
+        // Materialize the per-VM disk as a copy of the base, sharing blocks via
+        // reflink (copy-on-write) where the filesystem supports it and falling
+        // back to a full copy otherwise.
+        info!(
+            self.logger,
+            "Materializing {} from cached base {}",
+            dst.display(),
+            base.display()
+        );
+        let status = Command::new("cp")
+            .arg("--reflink=auto")
+            .arg(&base)
+            .arg(dst)
+            .status()
+            .with_context(|| {
+                format!("copying base image {} -> {}", base.display(), dst.display())
+            })?;
+        if !status.success() {
+            bail!(
+                "copying base image {} -> {} failed",
+                base.display(),
+                dst.display()
+            );
+        }
+        Ok(())
+    }
+
     /// Build the libvirt domain XML for `vm_name` and start it.
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
         // Recover the per-VM state persisted by `create_vm` /
@@ -919,7 +1016,7 @@ impl LocalBackend {
                     );
                 }
             };
-            extract_image(&local_src, &primary_disk, &self.logger)?;
+            self.extract_image_cached(&local_src, &primary_disk)?;
             std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
             if let Some(min_gib) = min_gib {
                 let _ = Command::new("truncate")
