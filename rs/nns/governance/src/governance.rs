@@ -6034,7 +6034,7 @@ impl Governance {
                 // Before returning Err, clean up the incomplete neuron.
                 match self.remove_neuron(neuron) {
                     Ok(()) => (),
-                    Err(err) => {
+                    Err(cleanup_err) => {
                         // If you dig into remove_neuron, the only way this could happen is if
                         // the neuron is not there. Theoretically, that can't happen, but if it
                         // does, it's not so bad, because we have achieved the desired end state:
@@ -6044,7 +6044,7 @@ impl Governance {
                         println!(
                             "{}ERROR: Failed to clean up neuron {:?} during claim_neuron after \
                              failing to get balance of Governance subaccount {}: {}",
-                            LOG_PREFIX, nid, subaccount, err
+                            LOG_PREFIX, nid, subaccount, cleanup_err
                         );
                     }
                 }
