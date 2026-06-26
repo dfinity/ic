@@ -9,8 +9,8 @@ Type=oneshot
 RemainAfterExit=yes
 # Print success message to serial output which will be picked up by HostOS
 # The string is expected by guest_vm_runner (GUESTOS_BOOT_SUCCESS_MARKER)
-# This is an observability signal only; GuestOS still has to confirm the boot
-# separately before the slot is considered stable in grubenv.
+# This does not directly drive the A/B boot state; it only tells HostOS that
+# the current GuestOS boot ended in a failure path.
 ExecStart=bash -c 'echo "GUESTOS BOOT SUCCESS" > /dev/ttyS0'
 
 [Install]

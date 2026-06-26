@@ -21,8 +21,6 @@ The recovery flow has two phases that intentionally span HostOS and GuestOS.
 6. After that, the machine is back in the normal GuestOS lifecycle, including
    the usual boot confirmation / rollback behavior.
 
-This is important: manual recovery is not a separate permanent boot mode. It
-re-enters the same A/B boot-state machine as a regular GuestOS upgrade.
 
 ## `guestos-recovery-upgrader`
 
@@ -45,3 +43,38 @@ artifact inside GuestOS itself.
 
 The recovery engine does not choose the slot or mutate the A/B boot state
 directly; HostOS already did that when it prepared the recovered GuestOS boot.
+
+### How the recovery engine is activated in the GuestOS
+
+The `guestos-recovery-engine.service` systemd unit is installed in recovery
+GuestOS images.
+
+The activation chain is:
+
+1. **HostOS writes the recovery hash.** Near the end of
+   `guestos-recovery-upgrader.sh`, the operator-supplied recovery-hash-prefix
+   is written to `/run/config/guestos_recovery_hash` on HostOS, and then
+   `guestos.service` is restarted.
+
+2. **HostOS embeds the hash into the GuestOS config.** When HostOS generates
+   the GuestOS config (`generate_guestos_config()` in the config tool), it
+   reads `/run/config/guestos_recovery_hash`. If the file exists and is
+   non-empty, the hash prefix is placed into `recovery_config.recovery_hash`
+   in the `GuestOSConfig` JSON. The file is then **deleted** to ensure
+   one-time use — a subsequent normal boot will not see a recovery hash.
+
+3. **GuestOS boots and the service starts.** The
+   `guestos-recovery-engine.service` unit starts as part of
+   `multi-user.target`.
+
+4. **The engine script reads the config.** `guestos-recovery-engine.sh` calls
+   `get_config_value '.recovery_config.recovery_hash'`.
+   - If the value is **present**, it downloads `recovery.tar.zst` from
+     `https://download.dfinity.systems/recovery/<hash_prefix>/recovery.tar.zst`
+     (falling back to `download.dfinity.network`), verifies the SHA-256 hash
+     prefix, extracts the archive, and applies the registry local store and
+     CUP to their target paths under `/var/lib/ic/data/`.
+   - If the value is **absent** (normal boot, no recovery), the script exits
+     with an error. Because the service is `Type=oneshot` with no hard
+     dependency from `ic-replica.service`, this does not block the normal
+     GuestOS boot.

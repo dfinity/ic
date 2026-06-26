@@ -5,8 +5,8 @@ Server side of the GuestOS upgrade disk-encryption key exchange.
 ## How it works
 - Runs in the currently active GuestOS, typically under orchestrator control.
 - Starts a gRPC service with an ephemeral self-signed certificate.
-- Fetches blessed GuestOS launch measurements from the registry and uses them to
-  verify the Upgrade VM's attestation.
+- Verifies the Upgrade VM's attestation against the Upgrade GuestOS's expected
+  launch measurement from the NNS Registry.
 - Asks HostOS over vsock to start the Upgrade VM, then waits for the client to
   connect and report success or failure.
 - On success, derives or loads the current store key and returns it to the

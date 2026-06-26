@@ -38,9 +38,9 @@ artifacts are present. If the crate has to fall back to legacy GRUB boot, it
 must not consume a boot-cycle transition prematurely.
 
 ## Resource model
-The Upgrade VM is intentionally small because the old GuestOS is still running.
-Any CPU or memory assigned to the Upgrade VM is taken away from the active
-GuestOS, so the temporary VM is kept as small as practical.
+The Upgrade VM is intentionally low‑resource because the old GuestOS continues
+to run concurrently. CPU and memory allocated to the Upgrade VM are
+unavailable to the active GuestOS, so the temporary VM is kept as small as practical.
 
 Hugepages are only used when confidential computing is disabled. In the SEV path
 this optimization is intentionally off because the current Linux/kernel stack in

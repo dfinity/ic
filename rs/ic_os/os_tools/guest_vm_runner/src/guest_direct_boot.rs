@@ -59,8 +59,9 @@ impl DirectBoot {
     }
 }
 
-/// Prepares a direct boot configuration by reading `grubenv` and the selected
-/// GuestOS boot partition.
+/// Prepares a direct boot configuration by reading `grubenv` to determine the GuestOS boot slot
+/// and then extracting the necessary direct boot components (kernel, initrd, etc.) from the
+/// selected GuestOS boot partition.
 ///
 /// The default GuestOS VM consumes the `grubenv` state machine before launch,
 /// while the temporary Upgrade VM intentionally does not mutate `grubenv` and

@@ -10,5 +10,3 @@ SetupOS-side operational CLI.
 - `check-elected-version` reads the local version file and checks whether that
   version is present in the NNS registry.
 
-This crate is intentionally thin: it mostly wires together `config_tool`,
-`deterministic_ips`, `network`, and the registry client.

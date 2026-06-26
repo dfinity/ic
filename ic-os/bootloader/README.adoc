@@ -3,27 +3,16 @@
 Bootloader is built somewhat similarly to the Ubuntu system, but is
 kept separately (the bootloader is never changed during system upgrades).
 
-The mutable A/B boot decision lives in +grubenv+, which records:
+The mutable A/B boot decision lives in +grubenv+, which records the active
+slot (+boot_alternative+) and its trust phase (+boot_cycle+: +stable+,
++install+, +first_boot+, +failsafe_check+). This split is intentional:
+upgrades rewrite inactive boot/root partitions and then update only +grubenv+
+to point at the candidate slot. The bootloader code itself remains unchanged
+across normal upgrades.
 
-- +boot_alternative+: which slot (+A+ or +B+) should be tried next
-- +boot_cycle+: whether that slot is already trusted (+stable+) or still in a
-  probation/rollback-sensitive phase (+install+, +first_boot+,
-  +failsafe_check+)
-
-This split is intentional: upgrades rewrite inactive boot/root partitions and
-then update only +grubenv+ to point at the candidate slot. The bootloader code
-itself remains unchanged across normal upgrades.
-
-On boot, the grub config runs the +boot_cycle+ state machine before loading
-the kernel:
-
-- +install -> stable+
-- +first_boot -> failsafe_check+
-- +failsafe_check -> switch to the opposite slot and mark it stable+
-
-The candidate slot becomes truly +stable+ only when the booted OS later
-confirms the boot by writing back to +grubenv+ (for example via
-+manageboot.sh confirm+).
+The full +boot_cycle+ state machine, its semantics, and the +manageboot.sh
+confirm+ promotion flow are documented in the
+link:../../rs/ic_os/boot/grub/README.md[`grub` crate README].
 
 For GuestOS specifically, +guestos_grub.cfg+ is primarily for standalone or
 custom-host boots (for example cloud deployments). When GuestOS is run by

@@ -30,9 +30,9 @@ The flow is:
    reopen `store`, adds its own new passphrase, and deletes the temporary
    previous-key file.
 
-The Upgrade VM is intentionally low-resource because the old GuestOS is still
-running at the same time. Any CPU or memory assigned to the Upgrade VM is taken
-away from the active GuestOS, so the temporary VM is kept as small as practical.
+The Upgrade VM is intentionally low‑resource because the old GuestOS continues
+to run concurrently. CPU and memory allocated to the Upgrade VM are
+unavailable to the active GuestOS, so the temporary VM is kept as small as practical.
 
 HostOS is responsible for launching the Upgrade VM, but it is not trusted to
 vouch for what software is actually running there or whether disk key material

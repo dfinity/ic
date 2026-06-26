@@ -1,7 +1,7 @@
 # grub
 
-Small library for reading, updating, and atomically writing the fixed-size
-`grubenv` block used by IC-OS GuestOS A/B boot management.
+Small library for reading, updating, and atomically writing the `grubenv` block
+used by IC-OS GuestOS A/B boot management.
 
 ## Role in the boot flow
 `grubenv` is the persistent handoff between HostOS decisions and GuestOS A/B

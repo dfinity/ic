@@ -7,8 +7,8 @@ node without redeploying SetupOS.
 - Connects to the target over SSH when possible.
 - Falls back to IPMI Serial-over-LAN to inject an SSH key when direct access is
   unavailable.
-- Copies the requested images to the node and triggers the HostOS-side reload
-  flow instead of doing a full provisioning cycle.
+- Copies the requested images to the node and triggers a reload of the GuestOS and/or
+  HostOS. This replaces the images directly, to avoid going through the slow SetupOS process.
 
 The crate is split between `deploy.rs` for the deployment logic and `lib.rs`
 for the IPMI session helper used to get the machine into a reachable state.
