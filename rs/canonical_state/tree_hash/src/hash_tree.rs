@@ -1430,7 +1430,8 @@ fn hash_lazy_tree_impl<'a>(
 
     let mut ht = HashTree::new();
     let strategy = &mut ParallelismStrategy::Concurrent;
-    // Always materialize the root, avoiding infinite recursion for stub subtrees.
+    // Always materialize the root. Stubbing applies to (and is relevant for) the
+    // children of potentially huge forks (e.g. `/canister` or `/request_status`).
     ht.root = build_tree(t, &mut ht, NodeId::empty(), strategy, 0, baseline)?;
     ht.check_invariants();
 
