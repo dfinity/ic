@@ -25,15 +25,16 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_threshold_sig_system_test_utils::{
     get_public_key_with_retries, run_chain_key_signature_test,
 };
-use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
-use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_management_canister_types_private::{
+    CanisterSnapshotResponse, MasterPublicKeyId, Payload, TakeCanisterSnapshotArgs,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{JournalStreamer, MessageCanister, block_on},
 };
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_types::{NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
@@ -180,10 +181,20 @@ pub fn upgrade(
             .expect("Failed to create agent");
         let mgr = ManagementCanister::create(&agent);
         let snapshot_args = TakeCanisterSnapshotArgs {
-            canister_id: CanisterId::from(can_id),
+            canister_id: PrincipalId(can_id),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         };
-        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+        // Call the management canister directly with the IC's own argument type
+        // (`ic-management-canister-types-private`); ic-utils' typed
+        // `take_canister_snapshot` would pull in an `ic-management-canister-types`
+        // version incompatible with the one the workspace pins (held back by ic-cdk).
+        mgr.update_("take_canister_snapshot")
+            .with_arg_raw(snapshot_args.encode())
+            .with_effective_canister_id(can_id)
+            .build::<(CanisterSnapshotResponse,)>()
+            .call_and_wait()
             .await
             .unwrap();
     });

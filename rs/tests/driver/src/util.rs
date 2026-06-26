@@ -56,7 +56,10 @@ use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{
     call::{AsyncCall, SyncCall},
-    interfaces::{ManagementCanister, management_canister::CanisterLogRecord},
+    interfaces::{
+        ManagementCanister,
+        management_canister::{CanisterLogRecord, FetchCanisterLogsArgs},
+    },
 };
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
@@ -293,9 +296,11 @@ impl<'a> UniversalCanister<'a> {
 
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let create_canister = match compute_allocation {
+            Some(ca) => mgr.create_canister().with_compute_allocation(ca),
+            None => mgr.create_canister(),
+        };
+        let canister_id = create_canister
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -663,9 +668,11 @@ impl<'a> MessageCanister<'a> {
     ) -> Result<MessageCanister<'a>, String> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let create_canister = match compute_allocation {
+            Some(ca) => mgr.create_canister().with_compute_allocation(ca),
+            None => mgr.create_canister(),
+        };
+        let canister_id = create_canister
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -801,12 +808,15 @@ impl<'a> MessageCanister<'a> {
 
     pub async fn fetch_logs(&self) -> Vec<CanisterLogRecord> {
         let mgr = ManagementCanister::create(self.agent);
-        mgr.fetch_canister_logs(&self.canister_id)
-            .call()
-            .await
-            .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
-            .0
-            .canister_log_records
+        mgr.fetch_canister_logs(&FetchCanisterLogsArgs {
+            canister_id: self.canister_id,
+            filter: None,
+        })
+        .call()
+        .await
+        .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
+        .0
+        .canister_log_records
     }
 }
 
@@ -844,9 +854,11 @@ impl<'a> SignerCanister<'a> {
     ) -> SignerCanister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let create_canister = match compute_allocation {
+            Some(ca) => mgr.create_canister().with_compute_allocation(ca),
+            None => mgr.create_canister(),
+        };
+        let canister_id = create_canister
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -2131,6 +2143,7 @@ pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: None,
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
@@ -2144,6 +2157,7 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }

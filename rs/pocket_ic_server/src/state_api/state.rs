@@ -43,6 +43,10 @@ use ic_gateway::{
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
         utils::health_manager::HealthManager,
     },
+    routing::{
+        domain::CustomDomainStorage,
+        ic::routing_table_manager::{LooksUpSubnetType, SubnetType},
+    },
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -511,6 +515,16 @@ impl Client for ReqwestClient {
 
 // END ADAPTED from ic-gateway
 
+// PocketIC serves a single local replica and has no NNS subnet-type information,
+// so the gateway's subnet-type lookup is a no-op.
+struct EmptySubnetTypeLookup;
+
+impl LooksUpSubnetType for EmptySubnetTypeLookup {
+    fn lookup_subnet_type(&self, _canister_id: &candid::Principal) -> Option<SubnetType> {
+        None
+    }
+}
+
 impl ApiState {
     // Helper function for auto progress mode.
     // Executes an operation to completion and returns its `OpOut`
@@ -850,20 +864,24 @@ impl ApiState {
 
                 let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
+                let registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
+                let custom_domain_storage =
+                    Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
                 let ic_gateway_router = setup_router(
                     &cli,
-                    custom_domain_providers,
+                    custom_domain_storage,
                     reload_handle,
                     &mut tasks,
                     health_manager,
                     http_client,
                     http_client_hyper,
                     Arc::new(route_provider),
-                    &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    &registry,
                     CancellationToken::new(),
                     None,
                     None,
                     None,
+                    Arc::new(EmptySubnetTypeLookup),
                 )
                 .await
                 .unwrap();

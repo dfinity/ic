@@ -169,7 +169,7 @@ pub fn get_cert_time(url: &url::Url, effective_canister_id: PrincipalId) -> Resu
         let paths = vec![path.clone()];
         let agent = assert_create_agent(url.as_str()).await;
         match agent
-            .read_state_raw(paths.clone(), effective_canister_id.into())
+            .read_state_raw(paths.clone(), effective_canister_id.0)
             .await
         {
             Ok(cert) => match lookup_value(&cert, path.clone()) {
