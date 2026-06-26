@@ -1138,10 +1138,21 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                let max_value = metrics_to_check
-                    .get(name.split('(').next().unwrap())
-                    .copied()
-                    .unwrap_or_default();
+                // Assert the metrics to check are prefix-free. This allows to specify a metric name
+                // prefix to check all metrics with that prefix.
+                let mut metrics_to_check = metrics_to_check
+                    .iter()
+                    .filter(|(metric_name, _)| name.starts_with(**metric_name))
+                    .map(|(_, max_value)| *max_value);
+                let max_value = metrics_to_check.next().unwrap_or_default();
+                // Assert that the iterator only had one element, i.e. the metrics to check are
+                // prefix-free.
+                assert!(
+                    metrics_to_check.count() == 0,
+                    "The metric `{name}` is not prefix-free with respect to the other metrics to check. \
+                    This is not allowed. Please specify a prefix-free set of metrics to check."
+                );
+
                 assert!(
                     value[0] <= max_value,
                     "The metric `{name}` on node {} exceeded the maximum allowed value: \

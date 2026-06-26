@@ -664,6 +664,8 @@ impl SystemTestSubGroup {
     }
 }
 
+// Replica metrics to check by default. Including a prefix is supported and will match on all
+// metrics with that prefix. For that reason, keep the list prefix-free.
 fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
     BTreeMap::from([
         ("critical_errors", 0),
@@ -675,12 +677,14 @@ fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
     ])
 }
 
+// Orchestrator metrics to check by default. Including a prefix is supported and will match on all
+// metrics with that prefix. For that reason, keep the list prefix-free.
 fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
     BTreeMap::from([
         ("orchestrator_cup_deserialization_failed_total", 0),
         ("orchestrator_state_removal_failed_total", 0),
         ("orchestrator_tasks_failed_total", 0),
-        ("orchestrator_replica_process_start_attempts_total", 1),
+        ("orchestrator_processes_start_attempts_total", 1),
     ])
 }
 
