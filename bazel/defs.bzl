@@ -2,6 +2,7 @@
 Utilities for building IC replica and canisters.
 """
 
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
@@ -43,11 +44,12 @@ def _zstd_compress(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
 
     ctx.actions.run(
-        executable = "zstd",
+        executable = ctx.file._zstd,
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
+        tools = [ctx.file._zstd],
         resource_set = _compress_resources,
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -56,6 +58,7 @@ zstd_compress = rule(
     implementation = _zstd_compress,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "_zstd": attr.label(allow_single_file = True, default = "@zstd//:zstd_cli"),
     },
 )
 
@@ -94,7 +97,8 @@ def _mcopy(ctx):
                 dest_path = dest + src_file.basename
             else:
                 dest_path = dest
-            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+            command += "&& {mcopy} -mi {output} -sQ {src_path} ::/{dest} ".format(
+                mcopy = ctx.file._mcopy.path,
                 output = out.path,
                 src_path = src_file.path,
                 dest = dest_path.removeprefix("/"),
@@ -102,7 +106,7 @@ def _mcopy(ctx):
 
     ctx.actions.run_shell(
         command = command,
-        inputs = inputs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs, ctx.file._mcopy],
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -112,6 +116,7 @@ mcopy = rule(
     attrs = {
         "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
+        "_mcopy": attr.label(default = "@mtools//:mcopy", cfg = "exec", allow_single_file = True),
     },
 )
 
@@ -348,8 +353,8 @@ def rust_test_with_binary(name, binary_name, **kwargs):
         test_target = name,
     )
 
-def _write_info_file_var_impl(ctx):
-    """Helper rule that creates a file with the content of the provided var from the info file."""
+def _write_stable_status_file_var_impl(ctx):
+    """Helper rule that creates a file with the content of the provided var from the info file (bazel-out/stable-status.txt)."""
 
     output = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run_shell(
@@ -361,10 +366,58 @@ def _write_info_file_var_impl(ctx):
     )
     return [DefaultInfo(files = depset([output]))]
 
-write_info_file_var = rule(
-    implementation = _write_info_file_var_impl,
+write_stable_status_file_var = rule(
+    implementation = _write_stable_status_file_var_impl,
     attrs = {
         "varname": attr.string(mandatory = True),
+    },
+)
+
+def _volatile_status_impl(ctx):
+    return [DefaultInfo(
+        files = depset([ctx.version_file]),
+        runfiles = ctx.runfiles(files = [ctx.version_file]),
+    )]
+
+volatile_status = rule(
+    implementation = _volatile_status_impl,
+)
+
+def _disable_hermetic_cc_transition(_settings, _attr):
+    return {
+        "//bazel:hermetic_cc": False,
+    }
+
+disable_hermetic_cc_transition = transition(
+    implementation = _disable_hermetic_cc_transition,
+    inputs = [],
+    outputs = [
+        "//bazel:hermetic_cc",
+    ],
+)
+
+def _disable_hermetic_cc_target_impl(ctx):
+    dep = ctx.attr.target[0]
+    providers = [dep[DefaultInfo]]
+
+    if CcInfo in dep:
+        providers.append(dep[CcInfo])
+    if OutputGroupInfo in dep:
+        providers.append(dep[OutputGroupInfo])
+
+    return providers
+
+disable_hermetic_cc_target = rule(
+    implementation = _disable_hermetic_cc_target_impl,
+    attrs = {
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+        "target": attr.label(
+            mandatory = True,
+            cfg = disable_hermetic_cc_transition,
+            allow_files = True,
+        ),
     },
 )
 

@@ -81,10 +81,33 @@ impl Default for SshSession {
 
 impl SshSession {
     pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
+        // The SSH transport handshake (TCP connect + protocol banner and key
+        // exchange) is retried for a bounded time because it can fail transiently
+        // (e.g. with "Failed getting banner") when the node is briefly unresponsive,
+        // for instance right after the replica/orchestrator is restarted. Such
+        // transport-level failures are unrelated to whether the key grants access,
+        // which is what the callers actually test. The authentication step below is
+        // not retried, so an actual loss of access (e.g. a key being incorrectly
+        // removed) is still reported immediately.
         let ip_str = format!("[{ip}]:22");
-        let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
-        self.session.set_tcp_stream(tcp);
-        self.session.handshake().map_err(|err| err.to_string())?;
+        let start = std::time::Instant::now();
+        loop {
+            let handshake_result = TcpStream::connect(&ip_str)
+                .map_err(|err| err.to_string())
+                .and_then(|tcp| {
+                    self.session.set_tcp_stream(tcp);
+                    self.session.handshake().map_err(|err| err.to_string())
+                });
+            match handshake_result {
+                Ok(()) => break,
+                Err(_) if start.elapsed() < SSH_ACCESS_TIMEOUT => {
+                    std::thread::sleep(SSH_ACCESS_BACKOFF);
+                    // A failed handshake can leave the session unusable, so replace it.
+                    self.session = Session::new().unwrap();
+                }
+                Err(err) => return Err(err),
+            }
+        }
 
         match mean {
             AuthMean::PrivateKey(pk) => self
@@ -209,6 +232,7 @@ pub fn get_update_subnet_payload_with_keys(
         max_number_of_canisters: None,
         ssh_readonly_access: readonly_keys,
         ssh_backup_access: backup_keys,
+        subnet_admins: None,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,

@@ -6,11 +6,7 @@ use ic_config::{
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasm_utils::instrumentation::instruction_to_cost,
-    wasmtime_embedder::{
-        CanisterMemoryType,
-        system_api::{ApiType, sandbox_safe_system_state::CallbackUpdate},
-        system_api_complexity,
-    },
+    wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
@@ -71,6 +67,7 @@ fn cannot_execute_wasm_without_memory() {
 fn correctly_count_instructions() {
     let data_size = 1024;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -215,6 +212,7 @@ fn correctly_report_performance_counter() {
         + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(
             format!(
                 r#"
@@ -1805,6 +1803,7 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1826,6 +1825,7 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1859,6 +1859,7 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases.clone() {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1877,6 +1878,7 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+        config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1935,6 +1937,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
 
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1946,6 +1949,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
+    config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -3367,40 +3371,32 @@ fn wasm64_saturate_fun_index() {
         .unwrap()
         .take_system_state_modifications();
 
-    // call_perform should trigger one callback update
-    let callback_update = system_state_modifications
-        .callback_updates
+    // call_perform should enqueue one OutputRequest carrying its callback closures.
+    let output_request = system_state_modifications
+        .requests()
         .first()
-        .unwrap()
-        .clone();
-    match callback_update {
-        CallbackUpdate::Register(_id, callback) => {
-            assert_eq!(
-                callback.on_reply,
-                WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 22
-                }
-            );
-            assert_eq!(
-                callback.on_reject,
-                WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 44
-                }
-            );
-            assert_eq!(
-                callback.on_cleanup,
-                Some(WasmClosure {
-                    func_idx: u32::MAX,
-                    env: 66
-                })
-            );
+        .expect("Expected an outgoing request with its callback");
+    assert_eq!(
+        output_request.on_reply,
+        WasmClosure {
+            func_idx: u32::MAX,
+            env: 22
         }
-        CallbackUpdate::Unregister(_) => {
-            panic!("Expected registration of new calback")
+    );
+    assert_eq!(
+        output_request.on_reject,
+        WasmClosure {
+            func_idx: u32::MAX,
+            env: 44
         }
-    }
+    );
+    assert_eq!(
+        output_request.on_cleanup,
+        Some(WasmClosure {
+            func_idx: u32::MAX,
+            env: 66
+        })
+    );
 }
 
 #[test]

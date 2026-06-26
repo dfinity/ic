@@ -5,6 +5,7 @@ on:
     # Only tag PRs on the branches for which we have protection rules / rulesets
     branches:
       - master
+      - feat-ai-on-engines
       - 'rc--*'
       - 'hotfix-*'
       - 'follow-*'

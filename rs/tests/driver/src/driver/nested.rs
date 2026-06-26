@@ -6,7 +6,7 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::driver::{
     bootstrap::setup_and_start_nested_vms,
-    farm::Farm,
+    farm::{Farm, HostFeature},
     resource::{allocate_resources, get_resource_request_for_nested_nodes},
     test_env::TestEnvAttribute,
     test_setup::GroupSetup,
@@ -45,20 +45,32 @@ pub struct NestedNodes {
 
 impl NestedNodes {
     pub fn new(names: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        NestedNodes::new_with_resource_overrides(names, VmResourceOverrides::default())
-    }
-
-    /// Allow specifying resource overrides to use for the nested VM.
-    ///
-    /// NOTE: The number of VCPUs must be divisible by 4.
-    pub fn new_with_resource_overrides(
-        names: impl IntoIterator<Item = impl Into<String>>,
-        vm_resource_overrides: VmResourceOverrides,
-    ) -> Self {
         NestedNodes {
             nodes: names
                 .into_iter()
-                .map(|v| NestedNode::new_farm(v.into(), vm_resource_overrides))
+                .map(|v| NestedNode::new_farm(v.into()))
+                .collect(),
+        }
+    }
+
+    /// Allow specifying resource overrides to use for the nested VMs.
+    pub fn with_resource_overrides(self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        NestedNodes {
+            nodes: self
+                .nodes
+                .into_iter()
+                .map(|node| node.with_resource_overrides(vm_resource_overrides))
+                .collect(),
+        }
+    }
+
+    /// Allow specifying required host features for the nested VMs.
+    pub fn with_required_host_features(self, required_host_features: Vec<HostFeature>) -> Self {
+        NestedNodes {
+            nodes: self
+                .nodes
+                .into_iter()
+                .map(|node| node.with_required_host_features(required_host_features.clone()))
                 .collect(),
         }
     }
@@ -98,7 +110,7 @@ impl NestedNodes {
         if !virtual_nodes.is_empty() {
             let res_request =
                 get_resource_request_for_nested_nodes(&virtual_nodes[..], env, &group_name)?;
-            let res_group = allocate_resources(&farm, &res_request, env)?;
+            let res_group = allocate_resources(&res_request, env)?;
 
             for (node, vm_spec) in self.nodes.iter().zip(&res_request.vm_configs) {
                 env.write_nested_vm(
@@ -160,14 +172,16 @@ fn allocated_vm_for_bare_metal_instance(
         hostname: "".to_string(),
         ipv6: host_address,
         mac6: mgmt_mac.to_string(),
-        ipv4: None,
         bare_metal: true,
     })
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum NestedNodeSpec {
-    Vm(VmResourceOverrides),
+    Vm {
+        vm_resource_overrides: VmResourceOverrides,
+        required_host_features: Vec<HostFeature>,
+    },
     BareMetal {
         host_address: Ipv6Addr,
         mgmt_mac: MacAddr6,
@@ -183,11 +197,14 @@ pub struct NestedNode {
 }
 
 impl NestedNode {
-    pub fn new_farm(name: String, vm_resource_overrides: VmResourceOverrides) -> Self {
+    pub fn new_farm(name: String) -> Self {
         NestedNode {
             name,
             boot_image: BootImage::default(),
-            node_spec: NestedNodeSpec::Vm(vm_resource_overrides),
+            node_spec: NestedNodeSpec::Vm {
+                vm_resource_overrides: VmResourceOverrides::default(),
+                required_host_features: Vec::default(),
+            },
         }
     }
 
@@ -206,6 +223,47 @@ impl NestedNode {
                 enable_trusted_execution_environment,
             },
         }
+    }
+
+    /// Allow specifying resource overrides to use for the nested VM.
+    ///
+    /// Panics if used on a bare metal node or if the number of VCPUs is not divisible by 4.
+    pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
+        if let Some(vcpus) = vm_resource_overrides.vcpus
+            && vcpus.get() % 4 != 0
+        {
+            panic!(
+                "The number of VCPUs must be divisible by 4, but got {}",
+                vcpus.get()
+            );
+        }
+
+        let NestedNodeSpec::Vm {
+            vm_resource_overrides: ref mut overrides,
+            ..
+        } = self.node_spec
+        else {
+            panic!("`with_resource_overrides` can only be used with VM nodes");
+        };
+
+        *overrides = vm_resource_overrides;
+        self
+    }
+
+    /// Allow specifying required host features for the nested VM.
+    ///
+    /// Panics if used on a bare metal node.
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        let NestedNodeSpec::Vm {
+            required_host_features: ref mut features,
+            ..
+        } = self.node_spec
+        else {
+            panic!("`with_required_host_features` can only be used with VM nodes");
+        };
+
+        *features = required_host_features;
+        self
     }
 
     pub fn with_boot_image(mut self, boot_image: BootImage) -> Self {

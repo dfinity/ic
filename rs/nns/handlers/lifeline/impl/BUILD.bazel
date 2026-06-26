@@ -4,11 +4,6 @@ load("//bazel:canisters.bzl", "motoko_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = glob(
-    ["src/**/*.rs"],
-    exclude = ["**/*tests.rs"],
-)
-
 # The motoko compiler fails to map float types in the Governance init arg to
 # appropriate Motoko types.
 genrule(
@@ -66,7 +61,10 @@ motoko_canister(
 
 rust_library(
     name = "lifeline",
-    srcs = LIB_SRCS,
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
     compile_data = [":lifeline_canister"],
     rustc_env = {
         "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline_canister)",

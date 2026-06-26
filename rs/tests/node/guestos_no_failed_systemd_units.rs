@@ -31,12 +31,43 @@ fn check_no_failed_systemd_units(env: TestEnv) {
             .expect("Failed to establish SSH session to GuestOS node");
 
         let failed_units = node
-            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager")
+            .block_on_bash_script("systemctl list-units --failed --no-legend --no-pager --plain")
             .expect("Failed to run systemctl list-units --failed on GuestOS node");
         info!(
             logger,
             "Node {}: systemctl list-units --failed:\n{}", node.node_id, failed_units
         );
+        if !failed_units.trim().is_empty() {
+            for line in failed_units.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                // With `--plain`, lines have no leading status glyph or tree
+                // structure, so the first whitespace-separated token is the
+                // unit name.
+                let Some(unit) = line.split_whitespace().next() else {
+                    continue;
+                };
+                let cmd = format!("journalctl -u '{}' --no-pager -n 500", unit);
+                match node.block_on_bash_script(&cmd) {
+                    Ok(journal) => info!(
+                        logger,
+                        "Node {}: journalctl -u {} (last 500 lines):\n{}",
+                        node.node_id,
+                        unit,
+                        journal
+                    ),
+                    Err(err) => info!(
+                        logger,
+                        "Node {}: failed to fetch journalctl logs for unit {}: {}",
+                        node.node_id,
+                        unit,
+                        err
+                    ),
+                }
+            }
+        }
         assert!(
             failed_units.trim().is_empty(),
             "Node {} has failed systemd units:\n{}",

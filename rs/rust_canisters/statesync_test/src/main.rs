@@ -1,7 +1,9 @@
+use candid::Nat;
 use futures::{StreamExt, stream};
 use ic_cdk::futures::spawn;
 use ic_cdk::management_canister::{
-    ProvisionalCreateCanisterWithCyclesArgs, provisional_create_canister_with_cycles,
+    CanisterSettings, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    provisional_create_canister_with_cycles, update_settings,
 };
 use ic_cdk::stable::{
     WASM_PAGE_SIZE_IN_BYTES as PAGE_SIZE, stable_grow, stable_size, stable_write,
@@ -88,12 +90,13 @@ async fn read_state(index: usize) -> Result<u8, String> {
 
 fn set_canister_creation_status(n: u64) -> bool {
     let mut canister_creation_status_guard = CANISTER_CREATION_STATUS.lock().unwrap();
-    match *canister_creation_status_guard {
+    match &*canister_creation_status_guard {
         CanisterCreationStatus::Idle => {
             *canister_creation_status_guard = CanisterCreationStatus::InProgress(n);
             true
         }
         CanisterCreationStatus::InProgress(num_canisters) => {
+            let num_canisters = *num_canisters;
             if n == num_canisters {
                 false
             } else {
@@ -102,7 +105,8 @@ fn set_canister_creation_status(n: u64) -> bool {
                 );
             }
         }
-        CanisterCreationStatus::Done(num_canisters) => {
+        CanisterCreationStatus::Done(canister_ids) => {
+            let num_canisters = canister_ids.len() as u64;
             if n == num_canisters {
                 false
             } else {
@@ -133,24 +137,53 @@ async fn create_many_canisters(n: u64) {
                 };
                 provisional_create_canister_with_cycles(&create_args)
                     .await
-                    .expect("Failed to create canister");
+                    .expect("Failed to create canister")
+                    .canister_id
             };
             futs.push(fut);
         }
 
-        stream::iter(futs)
+        let canister_ids = stream::iter(futs)
             .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
             .collect::<Vec<_>>()
             .await;
 
         let mut canister_creation_status_guard = CANISTER_CREATION_STATUS.lock().unwrap();
-        *canister_creation_status_guard = CanisterCreationStatus::Done(n);
+        *canister_creation_status_guard = CanisterCreationStatus::Done(canister_ids);
+    });
+}
+
+#[update]
+async fn update_many_canisters() {
+    let canister_ids = match &*CANISTER_CREATION_STATUS.lock().unwrap() {
+        CanisterCreationStatus::Done(ids) => ids.clone(),
+        _ => ic_cdk::trap("Canister creation is not done yet"),
+    };
+
+    #[allow(clippy::disallowed_methods)]
+    spawn(async move {
+        stream::iter(canister_ids.into_iter().cycle().enumerate().map(
+            |(i, canister_id)| async move {
+                update_settings(&UpdateSettingsArgs {
+                    canister_id,
+                    settings: CanisterSettings {
+                        freezing_threshold: Some(Nat::from(2592000_u64 + i as u64)),
+                        ..Default::default()
+                    },
+                })
+                .await
+                .expect("Failed to update settings");
+            },
+        ))
+        .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
+        .for_each(|()| async {})
+        .await;
     });
 }
 
 #[query]
 fn canister_creation_status() -> CanisterCreationStatus {
-    *CANISTER_CREATION_STATUS.lock().unwrap()
+    CANISTER_CREATION_STATUS.lock().unwrap().clone()
 }
 
 fn main() {}

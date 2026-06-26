@@ -1,5 +1,4 @@
 use crate::{
-    are_create_canister_and_install_code_proposals_enabled,
     pb::v1::{
         CreateCanisterAndInstallCode, GovernanceError, SelfDescribingValue, Topic,
         canister_settings::{LogVisibility, SnapshotVisibility},
@@ -23,13 +22,6 @@ use ic_nns_handler_root_interface as root;
 
 impl CreateCanisterAndInstallCode {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_create_canister_and_install_code_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "CreateCanisterAndInstallCode proposals are not enabled yet.",
-            ));
-        }
-
         let Self {
             host_subnet_id,
             canister_settings,
@@ -226,24 +218,10 @@ impl CallCanister for CreateCanisterAndInstallCode {
     type Reply = root::CreateCanisterAndInstallCodeOk;
 
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
-        if !are_create_canister_and_install_code_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "CreateCanisterAndInstallCode proposals are not enabled yet.",
-            ));
-        }
-
         Ok((ROOT_CANISTER_ID, "create_canister_and_install_code"))
     }
 
     fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
-        if !are_create_canister_and_install_code_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "CreateCanisterAndInstallCode proposals are not enabled yet.",
-            ));
-        }
-
         let request = root::CreateCanisterAndInstallCodeRequest::try_from(self.clone())?;
 
         Encode!(&request).map_err(|e| {

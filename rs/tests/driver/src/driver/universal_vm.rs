@@ -4,7 +4,6 @@ use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
 use crate::driver::farm::id_of_file;
-use crate::driver::ic::VmAllocationStrategy;
 use crate::driver::ic::VmResourceOverrides;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
@@ -13,7 +12,7 @@ use crate::driver::resource::{
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
@@ -36,7 +35,6 @@ use crate::driver::constants::SSH_USERNAME;
 pub struct UniversalVm {
     pub name: String,
     pub vm_resource_overrides: VmResourceOverrides,
-    pub vm_allocation: Option<VmAllocationStrategy>,
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub primary_image: Option<DiskImage>,
@@ -65,7 +63,6 @@ impl UniversalVm {
         UniversalVm {
             name,
             vm_resource_overrides: Default::default(),
-            vm_allocation: Default::default(),
             required_host_features: Default::default(),
             has_ipv4: false,
             primary_image: Default::default(),
@@ -75,11 +72,6 @@ impl UniversalVm {
 
     pub fn with_resource_overrides(mut self, vm_resource_overrides: VmResourceOverrides) -> Self {
         self.vm_resource_overrides = vm_resource_overrides;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(vm_allocation);
         self
     }
 
@@ -109,13 +101,16 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
 
         env.ssh_keygen()?;
-        let res_request =
-            get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.infra_group_name)?;
-        let resource_group = allocate_resources(&farm, &res_request, env)?;
+        let res_request = get_resource_request_for_universal_vm(
+            self,
+            &pot_setup,
+            &pot_setup.infra_group_name,
+            env,
+        )?;
+        let resource_group = allocate_resources(&res_request, env)?;
         let vm = resource_group
             .vms
             .get(&self.name)
@@ -126,19 +121,29 @@ impl UniversalVm {
         let universal_vm_dir = env.get_path(univm_path);
 
         let mut image_specs = vec![];
-        if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-            // Setup SSH image
-            let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
-            setup_ssh(env, config_ssh_dir.clone())?;
-            let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
-            create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
+        let mut local_image_paths: Vec<PathBuf> = vec![];
+        let backend = SystemTestBackend::read_attribute(env);
 
-            let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
-                &pot_setup.infra_group_name,
-                config_ssh_img,
-                CONF_SSH_IMG_FNAME,
-            )?);
-            image_specs.push(ssh_config_img_file_spec);
+        // Always build the SSH config image; Farm uploads it, Local attaches
+        // it directly from disk.
+        let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
+        setup_ssh(env, config_ssh_dir.clone())?;
+        let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
+        std::fs::create_dir_all(&universal_vm_dir)?;
+        create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
+        match backend {
+            SystemTestBackend::Farm => {
+                let farm: Farm = Farm::from_test_env(env, "universal VM");
+                let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
+                    &pot_setup.infra_group_name,
+                    config_ssh_img,
+                    CONF_SSH_IMG_FNAME,
+                )?);
+                image_specs.push(ssh_config_img_file_spec);
+            }
+            SystemTestBackend::Local => {
+                local_image_paths.push(config_ssh_img);
+            }
         }
 
         // Setup config image
@@ -146,59 +151,73 @@ impl UniversalVm {
             let config_img = match config {
                 UniversalVmConfig::Dir(config_dir) => {
                     let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
-                    std::fs::create_dir_all(universal_vm_dir)?;
+                    std::fs::create_dir_all(&universal_vm_dir)?;
                     create_universal_vm_config_image(config_dir, &config_img, "CONFIG")?;
                     config_img
                 }
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
             };
 
-            if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-                let file_id = id_of_file(config_img.clone())?;
-                let mut file_spec = AttachImageSpec::new(file_id.clone());
+            match backend {
+                SystemTestBackend::Farm => {
+                    let file_id = id_of_file(config_img.clone())?;
+                    let mut file_spec = AttachImageSpec::new(file_id.clone());
 
-                let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
-                    ClaimResult::FileClaimed(file_expiration) => {
-                        if let Some(expiration) = file_expiration.expiration {
-                            let now = Utc::now();
-                            let ttl = expiration - now;
-                            // If the file expires within a day we upload it again
-                            // to ensure it exists for at least a month.
-                            ttl < Duration::days(1)
-                        } else {
-                            // If there's no expiration time we assume the file never expires
-                            // so we don't need to upload it again.
-                            false
+                    let farm: Farm = Farm::from_test_env(env, "universal VM");
+                    let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
+                        ClaimResult::FileClaimed(file_expiration) => {
+                            if let Some(expiration) = file_expiration.expiration {
+                                let now = Utc::now();
+                                let ttl = expiration - now;
+                                // If the file expires within a day we upload it again
+                                // to ensure it exists for at least a month.
+                                ttl < Duration::days(1)
+                            } else {
+                                // If there's no expiration time we assume the file never expires
+                                // so we don't need to upload it again.
+                                false
+                            }
                         }
-                    }
-                    ClaimResult::FileNotFound => true,
-                };
+                        ClaimResult::FileNotFound => true,
+                    };
 
-                if upload {
-                    file_spec = AttachImageSpec::new(farm.upload_file(
-                        &pot_setup.infra_group_name,
-                        config_img,
-                        CONF_IMG_FNAME,
-                    )?);
-                    info!(env.logger(), "Uploaded image: {}", file_id);
-                } else {
-                    info!(
-                        env.logger(),
-                        "Image: {} was already uploaded, no need to upload it again", file_id,
-                    );
+                    if upload {
+                        file_spec = AttachImageSpec::new(farm.upload_file(
+                            &pot_setup.infra_group_name,
+                            config_img,
+                            CONF_IMG_FNAME,
+                        )?);
+                        info!(env.logger(), "Uploaded image: {}", file_id);
+                    } else {
+                        info!(
+                            env.logger(),
+                            "Image: {} was already uploaded, no need to upload it again", file_id,
+                        );
+                    }
+                    image_specs.push(file_spec);
                 }
-                image_specs.push(file_spec);
+                SystemTestBackend::Local => {
+                    local_image_paths.push(config_img);
+                }
             }
         }
 
-        if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-            farm.attach_disk_images(
-                &pot_setup.infra_group_name,
-                &self.name,
-                "usb-storage",
-                image_specs,
-            )?;
-            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        match backend {
+            SystemTestBackend::Farm => {
+                let farm: Farm = Farm::from_test_env(env, "universal VM");
+                farm.attach_disk_images(
+                    &pot_setup.infra_group_name,
+                    &self.name,
+                    "usb-storage",
+                    image_specs,
+                )?;
+                farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+            }
+            SystemTestBackend::Local => {
+                let backend = crate::driver::local_backend::LocalBackend::from_test_env(env)?;
+                backend.attach_disk_images(&self.name, &local_image_paths)?;
+                backend.start_vm(&pot_setup.infra_group_name, &self.name)?;
+            }
         }
 
         Ok(())
@@ -357,8 +376,10 @@ until ipv4=$(ip -j address show dev enp2s0 \
             | jq -r -e \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
-  if [ "$count" -ge 120 ]; then
+  if [ "$count" -ge 300 ]; then
     echo "Timed out waiting for IPv4 address!" >&2
+    echo "networkctl status enp2s0:" >&2
+    networkctl status enp2s0 >&2
     exit 1
   fi
   sleep 1

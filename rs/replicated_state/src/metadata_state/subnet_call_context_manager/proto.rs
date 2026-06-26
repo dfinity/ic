@@ -59,6 +59,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            delivered_canister_http_request_contexts: item
+                .delivered_canister_http_request_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::CanisterHttpRequestContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
             bitcoin_get_successors_contexts: item
                 .bitcoin_get_successors_contexts
                 .iter()
@@ -188,6 +198,17 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut delivered_canister_http_request_contexts =
+            BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
+        for entry in item.delivered_canister_http_request_contexts {
+            let context: CanisterHttpRequestContext = try_from_option_field(
+                entry.context,
+                "SystemMetadata::DeliveredCanisterHttpRequestContext",
+            )?;
+            delivered_canister_http_request_contexts
+                .insert(CallbackId::new(entry.callback_id), context);
+        }
+
         let mut reshare_chain_key_contexts = BTreeMap::<CallbackId, ReshareChainKeyContext>::new();
         for entry in item.reshare_chain_key_contexts {
             let pb_context =
@@ -261,6 +282,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             setup_initial_dkg_contexts,
             sign_with_threshold_contexts,
             canister_http_request_contexts,
+            delivered_canister_http_request_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
             canister_management_calls: CanisterManagementCalls {
@@ -330,12 +352,6 @@ fn try_into_array_message_hash(
     bytes: Vec<u8>,
 ) -> Result<[u8; MESSAGE_HASH_SIZE], ProxyDecodeError> {
     try_into_array::<MESSAGE_HASH_SIZE>(bytes, "message_hash")
-}
-
-fn try_into_array_pseudo_random_id(
-    bytes: Vec<u8>,
-) -> Result<[u8; PSEUDO_RANDOM_ID_SIZE], ProxyDecodeError> {
-    try_into_array::<PSEUDO_RANDOM_ID_SIZE>(bytes, "pseudo_random_id")
 }
 
 fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeError> {
@@ -535,10 +551,6 @@ impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
             request: Some((&context.request).into()),
             args: Some((&context.args).into()),
             derivation_path_vec: context.derivation_path.to_vec(),
-            deprecated_pseudo_random_id: context
-                .deprecated_pseudo_random_id
-                .map(|id| id.to_vec())
-                .unwrap_or_default(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
             nonce: context.nonce.map(|n| n.to_vec()),
         }
@@ -556,10 +568,6 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
             request,
             args,
             derivation_path: Arc::new(context.derivation_path_vec),
-            deprecated_pseudo_random_id: try_into_array_pseudo_random_id(
-                context.deprecated_pseudo_random_id,
-            )
-            .ok(),
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             nonce: context.nonce.map(try_into_array_nonce).transpose()?,
         })

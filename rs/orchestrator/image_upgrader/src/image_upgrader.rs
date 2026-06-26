@@ -138,8 +138,9 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         version: &V,
     ) -> UpgradeResult<(Vec<String>, Option<String>)>;
 
-    /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
-    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
+    /// Runs the disk encryption key exchange process for the target version if SEV is active.
+    /// NOOP otherwise.
+    async fn maybe_exchange_disk_encryption_key(&mut self, version: &V) -> UpgradeResult<()>;
 
     /// Return the implementation of [`ManagebootRunner`] to be used for running the
     /// `manageboot.sh` commands.
@@ -243,7 +244,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
             ));
         }
 
-        self.maybe_exchange_disk_encryption_key().await?;
+        self.maybe_exchange_disk_encryption_key(version).await?;
         self.set_prepared_version(Some(version.clone()));
         Ok(())
     }

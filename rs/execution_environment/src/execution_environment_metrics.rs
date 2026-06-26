@@ -25,6 +25,7 @@ pub const CRITICAL_ERROR_CALL_ID_WITHOUT_INSTALL_CODE_CALL: &str =
 /// Metrics used to monitor the performance of the execution environment.
 pub(crate) struct ExecutionEnvironmentMetrics {
     subnet_messages: HistogramVec,
+    pub(crate) canister_log_resize_duration: Histogram,
     pub executions_aborted: IntCounter,
     pub(crate) call_durations: Histogram,
 
@@ -92,6 +93,12 @@ impl ExecutionEnvironmentMetrics {
                 decimal_buckets(-3, 2),
                 // The `outcome` label is deprecated and should be replaced by `status` eventually.
                 &["method_name", "outcome", "status", "speed"],
+            ),
+            canister_log_resize_duration: metrics_registry.histogram(
+                "canister_log_resize_duration_seconds",
+                "Duration of `log_memory_limit` resize operations on the canister log memory store, in seconds.",
+                // Buckets: 1ms, 2ms, 5ms, ..., 10s, 20s, 50s.
+                decimal_buckets(-3, 1),
             ),
             executions_aborted: metrics_registry
                 .int_counter("executions_aborted", "Total number of aborted executions"),
@@ -320,7 +327,8 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::ReadCanisterSnapshotData
                     | ic00::Method::UploadCanisterSnapshotMetadata
                     | ic00::Method::UploadCanisterSnapshotData
-                    | ic00::Method::RenameCanister => String::from("fast"),
+                    | ic00::Method::RenameCanister
+                    | ic00::Method::CanisterMetrics => String::from("fast"),
 
                     // "Slow" management methods that might require several execution
                     // rounds to be completed, either due to using DTS or due to

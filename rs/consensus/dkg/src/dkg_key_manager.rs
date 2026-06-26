@@ -151,7 +151,7 @@ impl DkgKeyManager {
             }
         };
 
-        if id.start_block_height > last_height && id.target_subnet == NiDkgTargetSubnet::Local {
+        if id.start_block_height > last_height && id.target_subnet.is_local() {
             info!(
                 every_n_seconds => 5,
                 self.logger,

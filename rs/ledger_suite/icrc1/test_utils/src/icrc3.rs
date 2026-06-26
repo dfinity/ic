@@ -132,6 +132,32 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
+    /// Create an authorized mint operation (ICRC-122)
+    pub fn authorized_mint(self, to: Account, amount: Tokens) -> AuthorizedMintBuilder<Tokens> {
+        AuthorizedMintBuilder {
+            builder: self,
+            to,
+            amount,
+            caller: None,
+            mthd: None,
+            reason: None,
+            created_at_time: None,
+        }
+    }
+
+    /// Create an authorized burn operation (ICRC-122)
+    pub fn authorized_burn(self, from: Account, amount: Tokens) -> AuthorizedBurnBuilder<Tokens> {
+        AuthorizedBurnBuilder {
+            builder: self,
+            from,
+            amount,
+            caller: None,
+            mthd: None,
+            reason: None,
+            created_at_time: None,
+        }
+    }
+
     /// Create a fee collector block
     pub fn fee_collector(
         self,
@@ -346,6 +372,112 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
 
         self.builder
             .build_with_operation(Some("approve"), tx_fields)
+    }
+}
+
+/// Builder for authorized mint operations (ICRC-122)
+pub struct AuthorizedMintBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    to: Account,
+    amount: Tokens,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+    created_at_time: Option<u64>,
+}
+
+impl<Tokens: TokensType> AuthorizedMintBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn with_created_at_time(mut self, ts: u64) -> Self {
+        self.created_at_time = Some(ts);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("122mint".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("to".to_string(), account_to_icrc3_value(&self.to));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        if let Some(ts) = self.created_at_time {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder.build_with_operation(None, tx_fields)
+    }
+}
+
+/// Builder for authorized burn operations (ICRC-122)
+pub struct AuthorizedBurnBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    from: Account,
+    amount: Tokens,
+    caller: Option<Principal>,
+    mthd: Option<String>,
+    reason: Option<String>,
+    created_at_time: Option<u64>,
+}
+
+impl<Tokens: TokensType> AuthorizedBurnBuilder<Tokens> {
+    pub fn with_caller(mut self, caller: Principal) -> Self {
+        self.caller = Some(caller);
+        self
+    }
+
+    pub fn with_mthd(mut self, mthd: String) -> Self {
+        self.mthd = Some(mthd);
+        self
+    }
+
+    pub fn with_reason(mut self, reason: String) -> Self {
+        self.reason = Some(reason);
+        self
+    }
+
+    pub fn with_created_at_time(mut self, ts: u64) -> Self {
+        self.created_at_time = Some(ts);
+        self
+    }
+
+    pub fn build(mut self) -> ICRC3Value {
+        self.builder.btype = Some("122burn".to_string());
+        let mut tx_fields = BTreeMap::new();
+        tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.amount.into()));
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(mthd) = self.mthd {
+            tx_fields.insert("mthd".to_string(), ICRC3Value::Text(mthd));
+        }
+        if let Some(reason) = self.reason {
+            tx_fields.insert("reason".to_string(), ICRC3Value::Text(reason));
+        }
+        if let Some(ts) = self.created_at_time {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder.build_with_operation(None, tx_fields)
     }
 }
 

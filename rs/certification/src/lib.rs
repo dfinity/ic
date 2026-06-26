@@ -162,7 +162,7 @@ pub fn verify_certified_data_with_cache_for_canister_sig(
     let (time, delegation_info) =
         verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)?;
     if let Some(info) = delegation_info
-        && info.subnet_type.as_deref() == Some("cloud_engine")
+        && matches!(info.subnet_type.as_deref(), None | Some("cloud_engine"))
     {
         return Err(CertificateValidationError::UntrustedDelegationSubnet(
             info.subnet_id,

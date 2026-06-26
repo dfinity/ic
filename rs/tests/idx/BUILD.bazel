@@ -1,12 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-ALIASES = {
-    "//rs/utils": "utils",
-}
 
 rust_binary(
     name = "colocate_test_bin",
@@ -27,6 +23,7 @@ rust_binary(
 
 system_test(
     name = "basic_health_test",
+    cpus = MIN_LOCAL_CPUS + 8 * DEFAULT_VCPUS_PER_VM,  # 8 IC Node VMs (2 subnets * 4 nodes) * 6 vCPUs.
     enable_metrics = True,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -43,6 +40,7 @@ system_test(
 
 system_test(
     name = "ii_delegation_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs (3 fast single-node subnets) * 6 vCPUs.
     tags = [
         "long_test",
     ],
@@ -64,6 +62,7 @@ system_test(
 
 system_test(
     name = "mainnet_test",
+    cpus = MIN_LOCAL_CPUS,  # setup deploys no VMs (without_farm).
     tags = [
         "manual",
     ],
@@ -83,7 +82,9 @@ rust_binary(
     name = "test-driver-e2e-scenarios",
     testonly = True,
     srcs = ["test_driver_e2e_scenarios.rs"],
-    aliases = ALIASES,
+    aliases = {
+        "//rs/utils": "utils",
+    },
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         # Keep sorted.

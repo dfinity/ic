@@ -17,6 +17,11 @@ impl From<NodeRewardType> for String {
             NodeRewardType::Type3 => "type3".to_string(),
             NodeRewardType::Type3dot1 => "type3.1".to_string(),
             NodeRewardType::Type4 => "type4".to_string(),
+            NodeRewardType::Type4dot1 => "type4.1".to_string(),
+            NodeRewardType::Type4dot2 => "type4.2".to_string(),
+            NodeRewardType::Type4dot3 => "type4.3".to_string(),
+            NodeRewardType::Type4dot4 => "type4.4".to_string(),
+            NodeRewardType::Type4dot5 => "type4.5".to_string(),
         }
     }
 }
@@ -37,6 +42,11 @@ impl From<String> for NodeRewardType {
             "type3" => NodeRewardType::Type3,
             "type3.1" => NodeRewardType::Type3dot1,
             "type4" => NodeRewardType::Type4,
+            "type4.1" => NodeRewardType::Type4dot1,
+            "type4.2" => NodeRewardType::Type4dot2,
+            "type4.3" => NodeRewardType::Type4dot3,
+            "type4.4" => NodeRewardType::Type4dot4,
+            "type4.5" => NodeRewardType::Type4dot5,
             _ => NodeRewardType::Unspecified,
         }
     }

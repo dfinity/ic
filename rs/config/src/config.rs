@@ -11,6 +11,7 @@ use crate::{
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     firewall::BoundaryNodeConfig as BoundaryNodeFirewallConfig,
+    firewall::CloudEngineConfig as CloudEngineFirewallConfig,
     firewall::ReplicaConfig as ReplicaFirewallConfig,
     http_handler::Config as HttpHandlerConfig,
     initial_ipv4_config::IPv4Config,
@@ -51,6 +52,7 @@ pub struct Config {
     pub message_routing: MessageRoutingConfig,
     pub malicious_behavior: MaliciousBehavior,
     pub firewall: ReplicaFirewallConfig,
+    pub cloud_engine_firewall: CloudEngineFirewallConfig,
     pub boundary_node_firewall: BoundaryNodeFirewallConfig,
     pub registration: RegistrationConfig,
     pub nns_registry_replicator: NnsRegistryReplicatorConfig,
@@ -79,6 +81,7 @@ pub struct ConfigOptional {
     pub message_routing: Option<MessageRoutingConfig>,
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub firewall: Option<ReplicaFirewallConfig>,
+    pub cloud_engine_firewall: Option<CloudEngineFirewallConfig>,
     pub boundary_node_firewall: Option<BoundaryNodeFirewallConfig>,
     pub registration: Option<RegistrationConfig>,
     pub nns_registry_replicator: Option<NnsRegistryReplicatorConfig>,
@@ -90,7 +93,7 @@ pub struct ConfigOptional {
 
 impl Config {
     /// Return a [Config] with default settings that put all paths under a
-    /// 'parent_dir', with the given 'subnet_id'.
+    /// 'parent_dir'.
     ///
     /// It is an alternative way to construct a Config than parsing
     /// a configuration file.
@@ -111,8 +114,13 @@ impl Config {
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
             malicious_behavior: MaliciousBehavior::default(),
-            firewall: ReplicaFirewallConfig::default(),
-            boundary_node_firewall: BoundaryNodeFirewallConfig::default(),
+            firewall: ReplicaFirewallConfig::new(parent_dir.join("replica_firewall")),
+            cloud_engine_firewall: CloudEngineFirewallConfig::new(
+                parent_dir.join("cloud_engine_firewall"),
+            ),
+            boundary_node_firewall: BoundaryNodeFirewallConfig::new(
+                parent_dir.join("boundary_node_firewall"),
+            ),
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
             adapters_config: AdaptersConfig::default(),
@@ -165,6 +173,9 @@ impl Config {
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
             malicious_behavior: cfg.malicious_behavior.unwrap_or(default.malicious_behavior),
             firewall: cfg.firewall.unwrap_or(default.firewall),
+            cloud_engine_firewall: cfg
+                .cloud_engine_firewall
+                .unwrap_or(default.cloud_engine_firewall),
             boundary_node_firewall: cfg
                 .boundary_node_firewall
                 .unwrap_or(default.boundary_node_firewall),

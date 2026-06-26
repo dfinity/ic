@@ -37,5 +37,6 @@ WHERE
    AND (NOT {only_prs} OR wr.event_type = 'pull_request')
    AND ({branch} = '' OR wr.head_branch LIKE {branch})
    AND (wr.event_type != 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))
+   AND (bi.head_sha != ALL({exclude_commits}))
 
 ORDER BY bt.first_start_time DESC

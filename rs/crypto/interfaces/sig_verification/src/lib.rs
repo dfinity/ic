@@ -62,7 +62,7 @@ pub trait IngressSigVerifier:
     + BasicSigVerifierByPublicKey<Delegation>
     + CanisterSigVerifier<Delegation>
     + CanisterSigVerifier<MessageId>
-    + CanisterSigVerifier<SenderInfoContent>
+    + for<'a> CanisterSigVerifier<SenderInfoContent<'a>>
 {
 }
 
@@ -74,6 +74,6 @@ impl<T> IngressSigVerifier for T where
         + BasicSigVerifierByPublicKey<Delegation>
         + CanisterSigVerifier<Delegation>
         + CanisterSigVerifier<MessageId>
-        + CanisterSigVerifier<SenderInfoContent>
+        + for<'a> CanisterSigVerifier<SenderInfoContent<'a>>
 {
 }

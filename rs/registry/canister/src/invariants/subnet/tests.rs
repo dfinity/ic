@@ -9,9 +9,12 @@ use ic_protobuf::{
             CanisterCyclesCostSchedule, SubnetFeatures, SubnetListRecord, SubnetRecord, SubnetType,
         },
     },
-    types::v1::PrincipalId as PrincipalIdPb,
+    types::v1::{PrincipalId as PrincipalIdPb, SubnetId as SubnetIdPb},
 };
-use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_default_initial_dkg_subnet_id_key, make_node_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
+};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
 use strum::IntoEnumIterator;
 
@@ -271,6 +274,43 @@ fn non_rented_application_subnets_cannot_have_subnet_admins() {
 }
 
 #[test]
+fn subnets_cannot_have_more_than_max_subnet_admins() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            1,     // num_nodes_in_test_subnet
+            false, // with_chip_id
+        );
+
+    // Make the subnet rented so the type/cost-schedule check passes.
+    test_subnet_record.subnet_type = i32::from(SubnetType::Application);
+    test_subnet_record.canister_cycles_cost_schedule = i32::from(CanisterCyclesCostSchedule::Free);
+
+    // Exactly `MAX_SUBNET_ADMINS` admins is allowed.
+    test_subnet_record.subnet_admins = (0..MAX_SUBNET_ADMINS as u64)
+        .map(|i| PrincipalIdPb::from(user_test_id(i).get()))
+        .collect();
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    check_subnet_invariants(&snapshot).unwrap();
+
+    // One more than `MAX_SUBNET_ADMINS` is not.
+    test_subnet_record.subnet_admins = (0..(MAX_SUBNET_ADMINS as u64 + 1))
+        .map(|i| PrincipalIdPb::from(user_test_id(i).get()))
+        .collect();
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+    assert_non_compliant_record(&snapshot, "subnet admins, which exceeds the maximum of");
+}
+
+#[test]
 fn cloud_engine_subnets_must_have_type4_nodes() {
     let system_subnet_id = subnet_test_id(1);
     let test_subnet_id = subnet_test_id(2);
@@ -292,7 +332,21 @@ fn cloud_engine_subnets_must_have_type4_nodes() {
 
     // Sad case: CloudEngine subnet with nodes that have a non-Type4 reward type.
     for reward_type in NodeRewardType::iter()
-        .filter(|reward_type| *reward_type != NodeRewardType::Type4)
+        .filter(|reward_type| match reward_type {
+            NodeRewardType::Unspecified
+            | NodeRewardType::Type0
+            | NodeRewardType::Type1
+            | NodeRewardType::Type2
+            | NodeRewardType::Type3
+            | NodeRewardType::Type3dot1
+            | NodeRewardType::Type1dot1 => true,
+            NodeRewardType::Type4
+            | NodeRewardType::Type4dot1
+            | NodeRewardType::Type4dot2
+            | NodeRewardType::Type4dot3
+            | NodeRewardType::Type4dot4
+            | NodeRewardType::Type4dot5 => false,
+        })
         .map(Some)
         .chain(std::iter::once(None))
     {
@@ -458,4 +512,61 @@ fn assert_non_compliant_record(snapshot: &RegistrySnapshot, error_msg: &str) {
     let message = err.msg.to_lowercase();
     println!("Error message: {message}");
     assert!(message.contains(&error_msg.to_lowercase()));
+}
+
+fn insert_default_initial_dkg_subnet(snapshot: &mut RegistrySnapshot, subnet_id: SubnetId) {
+    let proto = SubnetIdPb {
+        principal_id: Some(PrincipalIdPb {
+            raw: subnet_id.get().into_vec(),
+        }),
+    };
+    snapshot.insert(
+        make_default_initial_dkg_subnet_id_key().into_bytes(),
+        proto.encode_to_vec(),
+    );
+}
+
+#[test]
+fn unset_default_initial_dkg_subnet_passes_invariant() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (snapshot, _) = setup_minimal_registry_snapshot_for_check_subnet_invariants(
+        system_subnet_id,
+        test_subnet_id,
+        1,     // num_nodes_in_test_subnet
+        false, // with_chip_id
+    );
+
+    check_subnet_invariants(&snapshot).unwrap();
+}
+
+#[test]
+fn set_default_initial_dkg_subnet_to_existing_subnet_passes_invariant() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, _) = setup_minimal_registry_snapshot_for_check_subnet_invariants(
+        system_subnet_id,
+        test_subnet_id,
+        1,     // num_nodes_in_test_subnet
+        false, // with_chip_id
+    );
+    insert_default_initial_dkg_subnet(&mut snapshot, test_subnet_id);
+
+    check_subnet_invariants(&snapshot).unwrap();
+}
+
+#[test]
+fn set_default_initial_dkg_subnet_to_unknown_subnet_fails_invariant() {
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, _) = setup_minimal_registry_snapshot_for_check_subnet_invariants(
+        system_subnet_id,
+        test_subnet_id,
+        1,     // num_nodes_in_test_subnet
+        false, // with_chip_id
+    );
+    let unknown_subnet_id = subnet_test_id(99);
+    insert_default_initial_dkg_subnet(&mut snapshot, unknown_subnet_id);
+
+    assert_non_compliant_record(&snapshot, "does not appear in the subnet list");
 }

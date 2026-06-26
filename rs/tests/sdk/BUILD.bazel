@@ -1,6 +1,6 @@
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "IC_GATEWAY_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -33,6 +33,7 @@ rust_library(
 
 system_test_nns(
     name = "dfx_smoke_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM + 1 API Boundary Node VM + 1 IC Gateway VM, each 6 vCPUs.
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "DFX_PATH": "//:dfx",
     },
@@ -49,6 +50,7 @@ system_test_nns(
 
 system_test(
     name = "dfx_check_old_wallet_version_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     runtime_deps = {
         "WALLET_CANISTER_0_7_2_WASM": "@wallet_canister_0.7.2//file",
         "DFX_PATH": "//:dfx",

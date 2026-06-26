@@ -55,13 +55,16 @@ fn conditionally_add_delegation_cert<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> CertificateBuilder {
     if with_delegation {
-        cert_builder.with_delegation(CertificateBuilder::new_with_rng(
-            CertificateData::SubnetData {
-                subnet_id: subnet_id(123),
-                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-            },
-            rng,
-        ))
+        cert_builder.with_delegation(
+            CertificateBuilder::new_with_rng(
+                CertificateData::SubnetData {
+                    subnet_id: subnet_id(123),
+                    canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+                },
+                rng,
+            )
+            .with_subnet_type("application"),
+        )
     } else {
         cert_builder
     }

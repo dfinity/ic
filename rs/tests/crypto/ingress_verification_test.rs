@@ -5,6 +5,7 @@ use candid::Encode;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -18,9 +19,10 @@ use ic_system_test_driver::util::{
 };
 use ic_types::crypto::Signable;
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo,
-    SenderInfoContent, SignedDelegation,
+    Blob, Certificate, Delegation, DelegationPermissions, HttpCallContent, HttpCanisterUpdate,
+    HttpQueryContent, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+    HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo, SenderInfoContent,
+    SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -32,6 +34,9 @@ const ALL_QUERY_API_VERSIONS: &[usize] = &[2, 3];
 const ALL_UPDATE_API_VERSIONS: &[usize] = &[2, 3, 4];
 const ALL_READ_STATE_API_VERSIONS: &[usize] = &[2, 3];
 
+/// Burn some number of instructions in each update
+const UPDATE_PAYLOAD_INSTRUCTIONS: u64 = 2_000_000_000;
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -39,6 +44,7 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(requests_with_delegations))
                 .add_test(systest!(requests_with_delegations_with_targets))
+                .add_test(systest!(requests_with_delegation_permissions))
                 .add_test(systest!(requests_with_delegation_loop))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_sender_info))
@@ -72,6 +78,7 @@ enum GenericIdentityType<'a> {
     Canister(&'a UniversalCanister<'a>),
     WebAuthnEcdsaSecp256r1,
     WebAuthnRsaPkcs1,
+    WebAuthnEd25519,
 }
 
 impl<'a> GenericIdentityType<'a> {
@@ -79,22 +86,24 @@ impl<'a> GenericIdentityType<'a> {
         canister: &'a UniversalCanister<'a>,
         rng: &mut R,
     ) -> Self {
-        match rng.r#gen::<usize>() % 6 {
+        match rng.r#gen::<usize>() % 7 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::Canister(canister),
             3 => Self::WebAuthnEcdsaSecp256r1,
             4 => Self::WebAuthnRsaPkcs1,
+            5 => Self::WebAuthnEd25519,
             _ => Self::Ed25519,
         }
     }
 
     fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        match rng.r#gen::<usize>() % 5 {
+        match rng.r#gen::<usize>() % 6 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
             2 => Self::WebAuthnEcdsaSecp256r1,
             3 => Self::WebAuthnRsaPkcs1,
+            4 => Self::WebAuthnEd25519,
             _ => Self::Ed25519,
         }
     }
@@ -108,6 +117,7 @@ enum GenericIdentityInner<'a> {
     Canister(CanisterSigner<'a>),
     WebAuthnEcdsaSecp256r1(ic_secp256r1::PrivateKey),
     WebAuthnRsaPkcs1(rsa::RsaPrivateKey),
+    WebAuthnEd25519(ic_ed25519::PrivateKey),
 }
 
 #[derive(Clone)]
@@ -150,6 +160,11 @@ impl<'a> GenericIdentity<'a> {
                 let sk = rsa::RsaPrivateKey::new(rng, 2048).expect("RSA keygen failed");
                 let pk = webauthn_cose_wrap_rsa_pkcs1_key(&rsa::RsaPublicKey::from(&sk));
                 (GenericIdentityInner::WebAuthnRsaPkcs1(sk), pk)
+            }
+            GenericIdentityType::WebAuthnEd25519 => {
+                let sk = ic_ed25519::PrivateKey::generate_using_rng(rng);
+                let pk = webauthn_cose_wrap_ed25519_key(&sk.public_key());
+                (GenericIdentityInner::WebAuthnEd25519(sk), pk)
             }
         };
 
@@ -210,6 +225,7 @@ impl<'a> GenericIdentity<'a> {
                 webauthn_sign_ecdsa_secp256r1(sk, bytes)
             }
             GenericIdentityInner::WebAuthnRsaPkcs1(sk) => webauthn_sign_rsa_pkcs1(sk, bytes),
+            GenericIdentityInner::WebAuthnEd25519(sk) => webauthn_sign_ed25519(sk, bytes),
             GenericIdentityInner::Canister(canister_signer) => {
                 let sign_future = canister_signer.sign(bytes);
                 // We are in a sync method and need to call the async `CanisterSigner::sign`,
@@ -663,6 +679,146 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
     });
 }
 
+// Tests for the optional `permissions` field on delegations: `"queries"`
+// restricts the sender to query calls and read_state requests (update calls
+// are rejected), `"all"` (and an absent field) permits everything, and any
+// other value invalidates the delegation for all request kinds.
+pub fn requests_with_delegation_permissions(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let test_info = TestInformation {
+                url: node_url,
+                canister_id: canister_id_from_principal(&canister.canister_id()),
+            };
+
+            // Expected outcome for a delegation chain carrying some
+            // `permissions` values.
+            enum Outcome {
+                /// Query and read_state succeed; update calls are rejected
+                /// with an error whose text contains the given substring.
+                QueriesOnly { err: &'static str },
+                /// All request kinds succeed.
+                All,
+            }
+
+            struct PermissionsTest {
+                note: &'static str,
+                // The `permissions` value of each delegation in the chain
+                // (`None` means the field is omitted for that delegation).
+                permissions: Vec<Option<DelegationPermissions>>,
+                outcome: Outcome,
+            }
+
+            let update_not_permitted = "Update calls are not permitted";
+
+            let scenarios = [
+                PermissionsTest {
+                    note: "single delegation restricted to queries",
+                    permissions: vec![Some(DelegationPermissions::Queries)],
+                    outcome: Outcome::QueriesOnly {
+                        err: update_not_permitted,
+                    },
+                },
+                PermissionsTest {
+                    note: "single delegation permitting all",
+                    permissions: vec![Some(DelegationPermissions::All)],
+                    outcome: Outcome::All,
+                },
+                PermissionsTest {
+                    note: "queries restriction in the first of two delegations",
+                    permissions: vec![Some(DelegationPermissions::Queries), None],
+                    outcome: Outcome::QueriesOnly {
+                        err: update_not_permitted,
+                    },
+                },
+                PermissionsTest {
+                    note: "queries restriction in the second of two delegations",
+                    permissions: vec![
+                        Some(DelegationPermissions::All),
+                        Some(DelegationPermissions::Queries),
+                    ],
+                    outcome: Outcome::QueriesOnly {
+                        err: update_not_permitted,
+                    },
+                },
+            ];
+
+            for scenario in &scenarios {
+                let delegation_count = scenario.permissions.len();
+                let mut identities = Vec::with_capacity(delegation_count + 1);
+                for _ in 0..=delegation_count {
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
+                    identities.push(GenericIdentity::new(id_type, rng));
+                }
+
+                let delegations =
+                    create_delegations_with_permissions(&identities, &scenario.permissions);
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
+
+                for &api_ver in ALL_QUERY_API_VERSIONS {
+                    let response = perform_query_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    // Query calls are permitted regardless of the outcome.
+                    response.expect_query_ok(api_ver);
+                }
+
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
+                    let response = perform_read_state_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    // read_state requests are permitted regardless of the outcome.
+                    response.expect_read_state_ok(api_ver);
+                }
+
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    let response = perform_update_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    match scenario.outcome {
+                        Outcome::All => response.expect_update_ok(api_ver),
+                        Outcome::QueriesOnly { err } => {
+                            assert_eq!(
+                                response.status(),
+                                400,
+                                "Scenario {} (update) using v{api_ver} unexpectedly succeeded",
+                                scenario.note
+                            );
+                            response.expect_text_error(err);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
 // Tests for handling of delegation loops
 pub fn requests_with_delegation_loop(env: TestEnv) {
     let logger = env.logger();
@@ -843,6 +999,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         },
                     };
 
+                    let request_id = MessageId::from(content.representation_independent_hash());
                     let signature = signer.sign_update(&content);
 
                     let response = send_request(
@@ -855,6 +1012,12 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         signature,
                     )
                     .await;
+
+                    let response =
+                        await_pending_update(api_ver, response, &test_info, sender, &request_id)
+                            .await;
+
+                    let response = response.with_request_id(request_id);
 
                     if include_mgmt_canister_id {
                         response.expect_update_ok(api_ver);
@@ -892,9 +1055,10 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         let signature = sender.sign_update(&content);
                         let request_id = MessageId::from(content.representation_independent_hash());
 
-                        // Always use a v3 call to test read state request since the call is sync,
-                        // otherwise we have to wait until the call executes before checking the read state, which
-                        // requires a potentially flaky retry loop.
+                        // Use a v3 call (sync delivery with fallback to read_state polling) to
+                        // ensure the ingress is processed before we exercise read_state below.
+                        // A v2 call would return 202 immediately without waiting for
+                        // processing, forcing us to poll here anyway.
 
                         let response = send_request(
                             /*api_ver=*/ 3,
@@ -907,7 +1071,12 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         )
                         .await;
 
-                        assert_eq!(response.status(), 200);
+                        let response =
+                            await_pending_update(3, response, &test_info, sender, &request_id)
+                                .await;
+
+                        let response = response.with_request_id(request_id.clone());
+                        response.expect_update_ok(3);
 
                         request_id
                     };
@@ -1179,7 +1348,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
 
             // The info blob that the signing canister attests to.
             let info_bytes = b"some user attributes".to_vec();
-            let sender_info_content = SenderInfoContent(info_bytes.clone());
+            let sender_info_content = SenderInfoContent(&info_bytes);
             let sender_info_signed_bytes = sender_info_content.as_signed_bytes();
             let sender_info_sig = signer.sign(&sender_info_signed_bytes).await;
 
@@ -1206,7 +1375,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                 };
                 let message_id = MessageId::from(content.representation_independent_hash());
                 let signature = id.sign_bytes(&message_id.as_signed_bytes());
-                send_request(
+                let fut = send_request(
                     api_ver,
                     &test_info,
                     "call",
@@ -1214,14 +1383,18 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
                     id.public_key_der(),
                     None,
                     signature,
-                )
+                );
+                async move { (fut.await, message_id) }
             };
 
             ///////////////////////////////////////////////////////////////////
             // Valid sender_info should be accepted for update calls
             for &api_ver in ALL_UPDATE_API_VERSIONS {
-                send_update(api_ver, valid_sender_info())
-                    .await
+                let (response, message_id) = send_update(api_ver, valid_sender_info()).await;
+                let response =
+                    await_pending_update(api_ver, response, &test_info, &id, &message_id).await;
+                response
+                    .with_request_id(message_id)
                     .expect_update_ok(api_ver);
             }
 
@@ -1290,7 +1463,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let mut si = valid_sender_info();
                 si.signer = Blob(CanisterId::ic_00().get().as_slice().to_vec());
-                let response = send_update(api_ver, si).await;
+                let (response, _) = send_update(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -1307,7 +1480,7 @@ pub fn requests_with_valid_sender_info(env: TestEnv) {
             for &api_ver in ALL_UPDATE_API_VERSIONS {
                 let mut si = valid_sender_info();
                 si.info = Blob(b"tampered info".to_vec());
-                let response = send_update(api_ver, si).await;
+                let (response, _) = send_update(api_ver, si).await;
                 assert_eq!(response.status(), 400);
                 response.expect_text_error(sender_info_error_text);
             }
@@ -1532,17 +1705,38 @@ fn create_delegations_with_targets(
             let delegation = if targets[i - 1].is_empty() {
                 Delegation::new(identities[i].public_key_der(), delegation_expiry)
             } else {
-                Delegation::new_with_targets(
-                    identities[i].public_key_der(),
-                    delegation_expiry,
-                    targets[i - 1].clone(),
-                )
+                Delegation::new(identities[i].public_key_der(), delegation_expiry)
+                    .with_targets(targets[i - 1].clone())
             };
 
             let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
 
             delegations.push(signed_delegation);
         }
+    }
+
+    delegations
+}
+
+fn create_delegations_with_permissions(
+    identities: &[GenericIdentity],
+    permissions: &[Option<DelegationPermissions>],
+) -> Vec<SignedDelegation> {
+    let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
+
+    let delegation_count = identities.len() - 1;
+    let mut delegations = Vec::with_capacity(delegation_count);
+
+    for i in 1..=delegation_count {
+        let delegation = match permissions[i - 1] {
+            Some(permissions) => Delegation::new(identities[i].public_key_der(), delegation_expiry)
+                .with_permissions(permissions),
+            None => Delegation::new(identities[i].public_key_der(), delegation_expiry),
+        };
+
+        let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
+
+        delegations.push(signed_delegation);
     }
 
     delegations
@@ -1598,11 +1792,19 @@ enum ResponseBody {
 struct ReplicaResponse {
     status: StatusCode,
     body: ResponseBody,
+    /// Set for responses to `call` (update) requests so `expect_update_ok`
+    /// can verify the returned certificate references this request id.
+    request_id: Option<MessageId>,
 }
 
 impl ReplicaResponse {
     fn status(&self) -> StatusCode {
         self.status
+    }
+
+    fn with_request_id(mut self, request_id: MessageId) -> Self {
+        self.request_id = Some(request_id);
+        self
     }
 
     fn expect_read_state_ok(&self, _api_ver: usize) {
@@ -1622,6 +1824,10 @@ impl ReplicaResponse {
         } else {
             assert_eq!(self.status(), 200);
             self.expect_certificate();
+            let request_id = self.request_id.as_ref().expect(
+                "expect_update_ok requires request_id to be set on the response for api v3+",
+            );
+            self.verify_update_certificate(request_id);
         }
     }
 
@@ -1650,6 +1856,48 @@ impl ReplicaResponse {
                 "Expected certificate response but got text instead: {:?}",
                 t
             ),
+        }
+    }
+
+    /// Verify that the CBOR response body contains a certificate whose state
+    /// tree includes `request_status/<request_id>/status = "replied"` and a
+    /// non-empty `request_status/<request_id>/reply` leaf.
+    fn verify_update_certificate(&self, request_id: &MessageId) {
+        let cbor = match &self.body {
+            ResponseBody::Cbor(cbor) => cbor,
+            other => panic!("Expected CBOR body for certificate verification, got: {other:?}"),
+        };
+
+        let cert_bytes = match cbor {
+            serde_cbor::Value::Map(m) => {
+                match m.get(&serde_cbor::Value::Text("certificate".to_string())) {
+                    Some(serde_cbor::Value::Bytes(b)) => b.clone(),
+                    other => panic!("Expected 'certificate' bytes in CBOR map, got: {other:?}"),
+                }
+            }
+            other => panic!("Expected CBOR map, got: {other:?}"),
+        };
+
+        let certificate: Certificate = serde_cbor::from_slice(&cert_bytes)
+            .expect("Failed to parse certificate from response body");
+
+        let status_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"status"];
+        match certificate.tree.lookup(&status_path) {
+            LookupStatus::Found(MixedHashTree::Leaf(status_bytes)) => {
+                let status_str = String::from_utf8(status_bytes.clone())
+                    .expect("Invalid UTF-8 in request status");
+                assert_eq!(
+                    status_str, "replied",
+                    "Expected request status 'replied', got '{status_str}'"
+                );
+            }
+            other => panic!("Expected 'replied' status leaf, got: {other:?}"),
+        }
+
+        let reply_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reply"];
+        match certificate.tree.lookup(&reply_path) {
+            LookupStatus::Found(MixedHashTree::Leaf(_)) => {}
+            other => panic!("Expected reply leaf in certificate, got: {other:?}"),
         }
     }
 
@@ -1770,7 +2018,241 @@ async fn send_request<C: serde::ser::Serialize>(
         }
     };
 
-    ReplicaResponse { status, body }
+    ReplicaResponse {
+        status,
+        body,
+        request_id: None,
+    }
+}
+
+/// Parsed ingress request status from a read_state certificate.
+enum IngressStatus {
+    /// The request was executed and a reply is available.
+    Replied {
+        /// Raw CBOR-encoded certificate bytes (the `certificate` field from
+        /// the read_state response). This is the same blob that the v3/v4
+        /// sync call endpoint would have embedded in its response.
+        reply: Vec<u8>,
+    },
+    /// The request was rejected.
+    Rejected {
+        reject_code: u64,
+        reject_message: String,
+    },
+    /// The request completed but response data has been pruned.
+    Done,
+    /// The request is still being processed.
+    NonFinal(String),
+}
+
+/// When a v3/v4 sync update call returns 202 (the replica's internal timeout
+/// was exceeded before the ingress message was processed), fall back to polling
+/// read_state until a terminal request status is available.
+/// If a v3+ sync update call returned 202 (the replica's internal timeout was
+/// exceeded before the ingress was processed), fall back to polling
+/// `read_state` for the final request status. Otherwise returns the response
+/// unchanged. Has no effect for v2 update calls, which are async and always
+/// return 202 on success.
+async fn await_pending_update(
+    api_ver: usize,
+    response: ReplicaResponse,
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    request_id: &MessageId,
+) -> ReplicaResponse {
+    if api_ver >= 3 && response.status() == 202 {
+        await_ingress_via_read_state(test, sender, request_id).await
+    } else {
+        response
+    }
+}
+
+async fn await_ingress_via_read_state(
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    request_id: &MessageId,
+) -> ReplicaResponse {
+    for attempt in 0..30 {
+        println!("await_ingress_via_read_state attempt {attempt}");
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        let content = HttpReadStateContent::ReadState {
+            read_state: HttpReadState {
+                sender: Blob(sender.principal().as_slice().to_vec()),
+                paths: vec![vec!["request_status".into(), request_id.clone().into()].into()],
+                ingress_expiry: expiry_time().as_nanos() as u64,
+                nonce: None,
+            },
+        };
+
+        let signature = sender.sign_read_state(&content);
+
+        let response = send_request(
+            3,
+            test,
+            "read_state",
+            content,
+            sender.public_key_der(),
+            None,
+            signature,
+        )
+        .await;
+
+        let status = response.status();
+
+        // 4xx (except 429 Too Many Requests) or 5xx: no point in continuing to poll
+        if (status.is_client_error() && status != 429) || status.is_server_error() {
+            panic!(
+                "read_state request failed with HTTP {}: {:?}",
+                status, response.body
+            );
+        }
+
+        if status == 200 {
+            // A 200 means the read_state HTTP request succeeded, but we must
+            // inspect the certificate to determine the actual request status.
+            match ingress_status_from_read_state_response(&response, request_id) {
+                Some(IngressStatus::Replied { reply }) => {
+                    // Reconstruct a ReplicaResponse matching the v3/v4 sync
+                    // call response format:
+                    //   { "status": "replied", "certificate": <cert_bytes> }
+                    // The certificate bytes come from the read_state response
+                    // and contain the state tree with the reply at
+                    // request_status/<id>/reply.
+                    let body = serde_cbor::Value::Map(
+                        [
+                            (
+                                serde_cbor::Value::Text("status".to_string()),
+                                serde_cbor::Value::Text("replied".to_string()),
+                            ),
+                            (
+                                serde_cbor::Value::Text("certificate".to_string()),
+                                serde_cbor::Value::Bytes(reply),
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    );
+                    return ReplicaResponse {
+                        status: StatusCode::OK,
+                        body: ResponseBody::Cbor(body),
+                        request_id: Some(request_id.clone()),
+                    };
+                }
+                Some(IngressStatus::Rejected {
+                    reject_code,
+                    reject_message,
+                }) => {
+                    panic!(
+                        "Ingress message was rejected: code={reject_code}, \
+                         message={reject_message}"
+                    );
+                }
+                Some(IngressStatus::Done) => {
+                    panic!(
+                        "Ingress message completed with 'done' status \
+                         (reply data no longer available)"
+                    );
+                }
+                Some(IngressStatus::NonFinal(s)) => {
+                    println!("await_ingress_via_read_state: status={s}, continuing to poll");
+                }
+                None => {
+                    // Status path absent or unknown in the certificate; keep polling
+                }
+            }
+        }
+    }
+
+    panic!("Timed out waiting for ingress message to be processed via read_state polling");
+}
+
+/// Parse the ingress request status from a read_state response certificate.
+/// Returns `None` if the status path is absent or unknown in the certificate tree.
+fn ingress_status_from_read_state_response(
+    response: &ReplicaResponse,
+    request_id: &MessageId,
+) -> Option<IngressStatus> {
+    let cbor = match &response.body {
+        ResponseBody::Cbor(cbor) => cbor,
+        other => panic!("Expected CBOR response body from read_state, got: {other:?}"),
+    };
+
+    let read_state_response: HttpReadStateResponse =
+        serde_cbor::value::from_value(cbor.clone()).expect("Failed to parse HttpReadStateResponse");
+
+    let certificate: Certificate =
+        serde_cbor::from_slice(read_state_response.certificate.0.as_ref())
+            .expect("Failed to parse certificate from read_state response");
+
+    let status_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"status"];
+
+    let status_str = match certificate.tree.lookup(&status_path) {
+        LookupStatus::Found(MixedHashTree::Leaf(status_bytes)) => {
+            String::from_utf8(status_bytes.clone()).expect("Invalid UTF-8 in request status")
+        }
+        LookupStatus::Found(other) => {
+            panic!("Request status is not a leaf node: {other:?}");
+        }
+        LookupStatus::Absent | LookupStatus::Unknown => {
+            // The status path may legitimately not yet be present in the
+            // certificate tree on early polls; signal the caller to keep
+            // polling rather than failing the test.
+            return None;
+        }
+    };
+
+    match status_str.as_str() {
+        "replied" => {
+            // Validate that the reply path exists in the tree.
+            let reply_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reply"];
+            match certificate.tree.lookup(&reply_path) {
+                LookupStatus::Found(MixedHashTree::Leaf(_)) => {}
+                LookupStatus::Found(other) => {
+                    panic!("Request reply is not a leaf node: {other:?}");
+                }
+                LookupStatus::Absent | LookupStatus::Unknown => {
+                    panic!("Request status is 'replied' but reply path is missing");
+                }
+            };
+            // Return the raw certificate bytes from the read_state response.
+            // The v3/v4 sync call endpoint embeds these same bytes in its
+            // response; we will reconstruct that format in the caller.
+            Some(IngressStatus::Replied {
+                reply: read_state_response.certificate.0,
+            })
+        }
+        "rejected" => {
+            let code_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reject_code"];
+            let reject_code = match certificate.tree.lookup(&code_path) {
+                LookupStatus::Found(MixedHashTree::Leaf(bytes)) => {
+                    // reject_code is a ULEB128-encoded natural number
+                    leb128::read::unsigned(&mut &bytes[..]).expect("Invalid ULEB128 in reject_code")
+                }
+                other => panic!("Missing or invalid reject_code: {other:?}"),
+            };
+
+            let msg_path: [&[u8]; 3] = [b"request_status", request_id.as_ref(), b"reject_message"];
+            let reject_message = match certificate.tree.lookup(&msg_path) {
+                LookupStatus::Found(MixedHashTree::Leaf(bytes)) => {
+                    String::from_utf8(bytes.clone()).expect("Invalid UTF-8 in reject_message")
+                }
+                // The reject_message is always supposed to be there for a rejected message
+                _ => panic!(
+                    "The request_status was rejected but the required reject_message field was missing"
+                ),
+            };
+            Some(IngressStatus::Rejected {
+                reject_code,
+                reject_message,
+            })
+        }
+        "done" => Some(IngressStatus::Done),
+        "received" | "processing" => Some(IngressStatus::NonFinal(status_str)),
+        other => panic!("Unknown request status: {other}"),
+    }
 }
 
 async fn perform_query_call_with_delegations(
@@ -1817,7 +2299,12 @@ async fn perform_update_call_with_delegations(
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(wasm().reply_data(b"update_reply").build()),
+            arg: Blob(
+                wasm()
+                    .instruction_counter_is_at_least(UPDATE_PAYLOAD_INSTRUCTIONS)
+                    .reply_data(b"update_reply")
+                    .build(),
+            ),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
@@ -1825,9 +2312,10 @@ async fn perform_update_call_with_delegations(
         },
     };
 
+    let request_id = MessageId::from(content.representation_independent_hash());
     let signature = signer.sign_update(&content);
 
-    send_request(
+    let response = send_request(
         api_ver,
         test,
         "call",
@@ -1836,7 +2324,11 @@ async fn perform_update_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await
+    .await;
+
+    let response = await_pending_update(api_ver, response, test, sender, &request_id).await;
+
+    response.with_request_id(request_id)
 }
 
 async fn perform_read_state_call_with_delegations(
@@ -1855,7 +2347,12 @@ async fn perform_read_state_call_with_delegations(
             update: HttpCanisterUpdate {
                 canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
                 method_name: "update".to_string(),
-                arg: Blob(wasm().reply_data(b"read state test").build()),
+                arg: Blob(
+                    wasm()
+                        .instruction_counter_is_at_least(UPDATE_PAYLOAD_INSTRUCTIONS)
+                        .reply_data(b"read state test")
+                        .build(),
+                ),
                 sender: Blob(sender.principal().as_slice().to_vec()),
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
@@ -1866,11 +2363,12 @@ async fn perform_read_state_call_with_delegations(
         let signature = sender.sign_update(&content);
         let request_id = MessageId::from(content.representation_independent_hash());
 
-        // Always use a v3 call to test read state request since the call is sync,
-        // otherwise we have to wait until the call executes before checking the read state, which
-        // requires a potentially flaky retry loop.
+        // Use a v3 call (sync delivery with fallback to read_state polling) to
+        // ensure the ingress is processed before we exercise read_state below.
+        // A v2 call would return 202 immediately without waiting for
+        // processing, forcing us to poll here anyway.
 
-        let _response = send_request(
+        let response = send_request(
             /*api_ver=*/ 3,
             test,
             "call",
@@ -1880,6 +2378,18 @@ async fn perform_read_state_call_with_delegations(
             signature,
         )
         .await;
+
+        let response = await_pending_update(3, response, test, sender, &request_id).await;
+
+        if response.status() != 200 {
+            // The preparatory update call failed (e.g., the replica rejected
+            // the signature). Return that failure directly so callers that
+            // expect an error can inspect it; attempting the read_state below
+            // would otherwise observe an empty state tree or fail elsewhere.
+            return response;
+        }
+        let response = response.with_request_id(request_id.clone());
+        response.expect_update_ok(3);
 
         request_id
     };
@@ -1953,7 +2463,12 @@ async fn perform_update_with_expiry(
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(wasm().reply_data(b"update_reply").build()),
+            arg: Blob(
+                wasm()
+                    .instruction_counter_is_at_least(UPDATE_PAYLOAD_INSTRUCTIONS)
+                    .reply_data(b"update_reply")
+                    .build(),
+            ),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
@@ -1961,9 +2476,10 @@ async fn perform_update_with_expiry(
         },
     };
 
+    let request_id = MessageId::from(content.representation_independent_hash());
     let signature = signer.sign_update(&content);
 
-    send_request(
+    let response = send_request(
         api_ver,
         test,
         "call",
@@ -1972,7 +2488,11 @@ async fn perform_update_with_expiry(
         None,
         signature,
     )
-    .await
+    .await;
+
+    let response = await_pending_update(api_ver, response, test, sender, &request_id).await;
+
+    response.with_request_id(request_id)
 }
 
 async fn perform_read_state_call_with_expiry(
@@ -2122,6 +2642,38 @@ fn webauthn_cose_wrap_ecdsa_secp256r1_key(pk: &ic_secp256r1::PublicKey) -> Vec<u
     wrap_cose_key_in_der_spki(&Value::Map(map))
 }
 
+fn webauthn_cose_wrap_ed25519_key(pk: &ic_ed25519::PublicKey) -> Vec<u8> {
+    let mut map = std::collections::BTreeMap::new();
+
+    use serde_cbor::Value;
+
+    /*
+    See:
+    - RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), section 13.2
+      for OKP key-type parameters.
+    - RFC 8812 ("CBOR Object Signing and Encryption (COSE) and JSON Object
+      Signing and Encryption (JOSE) Registrations for Web Authentication
+      (WebAuthn) Algorithms"), section 3.1 for the EdDSA algorithm code.
+     */
+    const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+    const COSE_PARAM_KTY_OKP: serde_cbor::Value = serde_cbor::Value::Integer(1);
+
+    const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+    const COSE_PARAM_ALG_EDDSA: serde_cbor::Value = serde_cbor::Value::Integer(-8);
+
+    const COSE_PARAM_OKP_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+    const COSE_PARAM_OKP_CRV_ED25519: serde_cbor::Value = serde_cbor::Value::Integer(6);
+
+    const COSE_PARAM_OKP_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+
+    map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_OKP);
+    map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_EDDSA);
+    map.insert(COSE_PARAM_OKP_CRV, COSE_PARAM_OKP_CRV_ED25519);
+    map.insert(COSE_PARAM_OKP_X, Value::Bytes(pk.serialize_raw().to_vec()));
+
+    wrap_cose_key_in_der_spki(&Value::Map(map))
+}
+
 fn webauthn_sign_message<F: FnOnce(&[u8]) -> Vec<u8>>(msg: &[u8], sign_fn: F) -> Vec<u8> {
     use serde::Serialize;
 
@@ -2172,5 +2724,12 @@ fn webauthn_sign_rsa_pkcs1(sk: &rsa::RsaPrivateKey, msg: &[u8]) -> Vec<u8> {
         use rsa::signature::{SignatureEncoding, Signer};
         signing_key.sign(to_sign).to_vec()
     };
+    webauthn_sign_message(msg, sign_fn)
+}
+
+fn webauthn_sign_ed25519(sk: &ic_ed25519::PrivateKey, msg: &[u8]) -> Vec<u8> {
+    // WebAuthn EdDSA signatures are the raw 64-byte R || s encoding from
+    // RFC 8032 §5.1.6 — no DER wrapping (cf. WebAuthn §6.5.6).
+    let sign_fn = |to_sign: &[u8]| -> Vec<u8> { sk.sign_message(to_sign).to_vec() };
     webauthn_sign_message(msg, sign_fn)
 }

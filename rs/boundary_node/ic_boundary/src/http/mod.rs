@@ -18,6 +18,8 @@ pub const PATH_READ_STATE_V2: &str = "/api/v2/canister/{canister_id}/read_state"
 pub const PATH_READ_STATE_V3: &str = "/api/v3/canister/{canister_id}/read_state";
 pub const PATH_SUBNET_READ_STATE_V2: &str = "/api/v2/subnet/{subnet_id}/read_state";
 pub const PATH_SUBNET_READ_STATE_V3: &str = "/api/v3/subnet/{subnet_id}/read_state";
+pub const PATH_SUBNET_QUERY_V3: &str = "/api/v3/subnet/{subnet_id}/query";
+pub const PATH_SUBNET_CALL_V4: &str = "/api/v4/subnet/{subnet_id}/call";
 pub const PATH_HEALTH: &str = "/health";
 
 /// Type of IC API request
@@ -52,15 +54,20 @@ pub enum RequestType {
     ReadStateV3,
     ReadStateSubnetV2,
     ReadStateSubnetV3,
+    QuerySubnetV3,
+    CallSubnetV4,
 }
 
 impl RequestType {
     pub const fn is_query(&self) -> bool {
-        matches!(self, Self::QueryV2 | Self::QueryV3)
+        matches!(self, Self::QueryV2 | Self::QueryV3 | Self::QuerySubnetV3)
     }
 
     pub const fn is_call(&self) -> bool {
-        matches!(self, Self::CallV2 | Self::CallV3 | Self::CallV4)
+        matches!(
+            self,
+            Self::CallV2 | Self::CallV3 | Self::CallV4 | Self::CallSubnetV4
+        )
     }
 
     pub const fn is_read_state(&self) -> bool {

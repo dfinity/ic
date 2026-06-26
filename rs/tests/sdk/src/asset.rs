@@ -21,6 +21,14 @@ pub fn get_asset_as_string(
     let asset_url = format!("https://{canister_id}.{ic_gateway_domain}{key}");
     info!(log, "asset url is {asset_url}");
 
+    // On the Local backend the gateway domain (and its per-canister subdomains)
+    // is not resolvable via DNS and is served with a self-signed certificate, so
+    // resolve the requested host directly to the gateway VM and accept the
+    // self-signed cert.
+    let parsed_asset_url = reqwest::Url::parse(&asset_url).unwrap();
+    let resolve_override = ic_gateway.resolve_override_for_url(&parsed_asset_url);
+    let accept_invalid_certs = ic_gateway.uses_self_signed_cert();
+
     let backoff = ExponentialBackoff {
         max_elapsed_time: Some(Duration::from_secs(120)),
         ..Default::default()
@@ -32,7 +40,13 @@ pub fn get_asset_as_string(
     };
 
     let operation = || {
-        let client = reqwest::blocking::Client::new();
+        let mut builder = reqwest::blocking::Client::builder();
+        if let Some((domain, addr)) = &resolve_override {
+            builder = builder.resolve(domain, *addr);
+        }
+        let client = builder
+            .danger_accept_invalid_certs(accept_invalid_certs)
+            .build()?;
         let response = client.get(asset_url.clone()).send()?;
         let body = response.text()?;
         Ok(body)

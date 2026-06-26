@@ -4,8 +4,8 @@
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
-# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`.
-# When --head is not provided defaults to HEAD.
+# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]`.
+# where `$HEAD` is from --head if specified.
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
@@ -13,6 +13,9 @@
 #
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
+#
+# For the `test` command a single `_local` system-test is re-added to smoke-test the local-backend machinery
+# whenever its Farm sibling is already selected.
 #
 # When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
 #
@@ -41,6 +44,10 @@ EXCLUDED_TAGS = [
     "fi_tests_nightly",
     "nns_tests_nightly",
     "pocketic_tests_nightly",
+    # The `_local` system-tests use too many resources to run on every PR so
+    # they run in the dedicated `local-system-tests.yml` workflow instead of
+    # in the `bazel-test-all` job.
+    "local_system_test",
 ]
 
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
@@ -110,15 +117,20 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
+def diff_only_query(command: str, base: str, head: str | None, skip_long_tests: bool) -> str:
     """
-    Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
+    Return a bazel query for all targets that have modified inputs in the specified git commit range.
+    If `head` is not specified it diffs against the working tree which is useful for testing locally.
+    It takes into account:
     * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
     * To only include test targets in case the bazel command was 'test'.
     * To exclude long_tests if requested.
     """
     modified_files = subprocess.run(
-        ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
+        ["git", "diff", "--name-only", "--merge-base", base] + ([head] if head is not None else []),
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.splitlines()
 
     n = len(modified_files)
@@ -187,7 +199,7 @@ def targets(
     query = (
         ("//..." + (" except attr(tags, long_test, //...)" if skip_long_tests else ""))
         if base is None
-        else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
+        else diff_only_query(command, base, head, skip_long_tests)
     )
 
     # Finally, exclude targets that have any of the excluded tags:
@@ -196,13 +208,31 @@ def targets(
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
-    result = subprocess.run(args, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
         log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
         sys.exit(result.returncode)
+
+    result_targets = result.stdout.splitlines()
+
+    # The `_local` system-tests are excluded from the inferred test targets (via
+    # the `local_system_test` tag in EXCLUDED_TAGS) and run in the dedicated
+    # `local-system-tests.yml` workflow instead. To still smoke-test the
+    # local-backend machinery, we re-add a single `_local` test, but only when
+    # its Farm sibling is already being tested so that it respects the diff-only
+    # target selection.
+    LOCAL_SMOKE_TEST_FARM_SIBLING = "//rs/tests/idx:basic_health_test"
+    if command == "test" and LOCAL_SMOKE_TEST_FARM_SIBLING in result_targets:
+        result_targets.append(f"{LOCAL_SMOKE_TEST_FARM_SIBLING}_local")
+
+    # Print the targets each on their own line. When there are no targets we
+    # print nothing (instead of an empty line) so the caller can detect the
+    # empty case, e.g. `bazel test` errors out when given an empty target file.
+    if result_targets:
+        print("\n".join(result_targets))
 
 
 def check():
@@ -277,7 +307,7 @@ def main():
     )
     parser.add_argument(
         "--base",
-        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
+        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]` where $HEAD is from --head if specified.",
     )
     parser.add_argument("--head", help="See --base.")
     args = parser.parse_args()

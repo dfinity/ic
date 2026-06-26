@@ -85,7 +85,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 ///   url : text;
 ///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
-///   method : variant { get; head; post; put; delete };
+///   method : variant { get; head; post; put; delete; patch };
 ///   body : opt blob;
 ///   transform : opt record {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
@@ -359,7 +359,7 @@ fn test_http_header_data_size() {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum HttpMethod {
     #[serde(rename = "get")]
     GET,
@@ -371,6 +371,8 @@ pub enum HttpMethod {
     PUT,
     #[serde(rename = "delete")]
     DELETE,
+    #[serde(rename = "patch")]
+    PATCH,
 }
 
 /// Represents the response for a canister http request.
@@ -435,6 +437,8 @@ pub enum FlexibleHttpGlobalError {
     OutOfCycles(candid::Reserved),
     #[serde(rename = "responses_too_large")]
     ResponsesTooLarge(candid::Reserved),
+    #[serde(rename = "too_many_rejects")]
+    TooManyRejects(candid::Reserved),
 }
 
 /// Per-node detail in a flexible HTTP outcall error.
@@ -464,7 +468,7 @@ pub struct FlexibleHttpNodeDetail {
 ///   cycles: opt variant { used: nat; exceeded: reserved };
 /// };
 /// ```
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct HttpRequestResourceReport {
     pub raw_response_bytes: Option<ResourceUsage<u64>>,
     pub http_roundtrip_time_ms: Option<ResourceUsage<u64>>,

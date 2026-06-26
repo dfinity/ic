@@ -411,7 +411,7 @@ pub mod node {
         pub fn create_transcript_or_panic(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> IDkgTranscript {
             self.create_transcript(params, dealings)
                 .unwrap_or_else(|error| {
@@ -474,7 +474,7 @@ pub mod node {
         fn create_transcript(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
             self.crypto_component.create_transcript(params, dealings)
         }
@@ -671,6 +671,15 @@ pub mod node {
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_basic_sig_batch(signature_batch, message, registry_version)
+        }
+
+        fn verify_basic_sig_batch_multi_msg(
+            &self,
+            inputs: &[(NodeId, &BasicSigOf<T>, &T)],
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            self.crypto_component
+                .verify_basic_sig_batch_multi_msg(inputs, registry_version)
         }
     }
 
@@ -1013,7 +1022,7 @@ pub mod node {
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
             let transcript_creator = self.filter_by_receivers(params).next().unwrap();
             let transcript =
-                transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
+                transcript_creator.create_transcript_or_panic(params, multisigned_dealings);
             assert!(
                 self.random_filtered_by_receivers(params.receivers(), rng)
                     .verify_transcript(params, &transcript)
@@ -1815,7 +1824,7 @@ pub fn load_previous_transcripts_for_all_dealers(params: &IDkgTranscriptParams, 
 pub fn create_transcript_or_panic(
     receiver: &Node,
     params: &IDkgTranscriptParams,
-    dealings: &BatchSignedIDkgDealings,
+    dealings: BatchSignedIDkgDealings,
 ) -> IDkgTranscript {
     receiver
         .create_transcript(params, dealings)
@@ -1854,7 +1863,7 @@ pub fn run_idkg_without_complaint<R: RngCore + CryptoRng>(
     let dealings = nodes.create_dealings(params);
     let dealings_with_receivers_support =
         nodes.support_dealings_from_all_receivers(dealings, params);
-    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support)
+    create_transcript_or_panic(receiver, params, dealings_with_receivers_support)
 }
 
 /// Corrupts the dealing for a single randomly picked receiver.

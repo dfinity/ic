@@ -10,6 +10,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,7 +30,7 @@ pub mod internal {
     use super::*;
     use ic_base_types::PrincipalId;
     use ic_config::crypto::CryptoConfig;
-    use ic_crypto::{CryptoComponent, CryptoComponentImpl};
+    use ic_crypto::CryptoComponentImpl;
     use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
     use ic_crypto_internal_csp::LocalCspVault;
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
@@ -104,6 +105,7 @@ pub mod internal {
     };
     use ic_types::signature::BasicSignatureBatch;
     use ic_types::{NodeId, RegistryVersion, SubnetId};
+    use rand::SeedableRng;
     use rand::rngs::OsRng;
     use rustls::{ClientConfig, ServerConfig};
     use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -124,7 +126,7 @@ pub mod internal {
         C: CryptoServiceProvider,
         R: CryptoComponentRng,
     {
-        crypto_component: CryptoComponentImpl<C>,
+        crypto_component: CryptoComponentImpl<C, ChaCha20Rng>,
         remote_vault_environment: Option<
             RemoteVaultEnvironment<
                 LocalCspVault<R, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>,
@@ -134,7 +136,7 @@ pub mod internal {
     }
 
     impl<C: CryptoServiceProvider, R: CryptoComponentRng> Deref for TempCryptoComponentGeneric<C, R> {
-        type Target = CryptoComponentImpl<C>;
+        type Target = CryptoComponentImpl<C, ChaCha20Rng>;
 
         fn deref(&self) -> &Self::Target {
             &self.crypto_component
@@ -278,6 +280,11 @@ pub mod internal {
             if let Some(source) = self.temp_dir_source {
                 copy_crypto_root(&source, temp_dir.path());
             }
+            // Derive a ChaCha20Rng for the crypto component from the builder's RNG
+            // so that a deterministic builder RNG produces a deterministic
+            // crypto component.
+            let mut builder_rng = self.rng;
+            let crypto_component_rng = ChaCha20Rng::from_seed(builder_rng.r#gen());
             let (vault, opt_remote_vault_environment) = match self.vault_type {
                 VaultType::InReplica => {
                     let vault = ProdLocalCspVault::builder_in_dir(
@@ -285,7 +292,7 @@ pub mod internal {
                         Arc::clone(&metrics),
                         new_logger!(logger),
                     )
-                    .with_rng(self.rng)
+                    .with_rng(builder_rng)
                     .with_time_source(Arc::clone(&time_source))
                     .build();
                     (Arc::new(vault) as Arc<dyn CspVault>, None)
@@ -297,7 +304,7 @@ pub mod internal {
                             Arc::clone(&metrics),
                             new_logger!(logger),
                         )
-                        .with_rng(self.rng)
+                        .with_rng(builder_rng)
                         .with_time_source(Arc::clone(&time_source))
                         .build(),
                     );
@@ -437,7 +444,7 @@ pub mod internal {
                 fake_registry_client as Arc<dyn RegistryClient>
             });
 
-            let crypto_component = CryptoComponent::new_for_test(
+            let crypto_component = CryptoComponentImpl::new_for_test(
                 csp,
                 vault,
                 logger,
@@ -445,6 +452,7 @@ pub mod internal {
                 node_id,
                 metrics,
                 Some(time_source),
+                crypto_component_rng,
             );
 
             TempCryptoComponentGeneric {
@@ -593,7 +601,7 @@ pub mod internal {
         fn create_transcript(
             &self,
             params: &IDkgTranscriptParams,
-            dealings: &BatchSignedIDkgDealings,
+            dealings: BatchSignedIDkgDealings,
         ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
             IDkgProtocol::create_transcript(&self.crypto_component, params, dealings)
         }
@@ -864,6 +872,15 @@ pub mod internal {
             self.crypto_component
                 .verify_basic_sig_batch(signature, message, registry_version)
         }
+
+        fn verify_basic_sig_batch_multi_msg(
+            &self,
+            inputs: &[(NodeId, &BasicSigOf<T>, &T)],
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            self.crypto_component
+                .verify_basic_sig_batch_multi_msg(inputs, registry_version)
+        }
     }
 
     impl<C: CryptoServiceProvider, T: Signable, R: CryptoComponentRng> MultiSigVerifier<T>
@@ -1012,7 +1029,7 @@ pub mod internal {
         fn create_transcript(
             &self,
             config: &NiDkgConfig,
-            verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
         ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
             NiDkgAlgorithm::create_transcript(&self.crypto_component, config, verified_dealings)
         }

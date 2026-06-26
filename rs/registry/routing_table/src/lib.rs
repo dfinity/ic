@@ -55,10 +55,7 @@ impl CanisterIdRange {
     /// * `None` if `previous_canister_id >= self.end`
     ///   or the entire range of 64 bit integers is exhausted.
     /// * `previous_canister_id + 1` otherwise.
-    pub fn generate_canister_id(
-        &self,
-        previous_canister_id: Option<CanisterId>,
-    ) -> Option<CanisterId> {
+    pub fn next_canister_id(&self, previous_canister_id: Option<CanisterId>) -> Option<CanisterId> {
         let previous_canister_id = match previous_canister_id {
             Some(previous_canister_id) => previous_canister_id,
 
@@ -215,17 +212,14 @@ impl CanisterIdRanges {
         self.0.last().map(|range| range.end)
     }
 
-    /// Generates the next canister ID after the (provided) previously generated
-    /// canister ID, if any is available.
+    /// Returns the next canister ID after `previous_canister_id`, if any is
+    /// available.
     ///
     /// Returns `None` if no more canister IDs can be generated.
-    pub fn generate_canister_id(
-        &self,
-        previous_canister_id: Option<CanisterId>,
-    ) -> Option<CanisterId> {
+    pub fn next_canister_id(&self, previous_canister_id: Option<CanisterId>) -> Option<CanisterId> {
         self.0
             .iter()
-            .flat_map(|range| range.generate_canister_id(previous_canister_id))
+            .flat_map(|range| range.next_canister_id(previous_canister_id))
             .next()
     }
 

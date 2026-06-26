@@ -78,6 +78,155 @@ fn should_fail_withdrawal() {
     );
 }
 
+/// Smoke-tests the ICRC-21 / ICRC-10 endpoints exposed by the minter:
+///
+/// * `icrc10_supported_standards` advertises both standards with the canonical
+///   `dfinity/ICRC` URLs.
+/// * `icrc21_canister_call_consent_message` produces both a GenericDisplay
+///   markdown message and a FieldsDisplay structured message for
+///   `retrieve_doge_with_approval`, with the configured network's token symbols
+///   threaded through.
+/// * Unsupported methods return `Icrc21Error::UnsupportedCanisterCall`.
+#[test]
+fn test_icrc21_endpoints_smoke() {
+    use candid::Encode;
+    use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalArgs;
+    use ic_ckdoge_minter::lifecycle::init::Network;
+    use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL};
+    use icrc_ledger_types::icrc21::errors::Icrc21Error;
+    use icrc_ledger_types::icrc21::requests::{
+        ConsentMessageMetadata, ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+    };
+    use icrc_ledger_types::icrc21::responses::{ConsentMessage, Value};
+
+    // Mainnet so we don't need a dogecoind daemon; "ckDOGE" / "DOGE" symbols.
+    let setup = Setup::new(Network::Mainnet);
+    let minter = setup.minter();
+    // A valid Dogecoin mainnet P2PKH address.
+    const ADDRESS: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
+
+    let make_request = |method: &str,
+                        arg: Vec<u8>,
+                        device_spec: Option<DisplayMessageType>|
+     -> ConsentMessageRequest {
+        ConsentMessageRequest {
+            method: method.to_string(),
+            arg,
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec,
+            },
+        }
+    };
+
+    // 1. icrc10_supported_standards advertises ICRC-10 and ICRC-21.
+    let standards = minter.icrc10_supported_standards();
+    let names: Vec<_> = standards.iter().map(|s| s.name.as_str()).collect();
+    assert!(
+        names.contains(&"ICRC-10") && names.contains(&"ICRC-21"),
+        "expected ICRC-10 and ICRC-21 in supported standards, got {names:?}"
+    );
+    let icrc21 = standards
+        .iter()
+        .find(|s| s.name == "ICRC-21")
+        .expect("ICRC-21 entry missing");
+    assert_eq!(
+        icrc21.url,
+        "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md"
+    );
+
+    // 2a. retrieve_doge_with_approval / GenericDisplay renders the expected
+    // Markdown sections, with the configured (mainnet) token symbols. The
+    // assertion is a full-string equality so any wording change has to be
+    // updated here consciously.
+    let args = RetrieveDogeWithApprovalArgs {
+        amount: 250_000,
+        address: ADDRESS.to_string(),
+        from_subaccount: None,
+    };
+    let info = minter
+        .icrc21_canister_call_consent_message(
+            USER_PRINCIPAL,
+            &make_request(
+                "retrieve_doge_with_approval",
+                Encode!(&args).unwrap(),
+                Some(DisplayMessageType::GenericDisplay),
+            ),
+        )
+        .expect("consent message should be produced for retrieve_doge_with_approval");
+    let message = match info.consent_message {
+        ConsentMessage::GenericDisplayMessage(m) => m,
+        other => panic!("expected GenericDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(
+        message,
+        format!(
+            "# Convert ckDOGE to DOGE\n\n\
+             Authorize the ckDOGE minter to burn ckDOGE from your account and \
+             send the equivalent amount in DOGE (minus network and minter fees) to \
+             the Dogecoin address below.\n\n\
+             **Amount to convert:** `0.0025 ckDOGE`\n\n\
+             **Dogecoin destination address:**\n`{ADDRESS}`"
+        )
+    );
+
+    // 2b. retrieve_doge_with_approval / FieldsDisplay renders the structured
+    // intent + (Amount, DOGE address) pair.
+    let info = minter
+        .icrc21_canister_call_consent_message(
+            USER_PRINCIPAL,
+            &make_request(
+                "retrieve_doge_with_approval",
+                Encode!(&args).unwrap(),
+                Some(DisplayMessageType::FieldsDisplay),
+            ),
+        )
+        .expect("consent message should be produced for retrieve_doge_with_approval");
+    let fields_display = match info.consent_message {
+        ConsentMessage::FieldsDisplayMessage(f) => f,
+        other => panic!("expected FieldsDisplayMessage, got {other:?}"),
+    };
+    assert_eq!(fields_display.intent, "ckDOGE to DOGE");
+    assert_eq!(
+        fields_display.fields,
+        vec![
+            (
+                "Amount".to_string(),
+                Value::TokenAmount {
+                    decimals: 8,
+                    amount: 250_000,
+                    symbol: "ckDOGE".to_string(),
+                }
+            ),
+            (
+                "DOGE address".to_string(),
+                Value::Text {
+                    content: ADDRESS.to_string(),
+                }
+            ),
+        ]
+    );
+
+    // 3. Unsupported methods return UnsupportedCanisterCall. `retrieve_doge`
+    // is intentionally listed here — the minter only renders consent for
+    // the approval-based flow.
+    for method in ["retrieve_doge", "update_balance", "get_doge_address"] {
+        let err = minter
+            .icrc21_canister_call_consent_message(
+                USER_PRINCIPAL,
+                &make_request(method, vec![], None),
+            )
+            .expect_err("expected UnsupportedCanisterCall");
+        assert!(
+            matches!(err, Icrc21Error::UnsupportedCanisterCall(_)),
+            "method {method:?} should be rejected as unsupported, got {err:?}"
+        );
+    }
+}
+
 mod get_doge_address {
     use candid::Principal;
     use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
@@ -135,7 +284,7 @@ mod get_doge_address {
 
         assert_eq!(address_from_caller, address_with_owner);
         assert_eq!(
-            address_from_caller, "D95u8BQWiN21ER5LqrNwSk4WDVe25WHWHT",
+            address_from_caller, "D6ngYFXhH7Sct9FbBanqqrsco5FwzSpt4X",
             "BUG: result of public key derivation changed!"
         );
 
@@ -148,7 +297,7 @@ mod get_doge_address {
         );
         assert_ne!(address_from_caller, address_with_subaccount);
         assert_eq!(
-            address_with_subaccount, "DPZ2c7wS53i9nGrMh25iCZABdPs718NRA9",
+            address_with_subaccount, "D7K8TmiiVy5WbHVrVnJ6tobHvrzBEQqwxa",
             "BUG: result of public key derivation changed!"
         );
     }
@@ -455,6 +604,7 @@ fn should_estimate_withdrawal_fee() {
     fn estimate_withdrawal_fee_and_check(
         minter: &MinterCanister,
         withdrawal_amount: u64,
+        expected_num_utxos: usize,
     ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
         let utxos_before = minter.get_known_utxos(USER_PRINCIPAL);
         let result = minter.estimate_withdrawal_fee(withdrawal_amount);
@@ -463,6 +613,7 @@ fn should_estimate_withdrawal_fee() {
             utxos_before, utxos_after,
             "BUG: a query endpoint should not be able to modify state!"
         );
+        assert_eq!(utxos_before.len(), expected_num_utxos);
         result
     }
 
@@ -470,7 +621,7 @@ fn should_estimate_withdrawal_fee() {
     let minter = setup.minter();
 
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        estimate_withdrawal_fee_and_check(&minter, DOGE, 0),
         Err(EstimateWithdrawalFeeError::AmountTooHigh),
         "Any amount should be too high since there are no UTXOs"
     );
@@ -484,7 +635,7 @@ fn should_estimate_withdrawal_fee() {
         .expect_mint();
 
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        estimate_withdrawal_fee_and_check(&minter, DOGE, 2),
         Err(EstimateWithdrawalFeeError::AmountTooLow {
             min_amount: RETRIEVE_DOGE_MIN_AMOUNT
         })
@@ -495,11 +646,13 @@ fn should_estimate_withdrawal_fee() {
         dogecoin_fee: 227_000_000,
     };
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
-        Ok(expected_fee)
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT, 2),
+        Ok(expected_fee),
+        "Minter logs {:?}",
+        minter.get_logs()
     );
     assert_eq!(
-        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT, 2),
         Ok(expected_fee),
         "BUG: estimate_withdrawal_fee should be idempotent"
     );

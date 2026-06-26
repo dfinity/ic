@@ -3,23 +3,25 @@ use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
 use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
 use crate::driver::farm::VMCreateResponse;
+use crate::driver::farm::VmAllocationMode;
 use crate::driver::farm::{CreateVmRequest, HostFeature};
 use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResourceOverrides};
+use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
     get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
 };
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv6Addr;
+use std::path::PathBuf;
 use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
@@ -52,10 +54,27 @@ pub struct ResourceRequest {
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
-pub struct DiskImage {
-    pub image_type: ImageType,
-    pub url: Url,
-    pub sha256: String,
+pub enum DiskImage {
+    /// Image downloaded by a Farm host via URL with sha256 verification.
+    Url {
+        image_type: ImageType,
+        url: Url,
+        sha256: String,
+    },
+    /// Image already present locally on disk. Used by the Local backend.
+    Local {
+        image_type: ImageType,
+        path: PathBuf,
+    },
+}
+
+impl DiskImage {
+    pub fn image_type(&self) -> &ImageType {
+        match self {
+            DiskImage::Url { image_type, .. } => image_type,
+            DiskImage::Local { image_type, .. } => image_type,
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
@@ -67,32 +86,25 @@ pub enum ImageType {
 
 impl From<DiskImage> for ImageLocation {
     fn from(src: DiskImage) -> ImageLocation {
-        match src.image_type {
-            ImageType::IcOsImage => IcOsImageViaUrl {
-                url: src.url.clone(),
-                sha256: src.sha256,
-            },
-            _ => ImageViaUrl {
-                url: src.url.clone(),
-                sha256: src.sha256,
-            },
+        match src {
+            DiskImage::Url {
+                image_type: ImageType::IcOsImage,
+                url,
+                sha256,
+            } => IcOsImageViaUrl { url, sha256 },
+            DiskImage::Url { url, sha256, .. } => ImageViaUrl { url, sha256 },
+            DiskImage::Local { .. } => {
+                panic!("Local DiskImage cannot be converted to Farm ImageLocation")
+            }
         }
     }
 }
 
 impl ResourceRequest {
-    pub fn new(
-        image_type: ImageType,
-        primary_image_url: Url,
-        primary_image_sha256: String,
-    ) -> Self {
+    pub fn new(primary_image: DiskImage) -> Self {
         Self {
             group_name: Default::default(),
-            primary_image: DiskImage {
-                image_type,
-                url: primary_image_url,
-                sha256: primary_image_sha256,
-            },
+            primary_image,
             vm_configs: Default::default(),
         }
     }
@@ -115,7 +127,7 @@ pub struct VmSpec {
     boot_image: BootImage,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
     has_ipv4: bool,
-    vm_allocation: Option<VmAllocationStrategy>,
+    vm_allocation_mode: Option<VmAllocationMode>,
     required_host_features: Vec<HostFeature>,
     alternate_template: Option<VmType>,
 }
@@ -164,7 +176,6 @@ pub struct AllocatedVm {
     pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
-    pub ipv4: Option<Ipv4Addr>,
     pub bare_metal: bool,
 }
 
@@ -175,9 +186,28 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256(), get_guestos_img_url());
-
-    let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
+    // The GuestOS image URL/hash environment variables are only populated for
+    // the Farm backend. Under the Local backend they are unset (the image is
+    // provided as a local path via `ENV_DEPS__GUESTOS_DISK_IMG_PATH`), so we
+    // must not call `get_guestos_img_url`/`get_guestos_img_sha256` there.
+    let primary_image = match SystemTestBackend::read_attribute(test_env) {
+        SystemTestBackend::Farm => DiskImage::Url {
+            image_type: ImageType::IcOsImage,
+            url: get_guestos_img_url(test_env),
+            sha256: get_guestos_img_sha256(),
+        },
+        SystemTestBackend::Local => {
+            let var = local_path_env_var(&ImageType::IcOsImage);
+            DiskImage::Local {
+                image_type: ImageType::IcOsImage,
+                path: PathBuf::from(
+                    std::env::var(var)
+                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                ),
+            }
+        }
+    };
+    let mut res_req = ResourceRequest::new(primary_image);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     let ic_resource_overrides = config.vm_resource_overrides;
@@ -223,11 +253,11 @@ pub fn get_resource_request_for_nested_nodes(
     let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
 
     // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(
-        ImageType::IcOsImage,
-        empty_disk_img_url,
-        empty_disk_img_sha256,
-    );
+    let mut res_req = ResourceRequest::new(DiskImage::Url {
+        image_type: ImageType::IcOsImage,
+        url: empty_disk_img_url,
+        sha256: empty_disk_img_sha256,
+    });
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
@@ -243,24 +273,73 @@ pub fn get_resource_request_for_nested_nodes(
 /// https://github.com/dfinity-lab/farm/actions?query=branch%3Amaster+is%3Asuccess
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
-const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "585f4cb5866a576a1ba85ffb2c4fbd1836c7e39a7e9a02b5be44bfb4820a1443";
+pub const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
+    "ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25";
+
+/// Returns the default Universal VM disk image as a Farm-style URL.
+/// Under the Local backend, callers should pipe this through [`maybe_localize`]
+/// so the URL is replaced with the local path supplied by bazel.
+pub fn default_universal_vm_disk_image() -> DiskImage {
+    DiskImage::Url {
+        image_type: ImageType::UniversalImage,
+        url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
+        sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
+    }
+}
+
+/// Environment variable name carrying the local path for a given image type.
+fn local_path_env_var(image_type: &ImageType) -> &'static str {
+    match image_type {
+        ImageType::IcOsImage => "ENV_DEPS__GUESTOS_DISK_IMG_PATH",
+        ImageType::PrometheusImage => "ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH",
+        ImageType::UniversalImage => "ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH",
+    }
+}
+
+/// Convert a `DiskImage::Url` into a `DiskImage::Local` when running under the
+/// Local backend, preserving its `image_type`. The local path is looked up via
+/// the appropriate `ENV_DEPS__*_DISK_IMG_PATH` environment variable provided by
+/// the bazel `system_test(local = True, ...)` macro.
+pub fn maybe_localize(primary_image: DiskImage, env: &TestEnv) -> DiskImage {
+    match SystemTestBackend::read_attribute(env) {
+        SystemTestBackend::Farm => primary_image,
+        SystemTestBackend::Local => match primary_image {
+            DiskImage::Local { .. } => primary_image,
+            DiskImage::Url { image_type, .. } => {
+                let var = local_path_env_var(&image_type);
+                let path = PathBuf::from(
+                    std::env::var(var)
+                        .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                );
+                DiskImage::Local { image_type, path }
+            }
+        },
+    }
+}
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
     group_setup: &GroupSetup,
     group_name: &str,
+    env: &TestEnv,
 ) -> anyhow::Result<ResourceRequest> {
-    let primary_image = universal_vm.primary_image.clone().unwrap_or_else(|| DiskImage {
-        image_type: ImageType::UniversalImage,
-        url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
-        sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
-    });
-    let mut res_req = ResourceRequest::new(
-        primary_image.image_type.clone(),
-        primary_image.url.clone(),
-        primary_image.sha256,
-    );
+    let primary_image = match universal_vm.primary_image.clone() {
+        Some(image) => maybe_localize(image, env),
+        None => match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => default_universal_vm_disk_image(),
+            SystemTestBackend::Local => {
+                let var = local_path_env_var(&ImageType::UniversalImage);
+                DiskImage::Local {
+                    image_type: ImageType::UniversalImage,
+                    path: PathBuf::from(
+                        std::env::var(var)
+                            .unwrap_or_else(|_| panic!("Failed to read '{var}' for Local backend")),
+                    ),
+                }
+            }
+        },
+    };
+    let mut res_req = ResourceRequest::new(primary_image);
     res_req.group_name = group_name.to_string();
 
     let resolved_vm_resources = universal_vm
@@ -275,47 +354,46 @@ pub fn get_resource_request_for_universal_vm(
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: universal_vm.has_ipv4,
-        vm_allocation: universal_vm.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: universal_vm.required_host_features.clone(),
         alternate_template: None,
     });
     Ok(res_req)
 }
 
-pub fn allocate_resources(
-    farm: &Farm,
-    req: &ResourceRequest,
-    env: &TestEnv,
-) -> FarmResult<ResourceGroup> {
+pub fn allocate_resources(req: &ResourceRequest, env: &TestEnv) -> FarmResult<ResourceGroup> {
     let group_name = req.group_name.clone();
+    let backend = SystemTestBackend::read_attribute(env);
 
-    let mut threads = vec![];
-    for vm_config in req.vm_configs.iter() {
-        let farm_cloned = farm.clone();
-        let vm_name = vm_config.name.clone();
-        let create_vm_request = CreateVmRequest::new(
-            vm_name.clone(),
-            vm_config
-                .alternate_template
-                .clone()
-                .unwrap_or(VmType::Production),
-            vm_config.vcpus,
-            vm_config.memory_kibibytes,
-            vec![],
-            match &vm_config.boot_image {
-                BootImage::GroupDefault => From::from(req.primary_image.clone()),
-                BootImage::Image(disk_image) => From::from(disk_image.clone()),
-                BootImage::File(id) => ImageLocation::IcOsImageViaId { id: id.clone() },
-            },
-            vm_config.boot_image_minimal_size_gibibytes,
-            vm_config.has_ipv4,
-            vm_config.vm_allocation.clone(),
-            vm_config.required_host_features.clone(),
-        );
-        let group_name = group_name.clone();
+    let mut res_group = ResourceGroup::new(group_name.clone());
 
-        match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+    match backend {
+        SystemTestBackend::Farm => {
+            let farm = Farm::from_test_env(env, "allocate_resources");
+            let mut threads = vec![];
+            for vm_config in req.vm_configs.iter() {
+                let farm_cloned = farm.clone();
+                let vm_name = vm_config.name.clone();
+                let create_vm_request = CreateVmRequest::new(
+                    vm_name.clone(),
+                    vm_config
+                        .alternate_template
+                        .clone()
+                        .unwrap_or(VmType::Production),
+                    vm_config.vcpus,
+                    vm_config.memory_kibibytes,
+                    vec![],
+                    match &vm_config.boot_image {
+                        BootImage::GroupDefault => From::from(req.primary_image.clone()),
+                        BootImage::Image(disk_image) => From::from(disk_image.clone()),
+                        BootImage::File(id) => ImageLocation::IcOsImageViaId { id: id.clone() },
+                    },
+                    vm_config.boot_image_minimal_size_gibibytes,
+                    vm_config.has_ipv4,
+                    None,
+                    vm_config.required_host_features.clone(),
+                );
+                let group_name = group_name.clone();
                 threads.push(std::thread::spawn(move || {
                     (
                         vm_name,
@@ -323,11 +401,6 @@ pub fn allocate_resources(
                     )
                 }));
             }
-        }
-    }
-    let mut res_group = ResourceGroup::new(group_name.clone());
-    match InfraProvider::read_attribute(env) {
-        InfraProvider::Farm => {
             for thread in threads {
                 let (vm_name, created_vm) = thread
                     .join()
@@ -342,7 +415,45 @@ pub fn allocate_resources(
                     name: vm_name,
                     group_name: group_name.clone(),
                     hostname,
-                    ipv4: None,
+                    ipv6,
+                    mac6,
+                    bare_metal: false,
+                });
+            }
+        }
+        SystemTestBackend::Local => {
+            let backend = crate::driver::local_backend::LocalBackend::from_test_env(env)
+                .expect("LocalBackend::from_test_env failed");
+            for vm_config in req.vm_configs.iter() {
+                let vm_name = vm_config.name.clone();
+                let primary_image: DiskImage = match &vm_config.boot_image {
+                    BootImage::GroupDefault => req.primary_image.clone(),
+                    BootImage::Image(disk_image) => disk_image.clone(),
+                    BootImage::File(_) => {
+                        panic!("BootImage::File is not supported by the Local backend")
+                    }
+                };
+                let created = backend
+                    .create_vm(
+                        &group_name,
+                        &vm_name,
+                        vm_config.vcpus.get(),
+                        vm_config.memory_kibibytes.get(),
+                        primary_image,
+                        vm_config.boot_image_minimal_size_gibibytes.map(|s| s.get()),
+                        vm_config.has_ipv4,
+                    )
+                    .expect("LocalBackend::create_vm failed");
+                let VMCreateResponse {
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ..
+                } = created;
+                res_group.add_vm(AllocatedVm {
+                    name: vm_name,
+                    group_name: group_name.clone(),
+                    hostname,
                     ipv6,
                     mac6,
                     bare_metal: false,
@@ -375,7 +486,7 @@ fn vm_spec_from_node(
         boot_image: n.boot_image.clone(),
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: n.vm_allocation.clone(),
+        vm_allocation_mode: None,
         required_host_features: n.required_host_features.clone(),
         alternate_template: None,
     }
@@ -389,8 +500,11 @@ fn vm_spec_from_nested_node(
     node: &NestedNode,
     group_vm_resource_overrides: VmResourceOverrides,
 ) -> anyhow::Result<VmSpec> {
-    let node_vm_resource_overrides = match &node.node_spec {
-        NestedNodeSpec::Vm(overrides) => overrides,
+    let (node_vm_resource_overrides, required_host_features) = match &node.node_spec {
+        NestedNodeSpec::Vm {
+            vm_resource_overrides,
+            required_host_features,
+        } => (*vm_resource_overrides, required_host_features.clone()),
         NestedNodeSpec::BareMetal { .. } => {
             bail!("Bare metal nodes are not supported by get_resource_request_for_nested_nodes")
         }
@@ -407,8 +521,8 @@ fn vm_spec_from_nested_node(
         boot_image: node.boot_image.clone(),
         boot_image_minimal_size_gibibytes: resolved_vm_resources.boot_image_minimal_size_gibibytes,
         has_ipv4: false,
-        vm_allocation: None,
-        required_host_features: Vec::new(),
+        vm_allocation_mode: None,
+        required_host_features,
         alternate_template: None,
     })
 }

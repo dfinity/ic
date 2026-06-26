@@ -7,59 +7,68 @@ package(default_visibility = [
     "//rs/validator/http_request_test_utils:__subpackages__",
 ])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/bls12_381/type",
-    "//rs/crypto/internal/crypto_lib/seed",
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/secrets_containers",
-    "//rs/crypto/sha2",
-    "//rs/types/types",
-    "@crate_index//:base64",
-    "@crate_index//:cached",
-    "@crate_index//:hex",
-    "@crate_index//:parking_lot",
-    "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:subtle",
-    "@crate_index//:zeroize",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:strum_macros",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/internal/test_vectors",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "@crate_index//:proptest",
-    "@crate_index//:strum",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:proptest-derive",
-]
-
 rust_library(
     name = "bls12_381",
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_threshold_sig_bls12381",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/secrets_containers",
+        "//rs/crypto/sha2",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:cached",
+        "@crate_index//:hex",
+        "@crate_index//:parking_lot",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:subtle",
+        "@crate_index//:zeroize",
+    ],
 )
 
 rust_test(
     name = "ic_crypto_internal_threshold_sig_bls12_381_test",
     crate = ":bls12_381",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:proptest-derive",
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/secrets_containers",
+        "//rs/crypto/sha2",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:cached",
+        "@crate_index//:hex",
+        "@crate_index//:parking_lot",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:strum",
+        "@crate_index//:subtle",
+        "@crate_index//:zeroize",
+    ],
 )
 
 rust_test_suite(
@@ -69,16 +78,68 @@ rust_test_suite(
         exclude = ["tests/honest_dealer_exhaustive.rs"],
     ),
     compile_data = glob(["tests/data/*"]),
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":bls12_381"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:proptest-derive",
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        # Keep sorted.
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/secrets_containers",
+        "//rs/crypto/sha2",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:cached",
+        "@crate_index//:hex",
+        "@crate_index//:parking_lot",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:strum",
+        "@crate_index//:subtle",
+        "@crate_index//:zeroize",
+    ],
 )
 
 rust_test(
     name = "honest_dealer_exhaustive",
     srcs = ["tests/honest_dealer_exhaustive.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:proptest-derive",
+        "@crate_index//:strum_macros",
+    ],
     tags = ["long_test"],
-    deps = [":bls12_381"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/secrets_containers",
+        "//rs/crypto/sha2",
+        "//rs/types/types",
+        "@crate_index//:base64",
+        "@crate_index//:cached",
+        "@crate_index//:hex",
+        "@crate_index//:parking_lot",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:strum",
+        "@crate_index//:subtle",
+        "@crate_index//:zeroize",
+    ],
 )
 
 rust_bench(

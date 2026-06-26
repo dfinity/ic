@@ -21,9 +21,36 @@ pub fn show_guestos_alternative() -> Result<()> {
     show_guestos_alternative_impl(&GptPartitionProvider::new(GUESTOS_DEVICE.into())?)
 }
 
+/// Returns the current GuestOS boot alternative.
+pub fn get_current_guestos_alternative() -> Result<grub::BootAlternative> {
+    get_current_guestos_alternative_impl(&GptPartitionProvider::new(GUESTOS_DEVICE.into())?)
+}
+
+fn get_current_guestos_alternative_impl(
+    partition_provider: &dyn ic_device::mount::PartitionProvider,
+) -> Result<grub::BootAlternative> {
+    let grub_partition = partition_provider
+        .mount_partition(
+            PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
+            MountOptions {
+                file_system: FileSystem::Vfat,
+                read_only: true, // GuestOS may be running, we must mount readonly
+            },
+        )
+        .context("Could not mount grub partition")?;
+    let grubenv_path = grub_partition.mount_point().join("grubenv");
+
+    let grubenv_file = std::fs::File::open(&grubenv_path).context("Failed to open grubenv")?;
+    let grubenv = grub::GrubEnv::read_from(grubenv_file).context("Failed to read grubenv")?;
+    grubenv
+        .boot_alternative
+        .context("Invalid/missing boot alternative in grubenv")
+}
+
 fn show_guestos_alternative_impl(
     partition_provider: &dyn ic_device::mount::PartitionProvider,
 ) -> Result<()> {
+    let current_boot_alternative = get_current_guestos_alternative_impl(partition_provider);
     let grub_partition = partition_provider
         .mount_partition(
             PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
@@ -39,9 +66,7 @@ fn show_guestos_alternative_impl(
     let grubenv = grub::GrubEnv::read_from(grubenv_file).context("Failed to read grubenv")?;
     println!(
         "GuestOS Boot alternative: {}",
-        grubenv
-            .boot_alternative
-            .map_or_else(|e| e.to_string(), |v| v.to_string())
+        current_boot_alternative.map_or_else(|e| e.to_string(), |v| v.to_string())
     );
     println!(
         "GuestOS Boot cycle: {}",
@@ -225,6 +250,15 @@ mod tests {
 
         let result = show_guestos_alternative_impl(&provider);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_current_guestos_alternative_impl() {
+        let (provider, _temp_dir) =
+            create_mock_partition_provider(Some(grub::BootAlternative::B), Some(BootCycle::Stable));
+
+        let result = get_current_guestos_alternative_impl(&provider);
+        assert_eq!(result.unwrap(), grub::BootAlternative::B);
     }
 
     #[test]

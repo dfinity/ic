@@ -73,6 +73,9 @@ pub struct NetworkTopology {
     pub chain_key_enabled_subnets: ::prost::alloc::vec::Vec<ChainKeySubnetEntry>,
     #[prost(message, optional, tag = "9")]
     pub full_topology: ::core::option::Option<FullTopology>,
+    #[prost(message, optional, tag = "10")]
+    pub default_initial_dkg_subnet_id:
+        ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FullTopology {
@@ -162,8 +165,6 @@ pub struct SignWithThresholdContext {
     pub args: ::core::option::Option<ThresholdArguments>,
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub derivation_path_vec: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bytes = "vec", tag = "4")]
-    pub deprecated_pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
     #[prost(bytes = "vec", optional, tag = "8")]
@@ -226,6 +227,8 @@ pub struct CanisterHttpRequestContext {
     pub pricing_version: ::core::option::Option<PricingVersion>,
     #[prost(message, optional, tag = "13")]
     pub refund_status: ::core::option::Option<RefundStatus>,
+    #[prost(uint64, tag = "14")]
+    pub registry_version: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefundStatus {
@@ -452,6 +455,9 @@ pub struct SubnetCallContextManager {
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
     #[prost(message, repeated, tag = "19")]
     pub pre_signature_stashes: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
+    #[prost(message, repeated, tag = "20")]
+    pub delivered_canister_http_request_contexts:
+        ::prost::alloc::vec::Vec<CanisterHttpRequestContextTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {
@@ -475,6 +481,9 @@ pub struct SubnetMetrics {
     pub update_transactions_total: ::core::option::Option<u64>,
     #[prost(message, repeated, tag = "11")]
     pub threshold_signature_agreements: ::prost::alloc::vec::Vec<ThresholdSignatureAgreementsEntry>,
+    #[prost(message, repeated, tag = "12")]
+    pub consumed_cycles_by_use_case_as_counters:
+        ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsFollowUpResponses {
@@ -589,6 +598,21 @@ pub struct SystemMetadata {
     #[prost(message, optional, tag = "24")]
     pub own_resource_limits:
         ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
+    #[prost(message, repeated, tag = "25")]
+    pub subnet_schedule: ::prost::alloc::vec::Vec<CanisterPriority>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterPriority {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(int64, tag = "2")]
+    pub accumulated_priority: i64,
+    #[prost(int64, tag = "3")]
+    pub executed_rounds: i64,
+    #[prost(uint64, optional, tag = "4")]
+    pub long_execution_start_round: ::core::option::Option<u64>,
+    #[prost(uint64, tag = "5")]
+    pub last_full_execution_round: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {
@@ -611,6 +635,7 @@ pub enum HttpMethod {
     Head = 3,
     Put = 4,
     Delete = 5,
+    Patch = 6,
 }
 impl HttpMethod {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -625,6 +650,7 @@ impl HttpMethod {
             Self::Head => "HTTP_METHOD_HEAD",
             Self::Put => "HTTP_METHOD_PUT",
             Self::Delete => "HTTP_METHOD_DELETE",
+            Self::Patch => "HTTP_METHOD_PATCH",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -636,6 +662,7 @@ impl HttpMethod {
             "HTTP_METHOD_HEAD" => Some(Self::Head),
             "HTTP_METHOD_PUT" => Some(Self::Put),
             "HTTP_METHOD_DELETE" => Some(Self::Delete),
+            "HTTP_METHOD_PATCH" => Some(Self::Patch),
             _ => None,
         }
     }

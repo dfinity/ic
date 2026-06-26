@@ -68,25 +68,25 @@ fn try_convert_string_into_canister_id_range() {
 }
 
 #[test]
-fn canister_id_range_generate_canister_id() {
+fn canister_id_range_next_canister_id() {
     let range = CanisterIdRange {
         start: 5.into(),
         end: 10.into(),
     };
 
     // `previous_canister_id` is `None`: `range.start`.
-    assert_eq!(Some(5.into()), range.generate_canister_id(None));
+    assert_eq!(Some(5.into()), range.next_canister_id(None));
 
     // `previous_canister_id < range.start`: `range.start`.
-    assert_eq!(Some(5.into()), range.generate_canister_id(Some(0.into())));
+    assert_eq!(Some(5.into()), range.next_canister_id(Some(0.into())));
 
     // In-range `previous_canister_id`: next canister ID.
-    assert_eq!(Some(6.into()), range.generate_canister_id(Some(5.into())));
-    assert_eq!(Some(10.into()), range.generate_canister_id(Some(9.into())));
+    assert_eq!(Some(6.into()), range.next_canister_id(Some(5.into())));
+    assert_eq!(Some(10.into()), range.next_canister_id(Some(9.into())));
 
     // `previous_canister_id >= range.end`: `None`.
-    assert_eq!(None, range.generate_canister_id(Some(10.into())));
-    assert_eq!(None, range.generate_canister_id(Some(11.into())));
+    assert_eq!(None, range.next_canister_id(Some(10.into())));
+    assert_eq!(None, range.next_canister_id(Some(11.into())));
 }
 
 #[test]
@@ -175,49 +175,31 @@ fn canister_id_ranges_are_not_disjoint() {
 }
 
 #[test]
-fn canister_id_ranges_generate_canister_id() {
+fn canister_id_ranges_next_canister_id() {
     let empty_ranges = new_canister_id_ranges(vec![]);
 
     // Empty ranges: `None`.
-    assert_eq!(None, empty_ranges.generate_canister_id(Some(1.into())));
-    assert_eq!(None, empty_ranges.generate_canister_id(None));
+    assert_eq!(None, empty_ranges.next_canister_id(Some(1.into())));
+    assert_eq!(None, empty_ranges.next_canister_id(None));
 
     let ranges = new_canister_id_ranges(vec![(10, 19), (30, 39)]);
 
     // `previous_canister_id` is `None`: `self.start`.
-    assert_eq!(Some(10.into()), ranges.generate_canister_id(None));
+    assert_eq!(Some(10.into()), ranges.next_canister_id(None));
 
     // `previous_canister_id < self.start`: `self.start`.
-    assert_eq!(Some(10.into()), ranges.generate_canister_id(Some(9.into())));
+    assert_eq!(Some(10.into()), ranges.next_canister_id(Some(9.into())));
 
     // `previous_canister_id < ranges.end()`: next canister ID.
-    assert_eq!(
-        Some(11.into()),
-        ranges.generate_canister_id(Some(10.into()))
-    );
-    assert_eq!(
-        Some(19.into()),
-        ranges.generate_canister_id(Some(18.into()))
-    );
-    assert_eq!(
-        Some(30.into()),
-        ranges.generate_canister_id(Some(19.into()))
-    );
-    assert_eq!(
-        Some(30.into()),
-        ranges.generate_canister_id(Some(25.into()))
-    );
-    assert_eq!(
-        Some(31.into()),
-        ranges.generate_canister_id(Some(30.into()))
-    );
-    assert_eq!(
-        Some(39.into()),
-        ranges.generate_canister_id(Some(38.into()))
-    );
+    assert_eq!(Some(11.into()), ranges.next_canister_id(Some(10.into())));
+    assert_eq!(Some(19.into()), ranges.next_canister_id(Some(18.into())));
+    assert_eq!(Some(30.into()), ranges.next_canister_id(Some(19.into())));
+    assert_eq!(Some(30.into()), ranges.next_canister_id(Some(25.into())));
+    assert_eq!(Some(31.into()), ranges.next_canister_id(Some(30.into())));
+    assert_eq!(Some(39.into()), ranges.next_canister_id(Some(38.into())));
 
     // `previous_canister_id == self.end`: `None`.
-    assert_eq!(None, ranges.generate_canister_id(Some(39.into())));
+    assert_eq!(None, ranges.next_canister_id(Some(39.into())));
 }
 
 #[test]

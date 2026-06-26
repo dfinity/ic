@@ -4,6 +4,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
+use std::time::Duration;
 
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
@@ -16,11 +17,6 @@ pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
 
 /// The maximum size of a delta (per message) canister log buffer.
 pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
-
-/// Upper bound on stored delta-log sizes used for metrics.
-/// Limits memory growth, 10k covers expected per-round
-/// number of messages per canister (and so delta log appends).
-const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
 /// Maximum number of response bytes for a fetch canister logs request.
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
@@ -131,13 +127,6 @@ pub struct CanisterLog {
 
     #[validate_eq(CompareWithValidateEq)]
     records: Records,
-
-    /// Tracks per-round sizes of appended delta logs — used solely for metrics.
-    ///
-    /// A round may append multiple logs (e.g. from heartbeats, timers, or message
-    /// executions). Their sizes are collected during the round and cleared after
-    /// metrics are recorded.
-    delta_log_sizes: VecDeque<usize>,
 }
 
 impl CanisterLog {
@@ -146,7 +135,6 @@ impl CanisterLog {
         Self {
             next_idx,
             records: Records::from(records, byte_capacity),
-            delta_log_sizes: VecDeque::new(),
         }
     }
 
@@ -227,6 +215,16 @@ impl CanisterLog {
         records.byte_capacity.saturating_sub(records.bytes_used)
     }
 
+    /// Returns the time span between the oldest and newest records in the
+    /// buffer, or `None` if the buffer is empty. Returns `Duration::ZERO`
+    /// when the buffer holds a single record.
+    pub fn retention(&self) -> Option<Duration> {
+        let records = self.records.get();
+        let first = records.front()?.timestamp_nanos;
+        let last = records.back()?.timestamp_nanos;
+        Some(Duration::from_nanos(last.saturating_sub(first)))
+    }
+
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: Vec<u8>) {
         // Add record and update the next index.
@@ -246,39 +244,29 @@ impl CanisterLog {
         if delta_log.is_empty() {
             return; // Don't append if delta is empty.
         }
-        // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.records.bytes_used);
 
-        // Assume records sorted cronologically (with increasing idx) and
+        // If the delta overflowed and evicted records, there is a gap between the
+        // aggregate's next expected index and the delta's first record. Drop all
+        // aggregate records to maintain index continuity.
+        if let Some(first) = delta_log.records.get().front()
+            && first.idx > self.next_idx
+        {
+            self.records.clear();
+        }
+
+        // Assume records sorted chronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
         if let Some(last) = delta_log.records.get().back() {
             self.next_idx = last.idx + 1;
         }
         self.records.append(&mut delta_log.records);
     }
+}
 
-    /// Records the size of the appended delta log.
-    fn push_delta_log_size(&mut self, size: usize) {
-        if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
-            self.delta_log_sizes.pop_front();
-        }
-        self.delta_log_sizes.push_back(size);
-    }
-
-    /// Returns true if the delta log sizes are not empty.
-    pub fn has_delta_log_sizes(&self) -> bool {
-        !self.delta_log_sizes.is_empty()
-    }
-
-    /// Returns delta_log sizes.
-    pub fn delta_log_sizes(&self) -> Vec<usize> {
-        self.delta_log_sizes.iter().cloned().collect()
-    }
-
-    /// Clears the delta_log sizes.
-    pub fn clear_delta_log_sizes(&mut self) {
-        self.delta_log_sizes.clear();
-    }
+/// Trait for canister log instrumentation.
+pub trait CanisterLogMetrics {
+    /// Observes the size of an appended delta log.
+    fn observe_delta_log_size(&self, size: usize);
 }
 
 #[cfg(test)]
@@ -438,16 +426,11 @@ mod tests {
         // Act.
         main.append_delta_log(&mut delta);
 
-        // Assert main log had data loss.
+        // Assert main log was cleared due to the gap (delta evicted records 3 and 4,
+        // so delta starts at idx 5 > next_idx 3; aggregate records are dropped).
         assert_eq!(
             main.records(),
-            &VecDeque::from(canister_log_records(&[
-                (0, 100, b"main #0"),
-                (1, 101, b"main #1"),
-                (2, 102, b"main #2"),
-                // Expected data loss.
-                (5, 202, b"delta #2"),
-            ]))
+            &VecDeque::from(canister_log_records(&[(5, 202, b"delta #2"),]))
         );
     }
 
@@ -500,9 +483,33 @@ mod tests {
                 (9, 303, b"delta #6"),
             ]))
         );
-        assert_eq!(main.delta_log_sizes(), vec![size_b, size_c]);
-        main.clear_delta_log_sizes();
-        assert_eq!(main.delta_log_sizes(), Vec::<usize>::new()); // Call after clear_delta_log_sizes.
         assert_eq!(main.bytes_used(), size_a + size_b + size_c);
+    }
+
+    #[test]
+    fn test_canister_log_retention() {
+        // Empty buffer: no retention.
+        let empty = CanisterLog::default_aggregate();
+        assert_eq!(empty.retention(), None);
+
+        // Single record: retention is zero.
+        let single = CanisterLog::new_aggregate(1, canister_log_records(&[(0, 100, b"a")]));
+        assert_eq!(single.retention(), Some(Duration::ZERO));
+
+        // Multiple records: retention spans first..last.
+        let span = CanisterLog::new_aggregate(
+            3,
+            canister_log_records(&[
+                (0, 1_000_000_000, b"a"),  // t = 1 s
+                (1, 1_500_000_000, b"b"),  // t = 1.5 s
+                (2, 61_000_000_000, b"c"), // t = 61 s
+            ]),
+        );
+        assert_eq!(span.retention(), Some(Duration::from_secs(60)));
+
+        // After clear the buffer is empty again.
+        let mut to_clear = span;
+        to_clear.clear();
+        assert_eq!(to_clear.retention(), None);
     }
 }

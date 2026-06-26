@@ -2,44 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/consensus/utils",
-    "//rs/interfaces",
-    "//rs/interfaces/registry",
-    "//rs/interfaces/state_manager",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/protobuf",
-    "//rs/registry/helpers",
-    "//rs/replicated_state",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "@crate_index//:prometheus",
-    "@crate_index//:rayon",
-    "@crate_index//:slog",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/artifact_pool",
-    "//rs/consensus/mocks",
-    "//rs/crypto/temp_crypto",
-    "//rs/crypto/test_utils/crypto_returning_ok",
-    "//rs/crypto/test_utils/ni-dkg",
-    "//rs/interfaces/registry/mocks",
-    "//rs/registry/keys",
-    "//rs/registry/subnet_features",
-    "//rs/test_utilities",
-    "//rs/test_utilities/artifact_pool",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/state",
-    "//rs/test_utilities/types",
-    "@crate_index//:prost",
-]
-
 rust_library(
     name = "dkg",
     srcs = glob(["src/**/*.rs"]),
@@ -52,7 +14,23 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/consensus/utils",
+        "//rs/interfaces",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/replicated_state",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:prometheus",
+        "@crate_index//:rayon",
+        "@crate_index//:slog",
+    ],
 )
 
 rust_doc(
@@ -63,5 +41,39 @@ rust_doc(
 rust_test(
     name = "consensus_dkg_test",
     crate = ":dkg",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/artifact_pool",
+        "//rs/config",
+        "//rs/consensus/mocks",
+        "//rs/consensus/utils",
+        "//rs/crypto/temp_crypto",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/interfaces",
+        "//rs/interfaces/mocks",
+        "//rs/interfaces/registry",
+        "//rs/interfaces/registry/mocks",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/subnet_features",
+        "//rs/replicated_state",
+        "//rs/test_utilities",
+        "//rs/test_utilities/artifact_pool",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:rayon",
+        "@crate_index//:slog",
+    ],
 )

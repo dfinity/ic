@@ -2,7 +2,8 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::Runtime;
 use common::test_helpers::{
-    get_added_subnet, get_cup_contents, get_subnet_list_record, prepare_registry_with_nodes,
+    get_added_subnet, get_cup_contents, get_subnet_list_record,
+    install_registry_canister_with_payload_builder, prepare_registry_with_nodes,
     set_up_universal_canister_as_governance, setup_registry_synced_with_fake_client,
     wait_for_chain_key_setup,
 };
@@ -14,20 +15,26 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
+use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::registry::decode_registry_value;
+use ic_nns_constants::{
+    ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
-        forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
-        set_up_universal_canister, state_machine_test_on_nns_subnet,
+        forward_call_via_universal_canister, set_up_registry_canister, set_up_universal_canister,
+        state_machine_test_on_nns_subnet,
     },
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{
-    ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
     SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
-use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+use ic_registry_keys::{
+    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_subnet_features::{
     ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
@@ -35,6 +42,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
+use pocket_ic::PocketIcBuilder;
 use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -142,76 +150,91 @@ fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
     });
 }
 
-#[test]
-fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let (data_provider, fake_client) = match runtime {
-            Runtime::Remote(_) | Runtime::StateMachine(_) => {
-                panic!(
-                    "Cannot run this test on Runtime::Remote or Runtime::StateMachine at this time"
-                );
-            }
-            Runtime::Local(ref r) => (r.registry_data_provider.clone(), r.registry_client.clone()),
-        };
+#[tokio::test]
+async fn test_governance_canister_can_create_a_subnet() {
+    create_subnet_succeeds_when_called_by(GOVERNANCE_CANISTER_ID.get()).await;
+}
 
-        let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
+#[tokio::test]
+async fn test_engine_controller_can_create_a_subnet() {
+    create_subnet_succeeds_when_called_by(ENGINE_CONTROLLER_CANISTER_ID.get()).await;
+}
 
-        let registry = setup_registry_synced_with_fake_client(
-            &runtime,
-            fake_client,
-            data_provider,
-            vec![init_mutate],
+/// Verifies that `caller` is authorized to call `create_subnet` and that doing
+/// so actually adds a new subnet to the registry.
+async fn create_subnet_succeeds_when_called_by(caller: PrincipalId) {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(
+        5 + INITIAL_MUTATION_ID,
+    ));
+    builder.push_init_mutate_request(init_mutate);
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+    let initial_subnet_list_record =
+        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
+            .await;
+    assert!(
+        !initial_subnet_list_record.subnets.is_empty(),
+        "expected the registry to already contain at least one subnet before create_subnet"
+    );
+
+    let payload = make_create_subnet_payload(node_ids.clone());
+
+    // Create a subnet via the authorized caller
+    pocket_ic
+        .update_call(
+            REGISTRY_CANISTER_ID.get().0,
+            caller.0,
+            "create_subnet",
+            Encode!(&payload).unwrap(),
         )
-        .await;
+        .await
+        .expect("create_subnet call by an authorized caller should succeed");
 
-        // Install the universal canister in place of the governance canister
-        let fake_governance_canister = set_up_universal_canister_as_governance(&runtime).await;
+    // Verify a new subnet appeared in the subnet list
+    let updated_subnet_list_record =
+        decode_registry_value::<SubnetListRecordPb>(&pocket_ic, make_subnet_list_record_key())
+            .await;
+    let added_subnets: Vec<_> = updated_subnet_list_record
+        .subnets
+        .iter()
+        .filter(|s| !initial_subnet_list_record.subnets.contains(s))
+        .collect();
+    assert_eq!(added_subnets.len(), 1);
+    let subnet_id = SubnetId::new(PrincipalId::try_from(added_subnets[0].as_slice()).unwrap());
 
-        // first, get current list of subnets created by underlying system
-        let initial_subnet_list_record = get_subnet_list_record(&registry).await;
-        // create payload message
-        let payload = make_create_subnet_payload(node_ids.clone());
+    let subnet_record =
+        decode_registry_value::<SubnetRecordPb>(&pocket_ic, make_subnet_record_key(subnet_id))
+            .await;
 
-        assert!(
-            forward_call_via_universal_canister(
-                &fake_governance_canister,
-                &registry,
-                "create_subnet",
-                Encode!(&payload).unwrap()
-            )
-            .await
-        );
+    assert_eq!(subnet_record.replica_version_id, payload.replica_version_id);
+    assert_eq!(
+        subnet_record.membership,
+        node_ids
+            .into_iter()
+            .map(|n| n.get().into_vec())
+            .collect::<Vec<Vec<u8>>>()
+    );
 
-        // Now let's check directly in the registry that the mutation actually happened
-        // by observing a new subnet in the subnet list
-        let (subnet_id, subnet_record) =
-            get_added_subnet(&registry, &initial_subnet_list_record).await;
+    let cup_contents = decode_registry_value::<CatchUpPackageContents>(
+        &pocket_ic,
+        make_catch_up_package_contents_key(subnet_id),
+    )
+    .await;
 
-        // Check if some fields are equal
-        assert_eq!(subnet_record.replica_version_id, payload.replica_version_id);
-        assert_eq!(
-            subnet_record.membership,
-            node_ids
-                .into_iter()
-                .map(|n| n.get().into_vec())
-                .collect::<::std::vec::Vec<std::vec::Vec<u8>>>()
-        );
-
-        let cup_contents = get_cup_contents(&registry, subnet_id).await;
-
-        assert!(
-            cup_contents
-                .initial_ni_dkg_transcript_low_threshold
-                .is_some()
-        );
-        assert!(
-            cup_contents
-                .initial_ni_dkg_transcript_high_threshold
-                .is_some()
-        );
-
-        Ok(())
-    });
+    assert!(
+        cup_contents
+            .initial_ni_dkg_transcript_low_threshold
+            .is_some()
+    );
+    assert!(
+        cup_contents
+            .initial_ni_dkg_transcript_high_threshold
+            .is_some()
+    );
 }
 
 fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: MasterPublicKeyId) {
@@ -303,6 +326,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let idkg_key_rotation_period_ms = Some(12345);
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = CreateSubnetPayload {
+            initial_dkg_subnet_id: Some(system_subnet_id),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
@@ -399,12 +423,12 @@ fn test_accepted_proposal_with_vetkd_gets_keys_from_other_subnet() {
     test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id);
 }
 
-// Start helper functions
 fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
     // create payload message
     CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: 60 * 1024 * 1024,
         max_ingress_bytes_per_block: None,
         max_ingress_messages_per_block: 1000,

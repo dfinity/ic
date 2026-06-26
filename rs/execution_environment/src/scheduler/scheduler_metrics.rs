@@ -1,30 +1,23 @@
 use crate::metrics::ScopedMetrics;
 use crate::scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH;
 use ic_metrics::MetricsRegistry;
-use ic_metrics::buckets::{
-    binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
-};
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::metrics::{
     duration_histogram, instructions_buckets, instructions_histogram, messages_buckets,
     messages_histogram, slices_histogram,
 };
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{PrincipalId, Time};
-use prometheus::{
-    Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec, IntGauge,
-};
+use prometheus::{Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter, IntCounterVec};
 use std::collections::BTreeMap;
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
-pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
-    "scheduler_subnet_memory_usage_invariant_broken";
 pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
     "scheduler_compute_allocation_invariant_broken";
 pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
 
 pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
-    pub(super) canister_log_delta_memory_usage: Histogram,
     pub(super) canister_ingress_queue_latencies: Histogram,
     pub(super) compute_utilization_per_core: Histogram,
     pub(super) msg_execution_duration: Histogram,
@@ -34,17 +27,17 @@ pub struct SchedulerMetrics {
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
     pub(super) execute_round_called: IntCounter,
-    pub(super) inner_loop_consumed_non_zero_instructions_count: IntCounter,
+    pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
+    pub(super) round_log_memory_store_migration_duration: Histogram,
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
     pub(super) round_postponed_raw_rand_queue: ScopedMetrics,
     pub(super) round_inner_subnet_queue: ScopedMetrics,
     pub(super) round_advance_long_install_code: ScopedMetrics,
-    pub(super) round_scheduling_duration: Histogram,
     pub(super) round_update_signature_request_contexts_duration: Histogram,
     pub(super) round_inner: ScopedMetrics,
     pub(super) round_inner_heartbeat_overhead_duration: Histogram,
@@ -64,10 +57,8 @@ pub struct SchedulerMetrics {
     pub(super) heap_delta_rate_limited_canisters_per_round: Histogram,
     pub(super) canister_install_code_debits: Histogram,
     pub(super) canister_invariants: IntCounter,
-    pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
-    pub(super) scheduler_accumulated_priority_invariant: IntGauge,
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) delivered_pre_signatures: HistogramVec,
@@ -85,12 +76,6 @@ impl SchedulerMetrics {
                 // 1, 2, 5, …, 1000, 2000, 5000
                 decimal_buckets(0, 3),
             ),
-            canister_log_delta_memory_usage: metrics_registry.histogram(
-                "canister_log_delta_memory_usage_bytes",
-                "Canisters log delta (per single execution) memory usage distribution in bytes.",
-                // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
-                binary_buckets_with_zero(10, 23)
-            ),
             canister_ingress_queue_latencies: metrics_registry.histogram(
                 "scheduler_canister_ingress_queue_latencies_seconds",
                 "Per-canister mean IC clock duration spent by messages in the ingress queue.",
@@ -99,7 +84,7 @@ impl SchedulerMetrics {
             ),
             compute_utilization_per_core: metrics_registry.histogram(
                 "scheduler_compute_utilization_per_core",
-                "The Internet Computer's compute utilization as a percent per cpu core.",
+                "The Internet Computer's compute utilization per CPU core as a 0.0-1.0 fraction.",
                 linear_buckets(0.0, 0.05, 21),
             ),
             msg_execution_duration: duration_histogram(
@@ -159,9 +144,9 @@ impl SchedulerMetrics {
             // allows one to estimate how often we manage to execute multiple
             // loops of inner_round(), i.e. how often we manage to successfully
             // induct messages on the same subnet and make progress on them.
-            inner_loop_consumed_non_zero_instructions_count: metrics_registry.int_counter(
-                "inner_loop_consumed_non_zero_instructions_count",
-                "The number of times inner_round()'s loop consumed at least 1 instruction.",
+            inner_loop_processed_non_zero_inputs_count: metrics_registry.int_counter(
+                "inner_loop_processed_non_zero_inputs_count",
+                "The number of times inner_round()'s loop processed at least 1 canister input.",
             ),
             inner_round_loop_consumed_max_instructions: metrics_registry.int_counter(
                 "inner_round_loop_consumed_max_instructions",
@@ -195,6 +180,7 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
+            round_log_memory_store_migration_duration: round_phase_duration_histogram("log_memory_store_migration", metrics_registry),
             round_preparation_duration: round_phase_duration_histogram("preparation", metrics_registry),
             // Expiration of messages in the ingress queue.
             round_preparation_ingress: round_preparation_phase_duration_histogram("expire ingress", metrics_registry),
@@ -227,7 +213,6 @@ impl SchedulerMetrics {
                 slices: round_phase_slices_histogram("long install", metrics_registry),
                 messages: round_phase_messages_histogram("long install", metrics_registry),
             },
-            round_scheduling_duration: round_phase_duration_histogram("scheduling", metrics_registry),
             round_update_signature_request_contexts_duration: round_phase_duration_histogram("threshold sign", metrics_registry),
             // `inner_round()` processing.
             round_inner: ScopedMetrics {
@@ -320,13 +305,8 @@ impl SchedulerMetrics {
                 metrics_registry,
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
-            subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
             scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
-            scheduler_accumulated_priority_invariant: metrics_registry.int_gauge(
-                "scheduler_accumulated_priority_invariant",
-                "The sum of all accumulated priorities on the subnet."
-            ),
             scheduler_accumulated_priority_deviation: metrics_registry.gauge(
                 "scheduler_accumulated_priority_deviation",
                 "The standard deviation of accumulated priorities on the subnet."

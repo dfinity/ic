@@ -223,6 +223,7 @@ pub fn empty_subnet_update() -> UpdateSubnetPayload {
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        subnet_admins: None,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,
@@ -992,6 +993,7 @@ pub async fn add_chain_keys_with_timeout_and_rotation_period(
 ) {
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
+        subnet_admins: None,
         chain_key_config: Some(ChainKeyConfig {
             key_configs: key_ids
                 .into_iter()
@@ -1035,6 +1037,7 @@ pub async fn enable_chain_key_signing_with_timeout_and_rotation_period(
 
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
+        subnet_admins: None,
         chain_key_signing_enable: Some(key_ids),
         ..empty_subnet_update()
     };
@@ -1079,6 +1082,7 @@ pub async fn create_new_subnet_with_keys(
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id: None,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
@@ -1194,6 +1198,7 @@ pub async fn set_pre_signature_stash_size(
 ) {
     let proposal_payload = UpdateSubnetPayload {
         subnet_id,
+        subnet_admins: None,
         chain_key_config: Some(ChainKeyConfig {
             key_configs: key_ids
                 .iter()

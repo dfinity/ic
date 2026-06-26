@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    governance::max_dissolve_delay_seconds,
+    governance::{RandomnessGenerator, RngError, max_dissolve_delay_seconds},
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         BallotInfo, Followees, KnownNeuronData, MaturityDisbursement, NeuronDissolveStateSnapshot,
@@ -1059,6 +1059,42 @@ fn test_record_neuron_vote() {
 }
 
 #[test]
+fn test_ensure_subaccount_available_succeeds_when_unused() {
+    let neuron_store = NeuronStore::new(BTreeMap::new());
+    let subaccount = Subaccount([42_u8; 32]);
+
+    let observed = neuron_store.ensure_subaccount_available(subaccount);
+
+    assert_eq!(observed, Ok(subaccount));
+}
+
+#[test]
+fn test_ensure_subaccount_available_fails_on_collision() {
+    let colliding_bytes = [1_u8; 32];
+    let neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount(colliding_bytes),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: 0,
+        },
+        CREATED_TIMESTAMP_SECONDS,
+    )
+    .build();
+    let neuron_store = NeuronStore::new(btreemap! { 1 => neuron });
+
+    let observed = neuron_store.ensure_subaccount_available(Subaccount(colliding_bytes));
+
+    assert_eq!(
+        observed,
+        Err(NeuronStoreError::SubaccountAlreadyExists {
+            subaccount: Subaccount(colliding_bytes),
+        })
+    );
+}
+
+#[test]
 fn test_clamp_dissolve_delay_for_all_neurons_multiple_neurons() {
     // Step 1. Create the neurons with various dissolve states.
     let now_seconds = 1_000_000_u64;
@@ -1193,4 +1229,81 @@ fn test_clamp_dissolve_delay_for_all_neurons_multiple_neurons() {
             );
         })
         .unwrap();
+}
+
+/// A mock RNG that returns predefined byte arrays in sequence.
+struct SequentialMockRng {
+    byte_arrays: Vec<[u8; 32]>,
+    index: usize,
+}
+
+impl SequentialMockRng {
+    fn new(byte_arrays: Vec<[u8; 32]>) -> Self {
+        Self {
+            byte_arrays,
+            index: 0,
+        }
+    }
+}
+
+impl RandomnessGenerator for SequentialMockRng {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        unimplemented!("not needed for subaccount tests")
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        let result = *self
+            .byte_arrays
+            .get(self.index)
+            .expect("SequentialMockRng exhausted predefined byte arrays");
+        self.index += 1;
+        Ok(result)
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {}
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        None
+    }
+}
+
+#[test]
+fn test_new_neuron_subaccount_succeeds_without_collision() {
+    let neuron_store = NeuronStore::new(BTreeMap::new());
+
+    let expected_bytes = [42_u8; 32];
+    let mut rng = SequentialMockRng::new(vec![expected_bytes]);
+
+    let observed = neuron_store.new_neuron_subaccount(&mut rng);
+
+    assert_eq!(observed, Ok(Subaccount(expected_bytes)));
+}
+
+#[test]
+fn test_new_neuron_subaccount_retries_on_collision() {
+    let colliding_bytes = [1_u8; 32];
+    let unique_bytes = [2_u8; 32];
+
+    // Create a neuron store with a neuron whose subaccount matches colliding_bytes.
+    let neuron = NeuronBuilder::new(
+        NeuronId { id: 1 },
+        Subaccount(colliding_bytes),
+        PrincipalId::new_user_test_id(1),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: 0,
+        },
+        CREATED_TIMESTAMP_SECONDS,
+    )
+    .build();
+    let neuron_store = NeuronStore::new(btreemap! { 1 => neuron });
+
+    // The first call returns the colliding subaccount; the second returns a unique one.
+    let mut rng = SequentialMockRng::new(vec![colliding_bytes, unique_bytes]);
+
+    let observed = neuron_store.new_neuron_subaccount(&mut rng);
+
+    assert_eq!(observed, Ok(Subaccount(unique_bytes)));
+    // Verify that both byte arrays were consumed (i.e., a retry happened).
+    assert_eq!(rng.index, 2);
 }

@@ -664,7 +664,7 @@ impl IDkgPreSignerImpl {
 
                     self.crypto_create_transcript(
                         &transcript_params,
-                        &completed_dealings,
+                        completed_dealings,
                         idkg_pool.stats(),
                     )
                 })
@@ -1021,7 +1021,7 @@ impl IDkgPreSignerImpl {
     fn crypto_create_transcript(
         &self,
         transcript_params: &IDkgTranscriptParams,
-        verified_dealings: &BatchSignedIDkgDealings,
+        verified_dealings: BatchSignedIDkgDealings,
         stats: &dyn IDkgStats,
     ) -> Option<IDkgTranscript> {
         // Check if we have enough dealings to create transcript
@@ -3208,7 +3208,7 @@ mod tests {
                 let expected_transcript = env
                     .nodes
                     .random_node(&mut rng)
-                    .create_transcript(&params, &batch_signed_dealings)
+                    .create_transcript(&params, batch_signed_dealings)
                     .expect("create transcript");
                 assert_eq!(completed_transcript, expected_transcript);
 

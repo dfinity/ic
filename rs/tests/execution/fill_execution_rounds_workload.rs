@@ -6,7 +6,7 @@
 //! each concurrently call `stable_fill()` with `NUMBER_OF_BYTES_TO_WRITE` bytes.
 //!
 //! To run the benchmark, run the following command in the dev environment:
-//! ict test //rs/tests/execution:fill_execution_rounds_workload -k -- --test_tmpdir=test_tmpdir --test_timeout=60000
+//! bazel test //rs/tests/execution:fill_execution_rounds_workload --test_arg=--keepalive --test_tmpdir=test_tmpdir --test_timeout=60000
 
 use anyhow::Result;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -20,7 +20,6 @@ use ic_system_test_driver::{
             AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
             VmResourceOverrides,
         },
-        prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -55,7 +54,6 @@ const PAGES: u32 = ((NUMBER_OF_BYTES_TO_WRITE) / (64 * 1024) as u32) * 2;
 /// Production value is 600ms
 const TUNED_INITIAL_NOTARIZATION_DELAY: Duration = Duration::from_millis(600);
 
-const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
@@ -75,7 +73,6 @@ fn main() -> Result<()> {
             NUMBER_OF_BYTES_TO_WRITE,
             PAGES,
             CONCURRENT_REQUESTS,
-            DOWNLOAD_PROMETHEUS_DATA,
         )
     };
     SystemTestGroup::new()
@@ -157,7 +154,6 @@ pub fn fill_execution_rounds(
     data: u32,
     pages: u32,
     concurrent_requests: usize,
-    download_prometheus_data: bool,
 ) {
     let log = env.logger();
     info!(
@@ -199,7 +195,7 @@ pub fn fill_execution_rounds(
             &log,
         ));
         canister_id = canister_id_ranges
-            .generate_canister_id(Some(canister_id))
+            .next_canister_id(Some(canister_id))
             .expect("Canister ID can be generated");
 
         currently_installing_canisters += 1;
@@ -219,7 +215,7 @@ pub fn fill_execution_rounds(
                     &log,
                 ));
                 canister_id = canister_id_ranges
-                    .generate_canister_id(Some(canister_id))
+                    .next_canister_id(Some(canister_id))
                     .expect("Canister ID can be generated");
 
                 currently_installing_canisters += 1;
@@ -265,12 +261,4 @@ pub fn fill_execution_rounds(
 
     // Poll the workload futures to completion
     block_on(async { while futures.next().await.is_some() {} });
-
-    // Download Prometheus data if required.
-    if download_prometheus_data {
-        info!(&log, "Waiting before download.");
-        std::thread::sleep(Duration::from_secs(100));
-        info!(&log, "Downloading p8s data");
-        env.download_prometheus_data_dir_if_exists();
-    }
 }

@@ -126,14 +126,14 @@ impl TestEnv {
         let source_path = source_dir.as_ref().join(".");
         std::fs::create_dir_all(&target_dir)?;
 
-        let _out = std::process::Command::new("cp")
+        let out = std::process::Command::new("cp")
             .arg("-L")
             .arg("-R")
             .arg(source_path)
             .arg(target_dir.as_ref())
-            .output();
+            .output()?;
 
-        // println!("{:?}", out);
+        println!("{:?}", out);
 
         Ok(())
     }
@@ -147,13 +147,13 @@ impl TestEnv {
         let source_path = source_dir.as_ref().join(".");
         std::fs::create_dir_all(&target_dir)?;
 
-        let _out = std::process::Command::new("cp")
+        let out = std::process::Command::new("cp")
             .arg("-R")
             .arg(source_path)
             .arg(target_dir.as_ref())
-            .output();
+            .output()?;
 
-        // println!("{:?}", out);
+        println!("{:?}", out);
 
         Ok(())
     }

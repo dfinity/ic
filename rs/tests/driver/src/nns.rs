@@ -505,6 +505,7 @@ pub async fn execute_fulfill_subnet_rental_request(
     user: PrincipalId,
     node_ids: Vec<PrincipalId>,
     replica_version_id: String,
+    initial_dkg_subnet_id: Option<SubnetId>,
 ) -> ProposalId {
     // Gather the various pieces needed to assemble a request to
     // make/create/submit the new proposal.
@@ -530,6 +531,7 @@ pub async fn execute_fulfill_subnet_rental_request(
                 user,
                 node_ids,
                 replica_version_id,
+                initial_dkg_subnet_id: initial_dkg_subnet_id.map(|id| id.get()),
             },
         )),
     };
@@ -722,12 +724,34 @@ pub async fn submit_create_application_subnet_proposal(
     cost_schedule: Option<CanisterCyclesCostSchedule>,
     max_number_of_canisters: Option<u64>,
 ) -> ProposalId {
+    submit_create_application_subnet_proposal_with_initial_dkg_subnet(
+        governance,
+        node_ids,
+        replica_version,
+        cost_schedule,
+        max_number_of_canisters,
+        None,
+    )
+    .await
+}
+
+/// Submits a proposal for creating an application subnet and optionally
+/// selecting the subnet that handles initial DKG.
+pub async fn submit_create_application_subnet_proposal_with_initial_dkg_subnet(
+    governance: &Canister<'_>,
+    node_ids: Vec<NodeId>,
+    replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
+    max_number_of_canisters: Option<u64>,
+    initial_dkg_subnet_id: Option<SubnetId>,
+) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
     let max_number_of_canisters = max_number_of_canisters.unwrap_or(0);
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,

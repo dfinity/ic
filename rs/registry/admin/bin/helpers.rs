@@ -37,7 +37,7 @@ pub(crate) async fn get_subnet_record(
     subnet_id: SubnetId,
 ) -> SubnetRecord {
     let value_pb = get_subnet_record_pb(registry_canister, subnet_id).await;
-    SubnetRecord::from(&value_pb)
+    SubnetRecord::from(value_pb)
 }
 
 pub(crate) async fn get_subnet_record_with_details(

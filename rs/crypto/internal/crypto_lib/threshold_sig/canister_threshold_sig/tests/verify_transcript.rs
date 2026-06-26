@@ -10,7 +10,7 @@ fn remove_dealing_and_verify(
 ) -> bool {
     let mut modified_dealings = round.dealings.clone();
     modified_dealings.remove(&node_index);
-    round.verify_transcript(setup, &modified_dealings).is_ok()
+    round.verify_transcript(setup, modified_dealings).is_ok()
 }
 
 fn swap_dealing_and_verify(
@@ -26,7 +26,7 @@ fn swap_dealing_and_verify(
     modified_dealings.insert(node_index0, dealing1);
     modified_dealings.insert(node_index1, dealing0);
 
-    round.verify_transcript(setup, &modified_dealings).is_ok()
+    round.verify_transcript(setup, modified_dealings).is_ok()
 }
 
 fn dup_dealing_and_verify(
@@ -37,7 +37,7 @@ fn dup_dealing_and_verify(
     let mut modified_dealings = round.dealings.clone();
     let dealing = modified_dealings.get(&node_index).unwrap().clone();
     modified_dealings.insert(modified_dealings.len() as u32 + 1, dealing);
-    round.verify_transcript(setup, &modified_dealings).is_ok()
+    round.verify_transcript(setup, modified_dealings).is_ok()
 }
 
 #[test]

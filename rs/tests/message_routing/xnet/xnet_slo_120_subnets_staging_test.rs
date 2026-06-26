@@ -13,8 +13,19 @@ const PER_TASK_TIMEOUT: Duration = Duration::from_secs(800);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1400);
 
 fn main() -> Result<()> {
-    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE);
+    let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE)
+        // Only best-effort calls with 30 seconds timeout, so the test doesn't hang for
+        // minutes in case we can't connect to some replica/subnet to pull.
+        .with_call_timeouts(&[Some(30)])
+        // With 120 single-node subnets colocated on shared performance hardware, the
+        // per-subnet block production rate varies between runs. On loaded runs a few
+        // "straggler" subnets dip just below the default 0.3 send rate threshold (down
+        // to ~0.28), while on unloaded runs the minimum is ~0.43. Lower the threshold to
+        // 0.2 to absorb this hardware variance while still catching systemic XNet
+        // regressions (the median send rate is ~0.7).
+        .with_send_rate_threshold(0.2);
     let test = config.clone().test();
+
     SystemTestGroup::new()
         .with_setup(config.build())
         .add_test(systest!(test))

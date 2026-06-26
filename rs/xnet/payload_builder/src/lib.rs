@@ -483,22 +483,11 @@ impl XNetPayloadBuilderImpl {
         state: &ReplicatedState,
         past_payloads: &[&XNetPayload],
     ) -> Result<BTreeMap<SubnetId, ExpectedIndices>, Error> {
-        let all_subnet_ids = self
+        let subnet_ids = self
             .registry
             .get_subnet_ids(validation_context.registry_version)
             .map_err(Error::RegistryGetSubnetsFailed)?
             .unwrap_or_default();
-
-        let subnet_ids: Vec<_> = all_subnet_ids
-            .into_iter()
-            .filter(|subnet_id| {
-                self.registry
-                    .get_subnet_type(*subnet_id, validation_context.registry_version)
-                    .is_ok_and(|maybe_t| {
-                        maybe_t.is_some_and(|t| t != SubnetType::CloudEngine.into())
-                    })
-            })
-            .collect();
 
         let expected_indices = subnet_ids
             .into_iter()
@@ -641,18 +630,11 @@ impl XNetPayloadBuilderImpl {
             );
         }
 
-        // Do not accept slices from CloudEngine subnets or subnets whose type
-        // cannot be determined.
+        // Do not accept slices from subnets whose type cannot be determined.
         match self
             .registry
             .get_subnet_type(subnet_id, validation_context.registry_version)
         {
-            Ok(Some(subnet_type)) if subnet_type == SubnetType::CloudEngine.into() => {
-                return SliceValidationResult::Invalid(format!(
-                    "Slice from CloudEngine subnet {}",
-                    subnet_id
-                ));
-            }
             Ok(Some(_)) => {}
             Ok(None) => {
                 return SliceValidationResult::Invalid(format!(
@@ -869,11 +851,6 @@ impl XNetPayloadBuilderImpl {
                 e
             })?
             .take();
-
-        // CloudEngine subnets do not participate in XNet.
-        if state.metadata.own_subnet_type == SubnetType::CloudEngine {
-            return Ok((XNetPayload::default(), 0.into()));
-        }
 
         // Build the payload based on indices computed from state + past payloads.
         let stream_positions =
@@ -1234,16 +1211,6 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 return Err(from_state_manager_error(err));
             }
         };
-
-        if state.metadata.own_subnet_type == SubnetType::CloudEngine
-            && !payload.stream_slices.is_empty()
-        {
-            return Err(ValidationError::InvalidArtifact(
-                InvalidXNetPayload::InvalidSlice(
-                    "CloudEngine subnets do not accept XNet payloads".to_string(),
-                ),
-            ));
-        }
 
         // For every slice in `payload`, check certification and gaps/duplicates.
         let mut new_stream_positions = Vec::new();
@@ -1754,8 +1721,8 @@ struct XNetClientImpl {
 }
 
 impl XNetClientImpl {
-    /// Creates a new `XNetClientImpl` with a request timeout of 1 second and at
-    /// most 1 idle connection per host.
+    /// Creates a new `XNetClientImpl` with a request timeout of 5 seconds, at
+    /// most 1 idle connection per host and HTTP/2 keep-alive pings.
     fn new(
         metrics_registry: &MetricsRegistry,
         tls: Arc<dyn TlsConfig>,
@@ -1767,9 +1734,24 @@ impl XNetClientImpl {
         let https = TlsConnector::new_for_tests(tls);
 
         // TODO(MR-28) Make timeout configurable.
+        //
+        // HTTP/2 keep-alive pings are necessary to evict dead pooled connections:
+        // cancelling a request (e.g. due to the 5-second query timeout) only resets
+        // the respective stream, it does not affect the underlying connection. And
+        // the pool only drops connections that report themselves as closed. So
+        // without keep-alive a connection that is dead or stalled (e.g. due to
+        // packet loss while under load) would be reused indefinitely, with every
+        // query against it timing out. With keep-alive, such a connection is closed
+        // within `interval + timeout` seconds and a fresh connection is established
+        // on the next query.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(TokioExecutor::new())
                 .http2_only(true)
+                // Timer required by HTTP/2 keep-alive.
+                .timer(TokioTimer::new())
+                .http2_keep_alive_interval(Some(Duration::from_secs(10)))
+                .http2_keep_alive_timeout(Duration::from_secs(5))
+                .http2_keep_alive_while_idle(true)
                 .pool_timer(TokioTimer::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)

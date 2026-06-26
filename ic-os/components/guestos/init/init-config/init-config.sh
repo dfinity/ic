@@ -7,42 +7,51 @@ set -eo pipefail
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
+# Log an informational message to both stdout (captured by the journal) and
+# /dev/ttyS0 (captured by the host's serial console) so that early-boot
+# progress of this service can be observed even when journald forwarding has
+# not yet been set up on the VM.
+function info() {
+    echo "$@"
+    echo "init-config: $@" >/dev/ttyS0 || true
+}
+
 function mount_config_device() {
     CONFIG_DEVICE="/dev/disk/by-label/CONFIG"
     TIMEOUT="10"
-    echo "Trigger udev and wait up to ${TIMEOUT} seconds for all events to be handled and exit early if ${CONFIG_DEVICE} appears ..."
+    info "Trigger udev and wait up to ${TIMEOUT} seconds for all events to be handled and exit early if ${CONFIG_DEVICE} appears ..."
     udevadm trigger --subsystem-match=block --action=add
     udevadm settle --timeout="${TIMEOUT}" --exit-if-exists="${CONFIG_DEVICE}"
 
-    echo "Checking for ${CONFIG_DEVICE} device"
+    info "Checking for ${CONFIG_DEVICE} device"
 
     # Check if device exists & is a symlink to the real one
     if [ -L "${CONFIG_DEVICE}" ]; then
-        echo "Found ${CONFIG_DEVICE} device, mounting at /mnt/config"
+        info "Found ${CONFIG_DEVICE} device, mounting at /mnt/config"
 
         # Ensure that the config device is vfat. If we ever change to another filesystem type, we should ensure
         # that it only contains regular files and directories (not symlinks, devices, etc.).
         if mount -t vfat -o ro ${CONFIG_DEVICE} /mnt/config; then
-            echo "Successfully mounted ${CONFIG_DEVICE} device at /mnt/config"
+            info "Successfully mounted ${CONFIG_DEVICE} device at /mnt/config"
             return 0
         else
-            echo "Failed to mount ${CONFIG_DEVICE} device at /mnt/config"
+            info "Failed to mount ${CONFIG_DEVICE} device at /mnt/config"
         fi
     fi
 
-    echo "No ${CONFIG_DEVICE} device found for mounting"
+    info "No ${CONFIG_DEVICE} device found for mounting"
     return 1
 }
 
 # Try config disk first, then run Cloud provisioning if that fails
 if ! mount_config_device; then
-    echo "Config disk not found, trying cloud provisioning"
+    info "Config disk not found, trying cloud provisioning"
 
     # Since root is read-only - mount a tmpfs at /mnt/config to be able to write a config.json there
     mount -t tmpfs config /mnt/config
 
     if ! /opt/ic/bin/guestos_tool cloud-provision; then
-        echo "Cloud provisioning failed"
+        info "Cloud provisioning failed"
         exit 1
     fi
 fi
@@ -57,7 +66,7 @@ if [ -f /run/config/bootstrap/config.json ]; then
     cp /run/config/bootstrap/config.json /run/config/config.json
     chown ic-replica:nogroup /run/config/config.json
 else
-    echo "config.json not found in config partition"
+    info "config.json not found in config partition"
     exit 1
 fi
 

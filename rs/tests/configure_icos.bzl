@@ -10,13 +10,13 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
 
     Args:
       guestos: The guestos image version. Can be a single value or a dictionary mapping tags to versions.
-        Single values: True (HEAD) | False | "malicious" | "recovery_dev" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_app". Default: True
+        Single values: True (HEAD) | False | "malicious" | "recovery_dev" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_nns_dev" | "mainnet_app". Default: True
         Dictionary: {"default": True, "my_tag": "mainnet_latest_dev"} - the "default" key works like the single value.
         Each tag generates env variables like ENV_DEPS__GUESTOS_{TAG}_DISK_IMG (uppercase tag).
-      guestos_update: The guestos update image version. Values: False | True (HEAD) | "test" | "malicious" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_app". Default: False
+      guestos_update: The guestos update image version. Values: False | True (HEAD) | "test" | "malicious" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_nns_dev" | "mainnet_app". Default: False
       hostos: The hostos image version. Values: False | True (HEAD). Default: False
       hostos_update: The hostos update image version. Values: False | True (HEAD) | "test" | "mainnet_latest" | "mainnet_latest_dev". Default: False
-      setupos: The setupos image version. Values: False | True (HEAD) | "mainnet_latest" | "mainnet_latest_dev". Default: False
+      setupos: The setupos image version. Values: False | True (HEAD) | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns_dev". Default: False
 
     Returns:
         A struct of 'env_var_files', 'env', 'runtime_deps' and 'icos_images' to inject in the test.
@@ -24,6 +24,13 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     env = {}
     env_var_files = {}
     icos_images = {}
+
+    # Images that must be served only by the Local backend's file server (and
+    # never uploaded to Farm), keyed by their `ENV_DEPS__...` env var name. The
+    # Farm backend downloads these from the CDN using the `..._URL` env vars set
+    # below; the Local backend instead serves them from a local file under the
+    # `..._HASH` already set below. See `system_test` in system_tests.bzl.
+    local_only_icos_images = {}
     runtime_deps = {}
 
     # Normalize guestos to a dictionary format
@@ -56,6 +63,9 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         icos_images["ENV_DEPS__GUESTOS" + suffix + "_DISK_IMG"] = repo + "//:guest-img"
         env["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG_HASH"] = version_dict["dev_hash" if dev else "hash"]
+
+        # Serve the initial (mainnet) update image from the Local backend's file server.
+        local_only_icos_images["ENV_DEPS__GUESTOS" + suffix + "_INITIAL_UPDATE_IMG"] = repo + "//:guest-update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS" + suffix + "_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
 
     def guestos_update_local(guestos_env, test = False):
@@ -72,6 +82,9 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = version_dict["version"]
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = version_dict["dev_hash" if dev else "hash"]
+
+        # Serve the (mainnet) update image from the Local backend's file server.
+        local_only_icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = repo + "//:guest-update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_UPDATE_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
 
     def setupos_dependencies():
@@ -138,6 +151,8 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
             guestos_mainnet(suffix, MAINNET_LATEST, "@mainnet_latest_guestos_images_dev", dev = True)
         elif guestos_version == "mainnet_nns":
             guestos_mainnet(suffix, MAINNET_NNS, "@mainnet_nns_images")
+        elif guestos_version == "mainnet_nns_dev":
+            guestos_mainnet(suffix, MAINNET_NNS, "@mainnet_nns_images_dev", dev = True)
         elif guestos_version == "mainnet_app":
             guestos_mainnet(suffix, MAINNET_APP, "@mainnet_app_images")
         elif guestos_version:
@@ -156,6 +171,8 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
         guestos_update_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images_dev", dev = True)
     elif guestos_update == "mainnet_nns":
         guestos_update_mainnet(MAINNET_NNS, "@mainnet_nns_images")
+    elif guestos_update == "mainnet_nns_dev":
+        guestos_update_mainnet(MAINNET_NNS, "@mainnet_nns_images_dev", dev = True)
     elif guestos_update == "mainnet_app":
         guestos_update_mainnet(MAINNET_APP, "@mainnet_app_images")
     elif guestos_update:
@@ -168,7 +185,7 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     elif setupos == "mainnet_latest":
         setupos_mainnet()
         setupos_dependencies()
-    elif setupos == "mainnet_latest_dev":
+    elif setupos == "mainnet_latest_dev" or setupos == "mainnet_nns_dev":
         setupos_mainnet(dev = True)
         setupos_dependencies()
     elif setupos:
@@ -199,4 +216,4 @@ def configure_icos(guestos, guestos_update, hostos, hostos_update, setupos):
     elif hostos_update:
         fail("unknown hostos_update: " + str(hostos_update))
 
-    return struct(env = env, env_var_files = env_var_files, runtime_deps = runtime_deps, icos_images = icos_images)
+    return struct(env = env, env_var_files = env_var_files, runtime_deps = runtime_deps, icos_images = icos_images, local_only_icos_images = local_only_icos_images)

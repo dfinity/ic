@@ -11,7 +11,9 @@ validate_argument() {
     # NOTE: version=RECOVERY_VERSION is allowed as a dummy value for testing purposes.
     if [[ "$arg" =~ ^mode=(prep|install|run)$ ]] \
         || [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \
-        || [[ "$arg" =~ ^recovery-hash-prefix=[a-f0-9]{6}$ ]] \
+        || [[ "$arg" =~ ^recovery-hash-prefix=([a-f0-9]{6})?$ ]] \
+        || [[ "$arg" =~ ^target-boot-alternative=(A|B)$ ]] \
+        || [[ "$arg" == "wipe-var-partition" ]] \
         || [[ "$arg" == "version=RECOVERY_VERSION" ]]; then
         return 0
     else
@@ -21,13 +23,14 @@ validate_argument() {
 }
 
 if [ $# -eq 0 ]; then
-    echo "Usage: $0 mode=<run|prep|install> version=<40-char-hex> recovery-hash-prefix=<6-char-hex>"
+    echo "Usage: $0 mode=<install> [target-boot-alternative=<A|B>] [wipe-var-partition]"
+    echo "   or: $0 mode=<prep|run> version=<40-char-hex> target-boot-alternative=<A|B> [recovery-hash-prefix=<6-char-hex>|recovery-hash-prefix=] [wipe-var-partition]"
     exit 1
 fi
 
 for arg in "$@"; do
     if ! validate_argument "$arg"; then
-        echo "Arguments must be: mode=<run|prep|install> version=<40-char-hex> recovery-hash-prefix=<6-char-hex>"
+        echo "Arguments must be valid recovery launcher arguments."
         exit 1
     fi
 done

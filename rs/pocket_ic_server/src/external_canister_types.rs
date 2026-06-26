@@ -45,6 +45,11 @@ pub enum CyclesLedgerArgs {
 
 /* Internet Identity */
 
+#[derive(CandidType)]
+pub struct DiscoverableOidcConfig {
+    pub discovery_domain: String,
+}
+
 pub type AnchorNumber = u64;
 
 #[derive(CandidType)]
@@ -103,6 +108,7 @@ pub struct OpenIdConfig {
     pub auth_scope: Vec<String>,
     pub fedcm_uri: Option<String>,
     pub email_verification: Option<OpenIdEmailVerification>,
+    pub seed_jwks: Option<Vec<Vec<(String, String)>>>,
 }
 
 #[allow(dead_code)]
@@ -122,6 +128,25 @@ pub struct DummyAuthConfig {
 }
 
 #[derive(CandidType)]
+pub struct DnssecRootAnchor {
+    pub key_tag: u16,
+    pub algorithm: u8,
+    pub digest_type: u8,
+    pub digest: Vec<u8>,
+}
+
+#[derive(CandidType)]
+pub struct DnssecConfig {
+    pub root_anchors: Vec<DnssecRootAnchor>,
+}
+
+#[derive(CandidType)]
+pub struct DohConfig {
+    pub allowed_domains: Vec<String>,
+    pub max_cache_age_secs: Option<u64>,
+}
+
+#[derive(CandidType)]
 pub struct InternetIdentityFrontendInit {
     pub backend_canister_id: Principal,
     pub backend_origin: String,
@@ -130,6 +155,14 @@ pub struct InternetIdentityFrontendInit {
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub dev_csp: Option<bool>,
+}
+
+#[derive(CandidType)]
+pub struct SsoCredentialMigrationEntry {
+    pub discovery_domain: String,
+    pub issuer: String,
+    pub client_id: String,
+    pub name: Option<String>,
 }
 
 #[derive(CandidType)]
@@ -142,10 +175,15 @@ pub struct InternetIdentityInit {
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
+    pub sso_discoverable_domains: Option<Vec<String>>,
+    pub sso_credential_migration: Option<Vec<SsoCredentialMigrationEntry>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub backend_canister_id: Option<Principal>,
     pub backend_origin: Option<String>,
+    pub enable_dnssec_email_recovery: Option<bool>,
+    pub dnssec_config: Option<Option<DnssecConfig>>,
+    pub doh_config: Option<Option<DohConfig>>,
 }

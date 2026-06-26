@@ -195,6 +195,7 @@ impl AdminHelper {
         subnet_id: SubnetId,
         checkpoint_height: Height,
         state_hash: String,
+        initial_dkg_subnet_id: Option<SubnetId>,
         chain_key_config: Option<(ChainKeyConfig, SubnetId)>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
@@ -207,6 +208,10 @@ impl AdminHelper {
             .add_argument("subnet-index", subnet_id)
             .add_argument("height", checkpoint_height)
             .add_argument("state-hash", state_hash);
+
+        if let Some(initial_dkg_subnet_id) = initial_dkg_subnet_id {
+            ic_admin.add_argument("initial-dkg-subnet-id", initial_dkg_subnet_id);
+        }
 
         if let Some((config, subnet_id)) = chain_key_config {
             let key_requests = config
@@ -538,6 +543,7 @@ mod tests {
                 Height::from(666),
                 "fake_state_hash".to_string(),
                 None,
+                None,
                 &[],
                 None,
                 UNIX_EPOCH + Duration::from_nanos(123456),
@@ -596,6 +602,7 @@ mod tests {
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 Height::from(666),
                 "fake_state_hash".to_string(),
+                Some(subnet_id_from_str(FAKE_SUBNET_ID_2)),
                 Some((chain_key_config, subnet_id_from_str(FAKE_SUBNET_ID_2))),
                 &[node_id_from_str(FAKE_NODE_ID)],
                 Some(RegistryParams {
@@ -620,6 +627,7 @@ mod tests {
             --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --height 666 \
             --state-hash fake_state_hash \
+            --initial-dkg-subnet-id mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe \
             --initial-chain-key-configs-to-request '[\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"},\

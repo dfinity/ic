@@ -8,11 +8,15 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
 ic_consensus_system_test_subnet_recovery = { path = "../../consensus/subnet_recovery" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 manual_guestos_recovery = { path = "../../../ic_os/os_tools/manual_guestos_recovery" }
+ic-nervous-system-root = { path = "../../../nervous_system/root" }
 ic-recovery = { path = "../../../recovery" }
 ic-system-test-driver = { path = "../../driver" }
+ic-testnet-mainnet-nns = { path = "../../testnets/mainnet_nns" }
 ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
 rand = { workspace = true }
@@ -29,8 +33,8 @@ name = "ic-systest-nested-nns-recovery-broken-dfinity-node"
 path = "nr_broken_dfinity_node.rs"
 
 [[bin]]
-name = "ic-systest-nested-nns-recovery-large"
-path = "nr_large.rs"
+name = "ic-systest-nested-nns-recovery-large-with-mainnet-state"
+path = "nr_large_with_mainnet_state.rs"
 
 [[bin]]
 name = "ic-systest-nested-nns-recovery-local"

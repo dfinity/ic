@@ -137,7 +137,10 @@ fn install_ledger(
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
         .with_archive_options(archive_options)
-        .with_feature_flags(FeatureFlags { icrc2: true });
+        .with_feature_flags(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        });
     if let Some(fee_collector_account) = fee_collector_account {
         builder = builder.with_fee_collector_account(fee_collector_account);
     }

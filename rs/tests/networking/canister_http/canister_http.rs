@@ -9,12 +9,8 @@ use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
-use ic_system_test_driver::driver::test_setup::InfraProvider;
 use ic_system_test_driver::driver::universal_vm::*;
-use ic_system_test_driver::driver::{
-    test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::*,
-};
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, PrincipalId};
 use ic_types_cycles::Cycles;
@@ -157,11 +153,9 @@ pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
 
 pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    match InfraProvider::read_attribute(env) {
-        InfraProvider::Farm => deployed_universal_vm
-            .block_on_ipv4()
-            .expect("Universal VM IPv4 not found."),
-    }
+    deployed_universal_vm
+        .block_on_ipv4()
+        .expect("Universal VM IPv4 not found.")
 }
 
 /// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to
@@ -170,7 +164,27 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let vm = deployed_universal_vm.get_vm().unwrap();
     let ipv6 = vm.ipv6.to_string();
-    let ipv4 = vm.ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
+    let session = deployed_universal_vm
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session to UVM");
+    // Retrieve the UVM's IPv4 address directly from the guest if it's configured
+    // with an IPv4 interface. This polls the guest until DHCP assigns a globally
+    // scoped address.
+    let has_ipv4_iface = deployed_universal_vm
+        .block_on_bash_script_from_session(
+            &session,
+            "if ip link show dev enp2s0 >/dev/null 2>&1; then echo yes; else echo no; fi",
+        )
+        .map(|s| s.trim() == "yes")
+        .unwrap();
+    let ipv4 = if has_ipv4_iface {
+        deployed_universal_vm
+            .block_on_ipv4_from_session(&session)
+            .expect("Failed to retrieve IPv4 address from UVM")
+            .to_string()
+    } else {
+        "".to_string()
+    };
     // We need to use port 443 as it's among the only ports that the Dante socks server can proxy to.
     let http_bin_port = 443;
     info!(
@@ -178,8 +192,10 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         "Starting httpbin service on UVM '{UNIVERSAL_VM_NAME}' ..."
     );
     deployed_universal_vm
-        .block_on_bash_script(&format!(
-            r#"
+        .block_on_bash_script_from_session(
+            &session,
+            &format!(
+                r#"
         set -e -o pipefail
         ipv6="{ipv6}"
         ipv4="{ipv4}"
@@ -187,19 +203,6 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         nip_io_hostname="${{ipv6//:/-}}.ipv6.nip.io"
         echo "Calculated nip.io hostname: $nip_io_hostname"
 
-        if [[ "$ipv4" == "" ]] && ip link show dev enp2s0 >/dev/null; then
-            count=0
-            until ipv4=$(ip -j address show dev enp2s0 \
-                        | jq -r -e \
-                        '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
-            do
-                if [ "$count" -ge 120 ]; then
-                    exit 1
-                fi
-                sleep 1
-                count=$((count+1))
-            done
-        fi
         echo "IPv4 is ${{ipv4:-disabled}}"
 
         echo "Generate ipv6 service cert with root cert and key, using minica ..."
@@ -244,7 +247,8 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
             httpbin:image \
             --cert-file /certs/cert.pem --key-file /certs/key.pem --port {http_bin_port}
     "#
-        ))
+            ),
+        )
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
 
     wait_for_orchestrator_fw_rules(env);
@@ -305,6 +309,14 @@ pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapsh
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("there is no application subnet")
+        .nodes()
+}
+
+pub fn get_cloud_engine_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+    env.topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::CloudEngine)
+        .expect("there is no cloud engine")
         .nodes()
 }
 

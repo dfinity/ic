@@ -7,7 +7,7 @@ use super::utils::{
     handle_construction_hash, handle_construction_parse, handle_construction_payloads,
     handle_construction_submit,
 };
-use crate::common::constants::INGRESS_INTERVAL_OVERLAP;
+use crate::common::constants::{INGRESS_INTERVAL_OVERLAP, MAX_INGRESS_WINDOW};
 use crate::common::types::Error;
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -108,6 +108,38 @@ pub fn construction_combine(
         .map_err(|err| Error::processing_construction_failed(&err))
 }
 
+/// Validate the caller-provided ingress window before it is expanded into a
+/// list of ingress expiries.
+///
+/// Rejects windows that would make the expiry loop iterate an excessive (or, on
+/// arithmetic wraparound, unbounded) number of times. It enforces that:
+/// - `ingress_start` is strictly before `ingress_end` (an empty or reversed
+///   window would otherwise produce an empty/degenerate set of payloads),
+/// - the span `ingress_end - ingress_start` must not exceed 24h, and
+/// - `ingress_end` must not be more than 24h in the future, which also rejects
+///   the near-`u64::MAX` payloads that would otherwise wrap the loop counter.
+fn validate_ingress_window(now: u64, ingress_start: u64, ingress_end: u64) -> Result<(), Error> {
+    let max_window = MAX_INGRESS_WINDOW.as_nanos() as u64;
+    if ingress_start >= ingress_end {
+        return Err(Error::processing_construction_failed(&format!(
+            "Ingress start should start before ingress end: Start: {ingress_start}, End: {ingress_end}"
+        )));
+    }
+    if ingress_end.saturating_sub(ingress_start) > max_window {
+        return Err(Error::processing_construction_failed(&format!(
+            "The ingress window (ingress_end - ingress_start) must not exceed {} hours: Start: {ingress_start}, End: {ingress_end}",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    if ingress_end.saturating_sub(now) > max_window {
+        return Err(Error::processing_construction_failed(&format!(
+            "ingress_end must not be more than {} hours in the future: Current time: {now}, End: {ingress_end}",
+            MAX_INGRESS_WINDOW.as_secs() / 3600
+        )));
+    }
+    Ok(())
+}
+
 pub fn construction_payloads(
     operations: Vec<Operation>,
     metadata: Option<ConstructionPayloadsRequestMetadata>,
@@ -145,17 +177,13 @@ pub fn construction_payloads(
         .and_then(|meta| meta.memo.clone())
         .map(|memo| memo.into());
 
-    if ingress_start >= ingress_end {
-        return Err(Error::processing_construction_failed(&format!(
-            "Ingress start should start before ingress end: Start: {ingress_start}, End: {ingress_end}"
-        )));
-    }
-
     if ingress_end < now + ingress_interval {
         return Err(Error::processing_construction_failed(&format!(
             "Ingress end should be at least one interval from the current time: Current time: {now}, End: {ingress_end}"
         )));
     }
+
+    validate_ingress_window(now, ingress_start, ingress_end)?;
 
     // Every ingress message sent to the IC has an expiry timestamp until which the signature associated with that message is valid
     // To support a longer overall timeframe than one interval, we can send multiple ingress messages with two signable contents each
@@ -260,6 +288,55 @@ mod tests {
 
     const NUM_TEST_CASES: u32 = 100;
     const NUM_BLOCKS: usize = 1;
+
+    const HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
+    // A realistic "now" (~2023) that is well away from the u64 boundary.
+    const NOW_NANOS: u64 = 1_700_000_000 * 1_000_000_000;
+
+    // A window whose span exceeds the documented 24h bound would make the loop
+    // build a huge list of ingress expiries, so it is rejected before the loop.
+    #[test]
+    fn oversized_ingress_window_is_rejected() {
+        assert!(
+            validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + 48 * HOUR_NANOS).is_err()
+        );
+    }
+
+    // A near-zero start together with a near-`u64::MAX` end spans almost the
+    // entire u64 range; that enormous span is rejected (it would otherwise
+    // iterate billions of times).
+    #[test]
+    fn unbounded_ingress_span_is_rejected() {
+        assert!(validate_ingress_window(NOW_NANOS, 0, u64::MAX).is_err());
+    }
+
+    // A window ending at (near) `u64::MAX` has a small span but an end far in the
+    // future; without the future bound the loop counter would wrap past
+    // `u64::MAX` and never terminate. The future bound rejects it.
+    #[test]
+    fn near_u64_max_ingress_window_is_rejected() {
+        assert!(
+            validate_ingress_window(NOW_NANOS, u64::MAX - 50 * 1_000_000_000, u64::MAX).is_err()
+        );
+    }
+
+    // Negative control: a realistic window (5 minutes ahead of now) is accepted.
+    #[test]
+    fn valid_ingress_window_is_accepted() {
+        assert!(
+            validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + 5 * 60 * 1_000_000_000)
+                .is_ok()
+        );
+    }
+
+    // Boundary: a window of exactly 24h ending exactly 24h from now is accepted,
+    // one nanosecond more is rejected.
+    #[test]
+    fn ingress_window_boundary_is_inclusive() {
+        let max = MAX_INGRESS_WINDOW.as_nanos() as u64;
+        assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max).is_ok());
+        assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max + 1).is_err());
+    }
 
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {
         let principal_id = key_pair.generate_principal_id().unwrap();
@@ -461,6 +538,17 @@ mod tests {
                             }
                             (_, _) => {}
                         }
+                        // Windows wider than the permitted maximum, or with an
+                        // ingress_end too far in the future, are rejected before
+                        // the loop.
+                        let eff_start = payloads_metadata.ingress_start.unwrap_or(now);
+                        let eff_end = payloads_metadata
+                            .ingress_end
+                            .unwrap_or(eff_start + ingress_interval);
+                        if validate_ingress_window(now, eff_start, eff_end).is_err() {
+                            assert!(construction_payloads_response.is_err());
+                            continue;
+                        }
                         let construction_parse_response = construction_parse(
                             construction_payloads_response
                                 .clone()
@@ -547,6 +635,8 @@ mod tests {
                             ic_icrc1::Operation::FeeCollector { .. } => {
                                 panic!("FeeCollector107 not implemented")
                             }
+                            ic_icrc1::Operation::AuthorizedMint { .. }
+                            | ic_icrc1::Operation::AuthorizedBurn { .. } => continue,
                         };
                         let args = match arg_with_caller.arg {
                             LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),

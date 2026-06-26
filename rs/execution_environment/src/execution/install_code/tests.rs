@@ -23,7 +23,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
@@ -74,6 +74,7 @@ fn dts_resume_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -99,8 +100,7 @@ fn dts_resume_works_in_install_code() {
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE,
                     )
                     .real(),
@@ -127,6 +127,7 @@ fn dts_abort_works_in_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -152,8 +153,7 @@ fn dts_abort_works_in_install_code() {
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
                     .real(),
@@ -179,8 +179,7 @@ fn dts_abort_works_in_install_code() {
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
                     .real(),
@@ -439,8 +438,7 @@ fn execute_install_code_message_dts_helper(
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(1_000_000),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
                     .real(),
@@ -461,6 +459,7 @@ fn install_code_with_start_with_err() {
         .with_instruction_limit(1_000_000)
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -494,6 +493,7 @@ fn install_code_with_start_with_success() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -568,6 +568,7 @@ fn install_code_with_init_method_with_error() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -600,6 +601,7 @@ fn install_code_with_init_method_success() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -638,8 +640,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         NumBytes::new(canister_history_memory_usage as u64 + canister_log_memory_store_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
     let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
@@ -675,6 +676,7 @@ fn install_code_running_out_of_instructions() {
         .with_install_code_instruction_limit(1_500)
         .with_install_code_slice_instruction_limit(1000)
         .with_manual_execution()
+        .with_create_execution_state_base_cost(0)
         .with_cost_to_compile_wasm_instruction(0)
         .build();
     let wasm: &str = r#"
@@ -729,6 +731,7 @@ fn dts_uninstall_with_aborted_install_code() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -777,6 +780,7 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -854,6 +858,7 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
         .with_own_subnet_id(own_subnet)
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -950,6 +955,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -1128,6 +1134,7 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
         .build();
@@ -1327,6 +1334,7 @@ fn consistent_install_code_calls_after_split() {
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         // Ensure that all `install_code()` executions will get paused.
         .with_install_code_slice_instruction_limit(1_000)
+        .with_create_execution_state_base_cost(0)
         .with_manual_execution()
         .with_caller(subnet_a, caller_canister)
         .build();
@@ -2333,8 +2341,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(wasm_chunk_store::chunk_size().get()),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             WASM_EXECUTION_MODE,
         )
         .real();
@@ -2413,8 +2420,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(0),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             WASM_EXECUTION_MODE,
         )
         .real();
@@ -2422,8 +2428,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(wasm_chunk_store::chunk_size().get()),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             WASM_EXECUTION_MODE,
         )
         .real()

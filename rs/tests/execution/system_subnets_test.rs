@@ -106,7 +106,7 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                 AgentError::HttpError(payload) => {
                     let error_message = String::from_utf8(payload.content).unwrap();
                     assert!(error_message.contains(&format!(
-                        "Specified CanisterId {subnet_id} does not match effective canister id in URL {canister_id}"
+                        "Specified canister ID {subnet_id} does not match effective canister ID in URL {canister_id}"
                     )));
                 }
                 _ => panic!("Unexpected error: {err:?}"),

@@ -1,4 +1,5 @@
 use super::*;
+use crate::CanisterPriority;
 use ic_base_types::subnet_id_try_from_option;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
@@ -13,7 +14,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
-use ic_types::subnet_id_try_from_protobuf;
+use ic_types::{AccumulatedPriority, ExecutionRound, subnet_id_try_from_protobuf};
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -65,6 +66,9 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
                         .collect(),
                     routing_table: Some(ft.routing_table.as_ref().into()),
                 }),
+            default_initial_dkg_subnet_id: item
+                .default_initial_dkg_subnet_id
+                .map(subnet_id_into_protobuf),
         }
     }
 }
@@ -104,6 +108,11 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             Some(canister) => Some(CanisterId::try_from(canister.clone())?),
             None => None,
         };
+
+        let default_initial_dkg_subnet_id = item
+            .default_initial_dkg_subnet_id
+            .map(subnet_id_try_from_protobuf)
+            .transpose()?;
 
         Ok(Self {
             subnets,
@@ -145,6 +154,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                     })
                 }
             },
+            default_initial_dkg_subnet_id,
         })
     }
 }
@@ -241,6 +251,15 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&cycles).into()),
                 })
                 .collect(),
+            consumed_cycles_by_use_case_as_counters: item
+                .consumed_cycles_by_use_case_as_counters
+                .clone()
+                .into_iter()
+                .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
+                    use_case: pbCyclesUseCase::from(use_case).into(),
+                    cycles: Some((&cycles).into()),
+                })
+                .collect(),
             num_canisters: Some(item.num_canisters),
             canister_state_bytes: Some(item.canister_state_bytes.get()),
             update_transactions_total: Some(item.update_transactions_total),
@@ -263,6 +282,20 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
             );
         }
+
+        let mut consumed_cycles_by_use_case_as_counters = BTreeMap::new();
+        for x in item.consumed_cycles_by_use_case_as_counters.into_iter() {
+            consumed_cycles_by_use_case_as_counters.insert(
+                CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
+                    ProxyDecodeError::ValueOutOfRange {
+                        typ: "CyclesUseCase",
+                        err: format!("Unexpected value of cycles use case: {}", x.use_case),
+                    }
+                })?)?,
+                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
+            );
+        }
+
         let mut threshold_signature_agreements = BTreeMap::new();
         for x in item.threshold_signature_agreements.into_iter() {
             threshold_signature_agreements.insert(
@@ -273,6 +306,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 x.count,
             );
         }
+
         Ok(Self {
             consumed_cycles_by_deleted_canisters: try_from_option_field(
                 item.consumed_cycles_by_deleted_canisters,
@@ -290,6 +324,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
+            consumed_cycles_by_use_case_as_counters,
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
@@ -369,27 +404,30 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
+            subnet_schedule: item
+                .subnet_schedule
+                .iter()
+                .map(|(canister_id, priority)| pb_metadata::CanisterPriority {
+                    canister_id: Some(pb_types::CanisterId::from(*canister_id)),
+                    accumulated_priority: priority.accumulated_priority.get(),
+                    executed_rounds: priority.executed_rounds,
+                    long_execution_start_round: priority
+                        .long_execution_start_round
+                        .map(|round| round.get()),
+                    last_full_execution_round: priority.last_full_execution_round.get(),
+                })
+                .collect(),
         }
     }
 }
 
 /// Decodes a `SystemMetadata` proto. The metrics are provided as a side-channel
 /// for recording errors without being forced to return `Err(_)`.
-impl
-    TryFrom<(
-        pb_metadata::SystemMetadata,
-        SubnetSchedule,
-        &dyn CheckpointLoadingMetrics,
-    )> for SystemMetadata
-{
+impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for SystemMetadata {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (item, subnet_schedule, metrics): (
-            pb_metadata::SystemMetadata,
-            SubnetSchedule,
-            &dyn CheckpointLoadingMetrics,
-        ),
+        (item, metrics): (pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics),
     ) -> Result<Self, Self::Error> {
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
@@ -398,6 +436,29 @@ impl
                 try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
             );
         }
+
+        let subnet_schedule = {
+            let mut priorities = BTreeMap::new();
+            for entry in &item.subnet_schedule {
+                let canister_id = CanisterId::try_from(entry.canister_id.clone().ok_or(
+                    ProxyDecodeError::MissingField("CanisterPriority::canister_id"),
+                )?)?;
+                priorities.insert(
+                    canister_id,
+                    CanisterPriority {
+                        accumulated_priority: AccumulatedPriority::new(entry.accumulated_priority),
+                        executed_rounds: entry.executed_rounds,
+                        long_execution_start_round: entry
+                            .long_execution_start_round
+                            .map(ExecutionRound::new),
+                        last_full_execution_round: ExecutionRound::new(
+                            entry.last_full_execution_round,
+                        ),
+                    },
+                );
+            }
+            SubnetSchedule::new(priorities)
+        };
 
         let canister_allocation_ranges: CanisterIdRanges = match item.canister_allocation_ranges {
             Some(canister_allocation_ranges) => canister_allocation_ranges.try_into()?,
@@ -510,6 +571,7 @@ impl
                 None => BlockmakerMetricsTimeSeries::default(),
             },
             unflushed_checkpoint_ops: Default::default(),
+            logs_migrated: false,
         })
     }
 }

@@ -161,6 +161,7 @@ fn test_recover_subnet_with_replacement_nodes() {
 
             let payload = RecoverSubnetPayload {
                 subnet_id: subnet_id.get(),
+                initial_dkg_subnet_id: None,
                 height: 10,
                 time_ns: 1200,
                 state_hash: vec![10, 20, 30],
@@ -371,6 +372,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: Some(system_subnet_id),
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],
@@ -623,6 +625,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],
@@ -798,6 +801,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
 
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],
@@ -1102,6 +1106,7 @@ fn test_recover_subnet_resets_cup_contents() {
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],

@@ -1,7 +1,6 @@
 pub mod proto;
 
 use crate::ExecutionTask;
-use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
@@ -125,14 +124,13 @@ impl TaskQueue {
     /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
     /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
     ///    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
-    pub fn check_dts_invariants(&self, current_round_type: ExecutionRoundType, id: &CanisterId) {
+    pub fn check_dts_invariants(&self, is_checkpoint_round: bool, id: &CanisterId) {
         if let Some(paused_or_aborted_task) = &self.paused_or_aborted_task {
             match paused_or_aborted_task {
                 ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                    assert_eq!(
-                        current_round_type,
-                        ExecutionRoundType::OrdinaryRound,
-                        "Unexpected paused execution {paused_or_aborted_task:?} after a checkpoint round in canister {id:?}"
+                    assert!(
+                        !is_checkpoint_round,
+                        "Unexpected paused execution {paused_or_aborted_task:?} in canister {id:?} after a checkpoint round"
                     );
                 }
                 ExecutionTask::AbortedExecution { .. }

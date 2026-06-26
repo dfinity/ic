@@ -1,7 +1,7 @@
 use crate::driver::ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, Playnet};
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
-use crate::driver::resource::BootImage;
+use crate::driver::resource::{BootImage, DiskImage};
 use crate::driver::test_env_api::{
     SshSession, get_guestos_img_url, get_guestos_launch_measurements,
     get_hostos_initial_update_img_url,
@@ -23,20 +23,22 @@ use crate::driver::{
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
         get_setupos_img_sha256, get_setupos_img_url, try_get_guestos_img_version,
     },
-    test_setup::InfraProvider,
+    test_setup::SystemTestBackend,
 };
 use anyhow::{Context, Result, bail};
 use bare_metal_deployment::SshAuthMethod;
-use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
+use bare_metal_deployment::deploy::{
+    DeploymentConfig, GuestOsDeploymentConfig, ImageSource, deploy_to_bare_metal,
+};
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::setupos::{
     config_ini::ConfigIniSettings,
     deployment_json::{self, DeploymentSettings},
 };
 use config_types::{
-    CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
-    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, IcBoundaryTlsCert,
-    Ipv4Config, Ipv6Config, NetworkSettings, RecoveryConfig,
+    CONFIG_VERSION, DeploymentEnvironment, FixedIpv6Config, GuestOSConfig, GuestOSDevSettings,
+    GuestOSSettings, GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings,
+    IcBoundaryTlsCert, Ipv4Config, Ipv6Config, NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -56,7 +58,7 @@ use std::{
     fs::File,
     io,
     io::Write,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     process::Command,
     thread::{self, JoinHandle},
@@ -192,11 +194,10 @@ pub fn init_ic(
     }
 
     let whitelist = ProvisionalWhitelist::All;
-    let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
-        get_guestos_initial_update_img_sha256(),
-        get_guestos_initial_update_img_url(),
-        get_guestos_launch_measurements(),
-    );
+
+    let ic_os_update_img_sha256 = get_guestos_initial_update_img_sha256();
+    let ic_os_update_img_url = get_guestos_initial_update_img_url(test_env);
+    let ic_os_launch_measurements = get_guestos_launch_measurements();
     let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
@@ -218,6 +219,34 @@ pub fn init_ic(
     );
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
+
+    // On the Local backend the test driver reaches the nodes over the group's
+    // IPv6 ULA bridge (`fd00::/8`). Unlike Farm — whose management prefixes are
+    // covered by the firewall template's built-in `default_rules` — these ULA
+    // source addresses are not whitelisted by default. Once the orchestrator
+    // applies its nftables ruleset (whose presence several tests assert on), the
+    // driver would otherwise be locked out of the replica endpoints it needs
+    // (`:8080`, SSH, metrics, ...). Whitelist the ULA range on the same ports
+    // the Farm `default_rules` cover so the firewall can be fully active while
+    // keeping the nodes reachable from the driver. Port 8080 is always included
+    // by `ic-prep`.
+    //
+    // Note: injecting this global registry rule makes the orchestrator use the
+    // registry firewall rules *instead of* the config-file `default_rules` (see
+    // `rs/orchestrator/src/firewall.rs`), so the ports here must also cover the
+    // API boundary node's `boundary_node_firewall` defaults. In particular 9324
+    // is `ic-boundary`'s observability/metrics port; without it the API BN's
+    // metrics endpoint is unreachable from the driver on Local (e.g. the
+    // boundary_nodes salt-sharing test scrapes `[api_bn]:9324`).
+    if matches!(
+        SystemTestBackend::read_attribute(test_env),
+        SystemTestBackend::Local
+    ) {
+        ic_config.set_whitelisted_prefixes(Some("fd00::/8".to_string()));
+        ic_config.set_whitelisted_ports(Some(
+            "22,2497,4100,7070,9090,9091,9100,9324,19100,19523,19531".to_string(),
+        ));
+    }
 
     for dc_record in &ic.data_centers {
         ic_config.add_data_center_record(dc_record.clone());
@@ -310,8 +339,8 @@ pub fn setup_and_start_vms(
             )?;
 
             let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
-            match InfraProvider::read_attribute(&t_env) {
-                InfraProvider::Farm => {
+            match SystemTestBackend::read_attribute(&t_env) {
+                SystemTestBackend::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
                         &group_name,
                         &node,
@@ -324,6 +353,12 @@ pub fn setup_and_start_vms(
                         vec![image_spec],
                     )?;
                     t_farm.start_vm(&group_name, &vm_name)?;
+                }
+                SystemTestBackend::Local => {
+                    let backend =
+                        crate::driver::local_backend::LocalBackend::from_test_env(&t_env)?;
+                    backend.attach_disk_images(&vm_name, std::slice::from_ref(&conf_img_path))?;
+                    backend.start_vm(&group_name, &vm_name)?;
                 }
             }
             std::fs::remove_file(conf_img_path)?;
@@ -398,7 +433,7 @@ pub fn setup_and_start_nested_vms(
                     NESTED_CONFIG_IMAGE_PATH,
                 )?);
                 let setupos_image =
-                    AttachImageSpec::via_url(get_setupos_img_url(), get_setupos_img_sha256());
+                    AttachImageSpec::via_url(get_setupos_img_url(&t_env), get_setupos_img_sha256());
                 t_farm.attach_disk_images(
                     &t_group_name,
                     &vm_name,
@@ -550,8 +585,27 @@ fn create_guestos_config_for_node(
     test_env: &TestEnv,
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
-    // Build NetworkSettings
-    let ipv6_config = Ipv6Config::RouterAdvertisement;
+    // Build NetworkSettings.
+    //
+    // Use a fixed (static) IPv6 address derived from the node's allocated
+    // address instead of `RouterAdvertisement`. The RA path makes the GuestOS
+    // emit `DHCP=yes` (to support cloud metadata servers), which enables DHCP
+    // for *both* IPv4 and IPv6. On Farm this causes every node to request an
+    // IPv4 lease and exhausts the IPv4 address space in our testnet DCs. A
+    // fixed config sets `IPv6AcceptRA=false` and does not enable DHCP.
+    let ipv6_addr = match node.node_config.public_api.ip() {
+        IpAddr::V6(addr) => addr,
+        IpAddr::V4(addr) => bail!("Expected an IPv6 node address, got IPv4: {addr}"),
+    };
+    // The gateway is the `<prefix>::1` address of the node's /64 subnet. This
+    // mirrors the gateway derivation used for SetupOS configs and resolves to
+    // the same physical router that router advertisements point to.
+    let s = ipv6_addr.segments();
+    let ipv6_gateway = Ipv6Addr::new(s[0], s[1], s[2], s[3], 0, 0, 0, 1);
+    let ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+        address: format!("{ipv6_addr}/64"),
+        gateway: ipv6_gateway,
+    });
 
     let ipv4_config = match ipv4_config {
         Some(config) => Some(Ipv4Config {
@@ -669,18 +723,23 @@ pub fn setup_baremetal_instance(
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
 
-    let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
+    let hostos_url = get_hostos_initial_update_img_url(env).as_str().parse()?;
 
     let nested_vm_config = nested_vm.get_nested_vm_config()?;
     let guestos_image_source = match &nested_vm_config.boot_image {
-        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url().as_str().parse()?),
-        BootImage::Image(disk_image) => ImageSource::Url(disk_image.url.as_str().parse()?),
+        BootImage::GroupDefault => ImageSource::Url(get_guestos_img_url(env).as_str().parse()?),
+        BootImage::Image(disk_image) => match disk_image {
+            DiskImage::Url { url, .. } => ImageSource::Url(url.as_str().parse()?),
+            DiskImage::Local { .. } => {
+                bail!("DiskImage::Local is not supported for bare metal deployment")
+            }
+        },
         BootImage::File(_) => bail!("BootImage::File is not supported for bare metal deployment"),
     };
 
     let config = DeploymentConfig {
         hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
-        guestos_image: Some(guestos_image_source),
+        guestos: Some(GuestOsDeploymentConfig::full(guestos_image_source)),
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 

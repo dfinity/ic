@@ -4,6 +4,12 @@ Common dependencies for system-tests.
 
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_NNS")
 
+# The number of CPUs to reserve minimally for system_tests using the local backend.
+MIN_LOCAL_CPUS = 1
+
+# This should equal DEFAULT_VCPUS_PER_VM in rs/tests/driver/src/driver/resource.rs.
+DEFAULT_VCPUS_PER_VM = 6
+
 MAINNET_ENV = {
     "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
     "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],
@@ -49,6 +55,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
     "migration-canister": {
         "tip-of-branch": "//rs/migration_canister:migration-canister",
         "mainnet": "@mainnet_canisters//:migration.wasm.gz",
+    },
+    "engine-controller-canister": {
+        "tip-of-branch": "//rs/engine_controller:engine-controller-canister",
+        "mainnet": "@mainnet_canisters//:engine-controller.wasm.gz",
     },
 }
 
@@ -154,4 +164,9 @@ CANISTER_SANDBOX_RUNTIME_DEPS = {
     "SANDBOX_BINARY": "//rs/canister_sandbox:canister_sandbox",
     "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
     "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
+}
+
+MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS | {
+    "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+    "IC_REPLAY_PATH": "//rs/replay:ic-replay",
 }

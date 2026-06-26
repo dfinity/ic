@@ -68,7 +68,6 @@ rust_library(
         "@crate_index//:tempfile",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasmparser",
-        "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
         "@crate_index//:wirm",
     ],
@@ -186,6 +185,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/nns/constants",
         "//rs/registry/routing_table",
@@ -293,6 +293,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        ":embedders",
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities/execution_environment",
         "//rs/types/types",

@@ -57,7 +57,7 @@ def build_image(image_tag: str, dockerfile: str, context_dir: str, build_args: L
     storage_args = get_storage_dir_args()
 
     log.info("Building image...")
-    cmd = f"podman {storage_args} build --squash-all --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
+    cmd = f"podman {storage_args} build --timestamp 0 --squash-all --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
     invoke.run(cmd)
     log.info("Image built successfully")
 

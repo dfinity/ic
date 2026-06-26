@@ -283,7 +283,7 @@ impl ProtocolRound {
             &mode,
             setup.next_dealing_seed(),
         );
-        let transcript = Self::create_transcript(setup, &dealings, &mode)?;
+        let transcript = Self::create_transcript(setup, dealings.clone(), &mode)?;
 
         match transcript.combined_commitment {
             CombinedCommitment::BySummation(PolynomialCommitment::Pedersen(_)) => {}
@@ -314,7 +314,7 @@ impl ProtocolRound {
             &mode,
             setup.next_dealing_seed(),
         );
-        let transcript = Self::create_transcript(setup, &dealings, &mode)?;
+        let transcript = Self::create_transcript(setup, dealings.clone(), &mode)?;
 
         match transcript.combined_commitment {
             CombinedCommitment::BySummation(PolynomialCommitment::Simple(_)) => {}
@@ -355,7 +355,7 @@ impl ProtocolRound {
             &mode,
             setup.next_dealing_seed(),
         );
-        let transcript = Self::create_transcript(setup, &dealings, &mode)?;
+        let transcript = Self::create_transcript(setup, dealings.clone(), &mode)?;
 
         match transcript.combined_commitment {
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(_)) => {}
@@ -396,7 +396,7 @@ impl ProtocolRound {
             &mode,
             setup.next_dealing_seed(),
         );
-        let transcript = Self::create_transcript(setup, &dealings, &mode)?;
+        let transcript = Self::create_transcript(setup, dealings.clone(), &mode)?;
         match transcript.combined_commitment {
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Simple(_)) => {}
             _ => panic!("Unexpected transcript commitment type"),
@@ -449,7 +449,7 @@ impl ProtocolRound {
             &mode,
             setup.next_dealing_seed(),
         );
-        let transcript = Self::create_transcript(setup, &dealings, &mode)?;
+        let transcript = Self::create_transcript(setup, dealings.clone(), &mode)?;
 
         match transcript.combined_commitment {
             CombinedCommitment::ByInterpolation(PolynomialCommitment::Pedersen(_)) => {}
@@ -650,10 +650,10 @@ impl ProtocolRound {
 
     fn create_transcript(
         setup: &ProtocolSetup,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
         mode: &IDkgTranscriptOperationInternal,
     ) -> CanisterThresholdResult<IDkgTranscriptInternal> {
-        match create_transcript(setup.alg, setup.threshold, dealings, mode) {
+        match create_transcript(setup.alg, setup.threshold, dealings.clone(), mode) {
             Ok(t) => {
                 assert!(verify_transcript(&t, setup.alg, setup.threshold, dealings, mode).is_ok());
                 Ok(t)
@@ -671,7 +671,7 @@ impl ProtocolRound {
     pub fn verify_transcript(
         &self,
         setup: &ProtocolSetup,
-        dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
     ) -> Result<(), IDkgVerifyTranscriptInternalError> {
         verify_transcript(
             &self.transcript,

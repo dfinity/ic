@@ -129,6 +129,9 @@ pub struct NeuronInfo {
     /// net of fees (including staked maturity) captured at the time of migration.
     /// For all other neurons, this is 0.
     pub eight_year_gang_bonus_base_e8s: Option<u64>,
+
+    /// See analogous field in Neuron.
+    pub staked_maturity_e8s_equivalent: Option<u64>,
 }
 
 impl NeuronInfo {
@@ -2065,12 +2068,31 @@ pub struct ProposalInfo {
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
 pub enum SuccessfulProposalExecutionValue {
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCodeOk),
+    TakeCanisterSnapshot(TakeCanisterSnapshotOk),
 }
 
 /// The result of a successful CreateCanisterAndInstallCode proposal execution.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
 pub struct CreateCanisterAndInstallCodeOk {
     pub canister_id: Option<PrincipalId>,
+}
+
+/// The result of a successful TakeCanisterSnapshot proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct TakeCanisterSnapshotOk {
+    pub snapshot_id: Vec<u8>,
+}
+
+impl From<CreateCanisterAndInstallCodeOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: CreateCanisterAndInstallCodeOk) -> Self {
+        Self::CreateCanisterAndInstallCode(ok)
+    }
+}
+
+impl From<TakeCanisterSnapshotOk> for SuccessfulProposalExecutionValue {
+    fn from(ok: TakeCanisterSnapshotOk) -> Self {
+        Self::TakeCanisterSnapshot(ok)
+    }
 }
 
 /// Network economics contains the parameters for several operations related
@@ -2807,6 +2829,9 @@ pub struct FulfillSubnetRentalRequest {
     pub user: Option<PrincipalId>,
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 #[derive(
@@ -2844,6 +2869,7 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+    pub vcpu_type: Option<String>,
 }
 
 /// Loads a snapshot of the canister.
@@ -4261,6 +4287,11 @@ pub enum NnsFunction {
     /// nodes become unassigned.
     /// Currently limited to CloudEngine subnets.
     DeleteSubnet = 57,
+    /// Set or unset the default subnet to which `SetupInitialDKG` management
+    /// canister calls are routed when no subnet is specified explicitly. If unset,
+    /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
+    /// calling subnet (NNS).
+    SetDefaultInitialDkgSubnet = 58,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4346,6 +4377,9 @@ impl NnsFunction {
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             NnsFunction::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             NnsFunction::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
+            NnsFunction::SetDefaultInitialDkgSubnet => {
+                "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4428,6 +4462,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
+            "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
             _ => None,
         }
     }
@@ -4716,3 +4751,23 @@ pub struct CreatedNeuron {
 }
 
 pub type CreateNeuronResponse = Result<CreatedNeuron, GovernanceError>;
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct MaturityModulation {
+    pub current_value_permyriad: Option<i32>,
+    pub updated_at_timestamp_seconds: Option<u64>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationRequest {}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default,
+)]
+pub struct GetMaturityModulationResponse {
+    pub maturity_modulation: Option<MaturityModulation>,
+}

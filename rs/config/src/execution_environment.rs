@@ -11,8 +11,12 @@ const MIB: u64 = 1024 * KIB;
 const GIB: u64 = 1024 * MIB;
 const TIB: u64 = 1024 * GIB;
 
+const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disabled;
+
+const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
+
 // TODO(DSM-105): remove after the feature is enabled by default.
-pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = false;
+pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
 pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
     FlagStatus::Enabled
 } else {
@@ -209,7 +213,7 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
 
 /// The maximum number of environment variables allowed per canister.
-pub const MAX_ENVIRONMENT_VARIABLES: usize = 20;
+pub const MAX_ENVIRONMENT_VARIABLES: usize = 32;
 
 /// The maximum length of an environment variable name.
 pub const MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;
@@ -379,6 +383,9 @@ pub struct Config {
 
     /// Enables the log memory store feature.
     pub log_memory_store_feature: FlagStatus,
+
+    /// Enables the flexible HTTP outcalls API (`flexible_http_request`).
+    pub flexible_http_requests: FlagStatus,
 }
 
 impl Default for Config {
@@ -463,8 +470,9 @@ impl Default for Config {
             max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-            replicated_inter_canister_log_fetch: FlagStatus::Disabled,
+            replicated_inter_canister_log_fetch: REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE,
             log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
+            flexible_http_requests: FLEXIBLE_HTTP_REQUESTS_FEATURE,
         }
     }
 }

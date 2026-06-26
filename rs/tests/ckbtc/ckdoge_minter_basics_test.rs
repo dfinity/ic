@@ -3,7 +3,7 @@ use anyhow::Result;
 use bitcoin::{Amount, Txid, dogecoin, dogecoin::Address};
 use candid::Nat;
 use candid::{Decode, Encode, Principal};
-use ic_ckdoge_agent::CkDogeMinterAgent;
+use ic_ckdoge_agent::{CkDogeMinterAgent, CkDogeMinterAgentError};
 use ic_ckdoge_minter::{
     UpdateBalanceArgs, UtxoStatus,
     candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs, WithdrawalFee},
@@ -280,10 +280,19 @@ async fn test_retrieve_doge_status<F: Fn(Txid) -> bool>(
     let retries = 30;
     let mut i = 1;
     while i < retries {
-        let status = minter_agent
-            .retrieve_doge_status(block_index)
-            .await
-            .expect("failed to call retrieve_doge_status");
+        let status = match minter_agent.retrieve_doge_status(block_index).await {
+            Ok(status) => status,
+            Err(CkDogeMinterAgentError::AgentError(ic_agent::AgentError::TransportError(err))) => {
+                info!(
+                    &logger,
+                    "[{i}/{retries}] retrieve_doge_status transport error: {err}, retrying..."
+                );
+                i += 1;
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                continue;
+            }
+            Err(err) => panic!("failed to call retrieve_doge_status: {err:?}"),
+        };
         // Whenever status changes, reset the retry count
         i = if Some(&status) != last_status.as_ref() {
             0

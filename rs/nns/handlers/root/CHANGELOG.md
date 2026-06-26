@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-04-25: Proposal 141567
+
+http://dashboard.internetcomputer.org/proposal/141567
+
+## Fixed
+
+* Do not deadlock when doing snapshot operations that target the Governance canister.
+
+
 # 2026-04-10: Proposal 141332
 
 http://dashboard.internetcomputer.org/proposal/141332

@@ -141,6 +141,7 @@ members = [
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/embedders/fuzz",
+    "rs/engine_controller",
     "rs/ethereum/cketh/minter",
     "rs/ethereum/cketh/test_utils",
     "rs/ethereum/ledger-suite-orchestrator",
@@ -494,6 +495,7 @@ members = [
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",
+    "rs/tests/networking/firewall",
     "rs/tests/networking/subnet_update_workload",
     "rs/tests/nns",
     "rs/tests/nns/cycles_minting",
@@ -706,6 +708,7 @@ ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.45.0" }
 ic-utils = { version = "0.45.0", features = ["raw"] }
 ic-vetkeys = "0.6.0"
+ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
@@ -718,6 +721,9 @@ idna = "1.0.2"
 indexmap = "2.10.0"
 indoc = "1.0.9"
 inferno = "0.12.0"
+inotify = { version = "0.11.2", default-features = false, features = [
+    "stream",
+] }
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 jsonrpc = "0.18.0"
@@ -914,14 +920,14 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.245.0", features = ["wasmparser"] }
-wasmparser = "0.245.0"
-wasmprinter = "0.245.0"
-wast = "245.0.0"
-wat = "~1.245.0"
+wasm-encoder = { version = "0.251.0", features = ["wasmparser"] }
+wasmparser = "0.251.0"
+wasmprinter = "0.251.0"
+wast = "251.0.0"
+wat = "~1.251.0"
 webpki-roots = "1.0.6"
 which = "6.0.3"
-wirm = { version = "2.1.0", features = ["parallel"] }
+wirm = { version = "4.0.4", features = ["parallel"] }
 wsl = "0.1.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
@@ -932,4 +938,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.8.1"
+version = "^0.9.11"

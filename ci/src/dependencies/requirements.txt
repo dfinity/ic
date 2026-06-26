@@ -1,16 +1,16 @@
 cvss==3.4
-GitPython==3.1.44
+GitPython==3.1.50
 jira==3.10.5
 nested_lookup==0.2.25
 node_semver==0.9.0
 packaging==25.0
 parse==1.20.2
-pytest==8.4.1
+pytest==9.0.3
 python_gitlab==6.0.0
 pyyaml==6.0.2
 PyGithub==2.6.1
-cryptography==46.0.5
-pyjwt==2.10.1
-requests==2.32.4
+cryptography==48.0.1
+pyjwt==2.13.0
+requests==2.33.0
 toml==0.10.2
 

@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use crate::{common::LOG_PREFIX, registry::Registry};
 
-use super::common::{check_api_boundary_nodes_exist, check_replica_version_is_blessed};
+use super::common::{check_api_boundary_nodes_exist, check_replica_version_is_elected};
 
 /// Deprecated; please use `DeployGuestosToSomeApiBoundaryNodes` instead.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -69,7 +69,7 @@ impl Registry {
         payload: &DeployGuestosToSomeApiBoundaryNodes,
     ) {
         check_api_boundary_nodes_exist(self, &payload.node_ids);
-        check_replica_version_is_blessed(self, &payload.version);
+        check_replica_version_is_elected(self, &payload.version);
     }
 }
 
@@ -79,14 +79,10 @@ mod tests {
 
     use ic_base_types::{NodeId, PrincipalId};
     use ic_protobuf::registry::{
-        api_boundary_node::v1::ApiBoundaryNodeRecord,
-        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
+        api_boundary_node::v1::ApiBoundaryNodeRecord, replica_version::v1::ReplicaVersionRecord,
     };
-    use ic_registry_keys::{
-        make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-        make_replica_version_key,
-    };
-    use ic_registry_transport::{insert, upsert};
+    use ic_registry_keys::{make_api_boundary_node_record_key, make_replica_version_key};
+    use ic_registry_transport::insert;
     use ic_types::ReplicaVersion;
     use prost::Message;
 
@@ -116,8 +112,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "'version' is NOT blessed")]
-    fn should_panic_if_version_not_blessed() {
+    #[should_panic(expected = "'version' is NOT elected")]
+    fn should_panic_if_version_not_elected() {
         let mut registry = invariant_compliant_registry(0);
 
         // Add node to registry
@@ -165,9 +161,7 @@ mod tests {
         );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
-        // Create and bless version
-        let blessed_versions = registry.get_blessed_replica_version_ids();
-
+        // Create and elect version
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert ApiBoundaryNodeRecord
             insert(
@@ -176,14 +170,6 @@ mod tests {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurements: None,
-                }
-                .encode_to_vec(),
-            ),
-            // Mutation to insert BlessedReplicaVersions
-            upsert(
-                make_blessed_replica_versions_key(), // key
-                BlessedReplicaVersions {
-                    blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
                 }
                 .encode_to_vec(),
             ),

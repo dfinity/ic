@@ -1,3 +1,4 @@
+use super::allowed_panics::panic_sandboxed_execution_controller_reply_channel_closed;
 use crate::compiler_sandbox::WasmCompilerProxy;
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
@@ -25,6 +26,7 @@ use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
+use ic_replicated_state::metrics::instructions_buckets;
 use ic_replicated_state::{
     EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
     page_map::allocated_pages_count,
@@ -40,7 +42,6 @@ use std::collections::{HashMap, VecDeque};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
 use std::os::fd::AsRawFd;
-use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::Weak;
 use std::sync::mpsc::Receiver;
@@ -49,6 +50,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
+use super::allowed_panics::panic_launcher_exited_due_to_signal;
 use super::controller_service_impl::ControllerServiceImpl;
 use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use super::process_exe_and_args::{
@@ -154,6 +156,7 @@ struct SandboxedExecutionMetrics {
     mprotect_count: HistogramVec,
     copy_page_count: HistogramVec,
     sigsegv_handler_duration: HistogramVec,
+    dmt_projected_message_cost: HistogramVec,
 }
 
 impl SandboxedExecutionMetrics {
@@ -407,6 +410,12 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type", "memory_type"],
             ),
+            dmt_projected_message_cost: metrics_registry.histogram_vec(
+                "sandboxed_execution_dmt_projected_message_cost",
+                "Cost of a message when the DMT charges for all page accesses.",
+                instructions_buckets(), /* same as scheduler_instructions_consumed_per_message for comparison */
+                &["api_type", "memory_type"],
+            ),
         }
     }
 
@@ -491,6 +500,10 @@ impl SandboxedExecutionMetrics {
         self.sigsegv_handler_duration
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_handler_duration.as_secs_f64());
+
+        self.dmt_projected_message_cost
+            .with_label_values(&[api_type_label, "both"])
+            .observe(instance_stats.dmt_projected_message_cost as f64);
 
         self.allocated_pages.set(allocated_pages_count() as i64);
     }
@@ -1027,7 +1040,7 @@ impl WasmExecutor for SandboxedExecutionController {
         // Wait for completion.
         let result = rx
             .recv()
-            .expect("Sandboxed_execution_controller reply channel closed unexpectedly");
+            .unwrap_or_else(|_| panic_sandboxed_execution_controller_reply_channel_closed());
         drop(wait_timer);
         let _finish_timer = self
             .metrics
@@ -1054,7 +1067,6 @@ impl WasmExecutor for SandboxedExecutionController {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
@@ -1236,7 +1248,6 @@ impl WasmExecutor for SandboxedExecutionController {
 
         let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {
-            canister_root,
             wasm_binary,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
@@ -1693,7 +1704,7 @@ impl SandboxedExecutionController {
                 });
                 return WasmExecutionResult::Paused(slice, paused);
             }
-            CompletionResult::Finished(exec_output) => {
+            CompletionResult::Finished(mut exec_output) => {
                 let execution_status = match exec_output.wasm.wasm_result.clone() {
                     Ok(Some(WasmResult::Reply(_))) => "Success",
                     Ok(Some(WasmResult::Reject(_))) => "Reject",
@@ -1705,6 +1716,19 @@ impl SandboxedExecutionController {
                     execution_status,
                     execution_state.wasm_execution_mode.as_str(),
                 );
+                // Temporary metric: How much will the message cost when we charge via DMT.
+                let instructions_used = message_instruction_limit
+                    .saturating_sub(&exec_output.wasm.num_instructions_left);
+                let stable_writes = exec_output.wasm.instance_stats.stable_dirty_pages;
+                let stable_reads = exec_output.wasm.instance_stats.stable_accessed_pages;
+                let heap_writes = exec_output.wasm.instance_stats.wasm_dirty_pages;
+                let heap_reads = exec_output.wasm.instance_stats.wasm_accessed_pages - heap_writes;
+                // we currently charge 1000 for stable and heap writes (plus 3000 for copy overhead, which remains separate), and 0 for everything else.
+                let additional_cost =
+                    (stable_writes + heap_writes) * 4000 + (stable_reads + heap_reads) * 5000;
+                exec_output.wasm.instance_stats.dmt_projected_message_cost =
+                    instructions_used.get() as usize + additional_cost;
+
                 self.metrics
                     .observe_instance_stats(&exec_output.wasm.instance_stats, api_type_label);
                 exec_output
@@ -2069,11 +2093,7 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
-    let scheduler_priorities = state_reader
-        .get_latest_state()
-        .get_ref()
-        .canister_accumulated_priorities();
-
+    let state = state_reader.get_latest_state();
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     let candidates: Vec<_> = backends
@@ -2083,10 +2103,12 @@ fn evict_sandbox_processes(
                 id: *id,
                 last_used: stats.last_used,
                 rss: stats.rss,
-                scheduler_priority: *scheduler_priorities
-                    .get(id)
-                    // This should happen only if the canister is deleted.
-                    .unwrap_or(&min_scheduler_priority),
+                scheduler_priority: if state.get_ref().canister_state(id).is_some() {
+                    state.get_ref().canister_priority(id).accumulated_priority
+                } else {
+                    // Canister was deleted.
+                    min_scheduler_priority
+                },
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -2182,9 +2204,7 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
         Some(code) => {
             panic!("Error from launcher process, pid {pid} exited with status code: {code}")
         }
-        None => panic!(
-            "Error from launcher process, pid {pid} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message."
-        ),
+        None => panic_launcher_exited_due_to_signal(pid),
     }
 }
 
@@ -2226,6 +2246,7 @@ mod tests {
     use std::{
         collections::BTreeMap,
         fs::{self, File},
+        path::PathBuf,
     };
 
     use super::*;
@@ -2309,7 +2330,6 @@ mod tests {
         controller
             .create_execution_state(
                 canister_module,
-                PathBuf::new(),
                 canister_id,
                 Arc::new(CompilationCacheBuilder::new().build()),
             )

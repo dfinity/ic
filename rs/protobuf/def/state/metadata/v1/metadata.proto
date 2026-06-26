@@ -56,6 +56,7 @@ message NetworkTopology {
   repeated types.v1.CanisterId bitcoin_mainnet_canister_ids = 7;
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
   FullTopology full_topology = 9;
+  types.v1.SubnetId default_initial_dkg_subnet_id = 10;
 }
 
 message FullTopology {
@@ -108,11 +109,10 @@ message ThresholdArguments {
 }
 
 message SignWithThresholdContext {
-  reserved 6, 7;
+  reserved 4, 6, 7;
   state.queues.v1.Request request = 1;
   ThresholdArguments args = 2;
   repeated bytes derivation_path_vec = 3;
-  bytes deprecated_pseudo_random_id = 4;
   uint64 batch_time = 5;
   optional bytes nonce = 8;
 }
@@ -140,6 +140,7 @@ enum HttpMethod {
   HTTP_METHOD_HEAD = 3;
   HTTP_METHOD_PUT = 4;
   HTTP_METHOD_DELETE = 5;
+  HTTP_METHOD_PATCH = 6;
 }
 
 message HttpHeader {
@@ -160,6 +161,7 @@ message CanisterHttpRequestContext {
   optional Replication replication = 11;
   optional PricingVersion pricing_version = 12;
   optional RefundStatus refund_status = 13;
+  uint64 registry_version = 14;
   reserved 5;
 }
 
@@ -305,6 +307,7 @@ message SubnetCallContextManager {
   repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
   repeated PreSignatureStashTree pre_signature_stashes = 19;
+  repeated CanisterHttpRequestContextTree delivered_canister_http_request_contexts = 20;
 }
 
 message SubnetMetrics {
@@ -322,6 +325,7 @@ message SubnetMetrics {
   optional uint64 canister_state_bytes = 9;
   optional uint64 update_transactions_total = 10;
   repeated ThresholdSignatureAgreementsEntry threshold_signature_agreements = 11;
+  repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case_as_counters = 12;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {
@@ -408,6 +412,16 @@ message SystemMetadata {
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
 
   registry.subnet.v1.ResourceLimits own_resource_limits = 24;
+
+  repeated CanisterPriority subnet_schedule = 25;
+}
+
+message CanisterPriority {
+  types.v1.CanisterId canister_id = 1;
+  int64 accumulated_priority = 2;
+  int64 executed_rounds = 3;
+  optional uint64 long_execution_start_round = 4;
+  uint64 last_full_execution_round = 5;
 }
 
 message StableMemory {

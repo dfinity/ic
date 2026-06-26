@@ -1,11 +1,12 @@
 use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
+use rcgen::{CertifiedKey, generate_simple_self_signed};
 use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
     fs,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::Path,
     time::Duration,
 };
@@ -14,16 +15,18 @@ use url::Url;
 
 use crate::{
     driver::{
-        farm::{DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate},
+        farm::{
+            Certificate, DemoCertificate, DnsRecord, DnsRecordType, HostFeature, PlaynetCertificate,
+        },
         log_events,
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv,
-            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
-            get_dependency_path_from_env,
+            AcquireDemoCertificate, AcquirePlaynetCertificate, CreateDnsRecords,
+            CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot,
+            IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path_from_env,
         },
-        test_setup::InfraProvider,
+        test_setup::SystemTestBackend,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
     retry_with_msg_async,
@@ -63,6 +66,44 @@ impl DeployedIcGatewayVm {
     /// Retrieves the underlying VM.
     pub fn get_vm(&self) -> AllocatedVm {
         self.vm.clone()
+    }
+
+    /// Returns a custom DNS resolution override for reaching the gateway at the
+    /// given `url`, if one is needed for the active system-test backend.
+    ///
+    /// On the [`SystemTestBackend::Local`] backend the gateway serves HTTPS with
+    /// a self-signed certificate for a local domain (`<name>.local` and its
+    /// wildcard) and there is no DNS service that resolves that domain (or the
+    /// per-canister subdomains `<canister_id>.<name>.local`). Clients reaching
+    /// the gateway therefore have to resolve the requested host themselves to
+    /// the gateway VM's IPv6 address. This returns `(host, [vm_ipv6]:443)` for
+    /// the host of `url` so a `reqwest` client can be configured with
+    /// `.resolve(host, addr)`.
+    ///
+    /// Note that `reqwest`'s `resolve` overrides only the *exact* host passed to
+    /// it (it does *not* apply to subdomains), so the host of the actual request
+    /// URL — e.g. `<canister_id>.<name>.local` — must be used, not the apex
+    /// domain. On the [`SystemTestBackend::Farm`] backend DNS resolves the
+    /// gateway domain, so no override is needed and `None` is returned.
+    pub fn resolve_override_for_url(&self, url: &Url) -> Option<(String, SocketAddr)> {
+        match SystemTestBackend::read_attribute(&self.env) {
+            SystemTestBackend::Local => {
+                let host = url.host_str()?.to_string();
+                Some((host, SocketAddr::new(IpAddr::V6(self.vm.ipv6), 443)))
+            }
+            SystemTestBackend::Farm => None,
+        }
+    }
+
+    /// Whether the gateway serves HTTPS with a self-signed certificate that
+    /// clients have to accept (i.e. `danger_accept_invalid_certs(true)`). This
+    /// is the case on the [`SystemTestBackend::Local`] backend; on Farm a
+    /// proper playnet certificate is used.
+    pub fn uses_self_signed_cert(&self) -> bool {
+        matches!(
+            SystemTestBackend::read_attribute(&self.env),
+            SystemTestBackend::Local
+        )
     }
 }
 
@@ -161,12 +202,50 @@ sudo networkctl reconfigure enp2s0
             None
         };
 
-        let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
-        let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
-        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
+        let backend = SystemTestBackend::read_attribute(env);
+        let demo_domain_env = std::env::var("DEMO_DOMAIN").ok().filter(|s| !s.is_empty());
+
+        let (ic_gateway_fqdn, cert, aaaa_records, a_records) = match backend {
+            SystemTestBackend::Local => {
+                // The Local backend has no playnet TLS service, so generate a
+                // self-signed certificate for a local domain and skip DNS
+                // configuration entirely.
+                let playnet = self.load_or_create_local_self_signed(env, vm_ipv6, vm_ipv4)?;
+                (
+                    playnet.playnet_cert.playnet.clone(),
+                    playnet.playnet_cert.cert.clone(),
+                    playnet.aaaa_records.clone(),
+                    playnet.a_records.clone(),
+                )
+            }
+            SystemTestBackend::Farm => {
+                if let Some(demo_domain) = demo_domain_env {
+                    let demo =
+                        self.load_or_create_demo_domain(env, &demo_domain, vm_ipv6, vm_ipv4)?;
+                    let fqdn = demo.demo_cert.domain.clone();
+                    self.configure_demo_domain_dns_records(env, &demo, &fqdn)?;
+                    (
+                        fqdn,
+                        demo.demo_cert.cert.clone(),
+                        demo.aaaa_records.clone(),
+                        demo.a_records.clone(),
+                    )
+                } else {
+                    let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
+                    let fqdn = playnet.playnet_cert.playnet.clone();
+                    self.configure_dns_records(env, &playnet, &fqdn)?;
+                    (
+                        fqdn,
+                        playnet.playnet_cert.cert.clone(),
+                        playnet.aaaa_records.clone(),
+                        playnet.a_records.clone(),
+                    )
+                }
+            }
+        };
 
         // Emit log events for A and AAAA records
-        emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
+        emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &aaaa_records, &a_records);
 
         // Save playnet configuration and start the gateway
         let playnet_url = Url::parse(&format!("https://{ic_gateway_fqdn}"))?;
@@ -185,7 +264,7 @@ sudo networkctl reconfigure enp2s0
                 url
             })
             .collect();
-        self.start_gateway_container(&deployed_vm, &playnet, api_nodes_urls)?;
+        self.start_gateway_container(&deployed_vm, &ic_gateway_fqdn, &cert, api_nodes_urls)?;
 
         // Wait for the service to become ready.
         // Readiness is defined when some API boundary node used by ic-gateway responds with HTTP 200 to /api/v2/status.
@@ -195,7 +274,21 @@ sudo networkctl reconfigure enp2s0
             self.universal_vm.name,
             health_url.as_str()
         );
-        block_on(await_status_is_healthy(&env.logger(), health_url, msg))
+        // The Local backend has no DNS for the self-signed domain, so resolve it
+        // directly to the VM's IPv6 address and accept the self-signed cert.
+        let resolve = match backend {
+            SystemTestBackend::Local => Some((
+                ic_gateway_fqdn.clone(),
+                SocketAddr::new(IpAddr::V6(vm_ipv6), 443),
+            )),
+            SystemTestBackend::Farm => None,
+        };
+        block_on(await_status_is_healthy(
+            &env.logger(),
+            health_url,
+            msg,
+            resolve,
+        ))
     }
 
     /// Loads existing playnet configuration or creates a new one.
@@ -234,15 +327,69 @@ sudo networkctl reconfigure enp2s0
         Ok(playnet)
     }
 
-    /// Configures DNS records based on infrastructure provider.
+    /// Loads existing configuration or, on the Local backend, generates a
+    /// self-signed certificate for a deterministic local domain. The Local
+    /// backend has no playnet TLS service, so the gateway serves HTTPS with this
+    /// self-signed certificate. The certificate covers both the apex domain and
+    /// its wildcard so the gateway can also serve canister subdomains.
+    fn load_or_create_local_self_signed(
+        &self,
+        env: &TestEnv,
+        uvm_ipv6: Ipv6Addr,
+        uvm_ipv4: Option<Ipv4Addr>,
+    ) -> Result<Playnet> {
+        let logger = env.logger();
+        let mut playnet = if Playnet::attribute_exists(env) {
+            let playnet: Playnet = Playnet::read_attribute(env);
+            info!(
+                logger,
+                "Using existing local domain: {}", playnet.playnet_cert.playnet
+            );
+            playnet
+        } else {
+            let domain = format!("{}.local", self.universal_vm.name);
+            let CertifiedKey { cert, key_pair } =
+                generate_simple_self_signed(vec![domain.clone(), format!("*.{domain}")])
+                    .context("failed to generate self-signed certificate")?;
+            let certificate = Certificate {
+                priv_key_pem: key_pair.serialize_pem(),
+                cert_pem: cert.pem(),
+                chain_pem: String::new(),
+            };
+            info!(
+                logger,
+                "Generated self-signed certificate for local domain: {domain}"
+            );
+            Playnet {
+                playnet_cert: PlaynetCertificate {
+                    playnet: domain,
+                    cert: certificate,
+                },
+                aaaa_records: vec![],
+                a_records: vec![],
+            }
+        };
+
+        playnet.aaaa_records.push(uvm_ipv6);
+        if let Some(ipv4) = uvm_ipv4 {
+            playnet.a_records.push(ipv4);
+        }
+
+        // Write/overwrite file
+        playnet.write_attribute(env);
+
+        Ok(playnet)
+    }
+
+    /// Configures DNS records based on the system-test backend.
     fn configure_dns_records(
         &self,
         env: &TestEnv,
         playnet: &Playnet,
         ic_gateway_fqdn: &str,
     ) -> Result<()> {
-        let mut records = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+        let mut records = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => {
                 vec![
                     DnsRecord {
                         name: "".to_string(),
@@ -260,6 +407,16 @@ sudo networkctl reconfigure enp2s0
                         records: vec![ic_gateway_fqdn.to_string()],
                     },
                 ]
+            }
+            SystemTestBackend::Local => {
+                // The Local backend has no playnet DNS service. Return an empty
+                // set; downstream code on the Local path is expected to skip
+                // playnet DNS configuration entirely.
+                slog::warn!(
+                    env.logger(),
+                    "LocalBackend: skipping configure_dns_records (no playnet)"
+                );
+                vec![]
             }
         };
 
@@ -283,7 +440,8 @@ sudo networkctl reconfigure enp2s0
     fn start_gateway_container(
         &self,
         deployed_universal_vm: &DeployedUniversalVm,
-        playnet: &Playnet,
+        domain: &str,
+        cert: &Certificate,
         api_nodes_urls: Vec<String>,
     ) -> Result<()> {
         let api_nodes_urls = (!api_nodes_urls.is_empty())
@@ -326,14 +484,105 @@ docker run --name=ic-gateway -d \
   --log-driver=journald \
   ic_gatewayd:image
 "#,
-            key = playnet.playnet_cert.cert.priv_key_pem,
-            cert = playnet.playnet_cert.cert.cert_pem,
-            cert_chain = playnet.playnet_cert.cert.chain_pem,
+            key = cert.priv_key_pem,
+            cert = cert.cert_pem,
+            cert_chain = cert.chain_pem,
             ic_url = api_nodes_urls,
-            domain = playnet.playnet_cert.playnet
+            domain = domain,
         );
 
         deployed_universal_vm.block_on_bash_script(&bash_script)?;
+        Ok(())
+    }
+
+    /// Loads existing demo-domain configuration or creates a new one by acquiring a
+    /// demo certificate for the given `domain`.
+    fn load_or_create_demo_domain(
+        &self,
+        env: &TestEnv,
+        domain: &str,
+        uvm_ipv6: Ipv6Addr,
+        uvm_ipv4: Option<Ipv4Addr>,
+    ) -> Result<DemoDomain> {
+        let logger = env.logger();
+        let mut demo = if DemoDomain::attribute_exists(env) {
+            let demo: DemoDomain = DemoDomain::read_attribute(env);
+            info!(
+                logger,
+                "Using existing demo domain: {}", demo.demo_cert.domain
+            );
+            demo
+        } else {
+            let demo_cert = env.acquire_demo_certificate(domain);
+            info!(logger, "Acquired new demo domain: {}", demo_cert.domain);
+            DemoDomain {
+                domain: domain.to_string(),
+                demo_cert,
+                aaaa_records: vec![],
+                a_records: vec![],
+            }
+        };
+
+        demo.aaaa_records.push(uvm_ipv6);
+        if let Some(ipv4) = uvm_ipv4 {
+            demo.a_records.push(ipv4);
+        }
+
+        // Write/overwrite file
+        demo.write_attribute(env);
+
+        Ok(demo)
+    }
+
+    /// Configures DNS records for the demo-domain flow based on the system-test backend.
+    fn configure_demo_domain_dns_records(
+        &self,
+        env: &TestEnv,
+        demo: &DemoDomain,
+        ic_gateway_fqdn: &str,
+    ) -> Result<()> {
+        let mut records = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => {
+                vec![
+                    DnsRecord {
+                        name: "".to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: demo.aaaa_records.iter().map(|r| r.to_string()).collect(),
+                    },
+                    DnsRecord {
+                        name: "*".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                    DnsRecord {
+                        name: "*.raw".to_string(),
+                        record_type: DnsRecordType::CNAME,
+                        records: vec![ic_gateway_fqdn.to_string()],
+                    },
+                ]
+            }
+            SystemTestBackend::Local => {
+                slog::warn!(
+                    env.logger(),
+                    "LocalBackend: skipping configure_demo_domain_dns_records (no playnet)"
+                );
+                vec![]
+            }
+        };
+
+        if !demo.a_records.is_empty() {
+            records.push(DnsRecord {
+                name: "".to_string(),
+                record_type: DnsRecordType::A,
+                records: demo.a_records.iter().map(|r| r.to_string()).collect(),
+            })
+        }
+
+        let base_domain = env.create_demo_dns_records(&demo.domain, records);
+
+        // Wait for DNS propagation by checking a random subdomain
+        block_on(await_dns_propagation(&env.logger(), &base_domain))?;
+
         Ok(())
     }
 }
@@ -352,8 +601,29 @@ impl TestEnvAttribute for Playnet {
     }
 }
 
+/// Demo-domain configuration structure, analogous to [`Playnet`] but backed by a
+/// [`DemoCertificate`] for a caller-supplied domain.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DemoDomain {
+    pub domain: String,
+    pub demo_cert: DemoCertificate,
+    pub aaaa_records: Vec<Ipv6Addr>,
+    pub a_records: Vec<Ipv4Addr>,
+}
+
+impl TestEnvAttribute for DemoDomain {
+    fn attribute_name() -> String {
+        String::from("demo_domain")
+    }
+}
+
 /// Emits log events for IC gateway A and AAAA records.
-fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, playnet: &Playnet) {
+fn emit_ic_gateway_records_event(
+    log: &slog::Logger,
+    ic_gateway_fqdn: &str,
+    aaaa_records: &[Ipv6Addr],
+    a_records: &[Ipv4Addr],
+) {
     #[derive(Deserialize, Serialize)]
     struct IcGatewayARecords {
         url: String,
@@ -370,7 +640,7 @@ fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, play
         IC_GATEWAY_A_RECORDS_CREATED_EVENT_NAME.to_string(),
         IcGatewayARecords {
             url: ic_gateway_fqdn.to_string(),
-            a_records: playnet.a_records.clone(),
+            a_records: a_records.to_vec(),
         },
     );
     event_a_record.emit_log(log);
@@ -379,7 +649,7 @@ fn emit_ic_gateway_records_event(log: &slog::Logger, ic_gateway_fqdn: &str, play
         IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
         IcGatewayAAAARecords {
             url: ic_gateway_fqdn.to_string(),
-            aaaa_records: playnet.aaaa_records.clone(),
+            aaaa_records: aaaa_records.to_vec(),
         },
     );
     event_aaaa_record.emit_log(log);
@@ -510,12 +780,26 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
     .await
 }
 
-async fn await_status_is_healthy(logger: &Logger, url: Url, msg: String) -> Result<()> {
+async fn await_status_is_healthy(
+    logger: &Logger,
+    url: Url,
+    msg: String,
+    resolve: Option<(String, SocketAddr)>,
+) -> Result<()> {
     info!(logger, "Waiting for IcGatewayVm to become healthy ...");
 
     let request = Request::new(Method::GET, url);
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
-        let client = Client::builder().build()?;
+        let mut builder = Client::builder();
+        // On the Local backend the gateway domain has no DNS entry and is served
+        // with a self-signed certificate, so resolve it directly to the VM and
+        // skip certificate verification.
+        if let Some((domain, addr)) = resolve.as_ref() {
+            builder = builder
+                .danger_accept_invalid_certs(true)
+                .resolve(domain, *addr);
+        }
+        let client = builder.build()?;
         let response = client
             .execute(request.try_clone().unwrap())
             .await

@@ -31,10 +31,11 @@ jobs:
   # as a separate job.
   release-system-tests:
     name: Release System Tests
-    runs-on: &dind-large-setup
+    runs-on:
+      group: dm1
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:ac24f205995a1c36921bb8606e0ee16b8b26d73be7dd0cac786c6882f3569680
+      image: ghcr.io/dfinity/ic-build@sha256:0ed93dc568f53cce56042a86b31f98cd1bbb9cd3ea8e649532c366494b9c160a
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 180
@@ -52,7 +53,7 @@ jobs:
             bazel test \
               --config=stamped \
               --config=flaky_retry \
-              --test_tag_filters=system_test_large \
+              --test_tag_filters=system_test_large,-local_system_test \
               //rs/tests/... \
               --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -67,7 +68,8 @@ jobs:
 
   setup-guest-os-qualification:
     name: Setting up guest os qualification pipeline
-    runs-on: *dind-large-setup
+    runs-on: &dind-large-setup
+      labels: dind-large
     container: *container-setup
     timeout-minutes: 180
     outputs:
@@ -78,16 +80,12 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           sparse-checkout: "ci/scripts/determine-initial-guest-os-versions.py"
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
       - id: generate
         name: Fetch beginning versions for qualification
         shell: bash
         run: |
           set -euo pipefail
-          OUTPUT=$(python ci/scripts/determine-initial-guest-os-versions.py)
+          OUTPUT=$(python3 ci/scripts/determine-initial-guest-os-versions.py)
           echo "output=$OUTPUT" >> $GITHUB_OUTPUT
 
   guest-os-qualification:

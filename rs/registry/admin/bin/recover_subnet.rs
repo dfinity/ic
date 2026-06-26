@@ -25,6 +25,11 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     /// The targeted subnet.
     subnet: SubnetDescriptor,
 
+    #[clap(long)]
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet recovery.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
+
     #[clap(long, required = true)]
     /// The height of the CUP
     pub height: u64,
@@ -220,6 +225,7 @@ impl ProposeToUpdateRecoveryCupCmd {
         };
 
         do_recover_subnet::RecoverSubnetPayload {
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             height: self.height,
             time_ns: self.time_ns,
             subnet_id: subnet_id.get(),
@@ -259,6 +265,7 @@ mod tests {
     ) -> do_recover_subnet::RecoverSubnetPayload {
         do_recover_subnet::RecoverSubnetPayload {
             subnet_id: subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height,
             time_ns,
             state_hash: hex::decode(state_hash)
@@ -277,6 +284,7 @@ mod tests {
     ) -> ProposeToUpdateRecoveryCupCmd {
         ProposeToUpdateRecoveryCupCmd {
             subnet: SubnetDescriptor::Id(subnet_id.get()),
+            initial_dkg_subnet_id: None,
             test_neuron_proposer: false,
             dry_run: false,
             json: true,
@@ -390,6 +398,25 @@ mod tests {
                 }),
                 ..minimal_recover_payload(subnet_id, height, time_ns, state_hash)
             },
+        );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_includes_initial_dkg_subnet_id() {
+        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
+        let initial_dkg_subnet_id = PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap();
+        let height = 1;
+        let time_ns = 2;
+        let state_hash =
+            "5d6601ac575f565b7c61d6bf5f9b25fa503bf7d756210a9a1fe8d8a32967f2e5".to_string();
+        let cmd = ProposeToUpdateRecoveryCupCmd {
+            initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
+            ..empty_propose_to_recover_subnet_cmd(subnet_id, height, time_ns, state_hash)
+        };
+
+        assert_eq!(
+            cmd.new_payload_for_subnet(subnet_id).initial_dkg_subnet_id,
+            Some(SubnetId::from(initial_dkg_subnet_id))
         );
     }
 

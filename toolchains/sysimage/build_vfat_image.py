@@ -17,7 +17,7 @@ import tempfile
 from toolchains.sysimage.utils import parse_size
 
 
-def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
+def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
     """
     Put contents of tarfile into vfat image.
 
@@ -39,7 +39,20 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
             if path == "":
                 continue
             os.mkdir(os.path.join(fs_basedir, path))
-            subprocess.run(["faketime", "-f", "1970-1-1 0:0:0", "mmd", "-i", out_file, "::/" + path], check=True)
+            subprocess.run(
+                [
+                    "faketime",
+                    "-f",
+                    "1970-1-1 0:0:0",
+                    os.path.abspath(mtools),
+                    "-c",
+                    "mmd",
+                    "-i",
+                    out_file,
+                    "::/" + path,
+                ],
+                check=True,
+            )
         elif member.type == tarfile.REGTYPE or member.type == tarfile.AREGTYPE:
             with open(os.path.join(fs_basedir, path), "wb") as f:
                 f.write(tf.extractfile(member).read())
@@ -48,6 +61,8 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
                     "faketime",
                     "-f",
                     "1970-1-1 0:0:0",
+                    os.path.abspath(mtools),
+                    "-c",
                     "mcopy",
                     "-o",
                     "-i",
@@ -61,7 +76,7 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
             raise RuntimeError("Unhandled tar member kind: %s" % member.type)
 
 
-def install_extra_files(out_file, extra_files, path_transform):
+def install_extra_files(out_file, extra_files, path_transform, mtools):
     for extra_file in extra_files:
         source_file, install_target, mode = extra_file.split(":")
         if install_target[0] == "/":
@@ -71,6 +86,8 @@ def install_extra_files(out_file, extra_files, path_transform):
                 "faketime",
                 "-f",
                 "1970-1-1 0:0:0",
+                os.path.abspath(mtools),
+                "-c",
                 "mcopy",
                 "-o",
                 "-i",
@@ -105,6 +122,11 @@ def main():
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
+    # mkfs.fat is the same binary as mkfs.vfat (upstream ships the latter as a
+    # symlink); behaviour does not depend on the name it is invoked under.
+    parser.add_argument("--mkfs-fat", help="Path to the mkfs.fat (mkfs.vfat) tool", type=str, required=True)
+    parser.add_argument("--mtools", help="Path to the mtools tool", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -129,13 +151,13 @@ def main():
 
     os.close(os.open(image_file, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_EXCL, 0o600))
     os.truncate(image_file, image_size)
-    subprocess.run(["/usr/sbin/mkfs.vfat", "-i", "0", image_file], check=True)
+    subprocess.run([os.path.abspath(args.mkfs_fat), "-i", "0", image_file], check=True)
 
     if in_file:
         with tarfile.open(in_file, mode="r|*") as tf:
-            untar_to_vfat(tf, fs_basedir, image_file, path_transform)
+            untar_to_vfat(tf, fs_basedir, image_file, path_transform, args.mtools)
 
-    install_extra_files(image_file, extra_files, path_transform)
+    install_extra_files(image_file, extra_files, path_transform, args.mtools)
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
@@ -154,7 +176,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,

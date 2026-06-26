@@ -3,8 +3,8 @@
 - [How can I run a system Test manually](#how-can-i-run-a-system-test-manually)
   - [Running a bazelified flavour of a system test](#running-a-bazelified-flavour-of-a-system-test)
     - [Via native Bazel commands](#via-native-bazel-commands)
-    - [Via `ict` command line tool](#via-ict-command-line-tool)
   - [Running a cargo-based (legacy) flavour of a system test](#running-a-cargo-based-legacy-flavour-of-a-system-test)
+- [How do I get Grafana dashboards on a testnet?](#how-do-i-get-grafana-dashboards-on-a-testnet)
 - [Where do I get test logs and logs of the IC nodes?](#where-do-i-get-test-logs-and-logs-of-the-ic-nodes)
   - [For manual test executions](#for-manual-test-executions)
   - [For CI/CD test executions](#for-cicd-test-executions)
@@ -31,37 +31,7 @@ Within the docker execute:
 devenv-container$ bazel test --test_output=streamed //rs/tests/idx:basic_health_test
 ```
 You can provide additional [flags](https://bazel.build/reference/command-line-reference#test) to the Bazel [test](https://bazel.build/reference/command-line-reference#test) command. For example, *--test_tmpdir* would be useful, if you want to keep test artifacts (logs, ssh keys, etc.) after the test execution has finished.
-### Via `ict` command line tool
-Within the same docker container there is also an [ict](https://github.com/dfinity/ic/tree/master/rs/tests/ict) CLI at your disposal. This tool simplifies your interaction with bazelified system tests and abstracts away the underlying Bazel machinery. In order to run the same `basic_health_test` with the `ict` execute:
-```
-devenv-container$ ict test //rs/tests/idx:basic_health_test
-```
-Upon this invocation `ict` launches the test and also displays the raw Bazel command, which is called under the hood:
-```
-Raw Bazel command to be invoked:
-$ bazel test //rs/tests/idx:basic_health_test --test_output=streamed --cache_test_results=no
-```
-You can explore the functionality of the continuously developed `ict` tool by:
-```
-devenv-container$ ict -h
-```
-For example, you can list all existing system test targets via:
-```
-devenv-container$ ict test list
-The following 60 system_test targets were found:
-//rs/tests/consensus:backup_manager_test
-//rs/tests/idx:basic_health_test
-...
-```
-Had you misspelled the test target name, `ict` will help you with a fuzzy match proposal:
-```
-devenv-container$ ict test almost_basic_test
-There was an error while executing CLI: 'No test target `almost_basic_test` was found:
-Did you mean any of:
-//rs/tests/idx:basic_health_test
-//rs/tests/ckbtc:ckbtc_minter_basics_test
-...
-```
+
 ## Running a cargo-based (legacy) flavour of a system test
 *Cargo-based* system tests are defined in the test suites of the [prod_test_driver.rs](https://github.com/dfinity/ic/blob/master/rs/tests/bin/prod_test_driver.rs).
 In order to launch `basic_health_test`, firstly enter the `nix-shell` environment:
@@ -79,6 +49,18 @@ Finally, execute `basic_health_test` (which resides in the `hourly` suite) via p
 If you omit *--include-pattern*, the whole `hourly` test suite will be executed.
 
 **Important**: GuestOs image specified by the IC_VERSION_ID should be available in http://download.proxy-global.dfinity.network:8080/ic/IC_VERSION_ID/guest-os/disk-img-dev/disk-img.tar.zst. Otherwise, Farm will fail to setup the IC nodes and the test will fail in the setup phase.
+# How do I get Grafana dashboards on a testnet?
+System tests and testnets declared with `enable_metrics = True` spawn a Prometheus VM that also runs Grafana. To additionally provision the IC's Grafana dashboards (maintained in the [dfinity-ops/k8s](https://github.com/dfinity-ops/k8s) repository under `bases/apps/ic-dashboards`), set the `IC_DASHBOARDS_BRANCH` environment variable to the k8s branch you want to sync the dashboards from:
+```
+devenv-container$ IC_DASHBOARDS_BRANCH=main bazel run //rs/tests/testnets:small -- --keepalive
+```
+The dashboards are checked out by [run_systest.sh](https://github.com/dfinity/ic/blob/master/rs/tests/run_systest.sh) (which requires SSH access to the k8s repository) and exposed to the test driver via the `IC_DASHBOARDS_DIR` environment variable. For colocated tests the checked out directory is forwarded to the colocated test-driver VM automatically.
+
+If you already have a local clone of the dashboards, point `IC_DASHBOARDS_DIR` at it directly to skip the checkout:
+```
+devenv-container$ IC_DASHBOARDS_DIR=~/k8s/bases/apps/ic-dashboards bazel run //rs/tests/testnets:small
+```
+
 # Where do I get test logs and logs of the IC nodes?
 During/after test execution one may naturally be interested in looking at the test logs and logs produced by the IC nodes.
 ## For manual test executions
@@ -97,7 +79,7 @@ password: root
 ```
 one can execute any terminal command, e.g., `journalctl -flu ic-replica` to read the replica logs.
 
-Logs of the test itself are displayed in the stdout in the mixed form of the unstructured and semi-structured logs. Log messages originating from the test are decorated with a timestamp and file path with a line number. For example, when [running](#via-ict-command-line-tool) a `basic_health_test` one can see this message:
+Logs of the test itself are displayed in the stdout in the mixed form of the unstructured and semi-structured logs. Log messages originating from the test are decorated with a timestamp and file path with a line number. For example, when running a `basic_health_test` one can see this message:
 ```
 Jan 27 16:33:01.539 INFO[rs/tests/src/basic_health_test.rs:149:0] Assert that message has been stored ...
 ```

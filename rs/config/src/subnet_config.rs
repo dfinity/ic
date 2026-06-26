@@ -129,11 +129,24 @@ pub const SCHNORR_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 /// cover the cost of the subnet.
 pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 
+/// Pay-as-you-go base-fee pricing constants for HTTP outcalls, charged upfront
+/// for every request by `CyclesAccountManager::http_request_base_fee`.
+pub const HTTP_REQUEST_BASE_FEE: u128 = 1_000_000;
+pub const HTTP_REQUEST_PER_BYTE_FEE: u128 = 50;
+pub const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
+pub const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
+pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
+pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
+pub const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
+
 /// Default subnet size which is used to scale cycles cost according to a subnet replication factor.
 ///
 /// All initial costs were calculated with the assumption that a subnet had 13 replicas.
 /// IMPORTANT: never set this value to zero.
 pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
+
+/// Reference subnet size for SEV-enabled application subnets.
+pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 
 /// Costs for each newly created dirty page in stable memory.
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
@@ -375,10 +388,6 @@ impl SchedulerConfig {
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CyclesAccountManagerConfig {
-    /// Reference value of a subnet size that all the fees below are calculated for.
-    /// Fees for a real subnet are calculated proportionally to this reference value.
-    pub reference_subnet_size: usize,
-
     /// Fee for creating canisters on a subnet
     pub canister_creation_fee: Cycles,
 
@@ -410,6 +419,9 @@ pub struct CyclesAccountManagerConfig {
 
     /// Fee for storing a GiB of data per second.
     pub gib_storage_per_second_fee: Cycles,
+
+    /// Base fee charged per second for every canister, regardless of resource usage.
+    pub base_per_second_fee: Cycles,
 
     /// Fee for each percent of the reserved compute allocation. Note that
     /// reserved compute allocation is a scarce resource, and should be
@@ -460,7 +472,6 @@ impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
         let ten_update_instructions_execution_fee_in_cycles = 10;
         Self {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: CANISTER_CREATION_FEE,
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
 
@@ -480,6 +491,7 @@ impl CyclesAccountManagerConfig {
             ingress_byte_reception_fee: Cycles::new(2_000),
             // 10 SDR per GiB per year => 10e12 Cycles per year
             gib_storage_per_second_fee: Cycles::new(317_500),
+            base_per_second_fee: Cycles::new(10_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             schnorr_signature_fee: SCHNORR_SIGNATURE_FEE,
@@ -502,7 +514,6 @@ impl CyclesAccountManagerConfig {
     /// All processing is free on system subnets
     pub fn system_subnet() -> Self {
         Self {
-            reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(0),
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
@@ -513,6 +524,7 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::new(0),
             ingress_byte_reception_fee: Cycles::new(0),
             gib_storage_per_second_fee: Cycles::new(0),
+            base_per_second_fee: Cycles::new(0),
             duration_between_allocation_charges: Duration::from_secs(10),
             // ECDSA and Schnorr signature fees are the fees charged when creating a
             // signature on this subnet. The request likely came from a
@@ -537,9 +549,8 @@ impl CyclesAccountManagerConfig {
         }
     }
 
-    pub fn zero_cost(subnet_size: usize) -> Self {
+    pub fn zero_cost() -> Self {
         Self {
-            reference_subnet_size: subnet_size,
             canister_creation_fee: Cycles::zero(),
             update_message_execution_fee: Cycles::zero(),
             ten_update_instructions_execution_fee: Cycles::zero(),
@@ -549,6 +560,7 @@ impl CyclesAccountManagerConfig {
             ingress_message_reception_fee: Cycles::zero(),
             ingress_byte_reception_fee: Cycles::zero(),
             gib_storage_per_second_fee: Cycles::zero(),
+            base_per_second_fee: Cycles::zero(),
             compute_percent_allocated_per_second_fee: Cycles::zero(),
             duration_between_allocation_charges: Duration::from_secs(u64::MAX),
             ecdsa_signature_fee: Cycles::zero(),

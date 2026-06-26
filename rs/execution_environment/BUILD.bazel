@@ -32,7 +32,6 @@ rust_library(
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/state_layout",
         "//rs/sys",
         "//rs/types/base_types",
         "//rs/types/cycles",
@@ -92,6 +91,7 @@ rust_ic_test(
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/execution_environment",
+        "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/state",
         "//rs/test_utilities/types",
@@ -101,6 +101,7 @@ rust_ic_test(
         "@crate_index//:assert_matches",
         "@crate_index//:flate2",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:itertools",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:serde_bytes",
@@ -273,6 +274,12 @@ rust_ic_test(
     name = "memory_matrix_test",
     size = "large",
     srcs = ["tests/memory_matrix.rs"],
+    # Reduce parallelism on Linux to deflake the test (see PR #9647),
+    # but keep the higher parallelism on Darwin to avoid timeouts on arm64-darwin.
+    args = select({
+        "@platforms//os:linux": ["--test-threads=2"],
+        "//conditions:default": ["--test-threads=4"],
+    }),
     data = [
         "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
@@ -280,7 +287,6 @@ rust_ic_test(
     env = {
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-        "RUST_TEST_THREADS": "4",
     },
     tags = [
         "cpu:4",
@@ -320,7 +326,10 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":execution_environment",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/test_utilities/types",
@@ -337,8 +346,11 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":execution_environment",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
@@ -353,6 +365,8 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/limits",
         "//rs/types/cycles",
@@ -370,6 +384,8 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//packages/ic-error-types",
+        "//rs/config",
+        "//rs/cycles_account_manager",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/limits",
         "//rs/types/cycles",
@@ -385,9 +401,11 @@ rust_ic_bench(
         # Keep sorted.
         ":execution_environment",
         "//rs/config",
+        "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",
@@ -460,28 +478,36 @@ rust_ic_bench(
     srcs = glob(["benches/management_canister/*.rs"]),
     data = [
         "//rs/execution_environment/benches/management_canister/test_canister",
+        "//rs/universal_canister/impl:universal_canister.module",
         "//rs/universal_canister/impl:universal_canister.wasm.gz",
     ],
     env = dict([
         ("TEST_CANISTER_WASM_PATH", "$(rootpath //rs/execution_environment/benches/management_canister/test_canister)"),
+        ("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.module)"),
         ("UNIVERSAL_CANISTER_WASM_PATH", "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)"),
     ]),
     deps = [
         # Keep sorted.
+        ":execution_environment",
         "//rs/config",
+        "//rs/interfaces",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities/execution_environment",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
+        "//rs/types/wasm_types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:criterion",
         "@crate_index//:rand",
         "@crate_index//:serde",
+        "@crate_index//:tempfile",
+        "@crate_index//:wat",
     ],
 )

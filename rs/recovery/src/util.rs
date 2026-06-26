@@ -1,15 +1,19 @@
 use crate::{
+    command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::write_bytes,
+    ssh_helper::SshHelper,
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
+use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use slog::{Drain, Logger, o};
 use std::{
     fmt,
     net::{IpAddr, Ipv6Addr},
+    process::Command,
 };
 use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
@@ -50,6 +54,61 @@ pub fn data_location_from_str(s: &str) -> RecoveryResult<DataLocation> {
             RecoveryError::UnexpectedError(format!("Unable to parse ipv6 address {e:?}"))
         })?,
     )))
+}
+
+/// Helper enum to abstract over local and remote implementations of functions that need to access
+/// the filesystem of the node. Local implementations execute commands directly on the machine,
+/// while remote implementations use ssh to execute them on the remote node.
+pub enum ExecutionMode<'a> {
+    Local,
+    Remote(&'a SshHelper),
+}
+
+impl<'a> ExecutionMode<'a> {
+    fn execute(&self, command: String) -> RecoveryResult<Option<String>> {
+        match self {
+            Self::Local => exec_cmd(Command::new("sh").arg("-c").arg(command)),
+            Self::Remote(ssh_helper) => ssh_helper.ssh(command),
+        }
+    }
+
+    pub fn path_exists(&self, path: &Path) -> RecoveryResult<bool> {
+        self.execute(format!("test -e {} && echo y || echo n", path.display()))
+            .map(|output| output.is_some_and(|s| s.trim() == "y"))
+    }
+
+    pub fn get_maybe_latest_checkpoint_name_and_height(
+        &self,
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<Option<(String, Height)>> {
+        let maybe_output = self.execute(format!(
+            "ls -1 {} | sort | tail -n 1",
+            checkpoints_path.display()
+        ))?;
+
+        let Some(output) = maybe_output else {
+            return Ok(None);
+        };
+
+        let name = output.trim();
+        let height = parse_hex_str(name)?;
+
+        Ok(Some((name.to_string(), Height::from(height))))
+    }
+}
+
+pub enum CheckpointHeight {
+    Latest,
+    Specified(u64),
+}
+
+impl From<Option<u64>> for CheckpointHeight {
+    fn from(value: Option<u64>) -> Self {
+        match value {
+            Some(height) => CheckpointHeight::Specified(height),
+            None => CheckpointHeight::Latest,
+        }
+    }
 }
 
 pub fn block_on<F: Future>(f: F) -> F::Output {

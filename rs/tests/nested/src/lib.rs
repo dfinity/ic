@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::bail;
 use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo};
 use ic_system_test_driver::driver::nested::NestedNode;
@@ -85,20 +87,19 @@ pub fn get_bare_metal_login_info() -> LoginInfo {
         .expect("Failed to parse baremetal login info")
 }
 
+pub fn registration(env: TestEnv) {
+    registration_with_timeout(env, NODE_REGISTRATION_TIMEOUT);
+}
+
 /// Allow the nested GuestOS to install and launch, and check that it can
 /// successfully join the testnet.
-pub fn registration(env: TestEnv) {
+pub fn registration_with_timeout(env: TestEnv, timeout: Duration) {
     let logger = env.logger();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
+    let initial_topology = env.topology_snapshot();
 
-    // Check that there are initially no unassigned nodes.
-    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 0);
+    // Keep track of the initial number of unassigned nodes.
+    let initial_num_unassigned_nodes = initial_topology.unassigned_nodes().count();
 
     let nested_vms = env.get_all_nested_vms().unwrap();
     let n = nested_vms.len();
@@ -106,24 +107,25 @@ pub fn registration(env: TestEnv) {
     // If the nodes are able to join successfully, the registry will be updated,
     // and the new node IDs will enter the unassigned pool.
     let mut new_topology = initial_topology;
+    let expected_num_unassigned_nodes = initial_num_unassigned_nodes + n;
     retry_with_msg!(
         format!("Waiting for all {n} nodes to join ..."),
         logger.clone(),
-        NODE_REGISTRATION_TIMEOUT,
+        timeout,
         NODE_REGISTRATION_BACKOFF,
         || {
             new_topology = block_on(
                 new_topology.block_for_newer_registry_version_within_duration(
-                    NODE_REGISTRATION_TIMEOUT,
+                    timeout,
                     NODE_REGISTRATION_BACKOFF,
                 ),
             )
             .unwrap();
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == n {
+            if num_unassigned_nodes == expected_num_unassigned_nodes {
                 Ok(())
             } else {
-                bail!("Expected {n} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
+                bail!("Expected {expected_num_unassigned_nodes} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
             }
         }
     ).unwrap();

@@ -8,7 +8,8 @@ use crate::{
     HttpError,
     common::{Cbor, WithTimeout, into_cbor},
     metrics::{
-        HttpHandlerMetrics, SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
+        CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
+        SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         SYNC_CALL_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
         SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
@@ -345,9 +346,16 @@ async fn call_sync(
         .with_label_values(&[status_label])
         .inc();
 
-    // TODO(DSM-121): ensure that `ParsedMessageStatus::Unknown` never occurs
-    // and trigger a critical error here if it does.
     if let ParsedMessageStatus::Unknown = message_status {
+        error!(
+            every_n_seconds => LOG_EVERY_N_SECONDS,
+            log,
+            "{}: Unknown status of call {} in the certificate at height {}.",
+            CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, message_id, certification.height
+        );
+        metrics
+            .critical_error_sync_call_unknown_certificate_status
+            .inc();
         return SyncCallResponse::Accepted(
             "Certified state does not contain request status. Please try /read_state.",
         );

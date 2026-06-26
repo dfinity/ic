@@ -28,9 +28,6 @@ use std::{
 /// ECDSA message hash size in bytes.
 const MESSAGE_HASH_SIZE: usize = 32;
 
-/// Threshold algorithm pseudo-random ID size in bytes.
-const PSEUDO_RANDOM_ID_SIZE: usize = 32;
-
 /// Threshold algorithm nonce size in bytes.
 const NONCE_SIZE: usize = 32;
 
@@ -220,6 +217,9 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
+    /// `CanisterHttpRequestContext`s whose responses have already been delivered to execution.
+    /// They are kept here such that asynchronous refunds may continue to be processed.
+    pub delivered_canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
@@ -549,7 +549,6 @@ pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
-    pub deprecated_pseudo_random_id: Option<[u8; PSEUDO_RANDOM_ID_SIZE]>,
     pub batch_time: Time,
     pub nonce: Option<[u8; NONCE_SIZE]>,
 }
@@ -747,6 +746,7 @@ mod testing {
             setup_initial_dkg_contexts: Default::default(),
             sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
+            delivered_canister_http_request_contexts: Default::default(),
             reshare_chain_key_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),

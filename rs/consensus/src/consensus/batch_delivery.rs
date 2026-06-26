@@ -31,6 +31,7 @@ use ic_types::{
     },
     consensus::{
         Block, BlockPayload, HasVersion,
+        dkg::RemoteTranscriptResult,
         idkg::{self},
     },
     crypto::randomness_from_crypto_hashable,
@@ -313,53 +314,53 @@ fn generate_responses_to_subnet_calls(
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
-    let block_payload = &block.payload;
-    if block_payload.is_summary() {
-        let summary = block_payload.as_ref().as_summary();
-        info!(
-            log,
-            "New DKG summary with config ids created: {:?}",
-            summary.dkg.configs.keys().collect::<Vec<_>>()
-        );
-        consensus_responses.append(&mut generate_responses_to_remote_dkgs(
-            &summary.dkg.transcripts_for_remote_subnets,
-            log,
-        ))
-    } else {
-        let block_payload = block_payload.as_ref().as_data();
-
-        consensus_responses.append(&mut generate_responses_to_remote_dkgs(
-            &block_payload.dkg.transcripts_for_remote_subnets,
-            log,
-        ));
-
-        if let Some(payload) = &block_payload.idkg {
-            consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
+    match block.payload.as_ref() {
+        BlockPayload::Summary(summary_payload) => {
+            info!(
+                log,
+                "New DKG summary with config ids created: {:?}",
+                summary_payload.dkg.configs.keys().collect::<Vec<_>>()
+            );
+            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
+                &summary_payload.dkg.transcripts_for_remote_subnets,
+                log,
+            ))
         }
+        BlockPayload::Data(data_payload) => {
+            consensus_responses.append(&mut generate_responses_to_remote_dkgs(
+                &data_payload.dkg.transcripts_for_remote_subnets,
+                log,
+            ));
 
-        let (mut http_responses, http_stats) =
-            CanisterHttpPayloadBuilderImpl::into_messages(&block_payload.batch.canister_http);
-        consensus_responses.append(&mut http_responses);
-        stats.canister_http = http_stats;
+            if let Some(payload) = &data_payload.idkg {
+                consensus_responses
+                    .append(&mut generate_responses_to_initial_dealings_calls(payload));
+            }
 
-        let mut chain_key_responses =
-            ChainKeyPayloadBuilderImpl::into_messages(&block_payload.batch.chain_key);
-        consensus_responses.append(&mut chain_key_responses);
+            let (mut http_responses, http_stats) =
+                CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
+            consensus_responses.append(&mut http_responses);
+            stats.canister_http = http_stats;
+
+            let mut chain_key_responses =
+                ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
+            consensus_responses.append(&mut chain_key_responses);
+        }
     }
     consensus_responses
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum RemoteDkgResults {
-    ReshareChainKey(Result<NiDkgTranscript, String>),
+enum RemoteDkgResults<'a> {
+    ReshareChainKey(&'a Result<NiDkgTranscript, String>),
     SetupInitialDKG {
-        low_threshold: Option<Result<NiDkgTranscript, String>>,
-        high_threshold: Option<Result<NiDkgTranscript, String>>,
+        low_threshold: Option<&'a Result<NiDkgTranscript, String>>,
+        high_threshold: Option<&'a Result<NiDkgTranscript, String>>,
     },
 }
 
-impl RemoteDkgResults {
-    fn new(id: &NiDkgId, transcript: Result<NiDkgTranscript, String>) -> Self {
+impl<'a> RemoteDkgResults<'a> {
+    fn new(id: &NiDkgId, transcript: &'a Result<NiDkgTranscript, String>) -> Self {
         match id.dkg_tag {
             NiDkgTag::LowThreshold => Self::SetupInitialDKG {
                 low_threshold: Some(transcript),
@@ -376,7 +377,7 @@ impl RemoteDkgResults {
     fn add_transcript(
         &mut self,
         id: &NiDkgId,
-        transcript: Result<NiDkgTranscript, String>,
+        transcript: &'a Result<NiDkgTranscript, String>,
         logger: &ReplicaLogger,
     ) {
         let Self::SetupInitialDKG {
@@ -421,17 +422,23 @@ impl RemoteDkgResults {
 /// - Responses to `setup_initial_dkg` system calls
 /// - Responses to `reshare_chain_key`, if the requested key is a NiDkg key
 fn generate_responses_to_remote_dkgs(
-    transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
+    transcripts_for_remote_subnets: &[RemoteTranscriptResult],
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
     let mut dkg_results: BTreeMap<CallbackId, RemoteDkgResults> = BTreeMap::new();
-    for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
+    for transcript in transcripts_for_remote_subnets.iter() {
         dkg_results
-            .entry(*callback_id)
+            .entry(transcript.callback_id)
             .and_modify(|transcript_result| {
-                transcript_result.add_transcript(id, transcript.clone(), log)
+                transcript_result.add_transcript(
+                    &transcript.dkg_id,
+                    &transcript.transcript_result,
+                    log,
+                )
             })
-            .or_insert_with(|| RemoteDkgResults::new(id, transcript.clone()));
+            .or_insert_with(|| {
+                RemoteDkgResults::new(&transcript.dkg_id, &transcript.transcript_result)
+            });
     }
 
     dkg_results
@@ -444,18 +451,16 @@ fn generate_responses_to_remote_dkgs(
                 RemoteDkgResults::SetupInitialDKG {
                     low_threshold,
                     high_threshold,
-                } => generate_dkg_response_payload(
-                    low_threshold.as_ref(),
-                    high_threshold.as_ref(),
-                    log,
-                ),
+                } => generate_dkg_response_payload(low_threshold, high_threshold, log),
             }
             .map(|payload| ConsensusResponse::new(callback_id, payload))
         })
         .collect()
 }
 
-fn generate_reshare_chain_key_response(key_transcript: Result<NiDkgTranscript, String>) -> Payload {
+fn generate_reshare_chain_key_response(
+    key_transcript: &Result<NiDkgTranscript, String>,
+) -> Payload {
     match key_transcript {
         Ok(transcript) => Payload::Data(ReshareChainKeyResponse::NiDkg(transcript.into()).encode()),
         Err(err) => Payload::Reject(RejectContext::new(RejectCode::CanisterReject, err)),
@@ -477,9 +482,9 @@ fn generate_dkg_response_payload(
                 high_threshold_transcript.dkg_id
             );
             let low_threshold_transcript_record =
-                InitialNiDkgTranscriptRecord::from(low_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(low_threshold_transcript);
             let high_threshold_transcript_record =
-                InitialNiDkgTranscriptRecord::from(high_threshold_transcript.clone());
+                InitialNiDkgTranscriptRecord::from(high_threshold_transcript);
 
             let threshold_sig_pk = match ThresholdSigPublicKey::try_from(high_threshold_transcript)
             {
@@ -528,7 +533,16 @@ fn generate_dkg_response_payload(
         (Some(Err(err_str)), _) | (_, Some(Err(err_str))) => Some(Payload::Reject(
             RejectContext::new(RejectCode::CanisterReject, err_str),
         )),
-        _ => None,
+        (Some(Ok(transcript)), None) | (None, Some(Ok(transcript))) => {
+            Some(Payload::Reject(RejectContext::new(
+                RejectCode::CanisterReject,
+                format!(
+                    "Data payload contains only the {:?} transcript for SetupInitialDKG request",
+                    transcript.dkg_id.dkg_tag
+                ),
+            )))
+        }
+        (None, None) => None,
     }
 }
 
@@ -558,7 +572,10 @@ mod tests {
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
-        consensus::{DataPayload, Payload as ConsensusPayload, Rank, dkg::DkgDataPayload},
+        consensus::{
+            DataPayload, Payload as ConsensusPayload, Rank,
+            dkg::{DkgDataPayload, RemoteTranscriptResult},
+        },
         crypto::{
             CryptoHash, CryptoHashOf,
             threshold_sig::ni_dkg::{
@@ -588,12 +605,12 @@ mod tests {
     fn test_generate_setup_initial_dkg_response() {
         // Build some transcipts with matching ids and tags
         let transcripts_for_remote_subnets = [
-            (
+            RemoteTranscriptResult::new(
                 ni_dkg_id(NiDkgTag::LowThreshold),
                 CallbackId::from(1),
                 Ok(dummy_transcript_for_tests()),
             ),
-            (
+            RemoteTranscriptResult::new(
                 ni_dkg_id(NiDkgTag::HighThreshold),
                 CallbackId::from(1),
                 Ok(dummy_transcript_for_tests()),
@@ -623,7 +640,7 @@ mod tests {
         });
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = [(
+        let transcripts_for_remote_subnets = [RemoteTranscriptResult::new(
             ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
             CallbackId::from(2),
             Ok(dummy_transcript_for_tests()),
@@ -644,7 +661,29 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_responses_for_early_remote_dkg_transcripts() {
+    fn test_generate_setup_initial_dkg_response_rejects_if_only_one_transcript_present() {
+        let transcripts_for_remote_subnets = [RemoteTranscriptResult::new(
+            ni_dkg_id(NiDkgTag::LowThreshold),
+            CallbackId::from(1),
+            Ok(dummy_transcript_for_tests()),
+        )];
+
+        let result =
+            generate_responses_to_remote_dkgs(&transcripts_for_remote_subnets[..], &no_op_logger());
+        assert_eq!(result.len(), 1);
+
+        let Payload::Reject(reject) = &result[0].payload else {
+            panic!("Expected reject payload when only one SetupInitialDKG transcript exists");
+        };
+        assert_eq!(reject.code(), RejectCode::CanisterReject);
+        assert_eq!(
+            reject.message(),
+            "Data payload contains only the LowThreshold transcript for SetupInitialDKG request"
+        );
+    }
+
+    #[test]
+    fn test_generate_responses_for_remote_dkg_transcripts() {
         let key_id: NiDkgMasterPublicKeyId = NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
             curve: VetKdCurve::Bls12_381_G2,
             name: String::from("test_vetkd_key"),
@@ -656,18 +695,18 @@ mod tests {
             messages: vec![],
             transcripts_for_remote_subnets: vec![
                 // ReshareChainKey (NiDkg) → one response
-                (
+                RemoteTranscriptResult::new(
                     ni_dkg_id(NiDkgTag::HighThresholdForKey(key_id.clone())),
                     CallbackId::from(42),
                     Ok(dummy_transcript.clone()),
                 ),
                 // SetupInitialDKG: low + high threshold for same callback → one response
-                (
+                RemoteTranscriptResult::new(
                     ni_dkg_id(NiDkgTag::LowThreshold),
                     CallbackId::from(1),
                     Ok(dummy_transcript.clone()),
                 ),
-                (
+                RemoteTranscriptResult::new(
                     ni_dkg_id(NiDkgTag::HighThreshold),
                     CallbackId::from(1),
                     Ok(dummy_transcript),
@@ -714,7 +753,7 @@ mod tests {
         };
         let response = ReshareChainKeyResponse::decode(payload_data).unwrap();
         let ReshareChainKeyResponse::NiDkg(_) = response else {
-            panic!("Expected a NiDkg response for early remote DKG transcript");
+            panic!("Expected a NiDkg response for remote DKG transcript");
         };
 
         let setup_initial_response = responses

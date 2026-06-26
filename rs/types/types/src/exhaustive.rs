@@ -2,15 +2,17 @@
 
 use crate::artifact::IngressMessageId;
 use crate::batch::ChainKeyAgreement;
+use crate::canister_http::CanisterHttpResponseSignature;
+use crate::consensus::dkg::RemoteDkgAttempts;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
-    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
-    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    CompletedReshareRequest, HasIDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
+    IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId, RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
+    UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::{
     Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
@@ -600,7 +602,7 @@ impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignat
     }
 }
 
-impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<T>> {
+impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<U>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let signatures_map: BTreeMap<_, _> = NodeId::exhaustive_set(rng)
             .into_iter()
@@ -917,7 +919,6 @@ impl ExhaustiveSet for IDkgPayload {
         DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
             .map(|payload| IDkgPayload {
-                signature_agreements: BTreeMap::new(),
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,
                 uid_generator: payload.uid_generator,
@@ -1023,13 +1024,13 @@ impl HasId<IDkgMasterPublicKeyId> for MasterKeyTranscript {
 impl HasId<CallbackId> for ChainKeyAgreement {}
 impl HasId<IngressMessageId> for SignedRequestBytes {}
 impl HasId<IDkgReshareRequest> for ReshareOfUnmaskedParams {}
-impl HasId<PseudoRandomId> for CompletedSignature {}
 impl HasId<IDkgReshareRequest> for CompletedReshareRequest {}
 impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
 impl HasId<SubnetId> for CertifiedStreamSlice {}
-impl HasId<NiDkgTargetId> for u32 {}
+impl HasId<NiDkgTargetId> for RemoteDkgAttempts {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
+impl HasId<NodeId> for CanisterHttpResponseSignature {}
 
 #[cfg(test)]
 mod tests {

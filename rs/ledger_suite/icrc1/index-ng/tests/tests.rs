@@ -969,6 +969,8 @@ fn test_get_account_transactions_pagination() {
                     approve: None,
                     timestamp: 0,
                     fee_collector: None,
+                    authorized_mint: None,
+                    authorized_burn: None,
                 },
                 transaction,
             );
@@ -1569,6 +1571,99 @@ fn test_block_with_no_btype_and_no_mthd() {
         expected_log_msg,
         index_err_logs
     );
+}
+
+#[test]
+fn test_authorized_mint_and_burn_indexing() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let account_1 = account(1, 0);
+    let account_2 = account(2, 0);
+    let caller = PrincipalId::new_user_test_id(99);
+
+    // Block 0: regular mint to give account_1 initial balance
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(account_1, Tokens::from(10_000_000_u64))
+        .build();
+    assert_eq!(
+        Nat::from(0_u64),
+        add_block(env, ledger_id, &block0).expect("failed to add block 0")
+    );
+
+    // Block 1: authorized mint to account_2 (ICRC-152 style, with caller/mthd/ts)
+    let block1 = BlockBuilder::new(1, 2000)
+        .authorized_mint(account_2, Tokens::from(5_000_000_u64))
+        .with_caller(caller.0)
+        .with_mthd("152mint".to_string())
+        .with_created_at_time(1500)
+        .build();
+    assert_eq!(
+        Nat::from(1_u64),
+        add_block(env, ledger_id, &block1).expect("failed to add block 1")
+    );
+
+    // Block 2: authorized burn from account_1
+    let block2 = BlockBuilder::new(2, 3000)
+        .authorized_burn(account_1, Tokens::from(3_000_000_u64))
+        .with_caller(caller.0)
+        .with_mthd("152burn".to_string())
+        .with_created_at_time(2500)
+        .with_reason("compliance".to_string())
+        .build();
+    assert_eq!(
+        Nat::from(2_u64),
+        add_block(env, ledger_id, &block2).expect("failed to add block 2")
+    );
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Verify balances
+    // account_1: 10_000_000 (mint) - 3_000_000 (authorized burn) = 7_000_000
+    assert_eq!(icrc1_balance_of(env, index_id, account_1), 7_000_000);
+    // account_2: 5_000_000 (authorized mint)
+    assert_eq!(icrc1_balance_of(env, index_id, account_2), 5_000_000);
+
+    // Verify account_2 transactions (should have the authorized mint)
+    let txs = get_account_transactions(env, index_id, account_2, None, u64::MAX);
+    assert_eq!(txs.transactions.len(), 1);
+    assert_eq!(txs.transactions[0].id, Nat::from(1_u64));
+    let tx = &txs.transactions[0].transaction;
+    assert_eq!(tx.kind, "122mint");
+    assert!(tx.authorized_mint.is_some());
+
+    // Verify account_1 transactions (should have the mint and the authorized burn)
+    let txs = get_account_transactions(env, index_id, account_1, None, u64::MAX);
+    assert_eq!(txs.transactions.len(), 2);
+    // Transactions are in descending order
+    assert_eq!(txs.transactions[0].id, Nat::from(2_u64));
+    assert_eq!(txs.transactions[0].transaction.kind, "122burn");
+    assert!(txs.transactions[0].transaction.authorized_burn.is_some());
+    assert_eq!(txs.transactions[1].id, Nat::from(0_u64));
+    assert_eq!(txs.transactions[1].transaction.kind, "mint");
+}
+
+#[test]
+fn test_authorized_mint_minimal_icrc122_block() {
+    // Test a minimal ICRC-122 block (no caller, no mthd — permissive schema)
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let account_1 = account(1, 0);
+
+    let block0 = BlockBuilder::new(0, 1000)
+        .authorized_mint(account_1, Tokens::from(1_000_000_u64))
+        .build();
+    assert_eq!(
+        Nat::from(0_u64),
+        add_block(env, ledger_id, &block0).expect("failed to add block 0")
+    );
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(icrc1_balance_of(env, index_id, account_1), 1_000_000);
 }
 
 #[test]

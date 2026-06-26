@@ -4,8 +4,8 @@ use super::subnet_call_context_manager::{
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
-use crate::InputQueueType;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
+use crate::{CanisterPriority, InputQueueType};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -39,7 +39,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{ExecutionRound, Height};
+use ic_types::{ExecutionRound, Height, RegistryVersion};
 use ic_types_cycles::{Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -202,12 +202,12 @@ fn init_allocation_ranges_if_empty() {
 }
 
 #[test]
-fn generate_new_canister_id_no_allocation_ranges() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+fn peek_new_canister_id_no_allocation_ranges() {
+    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
 
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     assert_eq!(None, system_metadata.last_generated_canister_id);
 }
@@ -219,7 +219,7 @@ fn generate_new_canister_id_no_allocation_ranges() {
 ///          \ canister_migrations.ranges()
 /// ```
 #[test]
-fn generate_new_canister_id() {
+fn peek_and_commit_new_canister_id() {
     fn range(start: u64, end: u64) -> CanisterIdRange {
         CanisterIdRange {
             start: start.into(),
@@ -269,10 +269,9 @@ fn generate_new_canister_id() {
     /// Asserts that the next generated canister ID is the expected one.
     /// And that `last_generated_canister_id` is updated accordingly.
     fn assert_next_generated(expected: u64, system_metadata: &mut SystemMetadata) {
-        assert_eq!(
-            Ok(expected.into()),
-            system_metadata.generate_new_canister_id()
-        );
+        let canister_id = system_metadata.peek_new_canister_id().unwrap();
+        assert_eq!(CanisterId::from(expected), canister_id);
+        system_metadata.commit_new_canister_id(canister_id);
         assert_eq!(
             Some(expected.into()),
             system_metadata.last_generated_canister_id
@@ -300,7 +299,7 @@ fn generate_new_canister_id() {
     // No more canister IDs can be generated.
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     // But last generated is the same.
     assert_eq!(Some(30.into()), system_metadata.last_generated_canister_id);
@@ -370,16 +369,38 @@ fn system_metadata_roundtrip_encoding() {
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
+    // Observe two `BlockmakerMetrics` on successive days.
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(1),
+            failed_blockmakers: vec![node_test_id(2)],
+        },
+    );
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(3),
+            failed_blockmakers: vec![node_test_id(4)],
+        },
+    );
+
+    // Add scheduling priority for a canister.
+    *system_metadata
+        .subnet_schedule
+        .get_mut(CanisterId::from_u64(1)) = CanisterPriority {
+        accumulated_priority: 100.into(),
+        executed_rounds: 2,
+        long_execution_start_round: Some(3.into()),
+        last_full_execution_round: 4.into(),
+    };
+
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (
-                proto,
-                system_metadata.subnet_schedule.clone(),
-                &DummyMetrics as &dyn CheckpointLoadingMetrics
-            )
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
                 .try_into()
                 .unwrap()
         );
@@ -398,30 +419,6 @@ fn system_metadata_roundtrip_encoding() {
 
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Observe two `BlockmakerMetrics` on successive days.
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(1),
-            failed_blockmakers: vec![node_test_id(2)],
-        },
-    );
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(3),
-            failed_blockmakers: vec![node_test_id(4)],
-        },
-    );
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Add scheduling priority for a canister.
-    system_metadata
-        .subnet_schedule
-        .get_mut(CanisterId::from_u64(1))
-        .accumulated_priority = 1.into();
     validate_roundtrip_encoding(&system_metadata);
 }
 
@@ -497,6 +494,7 @@ fn network_topology_roundtrip_encoding() {
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
         None,
+        Some(app_subnet_id),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology);
@@ -519,6 +517,7 @@ fn network_topology_roundtrip_encoding() {
             },
             routing_table: full_routing_table,
         }),
+        Some(app_subnet_id),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology_with_full);
@@ -869,6 +868,7 @@ fn subnet_call_contexts_deserialization() {
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -1141,7 +1141,6 @@ fn sign_with_threshold_context_roundtrip() {
                     request: RequestBuilder::new().build(),
                     args,
                     derivation_path: Arc::new(vec![]),
-                    deprecated_pseudo_random_id: Some([1; 32]),
                     batch_time: UNIX_EPOCH,
                     nonce: Some([3; 32]),
                 },
@@ -2289,7 +2288,7 @@ fn compatibility_for_reject_reason() {
         RejectReason::iter()
             .map(|reason| reason as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7]
+        [1, 2, 3, 4, 5, 6, 7, 8]
     );
 }
 
@@ -2387,7 +2386,6 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
     consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
     consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::new(10));
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
@@ -2843,7 +2841,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15]
     );
 }
 
@@ -2918,4 +2916,97 @@ fn blockmaker_metrics_check_soft_invariants(
     }
 
     prop_assert!(metrics.check_soft_invariants().is_ok());
+}
+
+fn make_network_topology_with_subnet(
+    subnet_id: SubnetId,
+    subnet_type: SubnetType,
+    sev_enabled: bool,
+) -> NetworkTopology {
+    let subnet_topology = SubnetTopology {
+        subnet_type,
+        subnet_features: SubnetFeatures {
+            sev_enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    NetworkTopology {
+        subnets: btreemap! { subnet_id => subnet_topology },
+        ..Default::default()
+    }
+}
+
+#[test]
+fn network_topology_application_sev_disabled_uses_default_reference_subnet_size() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology = make_network_topology_with_subnet(subnet_id, SubnetType::Application, false);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_application_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology = make_network_topology_with_subnet(subnet_id, SubnetType::Application, true);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(SEV_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_verified_application_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology =
+        make_network_topology_with_subnet(subnet_id, SubnetType::VerifiedApplication, true);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(SEV_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_system_ignores_sev_flag() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology_sev = make_network_topology_with_subnet(subnet_id, SubnetType::System, true);
+    let topology_no_sev = make_network_topology_with_subnet(subnet_id, SubnetType::System, false);
+    assert_eq!(
+        topology_sev.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+    assert_eq!(
+        topology_no_sev.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_reference_subnet_size_is_never_zero() {
+    use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE};
+    // reference_subnet_size is used as a divisor in scale_cost; it must never be zero.
+    assert_ne!(DEFAULT_REFERENCE_SUBNET_SIZE, 0);
+    assert_ne!(SEV_REFERENCE_SUBNET_SIZE, 0);
+
+    let subnet_id = subnet_test_id(1);
+    for subnet_type in [
+        SubnetType::Application,
+        SubnetType::VerifiedApplication,
+        SubnetType::System,
+    ] {
+        for sev_enabled in [false, true] {
+            let topology = make_network_topology_with_subnet(subnet_id, subnet_type, sev_enabled);
+            assert_ne!(
+                topology.get_reference_subnet_size(&subnet_id).unwrap(),
+                0,
+                "reference_subnet_size must not be zero for {subnet_type:?} sev={sev_enabled}"
+            );
+        }
+    }
 }

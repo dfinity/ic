@@ -2,21 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-COMMON_DEPS = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:ciborium",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:minicbor",
-    "@crate_index//:num-traits",
-    "@crate_index//:serde",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:test-strategy",
-]
-
 rust_library(
     name = "tokens_u256",
     srcs = [
@@ -24,21 +9,38 @@ rust_library(
     ],
     crate_name = "ic_icrc1_tokens_u256",
     version = "0.1.0",
-    deps = COMMON_DEPS + [
+    deps = [
+        # Keep sorted.
         "//packages/icrc-cbor:icrc-cbor_u256",
         "//rs/ledger_suite/common/ledger_core",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:ethnum",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
     ],
 )
 
 rust_test(
     name = "test",
     srcs = ["tests/tests.rs"],
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = COMMON_DEPS + [
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
         ":tokens_u256",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:hex",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:minicbor",
+        "@crate_index//:num-traits",
         "@crate_index//:proptest",
+        "@crate_index//:serde",
     ],
 )

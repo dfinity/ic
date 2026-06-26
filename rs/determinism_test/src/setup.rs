@@ -116,11 +116,13 @@ pub(crate) fn setup() -> (
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,
         subnet_type,
-        log.clone().into(),
-        &metrics_registry,
         &config.state_manager,
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
+        tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+        None,
+        &metrics_registry,
+        log.clone().into(),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

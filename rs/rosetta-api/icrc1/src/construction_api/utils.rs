@@ -275,6 +275,12 @@ pub fn build_icrc1_ledger_canister_method_args(
         crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
             bail!("FeeCollector Operation not supported")
         }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint { .. } => {
+            bail!("AuthorizedMint operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedBurn { .. } => {
+            bail!("AuthorizedBurn operation not supported")
+        }
     }
     .context("Unable to encode canister method args")
 }
@@ -303,6 +309,12 @@ fn extract_caller_principal_from_icrc1_ledger_operation(
         }
         crate::common::storage::types::IcrcOperation::FeeCollector { .. } => {
             bail!("FeeCollector Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedMint { .. } => {
+            bail!("AuthorizedMint operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::AuthorizedBurn { .. } => {
+            bail!("AuthorizedBurn operation not supported")
         }
     })
 }
@@ -682,5 +694,49 @@ mod test {
                 },
             )
             .unwrap();
+    }
+
+    #[test]
+    fn test_authorized_mint_rejected_by_construction_api() {
+        let authorized_mint_op = crate::common::storage::types::IcrcOperation::AuthorizedMint {
+            to: Account {
+                owner: candid::Principal::management_canister(),
+                subaccount: None,
+            },
+            amount: candid::Nat::from(1_000_000_u64),
+            caller: Some(candid::Principal::anonymous()),
+            mthd: Some("152mint".to_string()),
+            reason: None,
+        };
+        let result = build_icrc1_ledger_canister_method_args(authorized_mint_op, None, 0);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("AuthorizedMint operation not supported"),
+        );
+    }
+
+    #[test]
+    fn test_authorized_burn_rejected_by_construction_api() {
+        let authorized_burn_op = crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+            from: Account {
+                owner: candid::Principal::management_canister(),
+                subaccount: None,
+            },
+            amount: candid::Nat::from(1_000_000_u64),
+            caller: Some(candid::Principal::anonymous()),
+            mthd: Some("152burn".to_string()),
+            reason: None,
+        };
+        let result = build_icrc1_ledger_canister_method_args(authorized_burn_op, None, 0);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("AuthorizedBurn operation not supported"),
+        );
     }
 }

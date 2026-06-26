@@ -83,6 +83,14 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
     ) -> CryptoResult<()> {
         Ok(())
     }
+
+    fn verify_basic_sig_batch_multi_msg(
+        &self,
+        _inputs: &[(NodeId, &BasicSigOf<T>, &T)],
+        _registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        Ok(())
+    }
 }
 
 impl<T: Signable> BasicSigVerifierByPublicKey<T> for CryptoReturningOk {
@@ -217,7 +225,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
     fn create_transcript(
         &self,
         config: &NiDkgConfig,
-        _verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+        _verified_dealings: BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
         let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
@@ -319,19 +327,19 @@ impl IDkgProtocol for CryptoReturningOk {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BatchSignedIDkgDealings,
+        dealings: BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let mut receivers = BTreeSet::new();
         receivers.insert(node_test_id(0));
 
         let dealings_by_index = dealings
-            .iter()
+            .into_iter()
             .map(|dealing| {
                 (
                     params.dealer_index(dealing.dealer_id()).expect(
                         "dealer from BatchSignedIDkgDealing should be in IDkgTranscriptParams",
                     ),
-                    dealing.clone(),
+                    dealing,
                 )
             })
             .collect();

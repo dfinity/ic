@@ -1,11 +1,10 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use std::path::{Path, PathBuf};
-
 use crate::execution::common::{log_dirty_pages, validate_controller};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges},
     wasmtime_embedder::system_api::ExecutionParameters,
@@ -23,13 +22,11 @@ use ic_replicated_state::canister_state::system_state::{
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
-use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterLog, CanisterTimer, Height, MemoryAllocation, NumInstructions, Time,
-    messages::CanisterCall,
+    CanisterLog, CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
 };
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions};
+use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmHash;
 
 use crate::{
@@ -267,7 +264,7 @@ impl InstallCodeHelper {
                 .replay_step(state_change, original, round)
                 .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
-        assert_eq!(paused_instructions_left, helper.instructions_left());
+        debug_assert_eq!(paused_instructions_left, helper.instructions_left());
         Ok(helper)
     }
 
@@ -285,12 +282,24 @@ impl InstallCodeHelper {
         let message_instruction_limit = original.execution_parameters.instruction_limits.message();
         let instructions_left = self.instructions_left();
 
-        // The balance should not change because `install_code` cannot accept or
-        // send cycles. The execution cycles have already been accounted for in
-        // the clean canister state.
-        assert_eq!(
+        // The balance should only change due to cycles explicitly burned via
+        // `ic0.cycles_burn128`. The execution cycles are already accounted for
+        // in the clean canister state, and `install_code` cannot accept or send
+        // cycles.
+        let get_burned = |state: &CanisterState| {
+            state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
+                .get(&CyclesUseCase::BurnedCycles)
+                .map(|c| c.get())
+                .unwrap_or(0)
+        };
+        let burned_cycles_delta =
+            Cycles::new(get_burned(&self.canister).saturating_sub(get_burned(&clean_canister)));
+        debug_assert_eq!(
             clean_canister.system_state.balance(),
-            self.canister.system_state.balance()
+            self.canister.system_state.balance() + burned_cycles_delta
         );
 
         let instructions_used = NumInstructions::from(
@@ -305,8 +314,7 @@ impl InstallCodeHelper {
             message_instruction_limit,
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            original.subnet_cycles_config,
             original.wasm_execution_mode,
             round.log,
         );
@@ -352,8 +360,7 @@ impl InstallCodeHelper {
             let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
                 bytes,
                 &original.execution_parameters.subnet_memory_saturation,
-                original.subnet_size,
-                round.cost_schedule,
+                original.subnet_cycles_config,
             );
 
             match self
@@ -400,8 +407,7 @@ impl InstallCodeHelper {
                     self.canister.memory_usage(),
                     self.canister.message_memory_usage(),
                     self.canister.system_state.reserved_balance(),
-                    original.subnet_size,
-                    round.cost_schedule,
+                    original.subnet_cycles_config,
                     reveal_top_up,
                 )
             {
@@ -670,6 +676,7 @@ impl InstallCodeHelper {
                 round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
+                round.hypervisor.metrics(),
                 round.log,
             );
 
@@ -821,14 +828,13 @@ impl InstallCodeHelper {
 pub(crate) struct OriginalContext {
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
-    pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
     pub call_id: InstallCodeCallId,
     pub prepaid_execution_cycles: CompoundCycles<Instructions>,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
-    pub subnet_size: usize,
+    pub subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub log_dirty_pages: FlagStatus,
@@ -840,18 +846,6 @@ pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
         .execution_state
         .as_ref()
         .map(|execution_state| execution_state.wasm_binary.binary.module_hash())
-}
-
-#[doc(hidden)] // pub for usage in tests
-pub(crate) fn canister_layout(
-    state_path: &Path,
-    canister_id: &CanisterId,
-) -> CanisterLayout<ReadOnly> {
-    // We use ReadOnly, as CheckpointLayouts with write permissions have side effects
-    // of creating directories
-    CheckpointLayout::<ReadOnly>::new_untracked(state_path.into(), Height::from(0))
-        .and_then(|layout| layout.canister(canister_id))
-        .expect("failed to obtain canister layout")
 }
 
 /// Finishes an `install_code` execution early due to an error.
@@ -887,8 +881,7 @@ pub(crate) fn finish_err(
         message_instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
-        original.subnet_size,
-        round.cost_schedule,
+        original.subnet_cycles_config,
         original.wasm_execution_mode,
         round.log,
     );

@@ -1,4 +1,6 @@
-use crate::{common::LOG_PREFIX, registry::Registry};
+use crate::{
+    common::LOG_PREFIX, mutations::common::get_elected_replica_version_ids, registry::Registry,
+};
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
@@ -34,6 +36,19 @@ use ic_registry_canister_api::{AddNodePayload, NodeRegistrationAttestationCustom
 use ic_registry_keys::{NODE_REWARDS_TABLE_KEY, make_replica_version_key};
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
+
+/// Effective per-node-operator cap on the number of `type4.1`-`type4.4` nodes
+/// that may be registered, used in lieu of the standard
+/// `max_rewardable_nodes`-based quota for those reward types.
+///
+/// TODO(CLO-15): Remove this constant and the associated special case in
+/// `do_add_node_` once the reward canister no longer treats `type4.5` rewards
+/// as `type1.1`. Until then, we cannot meaningfully size
+/// `max_rewardable_nodes` for the `type4.x` family without blocking legitimate
+/// gen4 onboarding, so we substitute a large-but-bounded sentinel here. The
+/// value is chosen to be comfortably above any realistic per-operator
+/// deployment while still preventing runaway registrations.
+const EXCESSIVE_NUMBER_OF_TYPE_4_NODES: u32 = 1_000;
 
 impl Registry {
     /// Adds a new node to the registry.
@@ -134,10 +149,26 @@ impl Registry {
                 "{LOG_PREFIX}do_add_node: Node reward type is required."
             ))?;
 
-            let max_rewardable_nodes_same_type = *node_operator_record
-                .max_rewardable_nodes
-                .get(&(node_reward_type.to_string()))
-                .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
+            // See `EXCESSIVE_NUMBER_OF_TYPE_4_NODES` at the top of this file for
+            // why type4.1-type4.4 are handled via a sentinel quota rather than
+            // the per-operator `max_rewardable_nodes` map. Type4.5 is
+            // explicitly excluded from this exemption.
+            let is_permissionless_type_4_x = matches!(
+                node_reward_type,
+                NodeRewardType::Type4dot1
+                    | NodeRewardType::Type4dot2
+                    | NodeRewardType::Type4dot3
+                    | NodeRewardType::Type4dot4
+            );
+
+            let max_rewardable_nodes_same_type = if is_permissionless_type_4_x {
+                EXCESSIVE_NUMBER_OF_TYPE_4_NODES
+            } else {
+                *node_operator_record
+                    .max_rewardable_nodes
+                    .get(&(node_reward_type.to_string()))
+                    .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?
+            };
 
             let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
                 .into_iter()
@@ -145,10 +176,14 @@ impl Registry {
                 .filter(|t| t == &(node_reward_type as i32))
                 .count() as u32;
 
-            // Validate node operator's max_rewardable_nodes quota
-            if max_rewardable_nodes_same_type
-                <= num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type)
-            {
+            // Validate node operator's max_rewardable_nodes quota.
+            // TODO(@pietrodimarco-dfinity): confirm whether `>=` is intended
+            // here (i.e. `num_remaining_nodes == max_rewardable_nodes_same_type`
+            // should reject) or whether this should be `>`. Preserving the
+            // pre-existing behavior for now.
+            let num_remaining_nodes =
+                num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type);
+            if num_remaining_nodes >= max_rewardable_nodes_same_type {
                 return Err(format!(
                     "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}.\
                     Number of nodes in the registry with {node_reward_type} type = {num_in_registry_same_type},\
@@ -263,7 +298,7 @@ impl Registry {
         let parsed =
             ParsedSevAttestationPackage::parse(attestation_package.clone(), root_cert_verification)
                 .verify_custom_data(&expected_custom_data)
-                .verify_measurement(&self.get_all_blessed_guest_launch_measurements())
+                .verify_measurement(&self.get_all_elected_guest_launch_measurements())
                 .map_err(|e| {
                     format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}")
                 })?;
@@ -278,9 +313,9 @@ impl Registry {
         Ok(Some(chip_id))
     }
 
-    pub fn get_all_blessed_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
+    pub fn get_all_elected_guest_launch_measurements(&self) -> Vec<Vec<u8>> {
         let version = self.latest_version();
-        self.get_blessed_replica_version_ids()
+        get_elected_replica_version_ids(self)
             .iter()
             .filter_map(|version_id| {
                 self.get(make_replica_version_key(version_id).as_bytes(), version)
@@ -312,6 +347,11 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
         "type4" => NodeRewardType::Type4,
+        "type4.1" => NodeRewardType::Type4dot1,
+        "type4.2" => NodeRewardType::Type4dot2,
+        "type4.3" => NodeRewardType::Type4dot3,
+        "type4.4" => NodeRewardType::Type4dot4,
+        "type4.5" => NodeRewardType::Type4dot5,
         _ => return Err(format!("Invalid node type: {type_string}")),
     })
 }
@@ -1118,6 +1158,72 @@ mod tests {
     }
 
     #[test]
+    fn should_allow_arbitrarily_many_nodes_of_type4dot1_through_type4dot4() {
+        // TODO(CLO-15): Remove this test once we re-enable the
+        // max_rewardable_nodes quota check for type4.1-type4.4. See related TODO
+        // in `do_add_node_`.
+        for node_reward_type in [
+            NodeRewardType::Type4dot1,
+            NodeRewardType::Type4dot2,
+            NodeRewardType::Type4dot3,
+            NodeRewardType::Type4dot4,
+        ] {
+            let mut registry = invariant_compliant_registry(0);
+
+            let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+            registry.maybe_apply_mutation_internal(mutate_request.mutations);
+            let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+            // Note: `max_rewardable_nodes` intentionally does NOT contain
+            // an entry for `node_reward_type` here, demonstrating that the
+            // quota does not apply for these types.
+            let node_operator_id =
+                registry_add_node_operator_for_node(&mut registry, node_ids[0], btreemap! {});
+
+            // Adding several nodes of this type should all succeed even
+            // though no quota is configured. Note that for other reward types
+            // this would fail; the immediately following
+            // `should_panic_if_max_rewardable_nodes_is_exhausted_for_type4dot5`
+            // test demonstrates that the underlying quota check is still
+            // exercised, so passing here is meaningful and not simply due to
+            // the check being a no-op.
+            for i in 0..3_u8 {
+                let (payload, _) = prepare_add_node_payload(10 + i, node_reward_type);
+                registry
+                    .do_add_node_(payload, node_operator_id, now_system_time())
+                    .unwrap_or_else(|e| {
+                        panic!("do_add_node_ failed for {node_reward_type} on iteration {i}: {e}")
+                    });
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "[Registry] do_add_node: Node Operator has reached max_rewardable_nodes quota for type4.5"
+    )]
+    fn should_panic_if_max_rewardable_nodes_is_exhausted_for_type4dot5() {
+        // type4.5 is explicitly excluded from the type4.1-type4.4 exemption
+        // because rewards of type4.5 are currently treated as type1.1. The
+        // standard max_rewardable_nodes quota check therefore still applies.
+        let mut registry = invariant_compliant_registry(0);
+
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 1);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+        let node_ids: Vec<NodeId> = node_ids_and_dkg_pks.keys().cloned().collect();
+        let node_operator_id = registry_add_node_operator_for_node(
+            &mut registry,
+            node_ids[0],
+            btreemap! { NodeRewardType::Type4dot5 => 0 },
+        );
+
+        let (payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type4dot5);
+
+        registry
+            .do_add_node_(payload, node_operator_id, now_system_time())
+            .unwrap();
+    }
+
+    #[test]
     fn test_node_reward_type_is_required() {
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record first
@@ -1393,7 +1499,7 @@ mod tests {
             .into()
     }
 
-    fn add_blessed_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
+    fn add_elected_measurement_to_registry(registry: &mut Registry, measurement: &[u8]) {
         let replica_version_id = ReplicaVersion::default().to_string();
         let replica_version = ReplicaVersionRecord {
             release_package_sha256_hex: "".to_string(),
@@ -1417,7 +1523,7 @@ mod tests {
     fn should_succeed_for_adding_node_with_valid_sev_attestation() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+        add_elected_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1451,12 +1557,12 @@ mod tests {
     }
 
     #[test]
-    fn should_fail_for_sev_attestation_with_unblessed_measurement() {
+    fn should_fail_for_sev_attestation_with_unelected_measurement() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        // Add a blessed measurement that does NOT match what we'll put in the attestation
+        // Add a elected measurement that does NOT match what we'll put in the attestation
         let different_measurement: [u8; 48] = [99; 48];
-        add_blessed_measurement_to_registry(&mut registry, &different_measurement);
+        add_elected_measurement_to_registry(&mut registry, &different_measurement);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
@@ -1471,7 +1577,7 @@ mod tests {
         let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_registration_attestation = Some(create_mock_sev_attestation_package(
             &payload.node_signing_pk,
-            SEV_TEST_MEASUREMENT, // This won't match the blessed measurement
+            SEV_TEST_MEASUREMENT, // This won't match the elected measurement
             SEV_TEST_CHIP_ID,
         ));
 
@@ -1479,7 +1585,7 @@ mod tests {
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
 
         // Assert
-        let err = result.expect_err("should fail with unblessed measurement");
+        let err = result.expect_err("should fail with unelected measurement");
         assert!(
             err.contains("Attestation verification failed"),
             "Expected attestation verification error, got: {err}"
@@ -1490,7 +1596,7 @@ mod tests {
     fn should_fail_for_sev_attestation_with_wrong_custom_data() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        add_blessed_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
+        add_elected_measurement_to_registry(&mut registry, &SEV_TEST_MEASUREMENT);
 
         let node_operator_record = NodeOperatorRecord {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },

@@ -204,13 +204,33 @@ impl RegistryHelper {
         Ok(ids.unwrap_or_default())
     }
 
+    pub(crate) fn get_subnet_id_and_type_from_node_id(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<(SubnetId, SubnetType)>> {
+        self.registry_client
+            .get_subnet_id_and_type_from_node_id(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
     pub(crate) fn get_subnet_id_from_node_id(
         &self,
         node_id: NodeId,
         version: RegistryVersion,
     ) -> OrchestratorResult<Option<SubnetId>> {
+        Ok(self
+            .get_subnet_id_and_type_from_node_id(node_id, version)?
+            .map(|(subnet_id, _subnet_type)| subnet_id))
+    }
+
+    pub(crate) fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<SubnetType>> {
         self.registry_client
-            .get_subnet_id_from_node_id(node_id, version)
+            .get_subnet_type(subnet_id, version)
             .map_err(OrchestratorError::RegistryClientError)
     }
 
@@ -375,11 +395,11 @@ impl RegistryHelper {
     pub(crate) fn get_node_domain_name(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<String>> {
+    ) -> OrchestratorResult<String> {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
-        Ok(result)
+        result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
     }
 }

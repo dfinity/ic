@@ -5,6 +5,7 @@ use crate::common::storage::types::{
 };
 use candid::{Nat, Principal};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc122::schema::{BTYPE_122_BURN, BTYPE_122_MINT};
 use rusqlite::{Connection, params};
 use tempfile::tempdir;
 
@@ -715,4 +716,251 @@ fn test_get_blocks_by_index_range_returns_ascending_order() {
     assert_eq!(retrieved.len(), 2);
     assert_eq!(retrieved[0].index, 0);
     assert_eq!(retrieved[1].index, 1);
+}
+
+// Helper function to create a test block with an AuthorizedMint operation
+fn create_test_authorized_mint_block(
+    index: u64,
+    timestamp: u64,
+    principal: &[u8],
+    amount: u64,
+) -> RosettaBlock {
+    let account = Account {
+        owner: Principal::from_slice(principal),
+        subaccount: None,
+    };
+
+    let transaction = IcrcTransaction {
+        operation: IcrcOperation::AuthorizedMint {
+            to: account,
+            amount: Nat::from(amount),
+            caller: Some(Principal::from_slice(b"\x01")),
+            mthd: Some("152mint".to_string()),
+            reason: Some("test".to_string()),
+        },
+        memo: None,
+        created_at_time: Some(timestamp),
+    };
+
+    let icrc_block = IcrcBlock {
+        parent_hash: None,
+        transaction,
+        timestamp,
+        effective_fee: None,
+        fee_collector: None,
+        fee_collector_block_index: None,
+        btype: Some(BTYPE_122_MINT.to_string()),
+    };
+
+    RosettaBlock {
+        index,
+        block: icrc_block,
+    }
+}
+
+// Helper function to create a test block with an AuthorizedBurn operation
+fn create_test_authorized_burn_block(
+    index: u64,
+    timestamp: u64,
+    principal: &[u8],
+    amount: u64,
+) -> RosettaBlock {
+    let account = Account {
+        owner: Principal::from_slice(principal),
+        subaccount: None,
+    };
+
+    let transaction = IcrcTransaction {
+        operation: IcrcOperation::AuthorizedBurn {
+            from: account,
+            amount: Nat::from(amount),
+            caller: Some(Principal::from_slice(b"\x01")),
+            mthd: Some("152burn".to_string()),
+            reason: Some("compliance".to_string()),
+        },
+        memo: None,
+        created_at_time: Some(timestamp),
+    };
+
+    let icrc_block = IcrcBlock {
+        parent_hash: None,
+        transaction,
+        timestamp,
+        effective_fee: None,
+        fee_collector: None,
+        fee_collector_block_index: None,
+        btype: Some(BTYPE_122_BURN.to_string()),
+    };
+
+    RosettaBlock {
+        index,
+        block: icrc_block,
+    }
+}
+
+#[test]
+fn test_store_and_read_authorized_mint_block() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_authorized_mint_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![1, 2, 3, 4];
+    let block = create_test_authorized_mint_block(0, 1000000000, &principal, 500);
+
+    store_blocks(&mut connection, vec![block.clone()])?;
+
+    let retrieved = get_block_at_idx(&connection, 0)?.unwrap();
+
+    assert_eq!(retrieved.index, block.index);
+    assert_eq!(retrieved.get_timestamp(), 1000000000);
+    assert_eq!(
+        retrieved.block.transaction.created_at_time,
+        block.block.transaction.created_at_time
+    );
+    assert_eq!(
+        retrieved.block.btype,
+        Some(BTYPE_122_MINT.to_string()),
+        "btype should be preserved as BTYPE_122_MINT"
+    );
+
+    match &retrieved.block.transaction.operation {
+        IcrcOperation::AuthorizedMint {
+            to,
+            amount,
+            caller,
+            mthd,
+            reason,
+        } => {
+            assert_eq!(
+                *to,
+                Account {
+                    owner: Principal::from_slice(&principal),
+                    subaccount: None,
+                }
+            );
+            assert_eq!(*amount, Nat::from(500_u64));
+            assert_eq!(*caller, Some(Principal::from_slice(b"\x01")));
+            assert_eq!(*mthd, Some("152mint".to_string()));
+            assert_eq!(*reason, Some("test".to_string()));
+        }
+        _ => panic!("Expected AuthorizedMint operation"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_store_and_read_authorized_burn_block() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_authorized_burn_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![5, 6, 7, 8];
+    let block = create_test_authorized_burn_block(0, 2000000000, &principal, 300);
+
+    store_blocks(&mut connection, vec![block.clone()])?;
+
+    let retrieved = get_block_at_idx(&connection, 0)?.unwrap();
+
+    assert_eq!(retrieved.index, block.index);
+    assert_eq!(retrieved.get_timestamp(), 2000000000);
+    assert_eq!(
+        retrieved.block.transaction.created_at_time,
+        block.block.transaction.created_at_time
+    );
+    assert_eq!(
+        retrieved.block.btype,
+        Some(BTYPE_122_BURN.to_string()),
+        "btype should be preserved as BTYPE_122_BURN"
+    );
+
+    match &retrieved.block.transaction.operation {
+        IcrcOperation::AuthorizedBurn {
+            from,
+            amount,
+            caller,
+            mthd,
+            reason,
+        } => {
+            assert_eq!(
+                *from,
+                Account {
+                    owner: Principal::from_slice(&principal),
+                    subaccount: None,
+                }
+            );
+            assert_eq!(*amount, Nat::from(300_u64));
+            assert_eq!(*caller, Some(Principal::from_slice(b"\x01")));
+            assert_eq!(*mthd, Some("152burn".to_string()));
+            assert_eq!(*reason, Some("compliance".to_string()));
+        }
+        _ => panic!("Expected AuthorizedBurn operation"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_update_account_balances_authorized_mint() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir
+        .path()
+        .join("test_balance_authorized_mint_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![1, 2, 3, 4];
+    let account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+
+    let block = create_test_authorized_mint_block(0, 1000000000, &principal, 500);
+    store_blocks(&mut connection, vec![block])?;
+
+    update_account_balances(&mut connection, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
+
+    let balance = get_account_balance_at_block_idx(&connection, &account, 0)?;
+    assert_eq!(
+        balance,
+        Some(Nat::from(500_u64)),
+        "AuthorizedMint should credit the 'to' account"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_update_account_balances_authorized_burn() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir
+        .path()
+        .join("test_balance_authorized_burn_db.sqlite");
+    let mut connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let principal = vec![5, 6, 7, 8];
+    let account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+
+    // First mint tokens so the account has a balance to burn from
+    let mint_block = create_test_authorized_mint_block(0, 1000000000, &principal, 1000);
+    let burn_block = create_test_authorized_burn_block(1, 1000000001, &principal, 300);
+
+    store_blocks(&mut connection, vec![mint_block, burn_block])?;
+
+    update_account_balances(&mut connection, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
+
+    let balance = get_account_balance_at_block_idx(&connection, &account, 1)?;
+    assert_eq!(
+        balance,
+        Some(Nat::from(700_u64)),
+        "AuthorizedBurn should debit the 'from' account (1000 - 300 = 700)"
+    );
+
+    Ok(())
 }

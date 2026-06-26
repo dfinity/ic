@@ -3,25 +3,6 @@ load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils/canister_threshold_sigs",
-    "//rs/crypto/test_utils/crypto_returning_ok",
-    "//rs/crypto/test_utils/ni-dkg",
-    "//rs/crypto/tree_hash",
-    "//rs/limits",
-    "//rs/test_utilities",
-    "//rs/test_utilities/artifact_pool",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "@crate_index//:rand",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-]
-
 rust_library(
     name = "artifact_pool",
     srcs = glob(["src/**"]),
@@ -98,13 +79,27 @@ rust_binary(
 rust_test(
     name = "artifact_pool_test",
     crate = ":artifact_pool",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/state_manager",
+        "//rs/limits",
+        "//rs/test_utilities",
+        "//rs/test_utilities/artifact_pool",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "@crate_index//:rand",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+    ],
 )
-
-BENCH_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:criterion",
-]
 
 rust_bench(
     name = "load_blocks_bench",
@@ -137,5 +132,26 @@ rust_bench(
         ],
         "//conditions:default": [
         ],
-    }) + DEV_DEPENDENCIES + BENCH_DEPENDENCIES + [":artifact_pool"],
+    }) + [
+        # Keep sorted.
+        ":artifact_pool",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/state_manager",
+        "//rs/limits",
+        "//rs/test_utilities",
+        "//rs/test_utilities/artifact_pool",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+    ],
 )

@@ -201,6 +201,8 @@ pub enum OperationType {
     Approve,
     Fee,
     FeeCollector,
+    AuthorizedMint,
+    AuthorizedBurn,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -243,6 +245,52 @@ impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
     fn try_from(o: Option<ObjectMap>) -> anyhow::Result<Self> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
             .context("Could not parse ApproveMetadata from JSON object")
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct AuthorizedOperationMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl TryFrom<AuthorizedOperationMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: AuthorizedOperationMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(ob)) => Ok(ob),
+            Ok(v) => anyhow::bail!(
+                "Could not convert AuthorizedOperationMetadata to ObjectMap. Expected Object but received: {:?}",
+                v
+            ),
+            Err(err) => anyhow::bail!(
+                "Could not convert AuthorizedOperationMetadata to ObjectMap: {:?}",
+                err
+            ),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for AuthorizedOperationMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o.clone())).with_context(|| {
+            format!("Could not parse AuthorizedOperationMetadata from Object: {o:?}")
+        })
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for AuthorizedOperationMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: Option<ObjectMap>) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
+            .context("Could not parse AuthorizedOperationMetadata from JSON object")
     }
 }
 

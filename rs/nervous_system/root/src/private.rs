@@ -207,7 +207,7 @@ where
 
     if canister_id == GOVERNANCE_CANISTER_ID {
         spawn_migratory(async move {
-            // Result is discarded here; it is above.
+            // Result is discarded here; it is logged above.
             let _: Result<R, OfflineMaintenanceError> = operation.await;
         });
 

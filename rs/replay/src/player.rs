@@ -34,14 +34,11 @@ use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::{
-    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
-    types::v1 as pb,
-};
+use ic_protobuf::{registry::subnet::v1::SubnetRecord, types::v1 as pb};
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
-use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
+use ic_registry_keys::make_subnet_record_key;
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
@@ -53,6 +50,7 @@ use ic_registry_transport::{
     deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
+use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
@@ -276,12 +274,12 @@ impl Player {
             println!("Failed to set default replica version");
         }
 
-        let subnet_type = match registry.get_subnet_record(subnet_id, registry.get_latest_version())
-        {
+        let registry_version = registry.get_latest_version();
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(Some(record)) => {
                 SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
-            err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
+            err => panic!("Failed to read subnet record for {subnet_id:?} from registry: {err:?}"),
         };
 
         let metrics_registry = MetricsRegistry::new();
@@ -291,15 +289,19 @@ impl Player {
         let crypto = Arc::new(crypto);
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+        let replicated_state_invariants =
+            ReplicatedStateInvariants::new(&metrics_registry, &cfg.hypervisor);
         let state_manager = Arc::new(StateManagerImpl::new(
             verifier.clone(),
             subnet_id,
             subnet_type,
-            log.clone(),
-            &metrics_registry,
             &cfg.state_manager,
             None,
             MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
+            Some(replicated_state_invariants),
+            &metrics_registry,
+            log.clone(),
         ));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
@@ -877,21 +879,6 @@ impl Player {
                 },
             },
         }
-    }
-
-    /// Return latest BlessedReplicaVersions record by querying the registry
-    /// canister.
-    pub fn get_blessed_replica_versions(
-        &self,
-        ingress_expiry: Time,
-    ) -> Result<BlessedReplicaVersions, String> {
-        self.certify_state_with_dummy_certification();
-        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
-        self.runtime.block_on(registry_get_value(
-            &make_blessed_replica_versions_key(),
-            ingress_expiry,
-            &perform_query,
-        ))
     }
 
     /// Return the latest registry version by querying the registry canister.

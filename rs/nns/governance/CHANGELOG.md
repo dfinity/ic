@@ -11,6 +11,90 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-05-17: Proposal 141779
+
+http://dashboard.internetcomputer.org/proposal/141779
+
+## Changed
+
+* Neuron spawning and maturity disbursement finalization now read the locally
+  computed Mission 70 maturity modulation (derived from the XRC-backed price
+  history) instead of the CMC-polled `cached_daily_maturity_modulation_basis_points`.
+
+
+# 2026-05-13: Proposal 141771
+
+http://dashboard.internetcomputer.org/proposal/141771
+
+## Fixed
+
+* Tolerate XRC failures when updating maturity modulation: compute the average
+  over available days using last-observation-carried-forward, and advance past
+  days where XRC returns no rate so that a single persistent gap no longer
+  stalls maturity modulation updates.
+
+
+# 2026-05-08: Proposal 141738
+
+http://dashboard.internetcomputer.org/proposal/141738
+
+## Added
+
+* Daily timer task that fetches ICP/XDR rates from the Exchange Rate Canister, maintains a 365-day price history in Governance state, and computes Mission 70 maturity modulation locally. The computed value is not yet consumed by spawning or disbursement; that switchover will happen in a follow-up PR.
+
+* `get_maturity_modulation` query endpoint that returns the current Mission 70 maturity modulation value, including `current_value_permyriad` and `updated_at_timestamp_seconds`.
+
+* Expose `staked_maturity_e8s_equivalent` on `NeuronInfo`, so external callers
+  can read staked maturity from `get_neuron_info` / `list_neurons` responses.
+
+## Changed
+
+* The first Mission 70 maturity modulation calculation skips the daily speed limit, so the initial
+  value reflects the target directly (subject to global bounds) instead of being clamped to a tiny
+  step away from zero.
+
+
+# 2026-04-25: Proposal 141565
+
+http://dashboard.internetcomputer.org/proposal/141565
+
+## Added
+
+* `TakeCanisterSnapshot` proposals now store the new snapshot ID in the
+  `success_value` field.
+
+## Changed
+
+* Relax eight year gang membership requirement(s): Instead of needing to have dissolve
+  delay >= 8 * 365.25 days (8 "years"), which is exactly 252_460_800 seconds, a second
+  round of induction requires only that neurons had dissolve delay >= 8 * 365 days,
+  which is exactly 252_288_000 seconds. This is less than a 0.07% difference.
+  Additionally, to avoid bonusing newly staked ICP, the neuron must currently be aging
+  since before March 30 (midnight UTC). (Furthermore, neurons that are already members
+  will not have their eight year gang bonus base re-assessed.)
+
+
+# 2026-04-17: Proposal 141441
+
+http://dashboard.internetcomputer.org/proposal/141441
+
+## Added
+
+* Enabled CreateCanisterAndInstallCode proposals.
+
+## Changed
+
+* The minimum dissolve delay required to submit non-manage-neuron proposals is now
+  a fixed 6 months, decoupled from the voting eligibility threshold which can be lower.
+
+* Enable Mission 70 voting rewards changes. This includes the following:
+  1. Reduce max dissolve delay from 8 years to 2 years. This includes capping existing neurons via data migration.
+  2. Reduce voting rewards pool by approximately 36.71% (equivalently, scale by 0.6329 times).
+  3. Dissolve delay bonus: quadratic instead of linear, with a maximum of 3x instead of 2x.
+  4. Reduce the minimum dissolve delay needed to vote to 2 weeks instead of 6 months.
+  5. 8 year gang 10% bonus.
+
+
 # 2026-04-14: Proposal 141380
 
 http://dashboard.internetcomputer.org/proposal/141380

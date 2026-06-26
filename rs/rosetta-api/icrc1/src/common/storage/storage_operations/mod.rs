@@ -385,6 +385,36 @@ pub fn update_account_balances(
                         )?;
                     }
                 }
+                crate::common::storage::types::IcrcOperation::AuthorizedMint {
+                    to,
+                    amount,
+                    caller: _,
+                    mthd: _,
+                    reason: _,
+                } => {
+                    credit(
+                        to,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
+                crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                    from,
+                    amount,
+                    caller: _,
+                    mthd: _,
+                    reason: _,
+                } => {
+                    debit(
+                        from,
+                        amount,
+                        rosetta_block.index,
+                        connection,
+                        &mut account_balances_cache,
+                    )?;
+                }
                 crate::common::storage::types::IcrcOperation::Approve {
                     from,
                     spender: _,
@@ -609,6 +639,34 @@ pub fn store_blocks(
                 None,
                 None,
                 Nat::from(0_u64),
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::AuthorizedMint { to, amount, .. } => (
+                "authorized_mint",
+                None,
+                None,
+                Some(to.owner),
+                Some(*to.effective_subaccount()),
+                None,
+                None,
+                amount,
+                None,
+                None,
+                None,
+            ),
+            crate::common::storage::types::IcrcOperation::AuthorizedBurn {
+                from, amount, ..
+            } => (
+                "authorized_burn",
+                Some(from.owner),
+                Some(*from.effective_subaccount()),
+                None,
+                None,
+                None,
+                None,
+                amount,
                 None,
                 None,
                 None,
