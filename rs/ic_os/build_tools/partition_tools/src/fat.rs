@@ -11,6 +11,15 @@ pub struct FatPartition {
     original: PathBuf,
 }
 
+/// Try to infer the path of the mcopy binary
+fn mcopy_bin() -> String {
+    std::env::var("MCOPY").unwrap_or( "mcopy".to_string() /* default to PATH lookup */ )
+}
+
+fn mkfs_fat_bin() -> String {
+    std::env::var("MKFS_FAT").unwrap_or( "/usr/sbin/mkfs.fat".to_string() /* default to system binary */ )
+}
+
 impl Partition for FatPartition {
     /// Open a fat3 partition for writing, via mtools. There is nothing to do
     /// here, as mtools works in place.
@@ -41,7 +50,7 @@ impl Partition for FatPartition {
     /// Copy a file into place
     fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new("mcopy")
+            Command::new(mcopy_bin())
                 .args([
                     "-o",
                     "-i",
@@ -52,7 +61,7 @@ impl Partition for FatPartition {
                 .output()
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            Command::new(mcopy_bin())
                 .args([
                     "-o",
                     "-i",
@@ -83,7 +92,7 @@ impl Partition for FatPartition {
         );
 
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new("mcopy")
+            Command::new(mcopy_bin())
                 .args([
                     "-s", // recursive copy
                     "-o", // overwrite existing files
@@ -95,7 +104,7 @@ impl Partition for FatPartition {
                 .output()
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            Command::new(mcopy_bin())
                 .args([
                     "-s", // recursive copy
                     "-o", // overwrite existing files
@@ -147,7 +156,7 @@ impl FatPartition {
     // Capture and return stdout, which may be used to "read" the file directly
     fn copy_file_inner(&mut self, from: &Path, to: &Path) -> Result<Vec<u8>> {
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new("mcopy")
+            Command::new(mcopy_bin())
                 .args([
                     "-o",
                     "-i",
@@ -158,7 +167,7 @@ impl FatPartition {
                 .output()
                 .context("failed to run mcopy")?
         } else {
-            Command::new("mcopy")
+            Command::new(mcopy_bin())
                 .args([
                     "-o",
                     "-i",
@@ -194,7 +203,7 @@ mod test {
             ])
             .status()?;
 
-        Command::new("/usr/sbin/mkfs.fat")
+        Command::new(mkfs_fat_bin())
             .args(["-F", "32", "-i", "0"])
             .arg(path.as_os_str())
             .status()?;

@@ -27,6 +27,14 @@ rust_test(
         # Keep sorted.
         "@crate_index//:indoc",
     ],
+    data = [
+        "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
+    ],
+    env = {
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:anyhow",
