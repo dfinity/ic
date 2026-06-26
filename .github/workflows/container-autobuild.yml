@@ -103,6 +103,45 @@ jobs:
             exit 1
           fi
 
+  bre-worker-image:
+    name: Build BRE Worker Image
+    # Runs on a Namespace runner where 'nsc' is pre-authenticated. Decoupled from
+    # 'update-image-references' below so that an early-access BRE failure can never
+    # block the production container image reference update.
+    runs-on: namespace-profile-amd64-linux-32x64
+    needs: [build-image-prep, ic-build-image]
+    if: ${{ needs.build-image-prep.outputs.build_image == 'true' && github.repository == 'dfinity/ic' }}
+    timeout-minutes: 30
+    outputs:
+      worker-imageid: ${{ steps.worker.outputs.worker-imageid }}
+    steps:
+      - name: Mirror ic-build to nscr.io and optimize for Bazel Remote Execution
+        id: worker
+        shell: bash
+        run: |
+          set -xeuo pipefail
+
+          # Mirror the (unchanged) ic-build image -- just pushed to GHCR and pinned by
+          # digest -- into the Namespace tenant registry (nscr.io). Namespace BRE
+          # workers boot from this image.
+          src="ghcr.io/dfinity/ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
+          worker_repo="nscr.io/dfinity/ic-build-worker"
+          worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
+
+          nsc docker login
+          nsc base-image upload "$src" "ic-build-worker:$worker_tag"
+
+          # BRE requires an immutable digest (mutable tags are rejected). Resolve the
+          # digest produced in nscr.io. (Alternatives: 'crane digest' or 'nsc'.)
+          worker_digest="$(docker buildx imagetools inspect "$worker_repo:$worker_tag" --format '{{.Manifest.Digest}}')"
+          echo "Resolved worker image digest: $worker_digest"
+
+          # Optimize the pinned digest into a fast-booting worker variant. This blocks
+          # until ready and only needs to be done once per digest.
+          nsc base-image optimize --image_ref "$worker_repo@$worker_digest"
+
+          echo "worker-imageid=$worker_digest" >> "$GITHUB_OUTPUT"
+
   update-image-references:
     name: Update Image References in Repo
     runs-on: ubuntu-latest
@@ -192,3 +231,56 @@ jobs:
                 body: message
               });
             }
+
+  update-worker-reference:
+    name: Update BRE Worker Image Reference in Repo
+    runs-on: ubuntu-latest
+    # Runs after (and independently of) 'update-image-references'. Pins the BRE
+    # worker image reference used by bre-namespace-test.yml to the freshly mirrored
+    # and optimized digest. Skipped automatically if 'bre-worker-image' failed.
+    needs: [build-image-prep, bre-worker-image, update-image-references]
+    if: ${{ needs.build-image-prep.outputs.build_image == 'true' && github.repository == 'dfinity/ic' }}
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Update Worker Image Reference
+        shell: bash
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          # Pin the BRE worker image reference (used by bre-namespace-test.yml) to the
+          # freshly mirrored and optimized digest.
+          set -xeuo pipefail
+
+          WORKER_PREFIX="nscr.io/dfinity/"
+          IMG_NAME_WORKER="${WORKER_PREFIX}ic-build-worker@${{ needs.bre-worker-image.outputs.worker-imageid }}"
+
+          pushd .github
+          sed -i -E "s|${WORKER_PREFIX}ic-build-worker(:\|@)[^\"]{5,}|$IMG_NAME_WORKER|g" -- workflow*/*
+          popd
+
+          git config --global user.name "IDX GitHub Automation"
+          git config --global user.email "<>"
+          git add .
+          if git diff --cached --quiet; then
+            echo "Worker image reference already up to date; nothing to commit."
+          else
+            git commit \
+              -m 'Updating BRE worker image reference' \
+              -m 'ic-build-worker: ${{ needs.bre-worker-image.outputs.worker-imageid }}'
+            # 'update-image-references' may have pushed first; rebase onto the latest
+            # tip before pushing (the two jobs edit disjoint files, so no conflict).
+            git pull --rebase origin "$BRANCH"
+            git push origin "HEAD:$BRANCH"
+          fi

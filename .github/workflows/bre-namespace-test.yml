@@ -1,0 +1,79 @@
+name: BRE Namespace Test
+
+# Experimental: run `bazel test` on Namespace runners using Bazel Remote
+# Execution (BRE). Actions execute on Namespace workers booted from a custom
+# worker image (a mirror of ic-build) that is built, optimized and pinned by the
+# `container-autobuild.yml` workflow.
+#
+# See: https://namespace.so/docs/bazel/execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Bazel target patterns to test'
+        required: false
+        default: '//...'
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches:
+      - 'dev-gh-*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bazel-test-bre:
+    name: Bazel Test (Namespace BRE)
+    runs-on: namespace-profile-amd64-linux-32x64
+    timeout-minutes: 120
+    # Opt-in while experimental: manual dispatch, pushes to dev-gh-* branches, or
+    # pull requests labeled 'CI_BRE'. Only on the public repo, where Namespace
+    # runners are configured (otherwise the job would get stuck).
+    if: >-
+      github.repository == 'dfinity/ic' &&
+      ( github.event_name != 'pull_request' ||
+        contains(github.event.pull_request.labels.*.name, 'CI_BRE') )
+    steps:
+      - name: Set up Bazel Remote Execution
+        run: |
+          # Provisions the Namespace RBE cluster and writes a bazelrc fragment with
+          # the remote executor, remote cache, credentials and recommended defaults.
+          # 'nsc' is pre-authenticated on Namespace runners.
+          nsc bazel execution setup --bazelrc=/tmp/bazel-rbe.bazelrc
+          cat /tmp/bazel-rbe.bazelrc
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/netrc
+      - name: Bazel Test with BRE
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Custom worker image: a mirror of ic-build, pinned to an immutable digest
+          # and optimized for BRE. This reference is kept up to date automatically by
+          # the 'update-worker-reference' job in container-autobuild.yml.
+          # NOTE: the placeholder digest below is replaced on the first ic-build
+          # rebuild after this workflow is introduced; until then this job will fail.
+          worker_image="docker://nscr.io/dfinity/ic-build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+          targets="${{ inputs.targets || '//...' }}"
+
+          # We deliberately bypass the workspace .bazelrc (which pulls in the
+          # DFINITY-internal cache / remote-execution config) and instead pass the
+          # build config plus the Namespace RBE config explicitly, mirroring the
+          # bazel-test-arm64 job in ci-main.yml.
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
+            test \
+            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly \
+            --remote_default_exec_properties=container-image="$worker_image" \
+            --keep_going \
+            $targets
