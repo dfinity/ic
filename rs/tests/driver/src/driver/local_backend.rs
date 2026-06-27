@@ -1014,11 +1014,16 @@ impl LocalBackend {
                     cmd.arg(format!("{min_gib}G"));
                 }
             }
-            let status = cmd
-                .status()
-                .with_context(|| format!("creating qcow2 overlay {}", primary_disk.display()))?;
-            if !status.success() {
-                bail!("creating qcow2 overlay {} failed", primary_disk.display());
+            let output = cmd.output().with_context(|| {
+                format!("running qemu-img create for {}", primary_disk.display())
+            })?;
+            if !output.status.success() {
+                bail!(
+                    "creating qcow2 overlay {} failed with status {}: {}",
+                    primary_disk.display(),
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
             }
             std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
         }
@@ -1265,8 +1270,18 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
             src.display(),
             dst.display()
         );
-        // Extract into a fresh tempdir to find the disk-image entry.
-        let tmp = parent.join(format!(".extract-{}", std::process::id()));
+        // Extract into a fresh tempdir to find the disk-image entry. The dir
+        // name includes the destination file name (not just the pid) so that
+        // concurrent extractions of *different* images into the same parent
+        // directory — e.g. distinct base images under `image_cache`, which are
+        // guarded by distinct per-key locks — cannot collide on the scratch dir.
+        let tmp = parent.join(format!(
+            ".extract-{}-{}",
+            std::process::id(),
+            dst.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        ));
         std::fs::create_dir_all(&tmp)?;
         let status = Command::new("tar")
             .arg("-xf")
