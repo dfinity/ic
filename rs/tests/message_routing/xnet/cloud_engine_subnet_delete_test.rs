@@ -11,17 +11,22 @@ Runbook::
    CloudEngine subnet C.
 1. Install universal canisters US on S, UT on T, UC on C.
 2. Halt T.  Wait until T makes no progress.
-3. From UC make two bounded-wait (best-effort) update calls to UT that would
-   set UT's global data to a fixed blob.  The calls are fire-and-forget (UC
-   replies to its ingress immediately).
+3. From UC fire a bounded-wait call to UT that would set UT's global data to a
+   fixed blob.  The call is fire-and-forget (UC replies to its ingress
+   immediately) and remains stuck in the C -> T stream (T is halted).
 4. Halt C.  Wait until C makes no progress.
-5. From US fire 10 bounded-wait update calls to UC with 2 MB payload each
+5. From US submit 10 bounded-wait calls to UC with 2 MB payload each
    (generated at runtime, ingress stays small).  Each call's on_reject handler
-6. Then: delete C, unhalt T, verify T's registry version is the version at which C was deleted,
-   check UT global data is still empty, wait for all 10 calls from US to complete.
-7. Assert at least one call from US was rejected with DestinationInvalid (call
-   did not reach the stream) and at least one with SysUnknown (call reached
-   the stream but C is gone).
+   replies with the reject code as a 4-byte LE integer.  The 2 MB payloads
+   fill the S -> C stream, so some calls reach the stream while the rest stay
+   in US's output queue.
+6. Delete C, unhalt T, verify T's registry version is the version at which C
+   was deleted, check UT's global data is still empty (T must not pull messages
+   from the deleted C's stream), and wait for all 10 calls from US to complete.
+7. Assert at least one call from US was rejected with DestinationInvalid
+   (call did not reach the stream: no route after deletion) and at least one
+   with SysUnknown (call reached the stream but C is gone, so the bounded-wait
+   callback times out).
 
 Success::
 All assertions pass.
@@ -170,32 +175,29 @@ async fn test_async(env: TestEnv) {
     );
     slog::info!(logger, "Step 1 done: subnet T is halted");
 
-    // Step 2: Fire two bounded-wait calls from UC to UT that set UT's global
+    // Step 2: Fire a bounded-wait call from UC to UT that would set UT's global
     // data to FIXED_BLOB.  UC replies to its ingress immediately (fire-and-forget).
     slog::info!(
         logger,
-        "Step 2: Firing 2 bounded-wait UC->UT calls (fire-and-forget)"
+        "Step 2: Firing bounded-wait UC->UT call (fire-and-forget)"
     );
-    for i in 0..2 {
-        uc.update(
-            wasm()
-                .call_simple_with_cycles_and_best_effort_response(
-                    ut.canister_id(),
-                    "update",
-                    call_args()
-                        .other_side(wasm().set_global_data(FIXED_BLOB).reply_data(&[]))
-                        .on_reply(wasm().noop())
-                        .on_reject(wasm().noop()),
-                    0_u128,
-                    CALL_TIMEOUT_SECS,
-                )
-                .reply_data(&[]),
-        )
-        .await
-        .expect("UC fire-and-forget call to UT should succeed");
-        slog::info!(logger, "Step 2: UC->UT fire-and-forget call {} sent", i + 1);
-    }
-    slog::info!(logger, "Step 2 done: both UC->UT calls fired");
+    uc.update(
+        wasm()
+            .call_simple_with_cycles_and_best_effort_response(
+                ut.canister_id(),
+                "update",
+                call_args()
+                    .other_side(wasm().set_global_data(FIXED_BLOB).reply_data(&[]))
+                    .on_reply(wasm().noop())
+                    .on_reject(wasm().noop()),
+                0_u128,
+                CALL_TIMEOUT_SECS,
+            )
+            .reply_data(&[]),
+    )
+    .await
+    .expect("UC fire-and-forget call to UT should succeed");
+    slog::info!(logger, "Step 2 done: UC->UT fire-and-forget call fired");
 
     // Step 3: Halt subnet C and wait until C makes no progress.
     slog::info!(logger, "Step 3: Halting subnet C ({})", c_subnet.subnet_id);

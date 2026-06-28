@@ -19,11 +19,11 @@
 //! Runbook:
 //!   1. Install universal canisters `US` on `S`, `UT` on `T`, `UC` on `C`.
 //!   2. Halt `T` (stop executing rounds on it).
-//!   3. From `UC` fire a best-effort call to `UT` that would set `UT`'s
+//!   3. From `UC` fire a bounded-wait call to `UT` that would set `UT`'s
 //!      global data to a fixed blob. The call is fire-and-forget (`UC` replies
 //!      to its ingress immediately) and remains stuck in the `C -> T` stream.
 //!   4. Halt `C`.
-//!   5. From `US` submit 10 best-effort calls to `UC` with a 2 MB payload each
+//!   5. From `US` submit 10 bounded-wait calls to `UC` with a 2 MB payload each
 //!      (generated at runtime, so the ingress stays small). Each call's
 //!      `on_reject` handler replies with the reject code as a 4-byte LE integer.
 //!      The 2 MB payloads fill the `S -> C` stream (`TARGET_STREAM_SIZE_BYTES`),
@@ -33,7 +33,7 @@
 //!   7. Assert at least one call from `US` was rejected with `DestinationInvalid`
 //!      (call did not reach the stream: no route after deletion) and at least one
 //!      with `SysUnknown` (call reached the stream but `C` is gone, so the
-//!      best-effort callback times out).
+//!      bounded-wait callback times out).
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
@@ -194,7 +194,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
 
     // Step 2: Halt subnet T by simply not executing any rounds on it from now on.
 
-    // Step 3: Fire a fire-and-forget best-effort call from UC to UT that would
+    // Step 3: Fire a fire-and-forget bounded-wait call from UC to UT that would
     // set UT's global data to FIXED_BLOB. UC replies to its ingress immediately,
     // and the call remains stuck in the C -> T stream (T is halted).
     let payload = wasm()
@@ -224,7 +224,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
 
     // Step 4: Halt subnet C by not executing any more rounds on it.
 
-    // Step 5: Submit 10 best-effort calls from US to UC, each producing a 2 MB
+    // Step 5: Submit 10 bounded-wait calls from US to UC, each producing a 2 MB
     // payload at runtime (the ingress itself stays small). The on_reject handler
     // replies with the reject code as a 4-byte LE integer.
     let us_uc_payload = wasm()
