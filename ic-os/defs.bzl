@@ -143,38 +143,6 @@ def icos_build(
         target_compatible_with = ["@platforms//os:linux"],
     )
 
-    # To be 100% correct, this rule should also live below and be duplicated to the default and the test variant but
-    # since the extracted files are the same in both variants, it's a bit simpler to not duplicate it and only extract
-    # from the default variant.
-    native.genrule(
-        name = "extract_boot_partition_files",
-        srcs = [":partition-boot.tzst"],
-        outs = [
-            "extracted_boot_args",
-            "extracted_initrd.img",
-            "extracted_vmlinuz",
-            "extracted_OVMF_SEV.fd",
-        ],
-        cmd = """
-            tmpdir="$$(mktemp -d)"
-            trap 'rm -rf "$$tmpdir"' EXIT
-
-            tar --extract -a --file "$<" --directory "$$tmpdir"
-
-            # initrd and vmlinuz are symlinks, first extract the symlink targets
-            initrd_target="$$(/usr/sbin/debugfs -R "stat /initrd.img" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
-            vmlinuz_target="$$(/usr/sbin/debugfs -R "stat /vmlinuz" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
-
-            /usr/sbin/debugfs -R "dump /boot_args $(@D)/extracted_boot_args" "$$tmpdir/partition.img"
-            /usr/sbin/debugfs -R "dump /OVMF_SEV.fd $(@D)/extracted_OVMF_SEV.fd" "$$tmpdir/partition.img"
-            /usr/sbin/debugfs -R "dump /$$initrd_target $(@D)/extracted_initrd.img" "$$tmpdir/partition.img"
-            /usr/sbin/debugfs -R "dump /$$vmlinuz_target $(@D)/extracted_vmlinuz" "$$tmpdir/partition.img"
-        """,
-        message = "Extracting files from boot partition",
-        tags = ["manual"],
-        target_compatible_with = ["@platforms//os:linux"],
-    )
-
     # -------------------- Extract root and boot partitions --------------------
 
     # NOTE: e2fsdroid does not support filenames with spaces, fortunately,
@@ -257,6 +225,42 @@ def icos_build(
                 tags = ["manual", "no-cache"],
             )
 
+        # Extract individual files (boot args, initrd, vmlinuz, OVMF firmware) from the
+        # boot partition image for use in launch measurement generation and boot arg aliasing.
+        extracted_boot_args = "extracted_boot" + test_suffix + "_args"
+        extracted_initrd = "extracted_initrd" + test_suffix + ".img"
+        extracted_vmlinuz = "extracted_vmlinuz" + test_suffix
+        extracted_ovmf_sev = "extracted_OVMF_SEV" + test_suffix + ".fd"
+
+        native.genrule(
+            name = "extract_boot_partition_files" + test_suffix,
+            srcs = [":" + partition_boot_tzst],
+            outs = [
+                extracted_boot_args,
+                extracted_initrd,
+                extracted_vmlinuz,
+                extracted_ovmf_sev,
+            ],
+            cmd = """
+                tmpdir="$$(mktemp -d)"
+                trap 'rm -rf "$$tmpdir"' EXIT
+
+                tar --extract -a --file "$<" --directory "$$tmpdir"
+
+                # initrd and vmlinuz are symlinks, first extract the symlink targets
+                initrd_target="$$(/usr/sbin/debugfs -R "stat /initrd.img" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
+                vmlinuz_target="$$(/usr/sbin/debugfs -R "stat /vmlinuz" "$$tmpdir/partition.img" | sed -n 's/^Fast link dest: "\\(.*\\)"$$/\\1/p')"
+
+                /usr/sbin/debugfs -R "dump /boot_args $(@D)/""" + extracted_boot_args + """" "$$tmpdir/partition.img"
+                /usr/sbin/debugfs -R "dump /OVMF_SEV.fd $(@D)/""" + extracted_ovmf_sev + """" "$$tmpdir/partition.img"
+                /usr/sbin/debugfs -R "dump /$$initrd_target $(@D)/""" + extracted_initrd + """" "$$tmpdir/partition.img"
+                /usr/sbin/debugfs -R "dump /$$vmlinuz_target $(@D)/""" + extracted_vmlinuz + """" "$$tmpdir/partition.img"
+            """,
+            message = "Extracting files from boot partition",
+            tags = ["manual"],
+            target_compatible_with = ["@platforms//os:linux"],
+        )
+
         # The kernel command line (boot args) is usually generated from boot_args_template:
         # - For OS requiring root signing: Template includes ROOT_HASH placeholder that gets substituted with dm-verity hash
         # - For OS not requiring root signing: Template is used as-is without ROOT_HASH substitution
@@ -298,7 +302,7 @@ def icos_build(
             if build_alternative_guestos_image:
                 native.alias(
                     name = boot_args,
-                    actual = ":extracted_boot_args",
+                    actual = ":" + extracted_boot_args,
                     tags = ["manual"],
                 )
             else:
@@ -315,7 +319,7 @@ def icos_build(
             native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
             native.alias(
                 name = boot_args,
-                actual = ":extracted_boot_args" if build_alternative_guestos_image else ":boot_args_template",
+                actual = ":" + extracted_boot_args if build_alternative_guestos_image else ":boot_args_template",
                 tags = ["manual"],
             )
 
@@ -336,21 +340,21 @@ def icos_build(
             # are validated against the proposal *in the same genrule* so that the
             # validation can never become a leaf target that is silently skipped.
             measurement_srcs = [
-                ":extracted_OVMF_SEV.fd",
-                ":extracted_boot_args",
-                ":extracted_initrd.img",
-                ":extracted_vmlinuz",
+                ":" + extracted_ovmf_sev,
+                ":" + extracted_boot_args,
+                ":" + extracted_initrd,
+                ":" + extracted_vmlinuz,
             ]
             measurement_tools = ["//ic-os:sev-snp-measure"]
             measurement_cmd = r"""
-                    source $(execpath :extracted_boot_args)
+                    source $(execpath :""" + extracted_boot_args + r""")
                     # Create GuestLaunchMeasurements JSON for each CPU generation, vCPU count, and boot slot
                     (for vcpu_type in """ + " ".join(vcpu_types) + """; do
                         for vcpus in """ + vcpu_configs + """; do
                             # Note: We only create launch measurements for the TEE boot arg variants
                             # (BOOT_ARGS_TEE_A and BOOT_ARGS_TEE_B)
                             for cmdline in "$$BOOT_ARGS_TEE_A" "$$BOOT_ARGS_TEE_B"; do
-                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath extracted_OVMF_SEV.fd)" --vcpu-type "$$vcpu_type" --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
+                                hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus $$vcpus --ovmf "$(execpath """ + extracted_ovmf_sev + """)" --vcpu-type "$$vcpu_type" --append "$$cmdline" --initrd "$(location """ + extracted_initrd + """)" --kernel "$(location """ + extracted_vmlinuz + """)")
                                 # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                                 measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
                                 jq -na --arg cmd "$$cmdline" --arg m "$$measurement" --arg vcpu_type "$$vcpu_type" '{
