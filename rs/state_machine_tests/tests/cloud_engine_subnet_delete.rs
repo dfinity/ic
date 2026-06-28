@@ -56,7 +56,7 @@ use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const NUM_CALLS: usize = 10;
 /// Payload size per `US -> UC` call. `2 MB` is below `MAX_INTER_CANISTER_PAYLOAD_IN_BYTES`
-/// (`2 MiB`) and `5` such payloads exceed `TARGET_STREAM_SIZE_BYTES` (`10 MiB`),
+/// (`2 MiB`) and `6` such payloads exceed `TARGET_STREAM_SIZE_BYTES` (`10 MiB`),
 /// so the `S -> C` stream fills up and only some of the calls reach it.
 const PAYLOAD_SIZE: u32 = 2 * 1000 * 1000;
 /// Best-effort call timeout. Chosen comfortably larger than the number of rounds
