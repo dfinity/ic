@@ -17,10 +17,8 @@ Runbook::
 4. Halt C.  Wait until C makes no progress.
 5. From US fire 10 bounded-wait update calls to UC with 2 MB payload each
    (generated at runtime, ingress stays small).  Each call's on_reject handler
-   replies with the reject code as a 4-byte LE integer.
-6. Concurrently: delete C, unhalt T, verify T's registry version is the version
-   at which C was deleted, check UT global data is still empty, wait for all
-   10 calls from US to complete.
+6. Then: delete C, unhalt T, verify T's registry version is the version at which C was deleted,
+   check UT global data is still empty, wait for all 10 calls from US to complete.
 7. Assert at least one call from US was rejected with DestinationInvalid (call
    did not reach the stream) and at least one with SysUnknown (call reached
    the stream but C is gone).
