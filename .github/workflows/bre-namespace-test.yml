@@ -61,11 +61,12 @@ jobs:
           set -euo pipefail
 
           # Custom worker image: a mirror of ic-build, pinned to an immutable digest
-          # and optimized for BRE. This reference is kept up to date automatically by
-          # the 'update-worker-reference' job in container-autobuild.yml.
+          # and optimized for BRE. The ref below (Namespace tenant registry + digest)
+          # is kept up to date automatically by the 'update-image-references' job in
+          # container-autobuild.yml.
           # NOTE: the placeholder digest below is replaced on the first ic-build
           # rebuild after this workflow is introduced; until then this job will fail.
-          worker_image="docker://nscr.io/dfinity/ic-build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
           targets="${{ inputs.targets || '//...' }}"
 
