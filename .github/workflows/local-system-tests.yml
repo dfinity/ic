@@ -1,11 +1,6 @@
 name: local-system-tests
 
 on:
-  # TODO: remove before merge:
-  push:
-    branches:
-      - bas/local-backend-qcow2-overlays
-
   schedule:
     - cron: "0 21 * * *" # 21:00 UTC
   workflow_dispatch:
