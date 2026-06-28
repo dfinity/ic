@@ -13,7 +13,6 @@ canister-test = { path = "../../../rust_canisters/canister_test" }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-error-types = { path = "../../../../packages/ic-error-types" }
-ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
