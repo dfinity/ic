@@ -128,9 +128,8 @@ jobs:
           set -xeuo pipefail
 
           # 'nsc base-image upload' pushes a *relative* name into the Namespace tenant
-          # registry, prepending $NSC_CONTAINER_REGISTRY (e.g. nscr.io/<tenant>). Do
-          # NOT pass a fully-qualified ref here or it gets double-prefixed. We derive
-          # the same registry for the digest lookup so both refer to one image.
+          # registry, prepending $NSC_CONTAINER_REGISTRY (e.g. nscr.io/<tenant>). Do NOT
+          # pass a fully-qualified ref here or it gets double-prefixed.
           : "${NSC_CONTAINER_REGISTRY:?NSC_CONTAINER_REGISTRY is not set on this runner}"
 
           # Mirror the (unchanged) ic-build image -- just pushed to GHCR and pinned by
@@ -141,16 +140,22 @@ jobs:
           worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
 
           nsc docker login
-          nsc base-image upload "$src" "ic-build-worker:$worker_tag"
 
-          # BRE requires an immutable digest (mutable tags are rejected). Resolve the
-          # digest of the image we just pushed.
-          worker_digest="$(docker buildx imagetools inspect "${worker_repo}:${worker_tag}" --format '{{.Manifest.Digest}}')"
+          # Upload, then read the pushed digest from nsc's own "Uploaded base image:"
+          # line. We parse the upload output rather than 'docker buildx imagetools
+          # inspect', whose --format prints the whole manifest for the multi-platform
+          # attestation index that docker/build-push-action emits. BRE needs an
+          # immutable digest (mutable tags are rejected).
+          upload_log="$(nsc base-image upload "$src" "ic-build-worker:$worker_tag" 2>&1)"
+          echo "$upload_log"
+          worker_digest="$(printf '%s\n' "$upload_log" | grep -i 'Uploaded base image' | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
+          : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
           worker_image="${worker_repo}@${worker_digest}"
           echo "Resolved worker image: $worker_image"
 
           # Optimize the pinned digest into a fast-booting worker variant. This blocks
           # until ready and only needs to be done once per digest.
+          # NOTE: requires the 'baseimage:optimize' permission on the tenant registry.
           nsc base-image optimize --image_ref "$worker_image"
 
           echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
