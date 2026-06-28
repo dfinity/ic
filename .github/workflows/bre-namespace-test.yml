@@ -57,6 +57,8 @@ jobs:
       - uses: ./.github/actions/netrc
       - name: Bazel Test with BRE
         shell: bash
+        env:
+          BAZEL_TARGETS: ${{ inputs.targets || '//...' }}
         run: |
           set -euo pipefail
 
@@ -68,8 +70,7 @@ jobs:
           # rebuild after this workflow is introduced; until then this job will fail.
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
-          targets="${{ inputs.targets || '//...' }}"
-
+          targets="$BAZEL_TARGETS"
           # We deliberately bypass the workspace .bazelrc (which pulls in the
           # DFINITY-internal cache / remote-execution config) and instead pass the
           # build config plus the Namespace RBE config explicitly, mirroring the
