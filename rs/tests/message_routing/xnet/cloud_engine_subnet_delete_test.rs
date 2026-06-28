@@ -34,9 +34,12 @@ All assertions pass.
 end::catalog[] */
 
 use anyhow::{Result, bail};
-use candid::Encode;
+use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_consensus_system_test_utils::rw_message::cert_state_makes_no_progress_with_retries;
+use ic_management_canister_types_private::{
+    IC_00, Method, Payload, SubnetInfoArgs, SubnetInfoResponse,
+};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -44,14 +47,12 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
-    RETRY_BACKOFF, SubnetSnapshot, install_registry_canister_with_testnet_topology,
+    RETRY_BACKOFF, install_registry_canister_with_testnet_topology,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{
-    MetricsFetcher, UniversalCanister, assert_create_agent, block_on,
-};
-use ic_types::Height;
+use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
+use ic_types::{Height, SubnetId};
 use ic_universal_canister::{call_args, wasm};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
@@ -312,7 +313,8 @@ async fn test_async(env: TestEnv) {
         "Step 6c: Waiting for subnet T to observe registry version {}",
         c_delete_registry_version,
     );
-    wait_for_subnet_registry_version(t_subnet, c_delete_registry_version, &logger).await;
+    wait_for_subnet_registry_version(&ut, t_subnet.subnet_id, c_delete_registry_version, &logger)
+        .await;
     slog::info!(
         logger,
         "Step 6c done: subnet T has observed registry version {}",
@@ -442,35 +444,47 @@ async fn set_subnet_halted(
 }
 
 async fn wait_for_subnet_registry_version(
-    subnet: &SubnetSnapshot,
+    ut: &UniversalCanister<'_>,
+    subnet_id: SubnetId,
     target_version: u64,
     logger: &slog::Logger,
 ) {
-    let subnet_id = subnet.subnet_id;
-    let metrics = MetricsFetcher::new(subnet.nodes(), vec!["mr_registry_version".into()]);
     retry_with_msg_async!(
-        format!(
-            "waiting for subnet {subnet_id} to reach MR registry version {target_version}"
-        ),
+        format!("waiting for subnet {subnet_id} to reach registry version {target_version}"),
         logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            let values = metrics
-                .fetch::<u64>()
+            let reply = ut
+                .update(
+                    wasm()
+                        .call_simple(
+                            IC_00,
+                            Method::SubnetInfo,
+                            call_args().other_side(
+                                SubnetInfoArgs {
+                                    subnet_id: subnet_id.get(),
+                                }
+                                .encode(),
+                            ),
+                        )
+                        .build(),
+                )
                 .await
-                .map_err(|e| anyhow::anyhow!("failed to fetch metrics from {subnet_id}: {e}"))?;
-            let node_versions = values
-                .get("mr_registry_version")
-                .ok_or_else(|| anyhow::anyhow!("mr_registry_version not yet exposed on {subnet_id}"))?;
-            if let Some(v) = node_versions.iter().find(|&&v| v < target_version) {
-                bail!("subnet {subnet_id} node still at MR registry version {v} (target: {target_version})");
+                .map_err(|e| anyhow::anyhow!("subnet_info call failed: {e}"))?;
+            let response = Decode!(&reply, SubnetInfoResponse)
+                .map_err(|e| anyhow::anyhow!("failed to decode SubnetInfoResponse: {e}"))?;
+            if response.registry_version < target_version {
+                bail!(
+                    "subnet {subnet_id} at registry version {} (target: {target_version})",
+                    response.registry_version
+                );
             }
             Ok(())
         }
     )
     .await
     .unwrap_or_else(|e| {
-        panic!("subnet {subnet_id} did not reach MR registry version {target_version}: {e}")
+        panic!("subnet {subnet_id} did not reach registry version {target_version}: {e}")
     });
 }
