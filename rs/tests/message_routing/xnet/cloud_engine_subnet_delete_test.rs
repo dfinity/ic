@@ -306,38 +306,37 @@ async fn test_async(env: TestEnv) {
     set_subnet_halted(&governance, t_subnet.subnet_id, false).await;
     slog::info!(logger, "Step 6b done: subnet T unhalted");
 
-    // Step 6c: Wait for T to observe the registry version at which C was deleted,
-    // then advance T's state with a dummy call.
+    // Step 6c: Wait for T to observe the registry version at which C was deleted.
     slog::info!(
         logger,
         "Step 6c: Waiting for subnet T to observe registry version {}",
         c_delete_registry_version,
     );
     wait_for_subnet_registry_version(t_subnet, c_delete_registry_version, &logger).await;
-    ut.update(wasm().reply_data(&[]).build())
-        .await
-        .expect("dummy round-trip to UT should succeed");
     slog::info!(
         logger,
-        "Step 6c done: subnet T has observed registry version {} and state advanced",
+        "Step 6c done: subnet T has observed registry version {}",
         c_delete_registry_version,
     );
 
-    // Step 6d: Check that UT global data is still empty (T must not pull messages
-    // from the deleted C's stream).
+    // Step 6d: Execute multiple update rounds on T, checking after each that UT's
+    // global data is still empty (T must not pull messages from the deleted C's stream).
     slog::info!(
         logger,
-        "Step 6d: Checking that UT global data is still empty"
+        "Step 6d: Checking that UT global data remains empty over multiple rounds"
     );
-    let global_data = ut
-        .query(wasm().get_global_data().reply_data_append().reply().build())
-        .await
-        .expect("query to UT should succeed");
-    assert!(
-        global_data.is_empty(),
-        "UT global data should be empty but got {} bytes: {global_data:?}",
-        global_data.len()
-    );
+    for i in 0..5_usize {
+        let global_data = ut
+            .update(wasm().get_global_data().reply_data_append().reply().build())
+            .await
+            .expect("update to UT should succeed");
+        assert!(
+            global_data.is_empty(),
+            "UT global data should be empty at round {} but got {} bytes: {global_data:?}",
+            i + 1,
+            global_data.len()
+        );
+    }
     slog::info!(logger, "Step 6d done: UT global data is empty as expected");
 
     // Step 6e: Wait for all 10 calls from US to UC to complete.
