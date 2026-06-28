@@ -19,9 +19,9 @@
 //! Runbook:
 //!   1. Install universal canisters `US` on `S`, `UT` on `T`, `UC` on `C`.
 //!   2. Halt `T` (stop executing rounds on it).
-//!   3. From `UC` fire two best-effort calls to `UT` that would set `UT`'s
-//!      global data to a fixed blob. The calls are fire-and-forget (`UC` replies
-//!      to its ingress immediately) and remain stuck in the `C -> T` stream.
+//!   3. From `UC` fire a best-effort call to `UT` that would set `UT`'s
+//!      global data to a fixed blob. The call is fire-and-forget (`UC` replies
+//!      to its ingress immediately) and remains stuck in the `C -> T` stream.
 //!   4. Halt `C`.
 //!   5. From `US` submit 10 best-effort calls to `UC` with a 2 MB payload each
 //!      (generated at runtime, so the ingress stays small). Each call's
@@ -194,35 +194,33 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
 
     // Step 2: Halt subnet T by simply not executing any rounds on it from now on.
 
-    // Step 3: Fire two fire-and-forget best-effort calls from UC to UT that would
+    // Step 3: Fire a fire-and-forget best-effort call from UC to UT that would
     // set UT's global data to FIXED_BLOB. UC replies to its ingress immediately,
-    // and the calls remain stuck in the C -> T stream (T is halted).
-    for _ in 0..2 {
-        let payload = wasm()
-            .call_simple_with_cycles_and_best_effort_response(
-                ut,
-                "update",
-                call_args()
-                    .other_side(wasm().set_global_data(FIXED_BLOB).reply_data(&[]))
-                    .on_reply(wasm().noop())
-                    .on_reject(wasm().noop()),
-                0_u128,
-                CALL_TIMEOUT_SECS,
-            )
-            .reply_data(&[])
-            .build();
-        let msg_id = c.submit_ingress_as(user_id, uc, "update", payload).unwrap();
-        // UC replies to its ingress immediately after performing the call.
-        let mut completed = false;
-        for _ in 0..10 {
-            c.execute_round();
-            if ingress_result(&c, &msg_id).is_some() {
-                completed = true;
-                break;
-            }
+    // and the call remains stuck in the C -> T stream (T is halted).
+    let payload = wasm()
+        .call_simple_with_cycles_and_best_effort_response(
+            ut,
+            "update",
+            call_args()
+                .other_side(wasm().set_global_data(FIXED_BLOB).reply_data(&[]))
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+            0_u128,
+            CALL_TIMEOUT_SECS,
+        )
+        .reply_data(&[])
+        .build();
+    let msg_id = c.submit_ingress_as(user_id, uc, "update", payload).unwrap();
+    // UC replies to its ingress immediately after performing the call.
+    let mut completed = false;
+    for _ in 0..10 {
+        c.execute_round();
+        if ingress_result(&c, &msg_id).is_some() {
+            completed = true;
+            break;
         }
-        assert!(completed, "UC fire-and-forget ingress did not complete");
     }
+    assert!(completed, "UC fire-and-forget ingress did not complete");
 
     // Step 4: Halt subnet C by not executing any more rounds on it.
 
@@ -278,6 +276,23 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
         all_processing,
         "US did not perform all calls before deleting C"
     );
+
+    // Assert that the S -> C stream is partially filled: some calls reached the
+    // stream and some are still in US's output queue.
+    let state = s.get_latest_state();
+    assert!(
+        state
+            .get_stream(&c_id)
+            .map(|stream| stream.messages().len())
+            .unwrap_or(0)
+            > 0,
+        "expected some messages in the S -> C stream before deleting C"
+    );
+    assert!(
+        state.canister_state(&us).unwrap().has_output(),
+        "expected some messages in US's output queue before deleting C"
+    );
+    drop(state);
 
     // Step 6a: Delete subnet C. We remove it from the shared pool of subnets
     // (making it unreachable for S and T) and tombstone its registry records,
