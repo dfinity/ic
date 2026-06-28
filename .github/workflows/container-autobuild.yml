@@ -184,7 +184,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref }}
+          # head_ref is only set for pull_request; fall back to ref_name for push /
+          # workflow_dispatch so the checkout and git push target the right branch.
+          ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Update Image References
