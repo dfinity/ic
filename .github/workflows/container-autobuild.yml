@@ -21,7 +21,6 @@ concurrency:
 
 permissions:
   contents: write
-  id-token: write # OIDC token for 'nsc' (Namespace) auth in the bre-worker-image job
   packages: write
   pull-requests: write
 
