@@ -105,9 +105,9 @@ jobs:
 
   bre-worker-image:
     name: Build BRE Worker Image
-    # Runs on a Namespace runner where 'nsc' is pre-authenticated. Decoupled from
-    # 'update-image-references' below so that an early-access BRE failure can never
-    # block the production container image reference update.
+    # Runs on a Namespace runner where 'nsc' is pre-authenticated. 'update-image-references'
+    # waits for this job and pins the resulting digest in the same commit. Like
+    # 'ic-build-image', this job is required: if it fails, that's a bug to fix.
     runs-on: namespace-profile-amd64-linux-32x64
     needs: [build-image-prep, ic-build-image]
     # Restricted to the dfinity/ic repo and, for pull_request events, to non-fork
@@ -130,7 +130,7 @@ jobs:
           # Mirror the (unchanged) ic-build image -- just pushed to GHCR and pinned by
           # digest -- into the Namespace tenant registry (nscr.io). Namespace BRE
           # workers boot from this image.
-          src="ghcr.io/dfinity/ic-build@sha256:f4c6c7e0e16da470cba7ebceb0145f588d5fd4859c04acfa607bee475ecfa914"
+          src="ghcr.io/dfinity/ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
           worker_repo="nscr.io/dfinity/ic-build-worker"
           worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
           # Use the same fully-qualified ref for the upload destination and the
@@ -154,7 +154,12 @@ jobs:
   update-image-references:
     name: Update Image References in Repo
     runs-on: ubuntu-latest
-    needs: [build-image-prep, ic-build-image]
+    # Waits for the (slower) 'bre-worker-image' to finish before committing: the push
+    # this job makes triggers a new workflow run, and 'cancel-in-progress' in the
+    # concurrency group would otherwise cancel 'bre-worker-image' mid-optimize.
+    # Both 'ic-build-image' and 'bre-worker-image' are required (default 'needs'
+    # semantics): if either fails, that's a bug to fix.
+    needs: [build-image-prep, ic-build-image, bre-worker-image]
     if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
     steps:
       - name: Create GitHub App Token
@@ -189,13 +194,21 @@ jobs:
           sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
+          # Pin the BRE worker image (always produced by the required 'bre-worker-image').
+          WORKER_PREFIX="nscr.io/dfinity/"
+          IMG_NAME_WORKER="${WORKER_PREFIX}ic-build-worker@${{ needs.bre-worker-image.outputs.worker-imageid }}"
+          pushd .github
+          sed -i -E "s|${WORKER_PREFIX}ic-build-worker(:\|@)[^\"]{5,}|$IMG_NAME_WORKER|g" -- workflow*/*
+          popd
+
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
           git commit \
             -m 'Updating container images to tag: ${{ needs.build-image-prep.outputs.image_tag }}' \
             -m 'ic-build: ${{ needs.ic-build-image.outputs.ic-build-imageid }}' \
-            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imageid }}'
+            -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imageid }}' \
+            -m 'ic-build-worker: ${{ needs.bre-worker-image.outputs.worker-imageid }}'
           git push
 
       - name: Add PR Comment
@@ -210,6 +223,7 @@ jobs:
             message += 'New container images with tag: `${{ needs.build-image-prep.outputs.image_tag }}`\n'
             message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imageid }}`\n'
             message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imageid }}`\n'
+            message += 'ic-build-worker: `${{ needs.bre-worker-image.outputs.worker-imageid }}`\n'
 
             // Find existing comment from this workflow
             const comments = await github.rest.issues.listComments({
@@ -240,59 +254,3 @@ jobs:
                 body: message
               });
             }
-
-  update-worker-reference:
-    name: Update BRE Worker Image Reference in Repo
-    runs-on: ubuntu-latest
-    # Decoupled from 'update-image-references': a failure there must not prevent
-    # pinning a successfully-produced worker digest, so it is intentionally not in
-    # 'needs'. Pins the BRE worker image reference used by bre-namespace-test.yml to
-    # the freshly mirrored and optimized digest. Skipped automatically if
-    # 'bre-worker-image' failed (which also blocks fork PRs). The 'git pull --rebase'
-    # below absorbs any concurrent push from 'update-image-references'.
-    needs: [build-image-prep, bre-worker-image]
-    if: ${{ needs.build-image-prep.outputs.build_image == 'true' && github.repository == 'dfinity/ic' }}
-    steps:
-      - name: Create GitHub App Token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
-        id: app-token
-        with:
-          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
-
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Update Worker Image Reference
-        shell: bash
-        env:
-          BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          # Pin the BRE worker image reference (used by bre-namespace-test.yml) to the
-          # freshly mirrored and optimized digest.
-          set -xeuo pipefail
-
-          WORKER_PREFIX="nscr.io/dfinity/"
-          IMG_NAME_WORKER="${WORKER_PREFIX}ic-build-worker@${{ needs.bre-worker-image.outputs.worker-imageid }}"
-
-          pushd .github
-          sed -i -E "s|${WORKER_PREFIX}ic-build-worker(:\|@)[^\"]{5,}|$IMG_NAME_WORKER|g" -- workflow*/*
-          popd
-
-          git config --global user.name "IDX GitHub Automation"
-          git config --global user.email "<>"
-          git add .
-          if git diff --cached --quiet; then
-            echo "Worker image reference already up to date; nothing to commit."
-          else
-            git commit \
-              -m 'Updating BRE worker image reference' \
-              -m 'ic-build-worker: ${{ needs.bre-worker-image.outputs.worker-imageid }}'
-            # 'update-image-references' may have pushed first; rebase onto the latest
-            # tip before pushing (the two jobs edit disjoint files, so no conflict).
-            git pull --rebase origin "$BRANCH"
-            git push origin "HEAD:$BRANCH"
-          fi
