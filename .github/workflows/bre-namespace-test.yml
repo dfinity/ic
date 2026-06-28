@@ -27,7 +27,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   bazel-test-bre:
@@ -58,7 +57,7 @@ jobs:
       - name: Bazel Test with BRE
         shell: bash
         env:
-          BAZEL_TARGETS: ${{ inputs.targets || '//...' }}
+          BAZEL_TARGETS: ${{ github.event.inputs.targets || '//...' }}
         run: |
           set -euo pipefail
 

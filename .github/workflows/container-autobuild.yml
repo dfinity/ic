@@ -109,6 +109,9 @@ jobs:
     # waits for this job and pins the resulting digest in the same commit. Like
     # 'ic-build-image', this job is required: if it fails, that's a bug to fix.
     runs-on: namespace-profile-amd64-linux-32x64
+    # nsc authenticates via the runner's Namespace workspace identity, not the
+    # GITHUB_TOKEN, so this job needs no GitHub permissions (least privilege).
+    permissions: {}
     needs: [build-image-prep, ic-build-image]
     # Restricted to the dfinity/ic repo and, for pull_request events, to non-fork
     # PRs -- this job runs on a privileged Namespace runner with pre-authenticated
