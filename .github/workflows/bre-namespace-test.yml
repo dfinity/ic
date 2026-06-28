@@ -70,6 +70,10 @@ jobs:
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
 
           targets="$BAZEL_TARGETS"
+          # Split the (space-separated) target patterns into an array so each is passed
+          # as a single, quoted argument -- avoids word-splitting/glob surprises. The
+          # 'targets' input is workflow_dispatch-only and this job is gated to non-fork.
+          read -ra target_patterns <<<"$targets"
           # We deliberately bypass the workspace .bazelrc (which pulls in the
           # DFINITY-internal cache / remote-execution config) and instead pass the
           # build config plus the Namespace RBE config explicitly, mirroring the
@@ -81,4 +85,4 @@ jobs:
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly \
             --remote_default_exec_properties=container-image="$worker_image" \
             --keep_going \
-            $targets
+            "${target_patterns[@]}"
