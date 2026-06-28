@@ -144,8 +144,12 @@ async fn test_async(env: TestEnv) {
     let t_agent = assert_create_agent(t_node.get_public_url().as_str()).await;
     let c_agent = assert_create_agent(c_node.get_public_url().as_str()).await;
 
-    // Install governance UC at canister position 1 on NNS.
-    slog::info!(logger, "Installing universal canisters on NNS, S, T, C");
+    // Step 1: Install universal canisters US on S, UT on T, UC on C.
+    // Also install a governance UC on the NNS subnet to submit registry proposals.
+    slog::info!(
+        logger,
+        "Step 1: Installing universal canisters on NNS, S, T, C"
+    );
     let governance = UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
 
     let us = UniversalCanister::new_with_retries(&s_agent, s_node.effective_canister_id(), &logger)
@@ -156,15 +160,15 @@ async fn test_async(env: TestEnv) {
         .await;
     slog::info!(
         logger,
-        "Canisters installed: governance={}, US={}, UT={}, UC={}",
+        "Step 1 done: governance={}, US={}, UT={}, UC={}",
         governance.canister_id(),
         us.canister_id(),
         ut.canister_id(),
         uc.canister_id(),
     );
 
-    // Step 1: Halt subnet T and wait until T makes no progress.
-    slog::info!(logger, "Step 1: Halting subnet T ({})", t_subnet.subnet_id);
+    // Step 2: Halt subnet T and wait until T makes no progress.
+    slog::info!(logger, "Step 2: Halting subnet T ({})", t_subnet.subnet_id);
     set_subnet_halted(&governance, t_subnet.subnet_id, true).await;
     cert_state_makes_no_progress_with_retries(
         &t_node.get_public_url(),
@@ -173,13 +177,13 @@ async fn test_async(env: TestEnv) {
         Duration::from_secs(120),
         Duration::from_secs(5),
     );
-    slog::info!(logger, "Step 1 done: subnet T is halted");
+    slog::info!(logger, "Step 2 done: subnet T is halted");
 
-    // Step 2: Fire a bounded-wait call from UC to UT that would set UT's global
+    // Step 3: Fire a bounded-wait call from UC to UT that would set UT's global
     // data to FIXED_BLOB.  UC replies to its ingress immediately (fire-and-forget).
     slog::info!(
         logger,
-        "Step 2: Firing bounded-wait UC->UT call (fire-and-forget)"
+        "Step 3: Firing bounded-wait UC->UT call (fire-and-forget)"
     );
     uc.update(
         wasm()
@@ -197,10 +201,10 @@ async fn test_async(env: TestEnv) {
     )
     .await
     .expect("UC fire-and-forget call to UT should succeed");
-    slog::info!(logger, "Step 2 done: UC->UT fire-and-forget call fired");
+    slog::info!(logger, "Step 3 done: UC->UT fire-and-forget call fired");
 
-    // Step 3: Halt subnet C and wait until C makes no progress.
-    slog::info!(logger, "Step 3: Halting subnet C ({})", c_subnet.subnet_id);
+    // Step 4: Halt subnet C and wait until C makes no progress.
+    slog::info!(logger, "Step 4: Halting subnet C ({})", c_subnet.subnet_id);
     set_subnet_halted(&governance, c_subnet.subnet_id, true).await;
     cert_state_makes_no_progress_with_retries(
         &c_node.get_public_url(),
@@ -209,16 +213,16 @@ async fn test_async(env: TestEnv) {
         Duration::from_secs(120),
         Duration::from_secs(5),
     );
-    slog::info!(logger, "Step 3 done: subnet C is halted");
+    slog::info!(logger, "Step 4 done: subnet C is halted");
 
-    // Step 4: Submit 10 bounded-wait calls from US to UC each with 2 MB payload
+    // Step 5: Submit 10 bounded-wait calls from US to UC each with 2 MB payload
     // (generated at runtime on S; the ingress itself is small).
     // The on_reject handler replies with the reject code as a 4-byte LE integer.
-    // We submit all 10 calls before proceeding to step 5 so that they are
-    // in-flight in the S→C stream before C is deleted.
+    // We submit all 10 calls before step 6 so they are in-flight in the S->C
+    // stream before C is deleted.
     slog::info!(
         logger,
-        "Step 4: Submitting 10 bounded-wait US->UC calls (2 MB payload each)"
+        "Step 5: Submitting 10 bounded-wait US->UC calls (2 MB payload each)"
     );
     let us_uc_wasm: Vec<u8> = wasm()
         .call_simple_with_cycles_and_best_effort_response(
@@ -261,10 +265,14 @@ async fn test_async(env: TestEnv) {
         }
     }))
     .await;
-    slog::info!(logger, "Step 4 done: {} pending", us_uc_request_ids.len());
+    slog::info!(logger, "Step 5 done: {} pending", us_uc_request_ids.len());
 
-    // Step 5: Delete subnet C.
-    slog::info!(logger, "Step 5: Deleting subnet C ({})", c_subnet.subnet_id);
+    // Step 6a: Delete subnet C.
+    slog::info!(
+        logger,
+        "Step 6a: Deleting subnet C ({})",
+        c_subnet.subnet_id
+    );
     let delete_arg = DeleteSubnetPayload {
         subnet_id: c_subnet.subnet_id.get().into(),
     };
@@ -285,43 +293,41 @@ async fn test_async(env: TestEnv) {
     let c_delete_registry_version = topo_after_delete.get_registry_version().get();
     slog::info!(
         logger,
-        "Step 5 done: subnet C deleted at registry version {}",
+        "Step 6a done: subnet C deleted at registry version {}",
         c_delete_registry_version,
     );
 
-    // Step 6: Unhalt subnet T.
+    // Step 6b: Unhalt subnet T.
     slog::info!(
         logger,
-        "Step 6: Unhalting subnet T ({})",
+        "Step 6b: Unhalting subnet T ({})",
         t_subnet.subnet_id
     );
     set_subnet_halted(&governance, t_subnet.subnet_id, false).await;
-    slog::info!(logger, "Step 6 done: subnet T unhalted");
+    slog::info!(logger, "Step 6b done: subnet T unhalted");
 
-    // Step 7: Wait until T has observed the registry version at which C was deleted.
+    // Step 6c: Wait for T to observe the registry version at which C was deleted,
+    // then advance T's state with a dummy call.
     slog::info!(
         logger,
-        "Step 7: Waiting for subnet T to observe registry version {}",
+        "Step 6c: Waiting for subnet T to observe registry version {}",
         c_delete_registry_version,
     );
     wait_for_subnet_registry_version(t_subnet, c_delete_registry_version, &logger).await;
-    slog::info!(
-        logger,
-        "Step 7 done: subnet T has observed registry version {}",
-        c_delete_registry_version,
-    );
-
-    // Step 8: One more round on T (dummy call to advance state).
-    slog::info!(logger, "Step 8: Advancing T state with a dummy call to UT");
     ut.update(wasm().reply_data(&[]).build())
         .await
         .expect("dummy round-trip to UT should succeed");
-    slog::info!(logger, "Step 8 done: T state advanced");
-
-    // Step 9: Check that UT global data is still empty.
     slog::info!(
         logger,
-        "Step 9: Checking that UT global data is still empty"
+        "Step 6c done: subnet T has observed registry version {} and state advanced",
+        c_delete_registry_version,
+    );
+
+    // Step 6d: Check that UT global data is still empty (T must not pull messages
+    // from the deleted C's stream).
+    slog::info!(
+        logger,
+        "Step 6d: Checking that UT global data is still empty"
     );
     let global_data = ut
         .query(wasm().get_global_data().reply_data_append().reply().build())
@@ -332,20 +338,26 @@ async fn test_async(env: TestEnv) {
         "UT global data should be empty but got {} bytes: {global_data:?}",
         global_data.len()
     );
-    slog::info!(logger, "Step 9 done: UT global data is empty as expected");
+    slog::info!(logger, "Step 6d done: UT global data is empty as expected");
 
-    // Step 10: Verify that all 10 calls from US to UC were rejected.
-    // At least one must have DestinationInvalid (3) and at least one must have
-    // SysUnknown (6).
+    // Step 6e: Wait for all 10 calls from US to UC to complete.
+    slog::info!(
+        logger,
+        "Step 6e: Waiting for all 10 US->UC calls to complete"
+    );
     let us_uc_results = join_all(
         us_uc_request_ids
             .iter()
             .map(|req_id| s_agent.wait(req_id, us.canister_id())),
     )
     .await;
+    slog::info!(logger, "Step 6e done: all 10 US->UC calls completed");
+
+    // Step 7: Assert at least one call from US was rejected with DestinationInvalid
+    // and at least one with SysUnknown.
     slog::info!(
         logger,
-        "Step 10: Analyzing reject codes for 10 US->UC calls"
+        "Step 7: Asserting rejection codes for 10 US->UC calls"
     );
     let mut dest_invalid_count = 0_usize;
     let mut sys_unknown_count = 0_usize;
@@ -358,7 +370,7 @@ async fn test_async(env: TestEnv) {
             bytes.len()
         );
         let code = u32::from_le_bytes(bytes.try_into().unwrap());
-        slog::info!(logger, "Step 10: US->UC reject code {}", code);
+        slog::info!(logger, "Step 7: US->UC reject code {}", code);
         match code {
             3 => dest_invalid_count += 1,
             6 => sys_unknown_count += 1,
@@ -367,7 +379,7 @@ async fn test_async(env: TestEnv) {
     }
     slog::info!(
         logger,
-        "Step 10: DestinationInvalid={}, SysUnknown={}",
+        "Step 7 done: DestinationInvalid={}, SysUnknown={}",
         dest_invalid_count,
         sys_unknown_count,
     );
