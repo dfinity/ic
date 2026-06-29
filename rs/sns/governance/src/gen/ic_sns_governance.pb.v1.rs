@@ -545,7 +545,7 @@ pub mod transfer_sns_treasury_funds {
         }
     }
 }
-/// A proposal function that changes the ledger's parameters.
+/// A proposal function that changes the SNS ledger canister's parameters.
 /// Fields with None values will remain unchanged.
 #[derive(
     candid::CandidType,
