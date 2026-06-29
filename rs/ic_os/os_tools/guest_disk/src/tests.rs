@@ -15,6 +15,7 @@ use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
     CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
+use prometheus::Registry;
 use sev::Generation;
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
@@ -504,7 +505,6 @@ fn test_fail_to_open_if_device_is_not_formatted() {
 fn test_format_store_refuses_existing_detached_header() {
     let temp_dir = tempdir().unwrap();
     let store_luks_header_path = temp_dir.path().join("store.header");
-    let metrics_file = temp_dir.path().join("metrics.prom");
 
     fs::write(&store_luks_header_path, b"stale header")
         .expect("Failed to write stale detached Store header");
@@ -514,7 +514,7 @@ fn test_format_store_refuses_existing_detached_header() {
         previous_key_path: temp_dir.path().join("previous_key"),
         store_luks_header_path: store_luks_header_path.clone(),
         guest_vm_type: GuestVMType::Default,
-        metrics_file,
+        metrics_registry: Registry::new(),
     };
 
     let err = guest_disk::DiskEncryption::format(
@@ -1358,6 +1358,92 @@ fn test_metrics_export() {
     assert!(
         metrics_content.contains("passes_verification=\"true\""),
         "Missing or incorrect passes_verification label: {metrics_content}"
+    );
+}
+
+#[test]
+fn test_store_attached_luks2_header_status_metric_absent() {
+    let mut fixture = TestFixture::new(true);
+
+    // Format the store partition with a detached header only; there is no attached header on the
+    // data device.
+    fixture
+        .format(Partition::Store)
+        .expect("Failed to format store partition");
+
+    fixture
+        .open(Partition::Store)
+        .expect("Failed to open store partition");
+
+    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Store))
+        .expect("Failed to read metrics file");
+
+    assert!(
+        metrics_content.contains("guest_disk_store_attached_luks2_header_status"),
+        "Missing attached LUKS2 header status metric: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("status=\"absent\""),
+        "Expected status=\"absent\" label: {metrics_content}"
+    );
+    assert!(
+        !metrics_content.contains("status=\"present\""),
+        "Did not expect status=\"present\" label: {metrics_content}"
+    );
+}
+
+#[test]
+fn test_store_attached_luks2_header_status_metric_present() {
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+
+    let mut fixture = TestFixture::new(true);
+
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY)
+        .expect("Failed to write previous key for testing");
+
+    // Simulate a legacy device that has both an attached and a detached header.
+    format_crypt_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Attached,
+        PREVIOUS_KEY,
+    )
+    .expect("Failed to format device with attached header");
+
+    backup_luks_header_to_file(
+        &fixture.device.path().unwrap(),
+        &fixture.store_luks_header_path,
+    )
+    .expect("Failed to create detached header backup");
+
+    assert!(fixture.has_attached_luks2_header());
+
+    fixture
+        .open(Partition::Store)
+        .expect("opening Store should succeed");
+
+    // After opening, the attached header is wiped because a detached header is available.
+    // The metric reflects the end result, so it must report "absent".
+    assert!(
+        !fixture.has_attached_luks2_header(),
+        "attached LUKS header should have been wiped during open()"
+    );
+
+    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Store))
+        .expect("Failed to read metrics file");
+
+    assert!(
+        metrics_content.contains("guest_disk_store_attached_luks2_header_status"),
+        "Missing attached LUKS2 header status metric: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("status=\"absent\""),
+        "Expected status=\"absent\" after wipe: {metrics_content}"
+    );
+    // The LUKS parameters metric must still be present (not overwritten by the header status
+    // metric).
+    assert!(
+        metrics_content.contains("guest_disk_encryption_info"),
+        "Missing encryption info metric: {metrics_content}"
     );
 }
 

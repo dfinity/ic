@@ -6,6 +6,7 @@ use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
     CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
+use prometheus::Registry;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -142,7 +143,7 @@ pub fn activate_crypt_device(
     passphrase: &[u8],
     flags: CryptActivate,
     verify_luks_params: bool,
-    metrics_file: Option<&Path>,
+    metrics_registry: Option<&Registry>,
 ) -> Result<(CryptDevice, u32)> {
     let mut crypt_device = open_luks2_device(device_path, header_location)?;
 
@@ -154,9 +155,9 @@ pub fn activate_crypt_device(
         .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
-    if let Some(metrics_file) = metrics_file {
+    if let Some(registry) = metrics_registry {
         let log_result = luks_parameters.and_then(|luks_parameters| {
-            export_luks_parameters(metrics_file, &luks_parameters, device_path, active_keyslot)
+            export_luks_parameters(registry, &luks_parameters, device_path, active_keyslot)
         });
         if let Err(e) = log_result {
             warn!("Failed to export LUKS parameters: {e:#}");
