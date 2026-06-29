@@ -1,8 +1,9 @@
-use crate::lazy_tree::{LazyFork, LazyTree};
+use crate::lazy_tree::{LazyTree, SubtreeSource};
 use crypto::WitnessGenerationError;
 use ic_crypto_tree_hash::{
     self as crypto, Digest, Label, LabeledTree, WitnessBuilder, hasher::Hasher,
 };
+use ic_utils::iter::left_outer_join;
 use itertools::izip;
 use std::fmt;
 use std::iter::repeat_with;
@@ -15,6 +16,19 @@ const NUMBER_OF_CERTIFICATION_THREADS: u32 = 16;
 /// Note that in the current implementation the recursion depth corresponds to
 /// the depth of the lazy tree.
 const MAX_RECURSION_DEPTH: u32 = 128;
+
+/// A fork with fewer than this many (expensive to build) children is always
+/// built sequentially: it is too small for the thread pool to pay for itself.
+pub const PARALLEL_MIN_CHILDREN: usize = 1000;
+
+/// Forks start being built sequentially. In the meantime, we track how many
+/// children have been materialized and hashed — as opposed to cheaply reused
+/// from the baseline.
+///
+/// Once we've sampled at least this many children, if the projected number of
+/// expensively built children exceeds `PARALLEL_MIN_CHILDREN`, we switch to
+/// building in parallel.
+const ADAPTIVE_WARMUP_CHILDREN: usize = 500;
 
 /// SHA256 of the domain separator "ic-hashtree-empty"
 const EMPTY_HASH: Digest = Digest([
@@ -29,13 +43,14 @@ const EMPTY_LEAF_HASH: Digest = Digest([
     0xc0, 0x2a, 0x23, 0xa5, 0x1e, 0x08, 0x98, 0xbc, 0x2c, 0x4e, 0x32, 0x3f, 0xce, 0x0e, 0x62, 0x2c,
 ]);
 
-/// 30 LSBs are used to store the index
-const INDEX_MASK: u32 = 0x3fff_ffff;
-/// 2 MSBs are used to store the node kind
-const KIND_MASK: u32 = 0xc000_0000;
-const LEAF_KIND: u32 = 0x4000_0000;
-const NODE_KIND: u32 = 0x8000_0000;
-const FORK_KIND: u32 = 0xc000_0000;
+/// 29 LSBs are used to store the index
+const INDEX_MASK: u32 = 0x1fff_ffff;
+/// 3 MSBs are used to store the node kind
+const KIND_MASK: u32 = 0xe000_0000;
+const LEAF_KIND: u32 = 0x2000_0000;
+const NODE_KIND: u32 = 0x4000_0000;
+const FORK_KIND: u32 = 0x6000_0000;
+const STUB_KIND: u32 = 0x8000_0000;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum NodeKind {
@@ -43,6 +58,7 @@ enum NodeKind {
     Fork,
     Leaf,
     Node,
+    Stub,
 }
 
 /// The position of a node in the HashTree data structure.
@@ -69,6 +85,7 @@ impl fmt::Debug for NodeId {
             NodeKind::Fork => write!(f, "Fork({}, {})", self.bucket(), self.index()),
             NodeKind::Leaf => write!(f, "Leaf({}, {})", self.bucket(), self.index()),
             NodeKind::Node => write!(f, "Node({}, {})", self.bucket(), self.index()),
+            NodeKind::Stub => write!(f, "Stub({}, {})", self.bucket(), self.index()),
         }
     }
 }
@@ -128,6 +145,21 @@ impl NodeId {
         }
     }
 
+    /// Constructs a node ID for a new `Stub` with the specified index.
+    #[inline]
+    fn stub(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
+        if idx > INDEX_MASK as usize {
+            Err(HashTreeError::IndexOverflow)
+        } else {
+            Ok(Self {
+                bucket: bucket
+                    .try_into()
+                    .map_err(|_| HashTreeError::IndexOverflow)?,
+                index_and_kind: STUB_KIND | idx as u32,
+            })
+        }
+    }
+
     /// Returns the component kind of this node.
     #[inline]
     fn kind(self) -> NodeKind {
@@ -136,6 +168,7 @@ impl NodeId {
             FORK_KIND => NodeKind::Fork,
             NODE_KIND => NodeKind::Node,
             LEAF_KIND => NodeKind::Leaf,
+            STUB_KIND => NodeKind::Stub,
             _ => NodeKind::Empty,
         }
     }
@@ -210,17 +243,18 @@ impl NodeIndexRange {
 ///
 /// In this representation, the identifier of a node are two 32 bit unsigned
 /// integers, where the first number indexes into the (outer) vector and for
-/// the second number , the 2 most significant bits are used to indicate the
+/// the second number , the 3 most significant bits are used to indicate the
 /// type of the node:
 ///
-///  * (0,00) is an empty tree.
-///  * (0,01) is a leaf.
-///  * (0,10) is a labeled node.
-///  * (0,11) is a fork.
+///  * (0, 0x0000...) is an empty tree.
+///  * (0, 0x0010...) is a leaf.
+///  * (0, 0x0100...) is a labeled node.
+///  * (0, 0x0110...) is a fork.
+///  * (0, 0x1000...) is a reusable stub.
 ///
-///  This means that the tree can store at most 2^30 nodes of the same type.  As
+///  This means that the tree can store at most 2^29 nodes of the same type. As
 ///  each tree node has a 32-byte hash associated with it, the tree needs to
-///  occupy at least 32 GiB of data before the index overflows.
+///  occupy at least 16 GiB of data before the index overflows.
 ///
 /// [1]: https://en.wikipedia.org/wiki/AoS_and_SoA
 #[derive(Clone, Debug)]
@@ -284,6 +318,33 @@ pub struct HashTree {
     /// INVARIANT: bucket ≤ node_labels.len()
     /// index_range.0 <= index_range.1 <= node_labels[bucket].len()
     node_children_labels_ranges: Vec<Vec<NodeIndexRange>>,
+
+    /// (i,j)-th element of this array contains the stub with ID `NodeId::stub(i,j)`:
+    /// the subtree's root digest plus the [`SubtreeSource`] it was built from. The
+    /// subtree's contents are not materialized; when needed for building a witness
+    /// they are rebuilt on demand from the `SubtreeSource` (see
+    /// [`HashTree::witness`]).
+    stubs: Vec<Vec<StubNode>>,
+}
+
+/// A reusable subtree collapsed to a single digest ("stub"), stored in a
+/// [`NodeKind::Stub`] node.
+///
+/// Holds one `Arc` and one function pointer (inside the [`SubtreeSource`]) plus
+/// a cheap [`Digest`], so it can be stored inline, avoiding extra allocation
+/// and/or indirection.
+#[derive(Clone, Debug)]
+struct StubNode {
+    /// The subtree's root digest. Its contents are not materialized; they are
+    /// rebuilt on demand via [`SubtreeSource::expand`] during witness generation.
+    digest: Digest,
+
+    /// The source that this stub was built from (paired with its expander), used
+    /// both to detect that an unchanged subtree can be reused from a baseline (by
+    /// source identity and certification version) and to rebuild it for witnesses.
+    /// Holds an `Arc` into the source, keeping it alive so the identity cannot be
+    /// recycled (no ABA) and the source stays available for expansion.
+    source: SubtreeSource,
 }
 
 impl HashTree {
@@ -306,6 +367,7 @@ impl HashTree {
             node_labels: vec![Default::default()],
             node_children: vec![Default::default()],
             node_children_labels_ranges: vec![Default::default()],
+            stubs: vec![Default::default()],
         }
     }
 
@@ -314,9 +376,12 @@ impl HashTree {
         let leaf_size: usize = self.leaf_digests.iter().map(|bucket| bucket.len()).sum();
         let fork_size: usize = self.fork_digests.iter().map(|bucket| bucket.len()).sum();
         let node_size: usize = self.node_digests.iter().map(|bucket| bucket.len()).sum();
+        let stub_size: usize = self.stubs.iter().map(|bucket| bucket.len()).sum();
 
-        // Since this is for metrics only we don't care about potential overflows
-        leaf_size + fork_size + node_size
+        // Since this is for metrics only we don't care about potential overflows.
+        // Note: each stub is counted as a single node; the nodes of its
+        // unmaterialized subtree are not counted here.
+        leaf_size + fork_size + node_size + stub_size
     }
 
     /// Largest index in the `HashTree`.
@@ -339,8 +404,32 @@ impl HashTree {
             .map(|bucket| bucket.len())
             .max()
             .unwrap_or(0);
+        let stub_size = self
+            .stubs
+            .iter()
+            .map(|bucket| bucket.len())
+            .max()
+            .unwrap_or(0);
 
-        leaf_size.max(fork_size).max(node_size)
+        leaf_size.max(fork_size).max(node_size).max(stub_size)
+    }
+
+    /// Number of [`NodeKind::Stub`] nodes in this tree.
+    ///
+    /// Diagnostics/test only.
+    #[doc(hidden)]
+    pub fn stub_count(&self) -> usize {
+        self.stubs.iter().map(|bucket| bucket.len()).sum()
+    }
+
+    /// The [`SubtreeSource`] of every [`NodeKind::Stub`] node (in no particular
+    /// order). Lets tests assert stub source identity (e.g. that reuse is by
+    /// pointer, not by value).
+    ///
+    /// Diagnostics/test only.
+    #[doc(hidden)]
+    pub fn stub_sources(&self) -> impl Iterator<Item = &SubtreeSource> {
+        self.stubs.iter().flatten().map(|stub| &stub.source)
     }
 
     /// Note that new forks are always added to fork_digests[0], but in order
@@ -367,6 +456,13 @@ impl HashTree {
         let id = self.leaf_digests[0].len();
         self.leaf_digests[0].push(d);
         NodeId::leaf(self.bucket_offset, id)
+    }
+
+    /// Constructs a new stub (either freshly hashed or reused from a baseline).
+    fn new_stub(&mut self, digest: Digest, source: SubtreeSource) -> Result<NodeId, HashTreeError> {
+        let idx = self.stubs[0].len();
+        self.stubs[0].push(StubNode { digest, source });
+        NodeId::stub(self.bucket_offset, idx)
     }
 
     /// Preallocates `len` nodes. Makes the new nodes root if the `parent` is
@@ -429,6 +525,9 @@ impl HashTree {
             NodeKind::Leaf => {
                 &self.leaf_digests[node_id.bucket() - self.bucket_offset][node_id.index()]
             }
+            NodeKind::Stub => {
+                &self.stubs[node_id.bucket() - self.bucket_offset][node_id.index()].digest
+            }
             NodeKind::Empty => &EMPTY_HASH,
         }
     }
@@ -461,7 +560,7 @@ impl HashTree {
 
     /// Returns a structured representation-independent view of the node with
     /// the specified ID.
-    pub fn view(&self, node_id: NodeId) -> HashTreeView<'_> {
+    fn view(&self, node_id: NodeId) -> HashTreeView<'_> {
         let bucket = node_id.bucket() - self.bucket_offset;
         let idx = node_id.index();
         match node_id.kind() {
@@ -476,6 +575,7 @@ impl HashTree {
                 self.node_children[bucket][idx],
             ),
             NodeKind::Leaf => HashTreeView::Leaf(&self.leaf_digests[bucket][idx]),
+            NodeKind::Stub => HashTreeView::Stub(&self.stubs[bucket][idx].digest),
             NodeKind::Empty => HashTreeView::Empty,
         }
     }
@@ -486,6 +586,9 @@ impl HashTree {
     }
 
     /// Constructs a witness for the specified partial tree.
+    ///
+    /// Where the `partial_tree` descends into a [`NodeKind::Stub`] (e.g. into a
+    /// canister), the subtree is built on demand from its [`SubtreeSource`].
     pub fn witness<B: WitnessBuilder>(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
@@ -623,6 +726,13 @@ impl HashTree {
                                 );
                                 B::make_pruned(digest.clone())
                             }
+                            HashTreeView::Stub(digest) => {
+                                debug_assert!(
+                                    false,
+                                    "a tree node without children must not be a stub"
+                                );
+                                B::make_pruned(digest.clone())
+                            }
                         });
                     }
 
@@ -666,6 +776,27 @@ impl HashTree {
             pos: NodeId,
             t: &LabeledTree<Vec<u8>>,
         ) -> Result<B, WitnessGenerationError<B>> {
+            if pos.kind() == NodeKind::Stub {
+                // A stub, only storing its root digest.
+                return match t {
+                    // Requested partial tree descends into the subtree: rebuild it from source and
+                    // continue witness generation there.
+                    LabeledTree::SubTree(children) if !children.is_empty() => {
+                        // Sanity check: a complete `HashTree` has no bucket offset.
+                        debug_assert_eq!(ht.bucket_offset, 0);
+
+                        let expanded = ht.stubs[pos.bucket()][pos.index()]
+                            .source
+                            .expand()
+                            .expect("expanding a stub should not fail");
+                        go::<B>(&expanded, NodeId::empty(), expanded.root, t)
+                    }
+
+                    // Witness only needs the precomputed digest.
+                    _ => Ok(B::make_pruned(ht.digest(pos).clone())),
+                };
+            }
+
             match t {
                 LabeledTree::Leaf(data) => Ok(match ht.view(pos) {
                     HashTreeView::Leaf(_) => B::make_leaf(&data[..]),
@@ -674,12 +805,16 @@ impl HashTree {
                         B::make_node(label.clone(), B::make_pruned(ht.digest(child).clone()))
                     }
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
+                    // Intercepted above.
+                    HashTreeView::Stub(_) => unreachable!(),
                 }),
                 LabeledTree::SubTree(children) if children.is_empty() => Ok(match ht.view(pos) {
                     HashTreeView::Empty => B::make_empty(),
                     HashTreeView::Leaf(digest) => B::make_pruned(digest.clone()),
                     HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
                     HashTreeView::Node(digest, _label, _child) => B::make_pruned(digest.clone()),
+                    // Intercepted above.
+                    HashTreeView::Stub(_) => unreachable!(),
                 }),
                 LabeledTree::SubTree(children) => children
                     .iter()
@@ -710,6 +845,9 @@ impl HashTree {
         self.node_children.extend(subtree.node_children);
         self.node_children_labels_ranges
             .extend(subtree.node_children_labels_ranges);
+
+        // Reusable stubs
+        self.stubs.extend(subtree.stubs);
     }
 }
 
@@ -717,8 +855,20 @@ impl HashTree {
 impl PartialEq<crypto::HashTree> for HashTree {
     fn eq(&self, other: &crypto::HashTree) -> bool {
         fn eq_recursive(ht: &HashTree, ht_root: NodeId, other: &crypto::HashTree) -> bool {
+            // Sanity check: a complete `HashTree` has no bucket offset.
+            debug_assert_eq!(ht.bucket_offset, 0);
+
             ht.digest(ht_root) == other.digest()
                 && match (ht_root.kind(), other) {
+                    // A stub collapses a whole subtree to its root digest. Expand it from its
+                    // source and compare the materialized subtree structurally.
+                    (NodeKind::Stub, _) => {
+                        let expanded = ht.stubs[ht_root.bucket()][ht_root.index()]
+                            .source
+                            .expand()
+                            .expect("expanding a stub should not fail");
+                        eq_recursive(&expanded, expanded.root, other)
+                    }
                     (NodeKind::Leaf | NodeKind::Empty, crypto::HashTree::Leaf { digest: _ }) => {
                         true
                     }
@@ -764,11 +914,13 @@ impl PartialEq<crypto::HashTree> for HashTree {
 }
 
 #[derive(Debug)]
-pub enum HashTreeView<'a> {
+enum HashTreeView<'a> {
     Empty,
     Leaf(&'a Digest),
     Fork(&'a Digest, NodeId, NodeId),
     Node(&'a Digest, &'a Label, NodeId),
+    /// A subtree reduced to its root digest.
+    Stub(&'a Digest),
 }
 
 /// Error produced when computing hash trees
@@ -780,22 +932,114 @@ pub enum HashTreeError {
     IndexOverflow,
 }
 
+/// A cursor into a baseline [`HashTree`] that mirrors the position of the lazy
+/// tree being traversed. Used to reuse subtrees with matching [`SubtreeSource`]
+/// from a previously built tree, traversed in lockstep with the new tree.
+#[derive(Clone, Copy)]
+struct BaselineCursor<'a> {
+    tree: &'a HashTree,
+    /// The node at this position: `empty` for the root, otherwise the labeled
+    /// node (`kind() == Node`) reached via the edge leading here.
+    node: NodeId,
+}
+
+impl<'a> BaselineCursor<'a> {
+    /// The subtree stored below `self.node` in the baseline tree.
+    fn subtree_root(&self) -> NodeId {
+        if self.node == NodeId::empty() {
+            self.tree.root
+        } else {
+            // Sanity check: a complete `HashTree` has no bucket offset.
+            debug_assert_eq!(self.tree.bucket_offset, 0);
+
+            self.tree.node_children[self.node.bucket()][self.node.index()]
+        }
+    }
+
+    /// If the baseline stored this position as a reusable [`NodeKind::Stub`],
+    /// returns the stub node.
+    fn stub(&self) -> Option<&'a StubNode> {
+        let subtree_root = self.subtree_root();
+        if subtree_root.kind() == NodeKind::Stub {
+            // Sanity check: a complete `HashTree` has no bucket offset.
+            debug_assert_eq!(self.tree.bucket_offset, 0);
+
+            Some(&self.tree.stubs[subtree_root.bucket()][subtree_root.index()])
+        } else {
+            None
+        }
+    }
+
+    /// Streams the children positions as `(label, cursor)` pairs, in label order.
+    fn children(self) -> impl Iterator<Item = (&'a Label, BaselineCursor<'a>)> + 'a {
+        let tree = self.tree;
+        let NodeIndexRange {
+            bucket,
+            index_range,
+        } = tree.node_labels_range(self.node);
+        index_range.map(move |idx| {
+            let child = NodeId::node(bucket, idx).expect("valid baseline hash tree");
+            (
+                &tree.node_labels[bucket][idx],
+                BaselineCursor { tree, node: child },
+            )
+        })
+    }
+}
+
 /// Materializes the provided lazy tree and builds its hash tree that can be
 /// used to produce witnesses.
-pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
+///
+/// The children of a fork that declares
+/// [`LazyFork::stub_sources`](crate::lazy_tree::LazyFork::stub_sources)
+/// (e.g. canisters) are collapsed to digest-only [`NodeKind::Stub`] nodes.
+/// The resulting tree has the exact same root hash as a fully materialized
+/// build; witnesses that descend into a stubbed subtree rebuild it on demand
+/// from the [`SubtreeSource`] held in the stub (see [`HashTree::witness`]).
+///
+/// If a `baseline` tree is provided, the [`NodeKind::Stub`] nodes of unchanged
+/// subtrees are reused from it: the lazy tree and the baseline are traversed in
+/// lockstep (children merge-joined by label), and wherever a child carries an
+/// equal [`SubtreeSource`], it is reused instead of rebuilt. The result is
+/// identical (same root hash, same witnesses) regardless of `baseline`; in
+/// particular, a `baseline` built under a different certification version is
+/// safe to pass: its subtrees carry a different expander, so none of them are
+/// reused (they are simply rebuilt).
+pub fn hash_lazy_tree<'a>(
+    t: &LazyTree<'a>,
+    baseline: Option<&'a HashTree>,
+) -> Result<HashTree, HashTreeError> {
+    /// A labeled node built by a worker thread, to be written into the final tree
+    /// at preallocated index [`index`](Self::index) once its subtree is spliced in.
     struct SubtreeRoot {
+        index: usize,
+        label: Label,
+        /// The labeled-node digest `H("ic-hashtree-labeled" · label · root_digest)`,
+        /// computed in the worker thread (subtree digests are invariant under
+        /// splicing).
+        digest: Digest,
         children_range: NodeIndexRange,
         root: NodeId,
     }
 
+    /// One child of a fork, to be turned into a labeled node in the hash tree.
+    enum Child<'a> {
+        /// A regular subtree, materialized inline via [`build_tree`].
+        Tree(LazyTree<'a>),
+        /// A reusable subtree collapsed to a [`NodeKind::Stub`], identified by its
+        /// [`SubtreeSource`]. The subtree itself is materialized on demand (via the
+        /// parent fork's [`LazyFork::edge`]) only when it has to be rebuilt.
+        Stub(SubtreeSource),
+    }
+
     // We only initialize thread pools lazily the first time we need them
-    enum ParStrategy {
+    enum ParallelismStrategy {
         Sequential,
         Concurrent,
         ConcurrentInPool(scoped_threadpool::Pool),
     }
 
-    impl ParStrategy {
+    impl ParallelismStrategy {
         fn pool(&mut self) -> Option<&mut scoped_threadpool::Pool> {
             match self {
                 Self::Sequential => None,
@@ -814,12 +1058,72 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         }
     }
 
-    fn go(
-        t: &LazyTree<'_>,
+    /// Builds one labeled `child` (linked under `parent`), returning its
+    /// [`NodeId`] and whether it was expensively (re)built — i.e. materialized —
+    /// rather than cheaply reused from `baseline`.
+    ///
+    /// A [`Child::Stub`] is collapsed to a digest-only [`NodeKind::Stub`]: its
+    /// digest is reused from `baseline` when the sources are equal (cheap, without
+    /// materializing the child at all), else the subtree is rebuilt from its
+    /// [`SubtreeSource`] (expensive). A [`Child::Tree`] is materialized normally
+    /// via [`build_tree`] (expensive).
+    fn build_child<'a>(
+        child: Child<'a>,
         ht: &mut HashTree,
         parent: NodeId,
-        par_strategy: &mut ParStrategy,
+        parallelism_strategy: &mut ParallelismStrategy,
         recursion_depth: u32,
+        baseline: Option<BaselineCursor<'a>>,
+    ) -> Result<(NodeId, bool), HashTreeError> {
+        match child {
+            Child::Stub(source) => {
+                let (digest, was_built) = match baseline.and_then(|b| b.stub()) {
+                    // Unchanged: the baseline carries an equal `SubtreeSource` — same source
+                    // allocation *and* same expander (hence same certification version) — so its
+                    // digest is reused without materializing the child.
+                    Some(stub) if stub.source == source => (stub.digest.clone(), false),
+
+                    // New, changed, or built under a different version: rebuild the subtree from
+                    // its (current) `source` only to capture its root digest; if later needed for
+                    // a witness, it is rebuilt on demand the same way.
+                    _ => {
+                        let child_ht = source.expand().expect("failed to expand stub");
+                        (child_ht.root_hash().clone(), true)
+                    }
+                };
+                Ok((ht.new_stub(digest, source)?, was_built))
+            }
+
+            // Materialize non-stubbed child: expensive.
+            Child::Tree(t) => {
+                let id = build_tree(
+                    &t,
+                    ht,
+                    parent,
+                    parallelism_strategy,
+                    recursion_depth + 1,
+                    baseline,
+                )?;
+                Ok((id, true))
+            }
+        }
+    }
+
+    /// Materializes the hash tree for `t`, returning the [`NodeId`] of its root.
+    ///
+    /// This is different from [`build_child`] in that it always materializes the
+    /// tree, so this is invoked for building throwaway subtrees for stub nodes.
+    ///
+    /// Collapsing a fork's children into digest-only [`NodeKind::Stub`] nodes
+    /// happens here, driven by the parent fork's [`LazyFork::stub_sources`], via
+    /// [`build_child`].
+    fn build_tree<'a>(
+        t: &LazyTree<'a>,
+        ht: &mut HashTree,
+        parent: NodeId,
+        parallelism_strategy: &mut ParallelismStrategy,
+        recursion_depth: u32,
+        baseline: Option<BaselineCursor<'a>>,
     ) -> Result<NodeId, HashTreeError> {
         if recursion_depth > MAX_RECURSION_DEPTH {
             return Err(HashTreeError::RecursionTooDeep(MAX_RECURSION_DEPTH));
@@ -863,40 +1167,83 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
                 } = ht.preallocate_nodes(num_children, parent)?;
                 let mut nodes = Vec::with_capacity(num_children);
 
-                // We only use multithreading if the number of children is large. It is generally
-                // efficient to do so because the children of a given parent are of the same type
-                // (e.g. everything under `/canisters` is a canister state) and thus require
-                // similar amounts of work to materialize.
+                // Build the children sequentially, but watch how many have to be actually built
+                // (hashed) rather than cheaply reused from the baseline. After a warmup,
+                // extrapolate that rate over the whole fork; if it projects too much work, hand
+                // the *remaining* children to the thread pool. This covers both stubbing forks
+                // (where reuse keeps the rate low) and regular forks (where every child is
+                // materialized; so a large fork always parallelizes).
                 //
-                // We do not pass the thread pool down after use, so we are not spawning new threads
-                // in a nested way.
-                if num_children > 100 && par_strategy.is_concurrent() {
-                    fork_parallel(
-                        par_strategy.pool().unwrap(),
+                // We only collect the unprocessed tail into a `Vec` if and when we switch; the
+                // common, all-sequential path uses the `joined` iterator directly.
+                let may_parallelize =
+                    num_children >= PARALLEL_MIN_CHILDREN && parallelism_strategy.is_concurrent();
+                let mut do_parallelize = may_parallelize && baseline.is_none();
+                let mut num_processed = 0_usize;
+                let mut num_built = 0_usize;
+
+                // If the fork declares its children reusable (a stubbing fork), iterate
+                // `(label, source)` so unchanged children are reused from the baseline without
+                // being materialized at all; the rest are rebuilt from their source. Otherwise
+                // materialize every child inline.
+                let children: Box<dyn Iterator<Item = (Label, Child<'_>)> + '_> =
+                    match f.stub_sources() {
+                        Some(sources) => {
+                            Box::new(sources.map(|(label, source)| (label, Child::Stub(source))))
+                        }
+                        None => Box::new(
+                            f.children()
+                                .map(|(label, child)| (label, Child::Tree(child))),
+                        ),
+                    };
+
+                // Merge-join the children with the baseline children (a missing baseline child
+                // is `None`); each tagged with its preallocated node index.
+                let mut joined = range.zip(left_outer_join(
+                    children,
+                    baseline.into_iter().flat_map(BaselineCursor::children),
+                ));
+
+                while !do_parallelize && let Some((i, (label, child, base))) = joined.next() {
+                    let (child, was_built) = build_child(
+                        child,
+                        ht,
+                        NodeId::node(bucket, i)?,
+                        parallelism_strategy,
+                        recursion_depth,
+                        base,
+                    )?;
+
+                    num_built += was_built as usize;
+                    num_processed += 1;
+                    do_parallelize |= may_parallelize
+                        // Beyond the warmup, switch to parallel once the sampled build rate
+                        // (`num_built / num_processed`) projects more than the number of children
+                        // required for parallel processing over all `num_children` (rearranged to avoid
+                        // division).
+                        && num_processed >= ADAPTIVE_WARMUP_CHILDREN
+                            && num_built * num_children >= PARALLEL_MIN_CHILDREN * num_processed;
+
+                    let mut h = Hasher::for_domain("ic-hashtree-labeled");
+                    h.update(label.as_bytes());
+                    h.update(ht.digest(child).as_bytes());
+                    ht.node_digests[0][i] = h.finalize();
+                    ht.node_children[0][i] = child;
+                    ht.node_labels[0][i] = label;
+                    nodes.push(NodeId::node(bucket, i)?);
+                }
+
+                // Build whatever is left of the children in parallel.
+                if do_parallelize {
+                    build_fork_parallel(
+                        parallelism_strategy.pool().unwrap(),
                         ht,
                         &mut nodes,
-                        f,
                         recursion_depth,
                         bucket,
-                        &range,
+                        joined,
+                        num_children - num_processed,
                     )?;
-                } else {
-                    for (i, (label, child)) in range.zip(f.children()) {
-                        let child = go(
-                            &child,
-                            ht,
-                            NodeId::node(bucket, i)?,
-                            par_strategy,
-                            recursion_depth + 1,
-                        )?;
-                        let mut h = Hasher::for_domain("ic-hashtree-labeled");
-                        h.update(label.as_bytes());
-                        h.update(ht.digest(child).as_bytes());
-                        ht.node_digests[0][i] = h.finalize();
-                        ht.node_children[0][i] = child;
-                        ht.node_labels[0][i] = label;
-                        nodes.push(NodeId::node(bucket, i)?);
-                    }
                 }
 
                 if nodes.len() == 1 {
@@ -928,22 +1275,27 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         }
     }
 
-    /// Does the same as the single-threaded else branch, but using multiple threads
-    fn fork_parallel(
+    /// Builds the given `tail` of a fork's children across the thread pool,
+    /// writing the resulting labeled nodes into `ht` and appending their
+    /// [`NodeId`]s to `nodes` (in `tail` order).
+    ///
+    /// Each `tail` entry is `(i, (label, child, base))`, where `i` is the child's
+    /// preallocated node index and `base` is its baseline counterpart (already
+    /// merge-joined by the caller).
+    #[allow(clippy::type_complexity)]
+    fn build_fork_parallel<'a>(
         thread_pool: &mut scoped_threadpool::Pool,
         ht: &mut HashTree,
         nodes: &mut Vec<NodeId>,
-        fork_f: &std::sync::Arc<dyn LazyFork + Send + Sync + '_>,
         depth: u32,
         bucket: usize,
-        range: &Range<usize>,
+        mut tail: impl Iterator<Item = (usize, (Label, Child<'a>, Option<BaselineCursor<'a>>))>,
+        tail_len: usize,
     ) -> Result<(), HashTreeError> {
         let bucket_offset = ht.node_children.len();
         let threads = thread_pool.thread_count() as usize;
-        let children: Vec<_> = fork_f.children().collect();
         debug_assert!(threads > 0);
-        let per_thread = ((children
-            .len()
+        let per_thread = ((tail_len
             .checked_add(threads)
             .ok_or(HashTreeError::IndexOverflow)?
             - 1)
@@ -953,13 +1305,24 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         let mut roots: Vec<Vec<SubtreeRoot>> = repeat_with(|| Vec::with_capacity(per_thread))
             .take(threads)
             .collect();
+
+        // Partition `tail` into owned, consecutive per-thread chunks (mirroring
+        // `slice::chunks`, but by value) so each thread can *move* its children into
+        // `build_child` rather than clone them — dropping the duplicated
+        // `SubtreeSource` `Arc`s would otherwise add significant overhead.
+        let mut chunks: Vec<Vec<(usize, (Label, Child<'_>, Option<BaselineCursor<'_>>))>> =
+            Vec::with_capacity(threads);
+        loop {
+            let chunk: Vec<_> = tail.by_ref().take(per_thread).collect();
+            if chunk.is_empty() {
+                break;
+            }
+            chunks.push(chunk);
+        }
+
         thread_pool.scoped(|scope| {
-            for (i, (children, subtree, roots)) in izip!(
-                children.chunks(per_thread),
-                subtrees.iter_mut(),
-                roots.iter_mut()
-            )
-            .enumerate()
+            for (i, (chunk, subtree, roots)) in
+                izip!(chunks, subtrees.iter_mut(), roots.iter_mut()).enumerate()
             {
                 scope.execute(move || {
                     // In each thread, we use a bucket offset b. All e.g fork digests
@@ -970,21 +1333,44 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
                     // lookup based on NodeId.
                     let mut ht = HashTree::new_with_bucket_offset(bucket_offset + i);
                     let mut error: Option<HashTreeError> = None;
-                    for (_, child) in children {
+                    for (index, (label, child, base)) in chunk {
                         // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
-                        // and fix the link from `root` to the parent later
-                        let root = go(
+                        // and fix the link from `root` to the parent later. A `Child::Stub` is
+                        // collapsed to a stub here.
+                        //
+                        match build_child(
                             child,
                             &mut ht,
                             NodeId::empty(),
-                            &mut ParStrategy::Sequential,
-                            depth + 1,
-                        );
-                        match root {
-                            Ok(root) => {
+                            // Run with `ParallelismStrategy::Sequential`: besides avoiding nested thread
+                            // pools, this limits each worker's tree to a single bucket, which
+                            // `splice_subtree` relies on to place worker `i` at bucket `bucket_offset + i`.
+                            &mut ParallelismStrategy::Sequential,
+                            depth,
+                            base,
+                        ) {
+                            Ok((root, _was_built)) => {
+                                // Since the node had no parent (i.e. it was "the root"), its children have been
+                                // added to `root_labels_range`. Use it as the subtree's `children_range`.
+                                let children_range = if root.kind() == NodeKind::Stub {
+                                    // A stub has no materialized labeled children of its own, so its
+                                    // `children_range` is empty.
+                                    NodeIndexRange::default()
+                                } else {
+                                    ht.root_labels_range.clone()
+                                };
+                                // The subtree digest is invariant under splicing, so the labeled-node
+                                // digest can be computed here (in parallel) rather than on the main
+                                // thread after the splice.
+                                let mut h = Hasher::for_domain("ic-hashtree-labeled");
+                                h.update(label.as_bytes());
+                                h.update(ht.digest(root).as_bytes());
                                 roots.push(SubtreeRoot {
+                                    index,
+                                    label,
+                                    digest: h.finalize(),
+                                    children_range,
                                     root,
-                                    children_range: ht.root_labels_range.clone(),
                                 });
                             }
                             Err(err) => {
@@ -1004,22 +1390,34 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
         for subtree in subtrees.into_iter().flatten() {
             ht.splice_subtree(subtree?);
         }
-        for (i, (label, _), root) in izip!(range.clone(), children, roots.into_iter().flatten()) {
-            ht.node_children_labels_ranges[bucket][i] = root.children_range;
-            let mut h = Hasher::for_domain("ic-hashtree-labeled");
-            h.update(label.as_bytes());
-            h.update(ht.digest(root.root).as_bytes());
-            ht.node_digests[bucket][i] = h.finalize();
-            ht.node_children[bucket][i] = root.root;
-            ht.node_labels[bucket][i] = label;
-            nodes.push(NodeId::node(bucket, i)?);
+        // The roots are flattened in (thread, chunk) order, i.e. ascending node index.
+        for SubtreeRoot {
+            index,
+            label,
+            digest,
+            children_range,
+            root,
+        } in roots.into_iter().flatten()
+        {
+            ht.node_children_labels_ranges[bucket][index] = children_range;
+            ht.node_digests[bucket][index] = digest;
+            ht.node_children[bucket][index] = root;
+            ht.node_labels[bucket][index] = label;
+            nodes.push(NodeId::node(bucket, index)?);
         }
         Ok(())
     }
 
-    let mut ht = HashTree::new();
-    ht.root = go(t, &mut ht, NodeId::empty(), &mut ParStrategy::Concurrent, 0)?;
+    let baseline = baseline.map(|tree| BaselineCursor {
+        tree,
+        node: NodeId::empty(),
+    });
 
+    let mut ht = HashTree::new();
+    let strategy = &mut ParallelismStrategy::Concurrent;
+    // Always materialize the root. Stubbing applies to (and is relevant for) the
+    // children of potentially huge forks (e.g. `/canister` or `/request_status`).
+    ht.root = build_tree(t, &mut ht, NodeId::empty(), strategy, 0, baseline)?;
     ht.check_invariants();
 
     Ok(ht)

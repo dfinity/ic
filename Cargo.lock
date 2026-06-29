@@ -7587,6 +7587,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-tree-hash-test-utils",
+ "ic-utils 0.9.0",
  "itertools 0.12.1",
  "leb128",
  "proptest",
