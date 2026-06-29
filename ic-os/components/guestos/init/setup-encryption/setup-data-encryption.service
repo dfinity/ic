@@ -6,6 +6,9 @@ DefaultDependencies=no
 RequiresMountsFor=/boot/config /var
 Requires=init-config.service
 After=init-config.service
+Wants=ic-node-tmpfiles.service
+# needed for metrics
+After=ic-node-tmpfiles.service
 Wants=cryptsetup-pre.target
 Before=cryptsetup.target
 Conflicts=umount.target
