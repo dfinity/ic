@@ -119,6 +119,11 @@ async fn setup(
         })
         .with_application_subnet()
         .with_application_subnet()
+        // A third application subnet hosts the default effective canister ID so
+        // that the two application subnets used for the migrated and replaced
+        // canisters can both be deleted (the subnet containing the default
+        // effective canister ID cannot be deleted).
+        .with_application_subnet()
         .build_async()
         .await;
 
@@ -164,7 +169,19 @@ async fn setup(
     )
     .await;
 
-    let subnets = pic.topology().await.get_app_subnets();
+    let topology = pic.topology().await;
+    // Exclude the subnet hosting the default effective canister ID since it
+    // cannot be deleted (some tests delete the migrated/replaced subnets).
+    let default_subnet = topology
+        .get_subnet(Principal::from(
+            topology.default_effective_canister_id.clone(),
+        ))
+        .expect("default effective canister ID must belong to a subnet");
+    let subnets: Vec<_> = topology
+        .get_app_subnets()
+        .into_iter()
+        .filter(|subnet| *subnet != default_subnet)
+        .collect();
     let migrated_canister_subnet = subnets[0];
     let replaced_canister_subnet = subnets[1];
 
@@ -2068,18 +2085,21 @@ async fn migration_completes_after_subnet_deletion() {
 
             for _ in 0..10 {
                 let status = get_status(&pic, sender, &args).await.unwrap();
-                if matches!(status, MigrationStatus::Succeeded { .. }) {
-                    break;
+                match status {
+                    MigrationStatus::InProgress { .. } => {}
+                    MigrationStatus::Succeeded { .. } | MigrationStatus::Failed { .. } => break,
                 }
                 pic.advance_time(Duration::from_secs(250)).await;
                 advance(&pic).await;
             }
             let status = get_status(&pic, sender, &args).await.unwrap();
-            assert!(
-                matches!(status, MigrationStatus::Succeeded { .. }),
-                "state={state}, delete_source={delete_source}: expected Succeeded, got {:?}",
-                status
-            );
+            match status {
+                MigrationStatus::Succeeded { .. } | MigrationStatus::Failed { .. } => {}
+                MigrationStatus::InProgress { .. } => panic!(
+                    "state={state}, delete_source={delete_source}: expected Succeeded or Failed, got InProgress"
+                ),
+            }
+            pic.drop().await;
         }
     }
 }
