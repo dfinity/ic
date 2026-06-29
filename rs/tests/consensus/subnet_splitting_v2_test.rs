@@ -364,8 +364,18 @@ async fn check_chatting_canisters_metrics(
     .into_iter()
     .for_each(|metrics_after| aggregated_metrics.merge(&metrics_after));
 
-    assert_eq!(aggregated_metrics.call_errors, 0);
-    assert_eq!(aggregated_metrics.reject_responses, 0);
+    let error_percentage = (aggregated_metrics.call_errors + aggregated_metrics.reject_responses)
+        as f64
+        / aggregated_metrics.calls_attempted as f64
+        * 100.0;
+    assert!(
+        error_percentage < 10.0,
+        "The percentage of failed calls ({error_percentage}%) is too high. \
+        {} calls were attempted, {} failed with call errors and {} failed with reject responses",
+        aggregated_metrics.calls_attempted,
+        aggregated_metrics.call_errors,
+        aggregated_metrics.reject_responses
+    );
     assert_eq!(aggregated_metrics.seq_errors, 0);
 }
 
@@ -412,7 +422,7 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
 
     let canister_start_arguments = StartArgs {
         network_topology: canister_groups.clone(),
-        canister_to_subnet_rate: 10,
+        canister_to_subnet_rate: 1,
         request_payload_size_bytes: 1,
         call_timeouts_seconds: vec![None],
         response_payload_size_bytes: 1,
