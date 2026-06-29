@@ -1044,22 +1044,21 @@ crate.spec(
         "trace",
     ],
     package = "opentelemetry",
-    version = "^0.27.0",
+    version = "^0.32.0",
 )
 crate.spec(
     features = [
         "grpc-tonic",
     ],
     package = "opentelemetry-otlp",
-    version = "^0.27.0",
+    version = "^0.32.0",
 )
 crate.spec(
     features = [
         "trace",
-        "rt-tokio",
     ],
     package = "opentelemetry_sdk",
-    version = "^0.27.1",
+    version = "^0.32.1",
 )
 crate.spec(
     default_features = False,
@@ -1783,7 +1782,7 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-opentelemetry",
-    version = "^0.28.0",
+    version = "^0.33.0",
 )
 crate.spec(
     package = "tracing-serde",
