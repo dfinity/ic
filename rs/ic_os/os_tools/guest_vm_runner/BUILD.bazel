@@ -103,7 +103,12 @@ rust_test(
     name = "guest_vm_runner_test",
     crate = ":guest_vm_runner_dev",
     crate_features = ["dev"],
-    data = glob(["golden/*"]),
+    data = glob(["golden/*"]) + [
+        "@dosfstools//:mkfs.fat",
+    ],
+    env = {
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:goldenfile",
