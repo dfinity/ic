@@ -33,7 +33,7 @@ jobs:
     name: Bazel Test (Namespace BRE)
     runs-on: namespace-profile-amd64-linux-32x64
     container:
-      image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:2f8b2f0091a820141f7a9c63007049462f9a65db9e587eddd8c0b0b892fda2d4
+      image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:a3fdc7cdfeb31d083acfde33811d38f267434aaaafd4d70b3497fab8aed94308
     timeout-minutes: 120
     # Opt-in while experimental: manual dispatch, pushes to dev-gh-* branches, or
     # non-fork pull requests labeled 'CI_BRE'. Only on the public repo, where
@@ -69,7 +69,7 @@ jobs:
           # container-autobuild.yml.
           # NOTE: the placeholder digest below is replaced on the first ic-build
           # rebuild after this workflow is introduced; until then this job will fail.
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:2f8b2f0091a820141f7a9c63007049462f9a65db9e587eddd8c0b0b892fda2d4"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:a3fdc7cdfeb31d083acfde33811d38f267434aaaafd4d70b3497fab8aed94308"
 
           targets="$BAZEL_TARGETS"
           # Split the (space-separated) target patterns into an array so each is passed
