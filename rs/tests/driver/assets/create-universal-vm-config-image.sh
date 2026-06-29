@@ -79,6 +79,6 @@ size=$((2 * size + 1048576))
 size=$(((size + 4095) / 4096 * 4096))
 echo "image size: $size"
 truncate -s $size "$tmp"
-/usr/sbin/mkfs.vfat -n "$LABEL" "$tmp"
+/usr/sbin/mkfs.fat -n "$LABEL" "$tmp"
 mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
 zstd --threads=0 -10 -i "$tmp" -o "$OUTPUT_FILE" --force
