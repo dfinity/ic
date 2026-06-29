@@ -319,6 +319,27 @@ impl LocalBackend {
         info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
         let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
+
+        // The QEMU connection driver (libvirt_driver_qemu.so) is provided by
+        // Bazel (//rs/tests:libvirt_driver_qemu), extracted from a Debian
+        // package, rather than installed in the container image. Point libvirtd
+        // at the directory holding it via LIBVIRT_DRIVER_DIR so the monolithic
+        // daemon loads the QEMU driver from there. The other connection drivers
+        // (network, storage, secret, ...) are intentionally absent: the local
+        // backend manages networking and disks itself and only needs
+        // `qemu:///session`, so libvirtd simply skips the driver modules it
+        // cannot find in that directory. Canonicalized to an absolute path
+        // because the value read from the environment is runfiles-relative.
+        let qemu_driver_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRT_DRIVER_QEMU_PATH")
+            .canonicalize()
+            .context("canonicalizing the bazel-provided QEMU driver path")?;
+        let libvirt_driver_dir = qemu_driver_path.parent().with_context(|| {
+            format!(
+                "QEMU driver path {} has no parent directory",
+                qemu_driver_path.display()
+            )
+        })?;
+
         // We deliberately do not keep the `Child` handle. libvirtd must outlive
         // this (setup) process so forked task subprocesses can `connect_only` to
         // its socket; dropping the handle is harmless because
@@ -333,6 +354,7 @@ impl LocalBackend {
             .arg(&pid_path)
             .env("HOME", &state_home)
             .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
+            .env("LIBVIRT_DRIVER_DIR", libvirt_driver_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

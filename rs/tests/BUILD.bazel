@@ -255,10 +255,32 @@ genrule(
     cmd = "sed < $< 's/$$/-test/' > $@",
 )
 
+# libvirtd and the QEMU connection driver for the local system-test backend
+# (rs/tests/driver/src/driver/local_backend.rs), extracted from Debian packages
+# fetched via Bazel (@libvirt_daemon_deb / @libvirt_daemon_driver_qemu_deb in
+# MODULE.bazel) instead of copied from the container image. This keeps
+# `libvirt-daemon` / `libvirt-daemon-driver-qemu` out of the image (see
+# ci/container/files/packages.common); the libvirt runtime library they link
+# against still comes from `libvirt-dev`'s `libvirt0` dependency. The backend
+# runs `:libvirtd` with LIBVIRT_DRIVER_DIR pointed at `:libvirt_driver_qemu`'s
+# directory so the monolithic daemon loads the QEMU driver (only) from there.
+# `dpkg-deb --fsys-tarfile` decompresses the .deb's data archive to a tar stream
+# from which `tar -xO` writes the single member to stdout.
 genrule(
     name = "libvirtd",
+    srcs = ["@libvirt_daemon_deb//file"],
     outs = ["libvirtd.bin"],
-    cmd = "cp -L /usr/sbin/libvirtd $@",
+    cmd = "dpkg-deb --fsys-tarfile $(location @libvirt_daemon_deb//file) | tar -xO ./usr/sbin/libvirtd > $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+genrule(
+    name = "libvirt_driver_qemu",
+    srcs = ["@libvirt_daemon_driver_qemu_deb//file"],
+    outs = ["libvirt_driver_qemu.so"],
+    cmd = "dpkg-deb --fsys-tarfile $(location @libvirt_daemon_driver_qemu_deb//file) | tar -xO ./usr/lib/x86_64-linux-gnu/libvirt/connection-driver/libvirt_driver_qemu.so > $@",
     local = True,
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],

@@ -46,10 +46,12 @@ zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
 # Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
-# Provides per-test libvirtd subprocess + KVM-accelerated QEMU + dnsmasq for the
-# libvirt network's DHCP.
-libvirt-daemon
-libvirt-daemon-driver-qemu
+# Provides KVM-accelerated QEMU + dnsmasq for the libvirt network's DHCP + OVMF
+# firmware. The libvirtd daemon and its QEMU connection driver are intentionally
+# NOT installed here: they are fetched as Debian packages via Bazel and extracted
+# into the test runfiles (see //rs/tests:libvirtd and //rs/tests:libvirt_driver_qemu),
+# then run with LIBVIRT_DRIVER_DIR pointed at the extracted driver. The libvirt
+# runtime library they link against (libvirt0) is still pulled in by `libvirt-dev`.
 qemu-system-x86
 qemu-utils
 dnsmasq-base

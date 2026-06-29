@@ -284,6 +284,7 @@ def system_test(
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
     _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
+    _local_only_deps["ENV_DEPS__LIBVIRT_DRIVER_QEMU_PATH"] = "//rs/tests:libvirt_driver_qemu"
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
 
     local_dep_env = {

@@ -1218,6 +1218,32 @@ new_local_repository(
     path = "/usr",
 )
 
+# libvirtd and its QEMU connection driver, fetched as Debian packages and
+# extracted in //rs/tests (see the `libvirtd` and `libvirt_driver_qemu`
+# genrules). The local system-test backend
+# (rs/tests/driver/src/driver/local_backend.rs) spawns this libvirtd and points
+# it at the extracted QEMU driver via LIBVIRT_DRIVER_DIR, so the container image
+# no longer needs `libvirt-daemon` / `libvirt-daemon-driver-qemu` installed (see
+# ci/container/files/packages.common).
+#
+# Pinned to the same version (12.0.0-1ubuntu5.1) as the `libvirt0` runtime
+# library that `libvirt-dev` installs in the container, so the daemon and driver
+# are ABI-compatible with it. To bump: pick a snapshot.ubuntu.com date carrying
+# the desired version and update the urls + sha256 (the sha256 of the .deb).
+http_file(
+    name = "libvirt_daemon_deb",
+    downloaded_file_path = "libvirt-daemon.deb",
+    sha256 = "fb483c656580988c87815615c3959d9d521bb9f4cb71b4f2932cbc572272ec50",
+    url = "https://snapshot.ubuntu.com/ubuntu/20260629T000000Z/pool/main/libv/libvirt/libvirt-daemon_12.0.0-1ubuntu5.1_amd64.deb",
+)
+
+http_file(
+    name = "libvirt_daemon_driver_qemu_deb",
+    downloaded_file_path = "libvirt-daemon-driver-qemu.deb",
+    sha256 = "339590925f2427086df6305726656f32d5a1607d538b3a6cfcadfba65704c38a",
+    url = "https://snapshot.ubuntu.com/ubuntu/20260629T000000Z/pool/main/libv/libvirt/libvirt-daemon-driver-qemu_12.0.0-1ubuntu5.1_amd64.deb",
+)
+
 # Mainnet canister references
 
 canisters = use_repo_rule("//bazel:mainnet-canisters.bzl", "canisters")
