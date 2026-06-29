@@ -105,6 +105,7 @@ fn run(
             metrics_registry: &metrics_registry,
         })
     };
+    let partition = args.partition();
     let result = match args {
         Args::CryptOpen {
             partition,
@@ -123,7 +124,7 @@ fn run(
     // Always write metrics, even if the operation failed.
     write_metrics(
         &metrics_registry,
-        &metrics_file_path(metrics_dir, args.partition()),
+        &metrics_file_path(metrics_dir, partition),
     );
 
     result

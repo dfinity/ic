@@ -1,7 +1,7 @@
 use crate::crypt::{
     LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata, check_encryption_key,
-    destroy_keyslots_except, format_crypt_device, has_attached_luks2_header,
-    wipe_attached_luks2_header,
+    destroy_keyslots_except, format_crypt_device, has_attached_luks_header,
+    wipe_attached_luks_header,
 };
 use crate::metrics::export_attached_luks2_header_status;
 use crate::{DiskEncryption, Partition, activate_flags};
@@ -49,7 +49,7 @@ impl SevDiskEncryption {
     ///
     /// TODO: once no nodes with attached Store LUKS headers remain, remove this logic.
     fn wipe_and_export_attached_luks2_header(&self, device_path: &Path) {
-        let mut attached_header_present = has_attached_luks2_header(device_path).unwrap_or_else(|e| {
+        let attached_header_present = has_attached_luks_header(device_path).unwrap_or_else(|e| {
             warn!(
                 "Failed to check for attached LUKS2 header on {}: {e:#}. \
                 Continuing without wiping.",
@@ -64,15 +64,12 @@ impl SevDiskEncryption {
                 on {}. Wiping attached header.",
                 device_path.display()
             );
-            match wipe_attached_luks2_header(device_path) {
-                Ok(()) => attached_header_present = false,
-                Err(e) => {
-                    warn!(
-                        "Failed to wipe attached LUKS2 header on {}: {e:#}. \
-                        Continuing with detached header.",
-                        device_path.display()
-                    );
-                }
+            if let Err(e) = wipe_attached_luks_header(device_path) {
+                warn!(
+                    "Failed to wipe attached LUKS2 header on {}: {e:#}. \
+                    Continuing with detached header.",
+                    device_path.display()
+                );
             }
         }
 
@@ -80,7 +77,7 @@ impl SevDiskEncryption {
             device_path,
             // Note that we don't use `attached_header_present` here, because the header may
             // have been wiped above.
-            has_attached_luks2_header(device_path),
+            has_attached_luks_header(device_path),
         );
     }
 

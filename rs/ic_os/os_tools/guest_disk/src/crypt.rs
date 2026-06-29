@@ -10,7 +10,7 @@ use prometheus::Registry;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tracing::{info, warn};
@@ -319,28 +319,27 @@ pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Res
 
 /// Checks whether the device at `device_path` contains a valid LUKS2 header in the attached
 /// (on-device) position.
-pub fn has_attached_luks2_header(device_path: &Path) -> Result<bool> {
-    let mut crypt_device = CryptInit::init(device_path)
-        .context("Failed to initialize cryptographic device")?;
-    crypt_device
-        .context_handle()
-        .load::<CryptParamsLuks2Ref>(Some(EncryptionFormat::Luks2), None)?;
-    let format = crypt_device
-        .format_handle()
-        .get_type()
-        .context("Failed to get encryption format")?;
-    Ok(format == EncryptionFormat::Luks2)
+pub fn has_attached_luks_header(device_path: &Path) -> Result<bool> {
+    const LUKS_MAGIC: &[u8; 4] = b"LUKS";
+
+    let mut start = vec![];
+    std::fs::File::open(device_path).context("Failed to open device for header check")?
+        .take(LUKS_MAGIC.len() as u64)
+        .read_to_end(&mut start)
+        .context("Failed to read first few bytes for header check")?;
+
+    Ok(start == LUKS_MAGIC)
 }
 
-/// Wipes (zeroizes) the header area of the device at `device_path`, removing any attached LUKS2
+/// Wipes (zeroizes) the header area of the device at `device_path`, removing any attached LUKS
 /// header.
 ///
 /// This is used when the Store partition is opened with a detached header: if the data device still
 /// carries a legacy attached header (from an older GuestOS that wrote both), we wipe it so that
 /// only the detached header remains going forward.
-pub fn wipe_attached_luks2_header(device_path: &Path) -> Result<()> {
+pub fn wipe_attached_luks_header(device_path: &Path) -> Result<()> {
     let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached)
-        .context("Failed to open LUKS2 device to determine header size")?;
+        .context("Failed to open LUKS device to determine header size")?;
     // `get_data_offset` returns the offset in 512-byte sectors; convert to bytes.
     let data_offset_sectors = crypt_device.status_handle().get_data_offset();
     let header_size_bytes = data_offset_sectors * 512;
@@ -351,10 +350,10 @@ pub fn wipe_attached_luks2_header(device_path: &Path) -> Result<()> {
         .with_context(|| format!("Failed to open device {} for writing", device_path.display()))?;
     device
         .write_all(&vec![0u8; header_size_bytes as usize])
-        .with_context(|| format!("Failed to wipe LUKS2 header on device {}", device_path.display()))?;
+        .with_context(|| format!("Failed to wipe LUKS header on device {}", device_path.display()))?;
     device
         .flush()
-        .with_context(|| format!("Failed to flush LUKS2 header wipe on device {}", device_path.display()))?;
+        .with_context(|| format!("Failed to flush LUKS header wipe on device {}", device_path.display()))?;
     Ok(())
 }
 
