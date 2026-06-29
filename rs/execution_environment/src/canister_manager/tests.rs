@@ -405,7 +405,7 @@ fn install_code(
         None,
         old_canister,
         time,
-        &network_topology,
+        Arc::new(network_topology),
         execution_parameters,
         round_limits,
         CompilationCostHandling::CountFullAmount,

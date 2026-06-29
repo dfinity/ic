@@ -1570,7 +1570,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
@@ -1637,7 +1637,7 @@ fn push_output_request_respects_memory_limits() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
@@ -1734,7 +1734,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
@@ -2150,7 +2150,7 @@ fn get_system_api_for_best_effort_response(
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
