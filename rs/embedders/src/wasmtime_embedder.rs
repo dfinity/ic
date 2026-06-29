@@ -687,9 +687,15 @@ impl WasmtimeEmbedder {
 
             if current_size < requested_size {
                 let delta = requested_size - current_size;
-                instance_memory
-                    .grow(&mut store, delta)
-                    .expect("memory grow failed");
+                if instance_memory.grow(&mut store, delta).is_err() {
+                    return Err(HypervisorError::WasmEngineError(
+                        WasmEngineError::FailedToInstantiateModule(format!(
+                            "Failed to grow wasm memory by {} page(s) to {} page(s): \
+                             exceeds module's declared maximum",
+                            delta, requested_size,
+                        )),
+                    ));
+                }
             }
             let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
             let mut created_memories = self.created_memories.lock().unwrap();
