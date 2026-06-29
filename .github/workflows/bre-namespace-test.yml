@@ -48,6 +48,7 @@ jobs:
         ( github.event.pull_request.head.repo.full_name == github.repository &&
           contains(github.event.pull_request.labels.*.name, 'CI_BRE') ) )
     steps:
+      - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel Remote Execution
         run: |
           # Provisions the Namespace RBE cluster and writes a bazelrc fragment with
