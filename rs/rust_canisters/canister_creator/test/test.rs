@@ -17,10 +17,10 @@ use more_asserts::{assert_le, assert_lt};
 //
 // 4. Bumping the candid version to v0.10.22 increased the memory
 // further from 4_023_145 to 4_024_201 which is 1_056 bytes. Bumping
-// the candid version further to v0.10.28 increased the memory to
-// 4_027_202. However, this varies on some runs, so the upper limit
-// is set at 4_030_000.
-const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 4_030_000;
+// the candid version further to v0.10.29 increased the memory to
+// 4_092_396. However, this varies on some runs, so the upper limit
+// is set at 4_095_000.
+const CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES: u64 = 4_095_000;
 const HELLO_WORLD_WAT: &str = r#"
 (module
     (func $hi)
