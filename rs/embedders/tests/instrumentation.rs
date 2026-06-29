@@ -811,7 +811,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let cd = SchedulerConfig::application_subnet()
+    let _cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
 
