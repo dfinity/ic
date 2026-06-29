@@ -658,14 +658,6 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
-    // The `Arc` lets the (round-invariant) topology be shared cheaply across the
-    // per-message `SandboxSafeSystemState`s instead of being deep-cloned each
-    // time. It is safe to serialize via `serde_arc`: `NetworkTopology` is
-    // read-only here (no interior mutability to drift across copies) and there is
-    // a single reference to it per `SandboxSafeSystemState`, so the identity/
-    // duplication caveats of serializing `Arc`s don't apply. The inner topology
-    // crosses the sandbox IPC boundary by value regardless, exactly as it would
-    // if this were a plain owned field.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     network_topology: Arc<NetworkTopology>,
