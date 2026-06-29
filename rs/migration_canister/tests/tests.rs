@@ -402,6 +402,48 @@ async fn assert_in_progress_state_stable(
     assert_eq!(&s1, expected);
 }
 
+/// Drives a fresh migration to the given steady state.
+/// Assumes `migrate_canister` has NOT yet been called; calls it here.
+async fn bring_to_state(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &MigrateCanisterArgs,
+    target_state: &str,
+) {
+    let regular_advances: usize = match target_state {
+        "Accepted" => 0,
+        "ControllersChanged" => 1,
+        "StoppedAndReady" => 2,
+        "RenamedReplacedCanister" => 3,
+        "UpdatedRoutingTable" => 4,
+        "RoutingTableChangeAccepted" => 5,
+        "MigratedCanisterDeleted" => 6,
+        "RestoredControllers" => 6,
+        _ => panic!("unknown state: {target_state}"),
+    };
+
+    migrate_canister(pic, sender, args).await.unwrap();
+
+    for _ in 0..regular_advances {
+        advance(pic).await;
+    }
+
+    if target_state == "RestoredControllers" {
+        // MigratedCanisterDeleted waits 360 s before restoring controllers.
+        pic.advance_time(Duration::from_secs(360)).await;
+        advance(pic).await;
+    }
+
+    let status = get_status(pic, sender, args).await.unwrap();
+    assert_eq!(
+        status,
+        MigrationStatus::InProgress {
+            status: target_state.to_string()
+        },
+        "failed to reach state {target_state}"
+    );
+}
+
 async fn canister_info(
     pic: &PocketIc,
     proxy_canister: Principal,
@@ -1958,53 +2000,86 @@ async fn validation_fails_both_cloud_engine_subnets() {
 
 #[tokio::test]
 async fn migration_states_explicit() {
-    let Setup {
-        pic,
-        migrated_canisters,
-        replaced_canisters,
-        migrated_canister_controllers,
-        ..
-    } = setup(Settings::default()).await;
-    let sender = migrated_canister_controllers[0];
-    let migrated_canister = migrated_canisters[0];
-    let replaced_canister = replaced_canisters[0];
-    let args = MigrateCanisterArgs {
-        migrated_canister_id: migrated_canister,
-        replaced_canister_id: replaced_canister,
-    };
+    const STATES: &[&str] = &[
+        "Accepted",
+        "ControllersChanged",
+        "StoppedAndReady",
+        "RenamedReplacedCanister",
+        "UpdatedRoutingTable",
+        "RoutingTableChangeAccepted",
+        "MigratedCanisterDeleted",
+        "RestoredControllers",
+    ];
+    for state in STATES {
+        let Setup {
+            pic,
+            migrated_canisters,
+            replaced_canisters,
+            migrated_canister_controllers,
+            ..
+        } = setup(Settings::default()).await;
+        let sender = migrated_canister_controllers[0];
+        let args = MigrateCanisterArgs {
+            migrated_canister_id: migrated_canisters[0],
+            replaced_canister_id: replaced_canisters[0],
+        };
+        bring_to_state(&pic, sender, &args, state).await;
+        assert_in_progress_state_stable(&pic, sender, &args, state).await;
+    }
+}
 
-    migrate_canister(&pic, sender, &args).await.unwrap();
+#[tokio::test]
+async fn migration_completes_after_subnet_deletion() {
+    const STATES: &[&str] = &[
+        "Accepted",
+        "ControllersChanged",
+        "StoppedAndReady",
+        "RenamedReplacedCanister",
+        "UpdatedRoutingTable",
+        "RoutingTableChangeAccepted",
+        "MigratedCanisterDeleted",
+        "RestoredControllers",
+    ];
+    for state in STATES {
+        for delete_source in [true, false] {
+            let Setup {
+                pic,
+                migrated_canisters,
+                replaced_canisters,
+                migrated_canister_controllers,
+                migrated_canister_subnet,
+                replaced_canister_subnet,
+                ..
+            } = setup(Settings::default()).await;
+            let sender = migrated_canister_controllers[0];
+            let args = MigrateCanisterArgs {
+                migrated_canister_id: migrated_canisters[0],
+                replaced_canister_id: replaced_canisters[0],
+            };
 
-    // State 1: Accepted – the request was just enqueued; no time advance needed.
-    assert_in_progress_state_stable(&pic, sender, &args, "Accepted").await;
+            bring_to_state(&pic, sender, &args, state).await;
 
-    // States 2-7: `advance` fires the 1 s timer and ticks until the async xnet calls
-    // complete (the transition takes several ticks, not just one).  The 5 subsequent
-    // ticks inside `assert_in_progress_state_stable` (without a further time advance)
-    // do not fire the next state's timer, so the state stays put.
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "ControllersChanged").await;
+            let subnet_to_delete = if delete_source {
+                migrated_canister_subnet
+            } else {
+                replaced_canister_subnet
+            };
+            pic.delete_subnet(subnet_to_delete).await;
 
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "StoppedAndReady").await;
-
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "RenamedReplacedCanister").await;
-
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "UpdatedRoutingTable").await;
-
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "RoutingTableChangeAccepted").await;
-
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "MigratedCanisterDeleted").await;
-
-    // State 8: RestoredControllers – the MigratedCanisterDeleted timer waits for
-    // MAX_INGRESS_TTL (300 s) + PERMITTED_DRIFT_AT_VALIDATOR (30 s) + max clock drift (30 s)
-    // = 360 s to have elapsed since stopped_since.  Fast-forward past that threshold,
-    // then fire the timer with the usual advance (1 s + ticks).
-    pic.advance_time(Duration::from_secs(360)).await;
-    advance(&pic).await;
-    assert_in_progress_state_stable(&pic, sender, &args, "RestoredControllers").await;
+            for _ in 0..10 {
+                let status = get_status(&pic, sender, &args).await.unwrap();
+                if matches!(status, MigrationStatus::Succeeded { .. }) {
+                    break;
+                }
+                pic.advance_time(Duration::from_secs(250)).await;
+                advance(&pic).await;
+            }
+            let status = get_status(&pic, sender, &args).await.unwrap();
+            assert!(
+                matches!(status, MigrationStatus::Succeeded { .. }),
+                "state={state}, delete_source={delete_source}: expected Succeeded, got {:?}",
+                status
+            );
+        }
+    }
 }
