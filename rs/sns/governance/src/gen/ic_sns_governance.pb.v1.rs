@@ -556,6 +556,10 @@ pub mod transfer_sns_treasury_funds {
     ::prost::Message,
 )]
 pub struct ManageLedgerParameters {
+    /// Changes the SNS ledger's actual transfer fee. If this proposal executes
+    /// successfully, Governance also syncs NervousSystemParameters.transaction_fee_e8s
+    /// to this value. Use this field, not NervousSystemParameters.transaction_fee_e8s,
+    /// when changing the SNS token transfer fee.
     #[prost(uint64, optional, tag = "1")]
     pub transfer_fee: ::core::option::Option<u64>,
     #[prost(string, optional, tag = "2")]
@@ -1655,8 +1659,13 @@ pub struct NervousSystemParameters {
     /// must be larger than the transaction_fee_e8s.
     #[prost(uint64, optional, tag = "2")]
     pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
-    /// The transaction fee that must be paid for ledger transactions (except
-    /// minting and burning governance tokens).
+    /// Governance's stored copy of the SNS ledger transfer fee. Governance uses
+    /// this value when it submits ledger transfers for neuron operations.
+    ///
+    /// To change the SNS ledger's actual transfer fee, submit a
+    /// ManageLedgerParameters proposal with transfer_fee set. That proposal updates
+    /// the ledger and syncs this field after the ledger update succeeds. Changing
+    /// this field directly does not update the ledger.
     #[prost(uint64, optional, tag = "3")]
     pub transaction_fee_e8s: ::core::option::Option<u64>,
     /// The maximum number of proposals to keep, per action. When the
