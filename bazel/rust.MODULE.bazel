@@ -2185,6 +2185,10 @@ crate.annotation(
     crate = "metrics-proxy",
     gen_binaries = ["metrics-proxy"],
 )
+crate.annotation(
+    crate = "ic-gateway",
+    gen_binaries = ["ic-gateway"],
+)
 crate.splicing_config(
     resolver_version = "2",
 )

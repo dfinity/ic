@@ -139,6 +139,25 @@ system_test_nns(
     ],
 )
 
+system_test(
+    name = "cloud_engine_ic_gateway_test",
+    # Excluded from automatic runs while ic-gateway launching is gated off in the
+    # orchestrator (see IC_GATEWAY_LAUNCH_ENABLED in
+    # rs/orchestrator/src/processes.rs). Remove this tag when enabling the launch.
+    tags = ["manual"],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:slog",
+        "@crate_index//:url",
+    ],
+)
+
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 System IC Node VMs * 6 vCPUs.

@@ -2740,6 +2740,8 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "registry-canister",
+ "reqwest",
+ "serde_cbor",
  "slog",
  "tempfile",
  "tokio",
@@ -7457,6 +7459,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-crypto-tree-hash-test-utils",
+ "ic-utils 0.9.0",
  "itertools 0.12.1",
  "leb128",
  "proptest",
@@ -20031,7 +20034,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "14.0.0"
+version = "15.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -20093,7 +20096,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "14.0.0"
+version = "15.0.0"
 dependencies = [
  "aide",
  "askama",
