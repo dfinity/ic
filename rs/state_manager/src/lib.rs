@@ -1921,7 +1921,7 @@ impl StateManagerImpl {
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)?;
+        let hash_tree = hash_lazy_tree(&lazy_tree, None)?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -2052,7 +2052,7 @@ impl StateManagerImpl {
         states: &mut RwLockWriteGuard<'_, SharedState>,
     ) {
         let lazy_tree = replicated_state_as_lazy_tree(&state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)
+        let hash_tree = hash_lazy_tree(&lazy_tree, None)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);

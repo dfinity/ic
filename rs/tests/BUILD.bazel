@@ -44,14 +44,6 @@ tar(
 )
 
 tar(
-    name = "mkfsvfat",
-    mtree = [
-        # symlink instead of updating the PATH
-        "./usr/bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
-    ],
-)
-
-tar(
     name = "awk",
     mtree = [
         # we install the GNU variant but call 'awk' so we symlink
@@ -91,7 +83,6 @@ UBUNTU_PACKAGES = [
 
     # symlinks
     ":awk",
-    ":mkfsvfat",
     ":sh",
 ] + PACKAGES
 
