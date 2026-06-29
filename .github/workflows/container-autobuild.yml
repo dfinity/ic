@@ -138,7 +138,7 @@ jobs:
           # Mirror the (unchanged) ic-build image -- just pushed to GHCR and pinned by
           # digest -- into the Namespace tenant registry. Namespace BRE workers boot
           # from this image.
-          src="ghcr.io/dfinity/ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
+          src="ghcr.io/dfinity/ic-build@sha256:70e8e0f581390dfc4593235da8a0fe7d528796c5a3b84e530aa188496918f8b0"
           worker_repo="${NSC_CONTAINER_REGISTRY}/ic-build-worker"
           worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
 

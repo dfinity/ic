@@ -67,7 +67,7 @@ jobs:
           # container-autobuild.yml.
           # NOTE: the placeholder digest below is replaced on the first ic-build
           # rebuild after this workflow is introduced; until then this job will fail.
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:4a033a96a3a3937d92dc41023ec20d7f89efe68d59f7a0e3f4625144dbfe5963"
 
           targets="$BAZEL_TARGETS"
           # Split the (space-separated) target patterns into an array so each is passed
