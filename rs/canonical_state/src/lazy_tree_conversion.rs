@@ -644,6 +644,17 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
     fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// Collapse ingress messages into reusable stubs identified by their respective
+    /// `Arc<IngressStatus>`.
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        Some(Box::new(self.0.statuses_arc().map(|(id, status)| {
+            (
+                Label::from(id.as_bytes()),
+                SubtreeSource::new(status, expand_ingress_status),
+            )
+        })))
+    }
 }
 
 const ERROR_CODE_LABEL: &[u8] = b"error_code";
@@ -714,16 +725,17 @@ const REJECT_STATUS_LABELS: [&[u8]; 4] = [
 #[derive(Clone)]
 struct RejectStatus<'a> {
     reject_code: u64,
-    error_code: Option<ErrorCode>,
+    error_code: ErrorCode,
     message: &'a str,
 }
 
 impl<'a> LazyFork<'a> for RejectStatus<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         match label.as_bytes() {
-            ERROR_CODE_LABEL => self
-                .error_code
-                .map(|code| blob(move || code.to_string().into_bytes())),
+            ERROR_CODE_LABEL => {
+                let error_code = self.error_code;
+                Some(blob(move || error_code.to_string().into_bytes()))
+            }
             REJECT_CODE_LABEL => Some(num::<'a>(self.reject_code)),
             REJECT_MESSAGE_LABEL => Some(string(self.message)),
             STATUS_LABEL => Some(string("rejected")),
@@ -749,18 +761,20 @@ impl<'a> LazyFork<'a> for RejectStatus<'a> {
     }
 }
 
+/// Produces one of a few small, focused [`LazyFork`] shapes (reply / reject /
+/// status-only) for the given [`IngressStatus`].
 fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
     match status {
         IngressStatus::Known { state, .. } => match state {
             IngressState::Completed(WasmResult::Reply(b)) => fork(ReplyStatus(b)),
             IngressState::Completed(WasmResult::Reject(s)) => fork(RejectStatus {
                 reject_code: RejectCode::CanisterReject as u64,
-                error_code: Some(ErrorCode::CanisterRejectedMessage),
+                error_code: ErrorCode::CanisterRejectedMessage,
                 message: s,
             }),
             IngressState::Failed(error) => fork(RejectStatus {
                 reject_code: error.reject_code() as u64,
-                error_code: Some(error.code()),
+                error_code: error.code(),
                 message: error.description(),
             }),
             IngressState::Processing | IngressState::Received | IngressState::Done => {
@@ -769,6 +783,13 @@ fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
         },
         IngressStatus::Unknown => fork(OnlyStatus(status.as_str())),
     }
+}
+
+/// Materializes a stubbed ingress message's [`HashTree`], by recovering the
+/// `&IngressStatus` from the stub's [`SubtreeSource`].
+fn expand_ingress_status(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let status = source.downcast::<IngressStatus>();
+    hash_lazy_tree(&status_to_tree(status), None)
 }
 
 const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
