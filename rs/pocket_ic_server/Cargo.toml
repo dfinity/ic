@@ -5,7 +5,6 @@ edition.workspace = true
 
 [dependencies]
 aide = { workspace = true }
-arc-swap = { workspace = true }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }

@@ -20404,7 +20404,6 @@ name = "pocket-ic-server"
 version = "15.0.0"
 dependencies = [
  "aide",
- "arc-swap",
  "askama",
  "async-trait",
  "axum 0.8.9",

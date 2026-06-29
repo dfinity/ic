@@ -7,7 +7,6 @@ use crate::pocket_ic::{
     SetCertifiedTime,
 };
 use crate::{InstanceId, OpId, Operation};
-use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     Router,
@@ -44,6 +43,10 @@ use ic_gateway::{
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
         utils::health_manager::HealthManager,
     },
+    routing::{
+        domain::CustomDomainStorage,
+        ic::routing_table_manager::{LooksUpSubnetType, SubnetType},
+    },
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -75,6 +78,13 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::reload;
+
+struct NoOpSubnetTypeLookup;
+impl LooksUpSubnetType for NoOpSubnetTypeLookup {
+    fn lookup_subnet_type(&self, _: &candid::Principal) -> Option<SubnetType> {
+        None
+    }
+}
 
 // The maximum wait time for a computation to finish synchronously.
 pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -851,21 +861,24 @@ impl ApiState {
 
                 let (_, reload_handle) = reload::Layer::new(EnvFilter::new("warn"));
                 let health_manager = Arc::new(HealthManager::default());
+                let registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
+                let custom_domain_storage =
+                    Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
                 let ic_gateway_router = setup_router(
                     &cli,
-                    custom_domain_providers,
+                    custom_domain_storage,
                     reload_handle,
                     &mut tasks,
                     health_manager,
                     http_client,
                     http_client_hyper,
                     Arc::new(route_provider),
-                    &ic_gateway::ic_bn_lib::prometheus::Registry::new(),
+                    &registry,
                     CancellationToken::new(),
                     None,
                     None,
                     None,
-                    Arc::new(ArcSwapOption::new(None)),
+                    Arc::new(NoOpSubnetTypeLookup),
                 )
                 .await
                 .unwrap();
