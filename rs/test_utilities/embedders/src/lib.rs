@@ -170,7 +170,7 @@ impl WasmtimeInstanceBuilder {
         let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
             cycles_account_manager,
-            &self.network_topology,
+            std::sync::Arc::new(self.network_topology.clone()),
             dirty_page_overhead,
             ComputeAllocation::default(),
             subnet_available_callbacks,

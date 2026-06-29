@@ -434,7 +434,7 @@ impl ResponseHelper {
             &mut output,
             round_limits,
             round.time,
-            round.network_topology,
+            &round.network_topology,
             round.hypervisor.subnet_id(),
             round.hypervisor.metrics(),
             round.log,
@@ -510,7 +510,7 @@ impl ResponseHelper {
             &mut output,
             round_limits,
             round.time,
-            round.network_topology,
+            &round.network_topology,
             round.hypervisor.subnet_id(),
             round.hypervisor.metrics(),
             round.log,
@@ -1065,7 +1065,7 @@ pub fn execute_response(
         func_ref,
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
+        round.network_topology.clone(),
         original.subnet_cycles_config,
     );
 
@@ -1143,7 +1143,7 @@ fn execute_response_cleanup(
         func_ref,
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
+        round.network_topology.clone(),
         original.subnet_cycles_config,
     );
     process_cleanup_result(
