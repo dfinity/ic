@@ -2064,6 +2064,7 @@ async fn migration_completes_after_subnet_deletion() {
                 migrated_canisters,
                 replaced_canisters,
                 migrated_canister_controllers,
+                replaced_canister_controllers,
                 migrated_canister_subnet,
                 replaced_canister_subnet,
                 ..
@@ -2143,6 +2144,57 @@ async fn migration_completes_after_subnet_deletion() {
                 MigrationStatus::InProgress { .. } => panic!(
                     "state={state}, delete_source={delete_source}: expected Succeeded or Failed, got InProgress"
                 ),
+            }
+
+            // `get_subnet` only reflects the routing table (i.e. which subnet a
+            // canister ID is routed to), not whether the canister actually
+            // exists. Whenever a canister still routes to a subnet, that subnet
+            // is alive (so `canister_status` won't be rejected at ingress
+            // submission time) and the canister must actually exist there, which
+            // we confirm by querying its status on behalf of a controller.
+            let migration_canister: Principal = MIGRATION_CANISTER_ID.into();
+            for (canister, subnet, which, original_controllers) in [
+                (
+                    migrated_canisters[0],
+                    migrated_subnet,
+                    "migrated",
+                    &migrated_canister_controllers,
+                ),
+                (
+                    replaced_canisters[0],
+                    replaced_subnet,
+                    "replaced",
+                    &replaced_canister_controllers,
+                ),
+            ] {
+                if subnet.is_some() {
+                    let canister_status = pic
+                        .canister_status(canister, Some(sender))
+                        .await
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "state={state}, delete_source={delete_source}: {which} canister routes to {subnet:?} but canister_status failed: {err:?}"
+                            )
+                        });
+                    // The migration restores the original (user) controllers. The
+                    // migration canister may still be a controller only if it was
+                    // already one before the migration and the migration never
+                    // took exclusive control (otherwise it removes itself), so we
+                    // disregard it when comparing against the original controllers.
+                    let mut controllers: Vec<Principal> = canister_status
+                        .settings
+                        .controllers
+                        .into_iter()
+                        .filter(|controller| *controller != migration_canister)
+                        .collect();
+                    controllers.sort();
+                    let mut expected_controllers = original_controllers.clone();
+                    expected_controllers.sort();
+                    assert_eq!(
+                        controllers, expected_controllers,
+                        "state={state}, delete_source={delete_source}: {which} canister controllers were not restored to the original controllers"
+                    );
+                }
             }
 
             pic.drop().await;
