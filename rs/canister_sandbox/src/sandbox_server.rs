@@ -222,7 +222,6 @@ mod tests {
                 CanisterCyclesCostSchedule::Normal,
                 DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
             BTreeSet::from([controller]),
