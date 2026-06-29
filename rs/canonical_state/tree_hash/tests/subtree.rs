@@ -9,9 +9,9 @@
 //!   * has the exact same root hash as a fully materialized build,
 //!   * serves witnesses by expanding the stub on demand from the source `Arc`
 //!     it holds (via its [`SubtreeExpander`]), with no external source, and
-//!   * when built with a baseline (`hash_lazy_tree` with `Some(baseline)`),
+//!   * when built with a baseline ([`hash_lazy_tree`] with `Some(baseline)`),
 //!     reuses the stored digest of every unchanged subtree (matched by
-//!     `SubtreeSource`).
+//!     [`SubtreeSource`]).
 
 use ic_canonical_state_tree_hash::hash_tree::{
     HashTree, HashTreeError, PARALLEL_MIN_CHILDREN, hash_lazy_tree,
