@@ -316,10 +316,6 @@ pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Res
     Ok(())
 }
 
-/// The size of the LUKS2 header region in bytes. LUKS2 reserves the first 16 MiB of the device for
-/// the header and keyslot area.
-const LUKS2_HEADER_SIZE: usize = 16 * 1024 * 1024;
-
 /// Checks whether the device at `device_path` contains a valid LUKS2 header in the attached
 /// (on-device) position.
 pub fn has_attached_luks2_header(device_path: &Path) -> Result<bool> {
@@ -335,19 +331,25 @@ pub fn has_attached_luks2_header(device_path: &Path) -> Result<bool> {
     Ok(format == EncryptionFormat::Luks2)
 }
 
-/// Wipes (zeroizes) the first [`LUKS2_HEADER_SIZE`] bytes of the device at `device_path`, removing
-/// any attached LUKS2 header.
+/// Wipes (zeroizes) the header area of the device at `device_path`, removing any attached LUKS2
+/// header.
 ///
 /// This is used when the Store partition is opened with a detached header: if the data device still
 /// carries a legacy attached header (from an older GuestOS that wrote both), we wipe it so that
 /// only the detached header remains going forward.
 pub fn wipe_attached_luks2_header(device_path: &Path) -> Result<()> {
+    let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached)
+        .context("Failed to open LUKS2 device to determine header size")?;
+    // `get_data_offset` returns the offset in 512-byte sectors; convert to bytes.
+    let data_offset_sectors = crypt_device.status_handle().get_data_offset();
+    let header_size_bytes = data_offset_sectors * 512;
+
     let mut device = OpenOptions::new()
         .write(true)
         .open(device_path)
         .with_context(|| format!("Failed to open device {} for writing", device_path.display()))?;
     device
-        .write_all(&vec![0u8; LUKS2_HEADER_SIZE])
+        .write_all(&vec![0u8; header_size_bytes as usize])
         .with_context(|| format!("Failed to wipe LUKS2 header on device {}", device_path.display()))?;
     device
         .flush()
