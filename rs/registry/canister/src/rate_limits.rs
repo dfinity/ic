@@ -11,6 +11,7 @@ use ic_nervous_system_rate_limits::{
     StableMemoryCapacityStorage,
 };
 use ic_stable_structures::{DefaultMemoryImpl, memory_manager::VirtualMemory};
+use std::str::FromStr;
 use std::time::SystemTime;
 use std::{cell::RefCell, time::Duration};
 
@@ -49,22 +50,34 @@ const ELEVATED_NODE_OPERATOR_MAX_SPIKE: u64 = ELEVATED_NODE_OPERATOR_MAX_AVG_OPE
 const ELEVATED_NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
     ONE_DAY_SECONDS / ELEVATED_NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
 
-/// Node providers granted elevated (higher) add/remove rate limits. This is a
-/// hardcoded, temporary allowlist of trusted node providers; everyone else is
-/// subject to the standard limits. Operations performed by node operators
-/// belonging to one of these node providers are routed to the elevated
-/// limiters.
+/// Node providers granted elevated (higher) rate limits. This is a hardcoded,
+/// temporary allowlist of trusted node providers; everyone else is subject to
+/// the standard limits. All node operator operations (add, remove, and the
+/// direct node config updates) performed by node operators belonging to one of
+/// these node providers are routed to the elevated limiters, mirroring the
+/// scope of the standard node operator limiter.
 /// TODO: Remove entries (and the elevated limiters) once no longer needed.
 const ELEVATED_NODE_PROVIDERS: &[&str] = &[
     // DFINITY Foundation
     "bvcsg-3od6r-jnydw-eysln-aql7w-td5zn-ay5m6-sibd2-jzojt-anwag-mqe",
 ];
 
-fn is_elevated_node_provider(node_provider_id: PrincipalId) -> bool {
-    let node_provider_id = node_provider_id.to_string();
-    ELEVATED_NODE_PROVIDERS
+thread_local! {
+    /// `ELEVATED_NODE_PROVIDERS` parsed into `PrincipalId`s. Parsing once (rather
+    /// than on every reserve) avoids a per-call allocation and makes a malformed
+    /// allowlist entry fail fast instead of silently never matching.
+    static ELEVATED_NODE_PROVIDER_IDS: Vec<PrincipalId> = ELEVATED_NODE_PROVIDERS
         .iter()
-        .any(|allowlisted| *allowlisted == node_provider_id)
+        .map(|p| {
+            PrincipalId::from_str(p).unwrap_or_else(|e| {
+                panic!("Invalid principal in ELEVATED_NODE_PROVIDERS: {p:?}: {e}")
+            })
+        })
+        .collect();
+}
+
+fn is_elevated_node_provider(node_provider_id: PrincipalId) -> bool {
+    ELEVATED_NODE_PROVIDER_IDS.with(|ids| ids.contains(&node_provider_id))
 }
 
 thread_local! {
@@ -445,13 +458,24 @@ mod tests {
     }
 
     #[test]
-    fn test_allowlisted_node_provider_gets_elevated_rate_limit() {
-        use std::str::FromStr;
+    fn test_elevated_node_providers_allowlist_parses() {
+        // Touching the allowlist forces parsing; a malformed entry would panic.
+        ELEVATED_NODE_PROVIDER_IDS.with(|ids| assert_eq!(ids.len(), ELEVATED_NODE_PROVIDERS.len()));
+    }
 
+    #[test]
+    fn test_allowlisted_node_provider_gets_elevated_rate_limit() {
         let now = SystemTime::now();
-        // The first entry of the elevated allowlist (DFINITY).
-        let elevated_provider = PrincipalId::from_str(ELEVATED_NODE_PROVIDERS[0]).unwrap();
+        // DFINITY is on the elevated allowlist; reference it explicitly rather
+        // than by index so the test is independent of allowlist ordering.
+        let elevated_provider = PrincipalId::from_str(
+            "bvcsg-3od6r-jnydw-eysln-aql7w-td5zn-ay5m6-sibd2-jzojt-anwag-mqe",
+        )
+        .unwrap();
+        assert!(is_elevated_node_provider(elevated_provider));
         let standard_provider = PrincipalId::new_user_test_id(2000);
+        assert!(!is_elevated_node_provider(standard_provider));
+
         let elevated_operator = PrincipalId::new_user_test_id(10);
         let standard_operator = PrincipalId::new_user_test_id(11);
         let mut registry = invariant_compliant_registry(0);
@@ -477,14 +501,29 @@ mod tests {
         assert!(over_standard_spike <= ELEVATED_NODE_OPERATOR_MAX_SPIKE);
         assert!(over_standard_spike <= ELEVATED_NODE_PROVIDER_MAX_SPIKE);
 
-        // The allowlisted provider's operator can reserve beyond the standard spike.
-        registry
+        // The allowlisted provider's operator can reserve beyond the standard
+        // spike, and committing the reservation succeeds (exercising the
+        // elevated commit routing).
+        let reservation = registry
             .try_reserve_capacity_for_node_operator_operation(
                 now,
                 elevated_operator,
                 over_standard_spike,
             )
             .expect("allowlisted node provider should get the elevated rate limit");
+        registry
+            .commit_used_capacity_for_node_operator_operation(now, reservation)
+            .expect("committing the elevated reservation should succeed");
+
+        // The committed capacity is actually consumed from the elevated
+        // limiters: a follow-up reservation for the full elevated spike must now
+        // fail because `over_standard_spike` was already used.
+        let result = registry.try_reserve_capacity_for_node_operator_operation(
+            now,
+            elevated_operator,
+            ELEVATED_NODE_OPERATOR_MAX_SPIKE,
+        );
+        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
 
         // A standard provider's operator is still bound by the standard spike.
         let result = registry.try_reserve_capacity_for_node_operator_operation(
