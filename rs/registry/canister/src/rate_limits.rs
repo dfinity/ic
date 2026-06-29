@@ -1,6 +1,7 @@
 use crate::mutations::node_management::common::get_node_provider_id_for_operator_id;
 use crate::registry::Registry;
 use crate::storage::{
+    get_elevated_node_operator_rate_limiter_memory, get_elevated_node_provider_rate_limiter_memory,
     get_node_operator_rate_limiter_memory, get_node_provider_rate_limiter_memory,
 };
 use ic_base_types::PrincipalId;
@@ -30,6 +31,42 @@ const AVG_ADD_NODE_BY_IP_PER_DAY: u64 = 1;
 const ADD_NODE_IP_MAX_SPIKE: u64 = AVG_ADD_NODE_BY_IP_PER_DAY * 7;
 const ADD_NODE_IP_REFILL_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS;
 
+// Elevated rate limits for allowlisted node providers (see
+// `ELEVATED_NODE_PROVIDERS`). These are a temporary measure to let a small set
+// of trusted node providers onboard nodes in bulk (e.g. on-demand cloud
+// provisioning) without being blocked by the standard limits. They are set to
+// 10x the standard limits. The per-IP `add_node` limiter still applies.
+// TODO: Remove this exception once it is no longer needed.
+const ELEVATED_NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 =
+    10 * NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY;
+const ELEVATED_NODE_PROVIDER_MAX_SPIKE: u64 = ELEVATED_NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY * 7;
+const ELEVATED_NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
+    ONE_DAY_SECONDS / ELEVATED_NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY;
+
+const ELEVATED_NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY: u64 =
+    10 * NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
+const ELEVATED_NODE_OPERATOR_MAX_SPIKE: u64 = ELEVATED_NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY * 7;
+const ELEVATED_NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS: u64 =
+    ONE_DAY_SECONDS / ELEVATED_NODE_OPERATOR_MAX_AVG_OPERATIONS_PER_DAY;
+
+/// Node providers granted elevated (higher) add/remove rate limits. This is a
+/// hardcoded, temporary allowlist of trusted node providers; everyone else is
+/// subject to the standard limits. Operations performed by node operators
+/// belonging to one of these node providers are routed to the elevated
+/// limiters.
+/// TODO: Remove entries (and the elevated limiters) once no longer needed.
+const ELEVATED_NODE_PROVIDERS: &[&str] = &[
+    // DFINITY Foundation
+    "bvcsg-3od6r-jnydw-eysln-aql7w-td5zn-ay5m6-sibd2-jzojt-anwag-mqe",
+];
+
+fn is_elevated_node_provider(node_provider_id: PrincipalId) -> bool {
+    let node_provider_id = node_provider_id.to_string();
+    ELEVATED_NODE_PROVIDERS
+        .iter()
+        .any(|allowlisted| *allowlisted == node_provider_id)
+}
+
 thread_local! {
     static NODE_PROVIDER_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
@@ -53,6 +90,38 @@ thread_local! {
             max_reservations: NODE_OPERATOR_MAX_SPIKE * 2,
         },
         get_node_operator_rate_limiter_memory(),
+    ));
+
+    /// Elevated node provider rate limiter, used for allowlisted node providers
+    /// (see `ELEVATED_NODE_PROVIDERS`).
+    static ELEVATED_NODE_PROVIDER_RATE_LIMITER: RefCell<
+        RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
+    > = RefCell::new(RateLimiter::new_stable(
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(
+                ELEVATED_NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS,
+            ),
+            max_capacity: ELEVATED_NODE_PROVIDER_MAX_SPIKE,
+            max_reservations: ELEVATED_NODE_PROVIDER_MAX_SPIKE * 2,
+        },
+        get_elevated_node_provider_rate_limiter_memory(),
+    ));
+
+    /// Elevated node operator rate limiter, used for node operators belonging to
+    /// allowlisted node providers (see `ELEVATED_NODE_PROVIDERS`).
+    static ELEVATED_NODE_OPERATOR_RATE_LIMITER: RefCell<
+        RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
+    > = RefCell::new(RateLimiter::new_stable(
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(
+                ELEVATED_NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS,
+            ),
+            max_capacity: ELEVATED_NODE_OPERATOR_MAX_SPIKE,
+            max_reservations: ELEVATED_NODE_OPERATOR_MAX_SPIKE * 2,
+        },
+        get_elevated_node_operator_rate_limiter_memory(),
     ));
 
     /// IP-based rate limiter for add_node operations.
@@ -89,6 +158,18 @@ fn with_node_operator_rate_limiter<R>(
     NODE_OPERATOR_RATE_LIMITER.with_borrow_mut(f)
 }
 
+fn with_elevated_node_provider_rate_limiter<R>(
+    f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
+) -> R {
+    ELEVATED_NODE_PROVIDER_RATE_LIMITER.with_borrow_mut(f)
+}
+
+fn with_elevated_node_operator_rate_limiter<R>(
+    f: impl FnOnce(&mut RateLimiter<String, StableMemoryCapacityStorage<String, VM>>) -> R,
+) -> R {
+    ELEVATED_NODE_OPERATOR_RATE_LIMITER.with_borrow_mut(f)
+}
+
 fn with_add_node_ip_rate_limiter<R>(f: impl FnOnce(&mut InMemoryRateLimiter<String>) -> R) -> R {
     ADD_NODE_IP_RATE_LIMITER.with_borrow_mut(f)
 }
@@ -96,6 +177,10 @@ fn with_add_node_ip_rate_limiter<R>(f: impl FnOnce(&mut InMemoryRateLimiter<Stri
 pub struct RateLimitReservation {
     operator_reservation: Reservation<String>,
     provider_reservation: Reservation<String>,
+    // Whether the reservations were made against the elevated limiters. The
+    // commit must be routed to the same limiters the reservation was made
+    // against, otherwise it would not be found.
+    elevated: bool,
 }
 
 impl Registry {
@@ -111,19 +196,38 @@ impl Registry {
         let node_provider_id = get_node_provider_id_for_operator_id(self, node_operator_id)
             .map_err(RateLimiterError::InvalidArguments)?;
 
+        // Allowlisted node providers (and their operators) use elevated limiters.
+        let elevated = is_elevated_node_provider(node_provider_id);
+
+        let operator_key = node_operator_key(node_operator_id);
+        let provider_key = node_provider_key(node_provider_id);
+
         // First reserve from node operator rate limiter (primary)
-        let operator_reservation = with_node_operator_rate_limiter(|rate_limiter| {
-            rate_limiter.try_reserve(now, node_operator_key(node_operator_id), requested_capacity)
-        })?;
+        let operator_reservation = if elevated {
+            with_elevated_node_operator_rate_limiter(|rate_limiter| {
+                rate_limiter.try_reserve(now, operator_key, requested_capacity)
+            })?
+        } else {
+            with_node_operator_rate_limiter(|rate_limiter| {
+                rate_limiter.try_reserve(now, operator_key, requested_capacity)
+            })?
+        };
 
         // Then reserve from node provider rate limiter (secondary)
-        let provider_reservation = with_node_provider_rate_limiter(|rate_limiter| {
-            rate_limiter.try_reserve(now, node_provider_key(node_provider_id), requested_capacity)
-        })?;
+        let provider_reservation = if elevated {
+            with_elevated_node_provider_rate_limiter(|rate_limiter| {
+                rate_limiter.try_reserve(now, provider_key, requested_capacity)
+            })?
+        } else {
+            with_node_provider_rate_limiter(|rate_limiter| {
+                rate_limiter.try_reserve(now, provider_key, requested_capacity)
+            })?
+        };
 
         Ok(RateLimitReservation {
             operator_reservation,
             provider_reservation,
+            elevated,
         })
     }
 
@@ -147,14 +251,33 @@ impl Registry {
         now: SystemTime,
         reservation: RateLimitReservation,
     ) -> Result<(), RateLimiterError> {
-        // Commit both reservations, trying both even if one fails
-        let operator_result = with_node_operator_rate_limiter(|rate_limiter| {
-            rate_limiter.commit(now, reservation.operator_reservation)
-        });
+        let RateLimitReservation {
+            operator_reservation,
+            provider_reservation,
+            elevated,
+        } = reservation;
 
-        let provider_result = with_node_provider_rate_limiter(|rate_limiter| {
-            rate_limiter.commit(now, reservation.provider_reservation)
-        });
+        // Commit both reservations, trying both even if one fails. The commit
+        // must be routed to the same limiters the reservation was made against.
+        let operator_result = if elevated {
+            with_elevated_node_operator_rate_limiter(|rate_limiter| {
+                rate_limiter.commit(now, operator_reservation)
+            })
+        } else {
+            with_node_operator_rate_limiter(|rate_limiter| {
+                rate_limiter.commit(now, operator_reservation)
+            })
+        };
+
+        let provider_result = if elevated {
+            with_elevated_node_provider_rate_limiter(|rate_limiter| {
+                rate_limiter.commit(now, provider_reservation)
+            })
+        } else {
+            with_node_provider_rate_limiter(|rate_limiter| {
+                rate_limiter.commit(now, provider_reservation)
+            })
+        };
 
         // Return the first error if any, or Ok(()) if both succeeded
         operator_result?;
@@ -319,5 +442,56 @@ mod tests {
         assert_eq!(initial_operator_1_capacity, final_operator_1_capacity);
         assert_eq!(initial_operator_2_capacity, final_operator_2_capacity);
         assert_eq!(initial_provider_capacity, final_provider_capacity);
+    }
+
+    #[test]
+    fn test_allowlisted_node_provider_gets_elevated_rate_limit() {
+        use std::str::FromStr;
+
+        let now = SystemTime::now();
+        // The first entry of the elevated allowlist (DFINITY).
+        let elevated_provider = PrincipalId::from_str(ELEVATED_NODE_PROVIDERS[0]).unwrap();
+        let standard_provider = PrincipalId::new_user_test_id(2000);
+        let elevated_operator = PrincipalId::new_user_test_id(10);
+        let standard_operator = PrincipalId::new_user_test_id(11);
+        let mut registry = invariant_compliant_registry(0);
+
+        for (operator, provider, dc_id) in [
+            (elevated_operator, elevated_provider, "test_dc_elevated"),
+            (standard_operator, standard_provider, "test_dc_standard"),
+        ] {
+            registry.do_add_node_operator(AddNodeOperatorPayload {
+                node_operator_principal_id: Some(operator),
+                node_provider_principal_id: Some(provider),
+                node_allowance: 10,
+                dc_id: dc_id.to_string(),
+                rewardable_nodes: btreemap! { "type1".to_string() => 1 },
+                ipv6: None,
+                max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 1 }),
+            });
+        }
+
+        // A request that exceeds the standard spike but still fits within the
+        // elevated spike.
+        let over_standard_spike = NODE_OPERATOR_MAX_SPIKE + 1;
+        assert!(over_standard_spike <= ELEVATED_NODE_OPERATOR_MAX_SPIKE);
+        assert!(over_standard_spike <= ELEVATED_NODE_PROVIDER_MAX_SPIKE);
+
+        // The allowlisted provider's operator can reserve beyond the standard spike.
+        registry
+            .try_reserve_capacity_for_node_operator_operation(
+                now,
+                elevated_operator,
+                over_standard_spike,
+            )
+            .expect("allowlisted node provider should get the elevated rate limit");
+
+        // A standard provider's operator is still bound by the standard spike.
+        let result = registry.try_reserve_capacity_for_node_operator_operation(
+            now,
+            standard_operator,
+            over_standard_spike,
+        );
+        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
     }
 }
