@@ -126,9 +126,7 @@ mod tests {
     };
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
-    use ic_config::subnet_config::{
-        CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE,
-    };
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
     use ic_cycles_account_manager::{
         CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
     };
