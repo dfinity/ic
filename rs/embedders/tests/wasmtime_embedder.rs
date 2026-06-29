@@ -3798,8 +3798,10 @@ fn run_wasm_and_get_instructions_used(
     wat: &str,
     use_deterministic_tracker: bool,
 ) -> NumInstructions {
-    let mut config = Config::default();
-    config.dirty_page_overhead = NumInstructions::new(1);
+    let config = Config {
+        dirty_page_overhead: NumInstructions::new(1),
+        ..Default::default()
+    };
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_deterministic_memory_tracker_enabled(use_deterministic_tracker)
