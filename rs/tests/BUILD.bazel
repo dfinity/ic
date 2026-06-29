@@ -1,6 +1,6 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
-load("@rules_distroless//distroless:defs.bzl", "flatten", "passwd")
+load("@rules_distroless//distroless:defs.bzl", "cacerts", "flatten", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
@@ -49,6 +49,11 @@ tar(
         # we install the GNU variant but call 'awk' so we symlink
         "./usr/bin/awk type=link link=/usr/bin/gawk",
     ],
+)
+
+cacerts(
+    name = "ca_certificates",
+    package = "@resolute//ca-certificates/amd64:data",
 )
 
 # Creates /var/lib/dpkg/status with installed package information.
@@ -100,6 +105,7 @@ oci_image(
     target_compatible_with = ["@platforms//os:linux"],
     tars = [
         ":ubuntu_packages_tar",
+        ":ca_certificates",
     ],
 )
 
