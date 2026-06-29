@@ -379,6 +379,29 @@ impl Logs {
     }
 }
 
+async fn assert_in_progress_state_stable(
+    pic: &PocketIc,
+    sender: Principal,
+    args: &MigrateCanisterArgs,
+    expected: &str,
+) {
+    let s1 = match get_status(pic, sender, args).await.unwrap() {
+        MigrationStatus::InProgress { status } => status,
+        s => panic!("expected InProgress, got {:?}", s),
+    };
+    println!("State: {s1}");
+    for _ in 0..5 {
+        pic.tick().await;
+    }
+    let s2 = match get_status(pic, sender, args).await.unwrap() {
+        MigrationStatus::InProgress { status } => status,
+        s => panic!("expected InProgress, got {:?}", s),
+    };
+    println!("State: {s2}");
+    assert_eq!(s1, s2, "state changed without advancing time");
+    assert_eq!(&s1, expected);
+}
+
 async fn canister_info(
     pic: &PocketIc,
     proxy_canister: Principal,
@@ -1931,4 +1954,57 @@ async fn validation_fails_both_cloud_engine_subnets() {
     let Err(ValidationError::CloudEngineSubnet { .. }) = result else {
         panic!("unexpected result: {:?}", result)
     };
+}
+
+#[tokio::test]
+async fn migration_states_explicit() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = migrated_canister_controllers[0];
+    let migrated_canister = migrated_canisters[0];
+    let replaced_canister = replaced_canisters[0];
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
+    };
+
+    migrate_canister(&pic, sender, &args).await.unwrap();
+
+    // State 1: Accepted – the request was just enqueued; no time advance needed.
+    assert_in_progress_state_stable(&pic, sender, &args, "Accepted").await;
+
+    // States 2-7: `advance` fires the 1 s timer and ticks until the async xnet calls
+    // complete (the transition takes several ticks, not just one).  The 5 subsequent
+    // ticks inside `assert_in_progress_state_stable` (without a further time advance)
+    // do not fire the next state's timer, so the state stays put.
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "ControllersChanged").await;
+
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "StoppedAndReady").await;
+
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "RenamedReplacedCanister").await;
+
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "UpdatedRoutingTable").await;
+
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "RoutingTableChangeAccepted").await;
+
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "MigratedCanisterDeleted").await;
+
+    // State 8: RestoredControllers – the MigratedCanisterDeleted timer waits for
+    // MAX_INGRESS_TTL (300 s) + PERMITTED_DRIFT_AT_VALIDATOR (30 s) + max clock drift (30 s)
+    // = 360 s to have elapsed since stopped_since.  Fast-forward past that threshold,
+    // then fire the timer with the usual advance (1 s + ticks).
+    pic.advance_time(Duration::from_secs(360)).await;
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, "RestoredControllers").await;
 }
