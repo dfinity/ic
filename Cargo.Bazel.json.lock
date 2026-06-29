@@ -1,5 +1,5 @@
 {
-  "checksum": "6a43f11244d0b310055d3d01fa22ddaabdcedd7058fe26f728f38f9f112ba011",
+  "checksum": "c109b10f71849d7a3ee6bc3c6048eb3f9292e14d2324a211251418e2cf8c3dce",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -54964,81 +54964,6 @@
       ],
       "license_file": null
     },
-    "opentelemetry-http 0.32.0": {
-      "name": "opentelemetry-http",
-      "version": "0.32.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-http",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-http/0.32.0/download",
-          "sha256": "5683015d09e2df236ef005b17f6f196f0d5f6313c4fa43a7b6a53b52776e4331"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_http",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_http",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "reqwest",
-            "reqwest-blocking"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "opentelemetry 0.32.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "reqwest 0.13.4",
-              "target": "reqwest"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.32.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "opentelemetry-otlp 0.32.0": {
       "name": "opentelemetry-otlp",
       "version": "0.32.0",
@@ -55070,17 +54995,9 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "grpc-tonic",
             "http",
-            "http-proto",
-            "internal-logs",
-            "logs",
-            "metrics",
-            "opentelemetry-http",
             "prost",
-            "reqwest",
-            "reqwest-blocking-client",
             "tokio",
             "tonic",
             "tonic-types",
@@ -55099,10 +55016,6 @@
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-http 0.32.0",
-              "target": "opentelemetry_http"
-            },
-            {
               "id": "opentelemetry-proto 0.32.0",
               "target": "opentelemetry_proto"
             },
@@ -55113,10 +55026,6 @@
             {
               "id": "prost 0.14.1",
               "target": "prost"
-            },
-            {
-              "id": "reqwest 0.13.4",
-              "target": "reqwest"
             },
             {
               "id": "thiserror 2.0.18",
@@ -55248,8 +55157,6 @@
           "common": [
             "gen-tonic",
             "gen-tonic-messages",
-            "logs",
-            "metrics",
             "prost",
             "tonic",
             "tonic-prost",
@@ -68223,173 +68130,6 @@
         },
         "edition": "2021",
         "version": "0.12.24"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "reqwest 0.13.4": {
-      "name": "reqwest",
-      "version": "0.13.4",
-      "package_url": "https://github.com/seanmonstar/reqwest",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.13.4/download",
-          "sha256": "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "reqwest",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "reqwest",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "blocking"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.22.1",
-              "target": "base64"
-            },
-            {
-              "id": "bytes 1.11.1",
-              "target": "bytes"
-            },
-            {
-              "id": "futures-core 0.3.31",
-              "target": "futures_core"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "sync_wrapper 1.0.2",
-              "target": "sync_wrapper"
-            },
-            {
-              "id": "url 2.5.4",
-              "target": "url"
-            }
-          ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "futures-channel 0.3.31",
-                "target": "futures_channel"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "futures-channel 0.3.31",
-                "target": "futures_channel"
-              }
-            ],
-            "cfg(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\")))": [
-              {
-                "id": "js-sys 0.3.77",
-                "target": "js_sys"
-              },
-              {
-                "id": "wasm-bindgen 0.2.100",
-                "target": "wasm_bindgen"
-              },
-              {
-                "id": "wasm-bindgen-futures 0.4.37",
-                "target": "wasm_bindgen_futures"
-              },
-              {
-                "id": "web-sys 0.3.64",
-                "target": "web_sys"
-              }
-            ],
-            "cfg(not(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\"))))": [
-              {
-                "id": "http-body 1.0.1",
-                "target": "http_body"
-              },
-              {
-                "id": "http-body-util 0.1.3",
-                "target": "http_body_util"
-              },
-              {
-                "id": "hyper 1.8.1",
-                "target": "hyper"
-              },
-              {
-                "id": "hyper-util 0.1.12",
-                "target": "hyper_util"
-              },
-              {
-                "id": "log 0.4.28",
-                "target": "log"
-              },
-              {
-                "id": "percent-encoding 2.3.1",
-                "target": "percent_encoding"
-              },
-              {
-                "id": "pin-project-lite 0.2.16",
-                "target": "pin_project_lite"
-              },
-              {
-                "id": "tokio 1.48.0",
-                "target": "tokio"
-              },
-              {
-                "id": "tower 0.5.2",
-                "target": "tower"
-              },
-              {
-                "id": "tower-http 0.6.11",
-                "target": "tower_http"
-              },
-              {
-                "id": "tower-service 0.3.3",
-                "target": "tower_service"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "futures-channel 0.3.31",
-                "target": "futures_channel"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "futures-channel 0.3.31",
-                "target": "futures_channel"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.13.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -101460,9 +101200,6 @@
       "aarch64-apple-darwin"
     ],
     "cfg(all(target_arch = \"loongarch64\", target_os = \"linux\"))": [],
-    "cfg(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\")))": [
-      "wasm32-unknown-unknown"
-    ],
     "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
       "wasm32-unknown-unknown"
     ],
@@ -101588,12 +101325,6 @@
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
       "wasm32-unknown-unknown",
-      "x86_64-apple-darwin",
-      "x86_64-unknown-linux-gnu"
-    ],
-    "cfg(not(all(target_arch = \"wasm32\", any(target_os = \"unknown\", target_os = \"none\"))))": [
-      "aarch64-apple-darwin",
-      "aarch64-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],

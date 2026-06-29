@@ -1047,8 +1047,10 @@ crate.spec(
     version = "^0.32.0",
 )
 crate.spec(
+    default_features = False,
     features = [
         "grpc-tonic",
+        "trace",
     ],
     package = "opentelemetry-otlp",
     version = "^0.32.0",
