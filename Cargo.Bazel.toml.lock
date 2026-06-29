@@ -6261,9 +6261,9 @@ dependencies = [
 
 [[package]]
 name = "ic-bn-lib"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eea2c1f3aad0a4402aecc624cda39efbafc7dd6645c7f8ab68fe0b99620dcf02"
+checksum = "a00e80b8b5cfe66dcfb83ec7663181eba00bd56761576bf29b04c016699c8f2c"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -6727,7 +6727,7 @@ dependencies = [
 [[package]]
 name = "ic-gateway"
 version = "0.2.0"
-source = "git+https://github.com/dfinity/ic-gateway?rev=6f117f24b7046adef13ced255e0f42274d19fac1#6f117f24b7046adef13ced255e0f42274d19fac1"
+source = "git+https://github.com/dfinity/ic-gateway?rev=3e698972422be07776bf888666285b7b3f7c984e#3e698972422be07776bf888666285b7b3f7c984e"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -11726,7 +11726,7 @@ dependencies = [
  "quinn",
  "rustls 0.23.27",
  "rustls-pki-types",
- "rustls-platform-verifier 0.6.2",
+ "rustls-platform-verifier 0.7.0",
  "serde",
  "serde_json",
  "serde_urlencoded",

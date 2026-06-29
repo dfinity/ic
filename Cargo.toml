@@ -682,7 +682,7 @@ hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
 ic-agent = { version = "0.47.3", features = ["pem"] }
-ic-bn-lib = { version = "0.2.2", features = ["acme-alpn"] }
+ic-bn-lib = { version = "0.2.3", features = ["acme-alpn"] }
 ic-bn-lib-common = { version = "0.2.2" }
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
@@ -693,7 +693,7 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "6f117f24b7046adef13ced255e0f42274d19fac1", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "3e698972422be07776bf888666285b7b3f7c984e", default-features = false }
 ic-http-certification = "3.0.3"
 ic-identity-hsm = { version = "0.47.3" }
 ic-management-canister-types = "0.7.1"
