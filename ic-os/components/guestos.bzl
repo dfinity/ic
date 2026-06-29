@@ -79,6 +79,7 @@ def component_files(mode):
         Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
         Label("misc/sev/99-sev.rules"): "/etc/udev/rules.d/99-sev.rules",
         Label("guestos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
+        Label("guestos/misc/ic-node-tmpfiles.service"): "/etc/systemd/system/ic-node-tmpfiles.service",
         Label("guestos/misc/sudoers"): "/etc/sudoers",
         Label("guestos/misc/crypttab"): "/etc/crypttab",
         Label("guestos/misc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
