@@ -1045,7 +1045,7 @@ mod tests {
                         consumed_instructions - instructions_consumed_without_data;
                     assert_eq!(
                         (consumed_instructions.get()) as usize,
-                        ((payload_size / BYTES_PER_INSTRUCTION)),
+                        (payload_size / BYTES_PER_INSTRUCTION),
                     );
                 }
 
