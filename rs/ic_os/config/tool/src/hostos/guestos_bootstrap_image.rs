@@ -38,6 +38,12 @@ pub struct BootstrapOptions {
     pub accounts_ssh_authorized_keys: Option<PathBuf>,
 }
 
+fn mkfs_fat_bin() -> String {
+    std::env::var("MKFS_FAT").unwrap_or(
+        "/usr/sbin/mkfs.fat".to_string(), /* default to system binary */
+    )
+}
+
 impl BootstrapOptions {
     /// Create a FAT-formatted disk image containing bootstrap configuration.
     ///
@@ -65,12 +71,12 @@ impl BootstrapOptions {
             .context("Failed to set output file size")?;
 
         // Format the disk image as FAT
-        if !Command::new("/usr/sbin/mkfs.vfat")
+        if !Command::new(mkfs_fat_bin())
             .arg("-n")
             .arg("CONFIG")
             .arg(out_file)
             .status()
-            .context("Failed to execute mkfs.vfat command")?
+            .context("Failed to execute mkfs.fat command")?
             .success()
         {
             bail!("Failed to format disk image");
