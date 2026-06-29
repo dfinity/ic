@@ -864,6 +864,11 @@ impl ApiState {
                 let registry = ic_gateway::ic_bn_lib::prometheus::Registry::new();
                 let custom_domain_storage =
                     Arc::new(CustomDomainStorage::new(custom_domain_providers, &registry));
+                tasks.add_interval(
+                    "custom_domain_storage",
+                    custom_domain_storage.clone(),
+                    cli.domain.domain_custom_provider_poll_interval,
+                );
                 let ic_gateway_router = setup_router(
                     &cli,
                     custom_domain_storage,
