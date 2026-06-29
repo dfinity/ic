@@ -8,7 +8,8 @@ use libcryptsetup_rs::{
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tracing::{info, warn};
@@ -210,6 +211,10 @@ pub fn format_crypt_device(
             .context("Failed to create detached LUKS header file")?
             .set_len(16 * 1024 * 1024)
             .context("Failed to set size of detached LUKS header file")?;
+        // The replica (running as user ic-replica) needs read access to the detached header so
+        // that it can share it during an upgrade.
+        fs::set_permissions(header_path, fs::Permissions::from_mode(0o644))
+            .context("Failed to set permissions on detached LUKS header file")?;
     }
 
     let mut crypt_device = obtain_crypt_device_handle(device_path, header_location)?;
@@ -308,6 +313,45 @@ pub fn backup_luks_header_to_file(device_path: &Path, header_path: &Path) -> Res
     fs::rename(&temp_header_path, header_path)
         .with_context(|| format!("Failed to persist LUKS header to {}", header_path.display()))?;
 
+    Ok(())
+}
+
+/// The size of the LUKS2 header region in bytes. LUKS2 reserves the first 16 MiB of the device for
+/// the header and keyslot area.
+const LUKS2_HEADER_SIZE: usize = 16 * 1024 * 1024;
+
+/// Checks whether the device at `device_path` contains a valid LUKS2 header in the attached
+/// (on-device) position.
+pub fn has_attached_luks2_header(device_path: &Path) -> Result<bool> {
+    let mut crypt_device = CryptInit::init(device_path)
+        .context("Failed to initialize cryptographic device")?;
+    crypt_device
+        .context_handle()
+        .load::<CryptParamsLuks2Ref>(Some(EncryptionFormat::Luks2), None)?;
+    let format = crypt_device
+        .format_handle()
+        .get_type()
+        .context("Failed to get encryption format")?;
+    Ok(format == EncryptionFormat::Luks2)
+}
+
+/// Wipes (zeroizes) the first [`LUKS2_HEADER_SIZE`] bytes of the device at `device_path`, removing
+/// any attached LUKS2 header.
+///
+/// This is used when the Store partition is opened with a detached header: if the data device still
+/// carries a legacy attached header (from an older GuestOS that wrote both), we wipe it so that
+/// only the detached header remains going forward.
+pub fn wipe_attached_luks2_header(device_path: &Path) -> Result<()> {
+    let mut device = OpenOptions::new()
+        .write(true)
+        .open(device_path)
+        .with_context(|| format!("Failed to open device {} for writing", device_path.display()))?;
+    device
+        .write_all(&vec![0u8; LUKS2_HEADER_SIZE])
+        .with_context(|| format!("Failed to wipe LUKS2 header on device {}", device_path.display()))?;
+    device
+        .flush()
+        .with_context(|| format!("Failed to flush LUKS2 header wipe on device {}", device_path.display()))?;
     Ok(())
 }
 
