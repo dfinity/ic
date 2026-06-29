@@ -132,9 +132,9 @@ rust_test(
     # build_bootstrap_config_image(), which shells out to mkfs.fat/mcopy read
     # from MKFS_FAT/MCOPY (the build container no longer ships dosfstools/mtools).
     data = glob(["golden/*"]) + [
+        "//ic-os/guestos/envs/prod:disk-img-for-tests.tar",
         "@dosfstools//:mkfs.fat",
         "@mtools//:mcopy",
-        "//ic-os/guestos/envs/prod:disk-img-for-tests.tar",
     ],
     env = {
         "ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)",
