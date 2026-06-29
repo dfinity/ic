@@ -77,7 +77,10 @@ where
         let (left_key, left_value) = self.left.next()?;
 
         loop {
-            let (right_key, right_value) = self.right_peek.take().unwrap();
+            let (right_key, right_value) = self
+                .right_peek
+                .take()
+                .expect("right_peek is None during joining phase");
 
             match right_key.borrow().cmp(&left_key) {
                 // This right entry precedes the left key, so it has no match; skip past
@@ -190,5 +193,30 @@ mod tests {
                 (&3, &"C", Some(&"c"))
             ]
         );
+    }
+
+    #[test]
+    fn left_outer_join_empty_right() {
+        let left = BTreeMap::from([(1_u32, "a"), (2, "b"), (3, "c")]);
+        let right = BTreeMap::<u32, &str>::new();
+
+        let joined: Vec<_> = left_outer_join(left.iter(), right.iter()).collect();
+
+        assert_eq!(
+            joined,
+            vec![(&1, &"a", None), (&2, &"b", None), (&3, &"c", None)]
+        );
+    }
+
+    #[test]
+    fn left_outer_join_right_drained_after_skipping() {
+        // All right keys precede the first left key, so the right side is drained
+        // after skipping only `Ordering::Less` entries.
+        let left = BTreeMap::from([(4_u32, "d"), (5, "e")]);
+        let right = BTreeMap::from([(1_u32, "A"), (2, "B"), (3, "C")]);
+
+        let joined: Vec<_> = left_outer_join(left.iter(), right.iter()).collect();
+
+        assert_eq!(joined, vec![(&4, &"d", None), (&5, &"e", None)]);
     }
 }
