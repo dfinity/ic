@@ -116,9 +116,7 @@ pub(crate) fn export_attached_luks2_header_status(
     };
     let label_values: Vec<&str> = vec![&device_path_str, status_str];
 
-    header_status
-        .with_label_values(&label_values)
-        .set(1.0);
+    header_status.with_label_values(&label_values).set(1.0);
 
     registry
         .register(Box::new(header_status))

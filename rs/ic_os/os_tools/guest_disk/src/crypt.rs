@@ -323,7 +323,8 @@ pub fn has_attached_luks_header(device_path: &Path) -> Result<bool> {
     const LUKS_MAGIC: &[u8; 4] = b"LUKS";
 
     let mut start = vec![];
-    std::fs::File::open(device_path).context("Failed to open device for header check")?
+    std::fs::File::open(device_path)
+        .context("Failed to open device for header check")?
         .take(LUKS_MAGIC.len() as u64)
         .read_to_end(&mut start)
         .context("Failed to read first few bytes for header check")?;
@@ -347,13 +348,26 @@ pub fn wipe_attached_luks_header(device_path: &Path) -> Result<()> {
     let mut device = OpenOptions::new()
         .write(true)
         .open(device_path)
-        .with_context(|| format!("Failed to open device {} for writing", device_path.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed to open device {} for writing",
+                device_path.display()
+            )
+        })?;
     device
         .write_all(&vec![0u8; header_size_bytes as usize])
-        .with_context(|| format!("Failed to wipe LUKS header on device {}", device_path.display()))?;
-    device
-        .flush()
-        .with_context(|| format!("Failed to flush LUKS header wipe on device {}", device_path.display()))?;
+        .with_context(|| {
+            format!(
+                "Failed to wipe LUKS header on device {}",
+                device_path.display()
+            )
+        })?;
+    device.flush().with_context(|| {
+        format!(
+            "Failed to flush LUKS header wipe on device {}",
+            device_path.display()
+        )
+    })?;
     Ok(())
 }
 
