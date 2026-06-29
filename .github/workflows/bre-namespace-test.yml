@@ -27,7 +27,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   bazel-test-bre:
@@ -35,6 +34,8 @@ jobs:
     runs-on: namespace-profile-amd64-linux-32x64
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:a3fdc7cdfeb31d083acfde33811d38f267434aaaafd4d70b3497fab8aed94308
+      volumes:
+        - /var/run/nsc/:/var/run/nsc/
     timeout-minutes: 120
     # Opt-in while experimental: manual dispatch, pushes to dev-gh-* branches, or
     # non-fork pull requests labeled 'CI_BRE'. Only on the public repo, where
@@ -54,7 +55,6 @@ jobs:
           # 'nsc' is pre-authenticated on Namespace runners.
           # NOTE: do not print this bazelrc -- it contains short-lived credentials
           # that would leak into the Actions logs.
-          nsc auth exchange-github-token
           nsc bazel execution setup --bazelrc=/tmp/bazel-rbe.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
