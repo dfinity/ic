@@ -103,7 +103,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                 .await
                 .expect("Update call to proxy canister failed");
 
-            let expected_error_msg = "FlexibleHttpRequest is not yet implemented";
+            let expected_error_msg = "This API is not enabled on this subnet";
 
             match res {
                 Ok(_) => {

@@ -9,9 +9,10 @@ use crate::{
 };
 use LazyTree::Blob;
 use ic_canonical_state_tree_hash::{
-    hash_tree::HashTree,
+    hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
     lazy_tree::{
-        Lazy, LazyFork, LazyTree, blob, fork, materialize::materialize_partial, num, string,
+        Lazy, LazyFork, LazyTree, SubtreeExpander, SubtreeSource, blob, fork,
+        materialize::materialize_partial, num, string,
     },
 };
 use ic_crypto_tree_hash::{Label, Witness, sparse_labeled_tree_from_paths};
@@ -229,7 +230,7 @@ impl<K, V> MapFilter<K, V> for NoFilter {
 #[derive(Clone)]
 struct MapTransformFork<'a, K, V, MF, F>
 where
-    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a>,
+    F: Fn(&'a K, &'a V, CertificationVersion) -> LazyTree<'a>,
     MF: MapFilter<K, V>,
 {
     map: &'a BTreeMap<K, V>,
@@ -243,7 +244,7 @@ where
     K: Ord + LabelLike + Clone + Send + Sync,
     V: Send + Sync,
     MF: MapFilter<K, V> + Send + Sync,
-    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
+    F: Fn(&'a K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
 {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let k = K::from_label(label.as_bytes())?;
@@ -251,8 +252,8 @@ where
             return None;
         }
         self.map
-            .get(&k)
-            .map(move |v| (self.mk_tree)(k, v, self.certification_version))
+            .get_key_value(&k)
+            .map(|(k, v)| (self.mk_tree)(k, v, self.certification_version))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
@@ -272,7 +273,7 @@ where
                 .map(move |(k, v)| {
                     (
                         k.to_label(),
-                        (self.mk_tree)(k.clone(), v, self.certification_version),
+                        (self.mk_tree)(k, v, self.certification_version),
                     )
                 }),
         )
@@ -771,7 +772,6 @@ fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
 }
 
 const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
-const CONTROLLER_LABEL: &[u8] = b"controller";
 const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
@@ -792,60 +792,93 @@ struct CanisterFork<'a> {
 }
 
 impl<'a> CanisterFork<'a> {
-    /// Like `edge`, but skips the version check on every call.
-    fn edge_no_checks(&self, label: &[u8]) -> Option<LazyTree<'a>> {
+    /// Like `edge`, but assumes valid labels only.
+    fn edge_no_checks(&self, label: &[u8]) -> LazyTree<'a> {
         let canister = self.canister;
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
-                CERTIFIED_DATA_LABEL => Some(Blob(&canister.system_state.certified_data[..], None)),
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
-                CONTROLLERS_LABEL => Some(blob(move || {
-                    encode_controllers(&canister.system_state.controllers)
-                })),
-                METADATA_LABEL => Some(canister_metadata_as_tree(execution_state, self.version)),
-                MODULE_HASH_LABEL => Some(blob(move || {
-                    execution_state.wasm_binary.binary.module_hash().to_vec()
-                })),
-                _ => None,
+                CERTIFIED_DATA_LABEL => Blob(canister.system_state.certified_data.as_slice(), None),
+                CONTROLLERS_LABEL => {
+                    blob(move || encode_controllers(&canister.system_state.controllers))
+                }
+                METADATA_LABEL => canister_metadata_as_tree(execution_state, self.version),
+                MODULE_HASH_LABEL => {
+                    Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
+                }
+                _ => unreachable!(),
             },
             None => match label {
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
-                CONTROLLERS_LABEL => Some(blob(move || {
-                    encode_controllers(&canister.system_state.controllers)
-                })),
-                _ => None,
+                CONTROLLERS_LABEL => {
+                    blob(move || encode_controllers(&canister.system_state.controllers))
+                }
+                _ => unreachable!(),
             },
+        }
+    }
+
+    /// Returns the labels applicable to this canister.
+    #[inline]
+    fn valid_labels(&self) -> &'static [&'static [u8]] {
+        match self.canister.execution_state {
+            Some(_) => &CANISTER_LABELS,
+            None => &CANISTER_NO_MODULE_LABELS,
         }
     }
 }
 
 impl<'a> LazyFork<'a> for CanisterFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
-        CANISTER_LABELS.iter().find(|l| *l == &label.as_bytes())?;
-        self.edge_no_checks(label.as_bytes())
+        self.valid_labels()
+            .iter()
+            .find(|l| *l == &label.as_bytes())?;
+        Some(self.edge_no_checks(label.as_bytes()))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
-        match self.canister.execution_state {
-            Some(_) => Box::new(CANISTER_LABELS.iter().map(From::from)),
-            None => Box::new(CANISTER_NO_MODULE_LABELS.iter().map(From::from)),
-        }
+        Box::new(self.valid_labels().iter().map(From::from))
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         let canister = self.clone();
         Box::new(
-            CANISTER_LABELS.iter().filter_map(move |label| {
-                Some((Label::from(label), canister.edge_no_checks(label)?))
-            }),
+            self.valid_labels()
+                .iter()
+                .map(move |label| (Label::from(label), canister.edge_no_checks(label))),
         )
     }
 
     fn len(&self) -> usize {
-        match self.canister.execution_state {
-            Some(_) => CANISTER_LABELS.len(),
-            None => CANISTER_NO_MODULE_LABELS.len(),
-        }
+        self.valid_labels().len()
+    }
+}
+
+/// Rebuilds a canister's stubbed [subtree](`NodeKind::Stub`) for witness
+/// generation, by recovering the `&CanisterState` from the stub's
+/// [`SubtreeSource`] and traversing its [`CanisterFork`].
+///
+/// The certification version (which the canonical encoding depends on) is baked
+/// in as the const parameter `V`, so the stored function pointer alone fully
+/// determines the expansion — see [`select_canister_expander`].
+fn expand_canister<const V: u32>(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let canister = source.downcast::<CanisterState>();
+    let version = CertificationVersion::try_from(V)
+        .expect("const version parameter is a valid certification version");
+    hash_lazy_tree(&fork(CanisterFork { canister, version }))
+}
+
+/// Selects the [`expand_canister`] monomorphization for `version`, so the
+/// resulting [`SubtreeExpander`] function pointer carries the version with it
+/// (rather than replicating it in every stub).
+fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
+    match version {
+        CertificationVersion::V19 => expand_canister::<{ CertificationVersion::V19 as u32 }>,
+        CertificationVersion::V20 => expand_canister::<{ CertificationVersion::V20 as u32 }>,
+        CertificationVersion::V21 => expand_canister::<{ CertificationVersion::V21 as u32 }>,
+        CertificationVersion::V22 => expand_canister::<{ CertificationVersion::V22 as u32 }>,
+        CertificationVersion::V23 => expand_canister::<{ CertificationVersion::V23 as u32 }>,
+        CertificationVersion::V24 => expand_canister::<{ CertificationVersion::V24 as u32 }>,
+        CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
+        CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
     }
 }
 
@@ -919,6 +952,19 @@ impl<'a> LazyFork<'a> for CanisterStatesFork<'a> {
     fn len(&self) -> usize {
         self.canisters.len()
     }
+
+    /// Every canister's certified subtree is stored as a reusable stub identified
+    /// by the backing `Arc<CanisterState>` and the version-specific expander. An
+    /// unchanged canister keeps the same `Arc` (copy-on-write) and the same
+    /// expander, so its precomputed digest is reused from the baseline; any
+    /// mutation or version change yields a mismatched [`SubtreeSource`] and a
+    /// rebuild.
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        let expander = select_canister_expander(self.certification_version);
+        Some(Box::new(self.canisters.all_iter().map(
+            move |(k, canister)| (k.to_label(), SubtreeSource::new(canister, expander)),
+        )))
+    }
 }
 
 fn subnets_as_tree<'a>(
@@ -942,17 +988,15 @@ fn subnets_as_tree<'a>(
                         blob({
                             let inverted_routing_table = Arc::clone(&inverted_routing_table);
                             move || {
-                                encode_subnet_canister_ranges(
-                                    inverted_routing_table.get(&subnet_id),
-                                )
+                                encode_subnet_canister_ranges(inverted_routing_table.get(subnet_id))
                             }
                         }),
                     )
-                    .with_if(subnet_id == own_subnet_id, "node", move || {
+                    .with_if(subnet_id == &own_subnet_id, "node", move || {
                         nodes_as_tree(own_subnet_node_public_keys, certification_version)
                     })
                     .with_tree_if(
-                        subnet_id == own_subnet_id,
+                        subnet_id == &own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
@@ -977,7 +1021,7 @@ fn canister_ranges_as_tree(
         map_filter: NoFilter,
         certification_version,
         mk_tree: move |subnet_id, _subnet_topology, _certification_version| {
-            let split_ranges = split_routing_table.get(&subnet_id).map(Arc::clone);
+            let split_ranges = split_routing_table.get(subnet_id).map(Arc::clone);
             fork(CanisterRangesFork {
                 split_ranges,
                 phantom: PhantomData,

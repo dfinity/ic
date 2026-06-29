@@ -1,5 +1,6 @@
 use crate::message_routing::{
-    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
+    CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
+    MessageRoutingMetrics,
 };
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -12,18 +13,19 @@ use ic_interfaces::messaging::{
 use ic_logger::{ReplicaLogger, debug, error, info, trace};
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{add_bucket, decimal_buckets};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::{Stream, StreamMap};
 use ic_replicated_state::replicated_state::{
     LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, ReplicatedStateMessageRouting,
 };
 use ic_replicated_state::{ReplicatedState, StateError};
 use ic_types::messages::{
-    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES, Payload, Refund,
-    RejectContext, Request, RequestOrResponse, Response, StreamMessage,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
+    Refund, RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, SubnetId};
-use ic_types_cycles::CompoundCycles;
+use ic_types_cycles::{CompoundCycles, Cycles};
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -60,6 +62,10 @@ struct StreamHandlerMetrics {
     /// messages for canisters not hosted (now, or previously, according to
     /// `canister_migrations`) by this subnet.
     pub critical_error_receiver_subnet_mismatch: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// messages received from a CloudEngine subnet that carried cycles or were
+    /// guaranteed-response calls, which are not permitted on non-engine subnets.
+    pub critical_error_engine_message: IntCounter,
 }
 
 const METRIC_INDUCTED_XNET_MESSAGES: &str = "mr_inducted_xnet_message_count";
@@ -73,6 +79,7 @@ const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 const LABEL_STATUS: &str = "status";
 const LABEL_VALUE_SUCCESS: &str = "success";
 const LABEL_VALUE_DROPPED: &str = "dropped";
+const LABEL_VALUE_ENGINE_NOT_ALLOWED: &str = "EngineNotAllowed";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING: &str = "SenderSubnetMismatchMigrating";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
@@ -135,6 +142,9 @@ impl StreamHandlerMetrics {
             metrics_registry.error_counter(CRITICAL_ERROR_SENDER_SUBNET_MISMATCH);
         let critical_error_receiver_subnet_mismatch =
             metrics_registry.error_counter(CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH);
+        let critical_error_engine_message = message_routing_metrics
+            .critical_error_engine_message
+            .clone();
 
         // Initialize all `inducted_xnet_messages` counters with zero, so they are all
         // exported from process start (`IntCounterVec` is really a map).
@@ -142,6 +152,7 @@ impl StreamHandlerMetrics {
             for status in &[
                 LABEL_VALUE_SUCCESS,
                 LABEL_VALUE_DROPPED,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
                 LABEL_VALUE_CANISTER_NOT_FOUND,
                 LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
                 LABEL_VALUE_CANISTER_STOPPED,
@@ -171,6 +182,7 @@ impl StreamHandlerMetrics {
             critical_error_induct_response_failed,
             critical_error_sender_subnet_mismatch,
             critical_error_receiver_subnet_mismatch,
+            critical_error_engine_message,
         }
     }
 }
@@ -742,7 +754,30 @@ impl StreamHandlerImpl {
         available_guaranteed_response_memory: &mut i64,
     ) {
         let own_cost_schedule = state.get_own_cost_schedule();
-        let (msg, msg_type) = match msg {
+
+        // Messages crossing an engine boundary require special handling:
+        //   * Requests that are guaranteed-response or carry cycles are rejected with
+        //     `EngineNotAllowed`; the reject signal refunds any cycles to the sender.
+        //   * Best-effort requests without cycles are inducted normally.
+        //   * Best-effort responses without cycles are inducted normally.
+        //   * Responses that should not exist (guaranteed-response, or carrying cycles) are
+        //     dropped and a critical error is raised; any cycles are accounted as lost.
+        //   * `Refund` messages are dropped and a critical error is raised; their cycles
+        //     are accounted as lost.
+        // Loopback (own-subnet) messages are excluded: an engine's own messages are always
+        // inducted normally.
+        let remote_is_engine = state
+            .metadata
+            .network_topology
+            .subnets()
+            .get(&remote_subnet_id)
+            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+        let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
+        // At an engine boundary iff this is a cross-subnet message and either side is an engine.
+        let is_at_engine_boundary =
+            remote_subnet_id != self.subnet_id && (own_is_engine || remote_is_engine);
+
+        let (mut msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
                 (RequestOrResponse::Request(req), LABEL_VALUE_TYPE_REQUEST)
             }
@@ -750,6 +785,27 @@ impl StreamHandlerImpl {
                 (RequestOrResponse::Response(rep), LABEL_VALUE_TYPE_RESPONSE)
             }
             StreamMessage::Refund(refund) => {
+                // Refunds bypass sender validation; apply the engine filters here.
+                if is_at_engine_boundary {
+                    error!(
+                        self.log,
+                        "{}: Dropping refund from {}: {:?}",
+                        CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
+                        remote_subnet_id,
+                        refund,
+                    );
+                    self.metrics.critical_error_engine_message.inc();
+                    self.observe_inducted_message_status(
+                        LABEL_VALUE_TYPE_REFUND,
+                        LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                    );
+                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                        refund.amount(),
+                        own_cost_schedule,
+                    ));
+                    stream.push_accept_signal();
+                    return;
+                }
                 return self.induct_refund(&refund, state, stream);
             }
         };
@@ -762,6 +818,81 @@ impl StreamHandlerImpl {
             // on a canister's migration path.
             (SenderSubnet::Match, _)
             | (SenderSubnet::OnMigrationPath, RequestOrResponse::Response(_)) => {
+                // Apply the engine filter before inducting. See `is_at_engine_boundary`.
+                if is_at_engine_boundary {
+                    let mut stripped_msg: Option<RequestOrResponse> = None;
+                    match &msg {
+                        // Requests are not allowed across the engine boundary if they are
+                        // guaranteed-response (unbounded-wait) or carry cycles. Reject them
+                        // with `EngineNotAllowed`; the reject signal refunds any cycles to the
+                        // sender, so they are not lost.
+                        RequestOrResponse::Request(req)
+                            if req.deadline == NO_DEADLINE || req.payment > Cycles::zero() =>
+                        {
+                            error!(
+                                self.log,
+                                "{}: Rejecting disallowed request at engine boundary (from {}): {:?}",
+                                CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
+                                remote_subnet_id,
+                                req,
+                            );
+                            self.metrics.critical_error_engine_message.inc();
+                            self.observe_inducted_message_status(
+                                msg_type,
+                                LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                            );
+                            stream.push_reject_signal(RejectReason::EngineNotAllowed);
+                            return;
+                        }
+                        // A response that should not exist at the engine boundary: a
+                        // guaranteed-response response, or one carrying cycles. This can only
+                        // come from a buggy or malicious peer, so raise a critical error. Any
+                        // attached cycles are stripped here, before induction, so that none
+                        // cross the boundary -- not even as anonymous refunds credited while
+                        // inducting; the stripped cycles are lost.
+                        RequestOrResponse::Response(rep)
+                            if rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero() =>
+                        {
+                            error!(
+                                self.log,
+                                "{}: Illegal engine-boundary response (from {}): {:?}",
+                                CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
+                                remote_subnet_id,
+                                rep,
+                            );
+                            self.metrics.critical_error_engine_message.inc();
+                            if rep.refund > Cycles::zero() {
+                                state.observe_lost_cycles_due_to_dropped_messages(
+                                    CompoundCycles::new(rep.refund, own_cost_schedule),
+                                );
+                            }
+                            if rep.deadline != NO_DEADLINE {
+                                // Best-effort illegal response: drop it. The caller will time
+                                // out on its own, so there is no need to deliver it.
+                                self.observe_inducted_message_status(
+                                    msg_type,
+                                    LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                                );
+                                stream.push_accept_signal();
+                                return;
+                            }
+                            // Guaranteed response: still induct it (with any cycles stripped)
+                            // so the caller is not left hanging forever on our bug.
+                            if rep.refund > Cycles::zero() {
+                                let mut stripped = (**rep).clone();
+                                stripped.refund = Cycles::zero();
+                                stripped_msg =
+                                    Some(RequestOrResponse::Response(Arc::new(stripped)));
+                            }
+                        }
+                        // Best-effort request with no cycles, or a best-effort response with
+                        // no cycles: induct normally.
+                        _ => {}
+                    }
+                    if let Some(stripped) = stripped_msg {
+                        msg = stripped;
+                    }
+                }
                 match self.induct_message_impl(
                     msg,
                     msg_type,
@@ -797,6 +928,13 @@ impl StreamHandlerImpl {
 
             // Reject requests not originating from their sender's known host
             // subnet. Their senders are likely manually migrated canisters.
+            //
+            // NOTE: We intentionally do NOT relax this for engine-boundary traffic.
+            // Sender-subnet validation is the only anti-forgery check on responses; a
+            // malicious engine that forges `respondent` to a canister hosted on a
+            // different subnet would otherwise be able to inject responses matching
+            // outstanding callbacks. Failing closed here (drop responses, reject
+            // requests) is required for response authenticity.
             (SenderSubnet::Mismatch, RequestOrResponse::Request(_)) => {
                 self.observe_inducted_message_status(
                     msg_type,
@@ -1011,7 +1149,7 @@ impl StreamHandlerImpl {
                     // Recipient canister not found, cycles are lost.
                     self.observe_inducted_message_status(
                         LABEL_VALUE_TYPE_REFUND,
-                        LABEL_VALUE_DROPPED,
+                        LABEL_VALUE_CANISTER_NOT_FOUND,
                     );
                     state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
                         refund.amount(),

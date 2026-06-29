@@ -116,7 +116,7 @@ class Args:
     parallel: int = 1
 
     # Path to an idrac script, which we use to find the directory. If None, pip bin directory will be used.
-    idrac_script: Optional[str] = None
+    idrac_script_dir: Optional[str] = None
 
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
@@ -431,7 +431,17 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 
 def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
-    command = f"python3 {idrac_script_dir}/{script_and_args}"
+    script_name, _, args = script_and_args.partition(" ")
+
+    script_path = next(idrac_script_dir.glob(f"*.data/scripts/{script_name}"), None)
+    if not script_path:
+        raise FileNotFoundError(
+            f"Could not find '{script_name}' inside any *.data/scripts/ directory under {idrac_script_dir}"
+        )
+
+    command = f"{sys.executable} {script_path} {args}".strip()
+
+    log.info(f"Invoking subprocess command: {command}")
     result = invoke.run(command)
 
     if result and not result.ok:
@@ -783,7 +793,7 @@ def main():
     network_image_url: str = f"http://{args.file_share_url}/{args.file_share_image_filename}"
     log.info(f"Using network_image_url: {network_image_url}")
 
-    idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
+    idrac_script_dir = Path(args.idrac_script_dir) if args.idrac_script_dir else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
     ini_filename: str = args.ini_filename

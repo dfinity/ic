@@ -2,33 +2,26 @@
 build-essential
 curl
 git
-git-lfs
-gnupg
 iproute2
 jq
 rclone
 retry
-shellcheck
 sudo
 time
-uuid-dev
-vim
 xxd
 zip
 
-# Bitcoin core (for bitcoin adapter integration test)
+# Autotools (libtoolize/autoconf/automake), pulled in via libtool. Needed by
+# rules_foreign_cc source builds, e.g. jemalloc's autogen.sh runs autoconf.
 libtool
-libevent-dev
-libboost-dev
 
 # RUST
-gcc
 pkg-config
-libclang-18-dev
-libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)  
+libclang-dev
+libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)
 libusb-1.0-0-dev # required for HSM
 lld # required for ovmf_sev genrule
-protobuf-compiler
+protobuf-compiler # needed by cargo for prost-build/tonic-build (Bazel brings its own)
 llvm
 
 # IC-OS
@@ -41,8 +34,6 @@ iasl # to build OVMF
 ipmitool # to connect to baremetal test instances
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
- # Linked in by IC-OS binaries for creating mapped devices.
-libdevmapper-dev
 libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
@@ -54,9 +45,18 @@ rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
-# Unknown
-containernetworking-plugins
-buildah
+# Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
+# Provides per-test libvirtd subprocess + KVM-accelerated QEMU + dnsmasq for the
+# libvirt network's DHCP.
+libvirt-daemon
+libvirt-daemon-driver-qemu
+qemu-system-x86
+qemu-utils
+dnsmasq-base
+ovmf
+# Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
+# plus `setcap`/`getcap`; see ci/container/Dockerfile.
+libcap2-bin
 
 # For ci/githubstats/query.py
 libpq-dev

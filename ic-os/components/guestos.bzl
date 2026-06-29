@@ -53,6 +53,7 @@ def component_files(mode):
         Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
         Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
         Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
+        Label("guestos/share/ic-gateway.env"): "/opt/ic/share/ic-gateway.env",
         Label("guestos/share/nns_public_key.pem"): "/opt/ic/share/nns_public_key.pem",
 
         # init

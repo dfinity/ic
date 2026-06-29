@@ -86,6 +86,7 @@ fn setup(
                         max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    /* page_overhead not relevant in these tests */ 1,
                     Arc::new(SignalMutex::new(|_| {})),
                 )
                 .unwrap(),
@@ -104,6 +105,7 @@ fn setup(
                         max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    /* prefetching does not use this anyway */ 0,
                     Arc::new(SignalMutex::new(|_| {})),
                 )
                 .unwrap(),

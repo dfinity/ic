@@ -13,7 +13,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{NumBytes, NumInstructions, NumOsPages};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
@@ -186,8 +186,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -279,8 +278,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -376,8 +374,7 @@ fn dts_update_concurrent_cycles_change_fails() {
             canister.memory_usage() + NumBytes::from(bytes_to_grow as u64),
             canister.message_memory_usage(),
             canister.compute_allocation(),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             Cycles::zero(),
         );
 
@@ -385,8 +382,7 @@ fn dts_update_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -485,8 +481,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
