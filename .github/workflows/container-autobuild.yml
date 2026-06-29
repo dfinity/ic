@@ -108,7 +108,7 @@ jobs:
     # Runs on a Namespace runner where 'nsc' is pre-authenticated. 'update-image-references'
     # waits for this job and pins the resulting digest in the same commit. Like
     # 'ic-build-image', this job is required: if it fails, that's a bug to fix.
-    runs-on: namespace-profile-default
+    runs-on: namespace-profile-default;permissions.additional_grant=baseimage:*:*
     # nsc authenticates via the runner's Namespace workspace identity, not the
     # GITHUB_TOKEN, so this job needs no GitHub permissions (least privilege).
     permissions: {}
