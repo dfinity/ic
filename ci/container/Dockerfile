@@ -83,6 +83,8 @@ RUN curl --fail https://sh.rustup.rs -sSf \
       sh -s -- -y --default-toolchain none --no-modify-path \
     && rm -rf /opt/rustup
 
+curl -fsSL https://get.namespace.so/cloud/install.sh | sh
+
 WORKDIR /
 # Bake the entrypoint into the image so it works without the repo bind-mounted.
 COPY ./ci/container/init.sh /ci/container/init.sh
