@@ -2092,13 +2092,59 @@ async fn migration_completes_after_subnet_deletion() {
                 pic.advance_time(Duration::from_secs(250)).await;
                 advance(&pic).await;
             }
+            // `delete_source == true` deletes the source subnet (the subnet of
+            // the migrated canister) and keeps the target subnet (the subnet of
+            // the replaced canister); `delete_source == false` does the opposite.
+            let source_subnet = migrated_canister_subnet;
+            let target_subnet = replaced_canister_subnet;
+            let source_deleted = delete_source;
+            let target_deleted = !delete_source;
+
+            // We use `get_subnet` (instead of `canister_status`) to determine on
+            // which subnet a canister lives: `canister_status` would be an
+            // ingress message that is rejected at submission time (and makes the
+            // client panic) if the canister's subnet has been deleted.
             let status = get_status(&pic, sender, &args).await.unwrap();
+            let migrated_subnet = pic.get_subnet(migrated_canisters[0]).await;
+            let replaced_subnet = pic.get_subnet(replaced_canisters[0]).await;
             match status {
-                MigrationStatus::Succeeded { .. } | MigrationStatus::Failed { .. } => {}
+                MigrationStatus::Succeeded { .. } => {
+                    // The migration moved the migrated canister to the target
+                    // subnet and removed it from the source subnet (so the source
+                    // subnet no longer contains it). If the target subnet was
+                    // deleted, the migrated canister no longer exists anywhere.
+                    assert_eq!(
+                        migrated_subnet,
+                        (!target_deleted).then_some(target_subnet),
+                        "state={state}, delete_source={delete_source}: migrated canister should be on the target subnet (or gone if it was deleted)"
+                    );
+                    // The replaced canister was consumed by the migration.
+                    assert_eq!(
+                        replaced_subnet, None,
+                        "state={state}, delete_source={delete_source}: replaced canister should have been consumed by the migration"
+                    );
+                }
+                MigrationStatus::Failed { .. } => {
+                    // The migration did not move the migrated canister; it remains
+                    // on the source subnet. If the source subnet was deleted, it
+                    // no longer exists anywhere.
+                    assert_eq!(
+                        migrated_subnet,
+                        (!source_deleted).then_some(source_subnet),
+                        "state={state}, delete_source={delete_source}: migrated canister should remain on the source subnet (or gone if it was deleted)"
+                    );
+                    // The replaced canister was left untouched on the target subnet.
+                    assert_eq!(
+                        replaced_subnet,
+                        (!target_deleted).then_some(target_subnet),
+                        "state={state}, delete_source={delete_source}: replaced canister should remain on the target subnet (or gone if it was deleted)"
+                    );
+                }
                 MigrationStatus::InProgress { .. } => panic!(
                     "state={state}, delete_source={delete_source}: expected Succeeded or Failed, got InProgress"
                 ),
             }
+
             pic.drop().await;
         }
     }
