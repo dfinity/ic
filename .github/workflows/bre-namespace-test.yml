@@ -107,21 +107,10 @@ jobs:
           # command-line flags override the remote-only strategies from the Namespace
           # bazelrc because command-line flags win, and --strategy=Genrule overrides both
           # --spawn_strategy and --genrule_strategy for the Genrule mnemonic.
-          #
-          # bazel/conf/.bazelrc.build sets --noexperimental_inmemory_dotd_files, which
-          # forces C++ .d (dependency) files to be read from local disk. That was done to
-          # work around a DFINITY remote-*cache* bug (bazelbuild/bazel#22387) which does
-          # not apply here: this job bypasses that cache and uses Namespace's executor.
-          # Under remote *execution* with build-without-the-bytes (the Namespace bazelrc
-          # only downloads minimal/top-level outputs), the intermediate .d files are never
-          # downloaded, so reading them from disk fails with "error while parsing .d file:
-          # ... (No such file or directory)". Re-enable in-memory .d files so they are
-          # streamed from the remote nodes instead of read from disk.
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
             test \
-            --experimental_inmemory_dotd_files \
             --spawn_strategy=remote,local \
             --strategy=Genrule=remote,local \
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly \
