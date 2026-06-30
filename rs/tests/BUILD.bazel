@@ -51,6 +51,9 @@ tar(
     ],
 )
 
+# Needed because reqwest 0.13 switched to `rustls-platform-verifier`, which on Linux reads
+# from `/etc/ssl/certs/ca-certificates.crt`. This rule creates that bundle from the cert package;
+# the old `rustls-native-certs` (reqwest 0.12) could find individual cert files without it.
 cacerts(
     name = "ca_certificates",
     package = "@resolute//ca-certificates/amd64:data",
