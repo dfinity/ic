@@ -902,6 +902,12 @@ impl LocalBackend {
     /// *path*: within a single bazel invocation a given image always resolves to
     /// the same immutable runfiles path, so the path identifies the content
     /// without reading the (large) file to hash it.
+    ///
+    /// The returned path is absolute (`working_dir` is canonicalized during
+    /// backend setup) and each VM's qcow2 overlay records it as its backing
+    /// file, so the base must not be relocated while overlays reference it. It
+    /// isn't: it stays under `working_dir` and is torn down together with the
+    /// overlays at the end of the group.
     fn ensure_base_image(&self, src: &Path) -> Result<PathBuf> {
         use ic_crypto_sha2::Sha256;
         use std::os::unix::io::AsRawFd;
@@ -926,6 +932,11 @@ impl LocalBackend {
             .with_context(|| format!("opening image cache lock {}", lock_path.display()))?;
         nix::fcntl::flock(lock.as_raw_fd(), nix::fcntl::FlockArg::LockExclusive)
             .with_context(|| format!("locking image cache lock {}", lock_path.display()))?;
+        // The lock is released when `lock` is dropped at the end of this function
+        // (its `File` closes the fd, which drops the advisory lock). Rust opens
+        // files `O_CLOEXEC`, so a forked task subprocess that `exec`s does not
+        // inherit this fd and therefore cannot keep the lock held after we
+        // return.
 
         if !base.exists() {
             // Extract to a temp file on the same filesystem, then atomically
@@ -1002,10 +1013,10 @@ impl LocalBackend {
                 .arg("-b")
                 .arg(&base)
                 .arg(&primary_disk);
-            // Grow the overlay's virtual size to `min_gib` only when it exceeds
-            // the base image's size (the base is raw, so its byte length is its
-            // virtual size). Mirrors the old `truncate --size=>{min_gib}G`
-            // grow-only semantics; a smaller request leaves the base size.
+            // Grow the overlay's virtual size to `min_gib`, but only when it
+            // exceeds the base image's size (the base is raw, so its byte length
+            // is its virtual size). This is grow-only: a request smaller than the
+            // base leaves the overlay at the base size.
             if let Some(min_gib) = min_gib {
                 let base_virtual = std::fs::metadata(&base)
                     .with_context(|| format!("stat base image {}", base.display()))?
@@ -1271,13 +1282,15 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
             dst.display()
         );
         // Extract into a fresh tempdir to find the disk-image entry. The dir
-        // name includes the destination file name (not just the pid) so that
-        // concurrent extractions of *different* images into the same parent
-        // directory — e.g. distinct base images under `image_cache`, which are
-        // guarded by distinct per-key locks — cannot collide on the scratch dir.
+        // name is unique per process *and* per thread, and also includes the
+        // destination file name, so concurrent extractions of *different* images
+        // into the same parent directory — e.g. distinct base images under
+        // `image_cache`, which are guarded by distinct per-key locks — cannot
+        // collide on the scratch dir.
         let tmp = parent.join(format!(
-            ".extract-{}-{}",
+            ".extract-{}-{:?}-{}",
             std::process::id(),
+            std::thread::current().id(),
             dst.file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default()
