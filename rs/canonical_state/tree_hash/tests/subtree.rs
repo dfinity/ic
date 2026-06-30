@@ -253,6 +253,11 @@ fn every_canister_is_a_subtree() {
         NUM_CANISTERS,
         "every canister should be stored as a stub"
     );
+
+    // No baseline, so nothing is reused; and a from-scratch fork this large is
+    // built entirely in parallel.
+    assert_eq!(tree.reused_stubs(), 0);
+    assert_eq!(tree.parallel_built_children(), NUM_CANISTERS);
 }
 
 #[test]
@@ -393,6 +398,14 @@ fn baseline_build_with_partial_change_matches_from_scratch() {
 
     assert_eq!(with_baseline.stub_count(), NUM_CANISTERS);
     assert_eq!(with_baseline.root_hash(), from_scratch.root_hash());
+
+    // With the baseline, every canister but the mutated one is reused; the build
+    // stays sequential (the rebuild rate never projects enough work to parallelize).
+    assert_eq!(with_baseline.reused_stubs(), NUM_CANISTERS - 1);
+    assert_eq!(with_baseline.parallel_built_children(), 0);
+    // The from-scratch build reuses nothing and parallelizes the whole fork.
+    assert_eq!(from_scratch.reused_stubs(), 0);
+    assert_eq!(from_scratch.parallel_built_children(), NUM_CANISTERS);
 }
 
 /// Whether `a` and `b` hold the same stub [`SubtreeSource`]s by identity: each
