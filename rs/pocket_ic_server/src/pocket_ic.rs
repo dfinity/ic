@@ -1200,6 +1200,17 @@ impl PocketIcSubnets {
         }
 
         // Upload registry to the registry canister.
+        self.sync_registry_to_canister(nns_subnet);
+    }
+
+    /// Applies all registry data provider mutations that have not yet been
+    /// applied to the registry canister, advancing the registry canister to
+    /// the latest version of the local registry data provider. This keeps the
+    /// registry canister and the local registry data provider in sync so that
+    /// `sync_registry_from_canister` does not loop forever waiting for the
+    /// registry canister to reach a version that the local registry data
+    /// provider has already surpassed.
+    fn sync_registry_to_canister(&mut self, nns_subnet: Arc<Subnet>) {
         let mutation_requests: Vec<_> = self
             .registry_data_provider
             .export_versions_as_atomic_mutation_requests()
@@ -2843,7 +2854,7 @@ impl PocketIcSubnets {
         }
 
         // Update global registry records to reflect the removed subnet.
-        if self.nns_subnet.is_some() {
+        if let Some(nns_subnet) = self.nns_subnet.clone() {
             let next_version =
                 RegistryVersion::new(self.registry_data_provider.latest_version().get() + 1);
             remove_chain_key_registry_records(
@@ -2871,6 +2882,15 @@ impl PocketIcSubnets {
                 next_version,
             );
             self.persist_registry_changes();
+            // Apply the registry changes to the registry canister as well if the
+            // `registry` ICP feature is enabled so that the registry canister and
+            // the local registry data provider stay in sync (otherwise
+            // `sync_registry_from_canister` would loop forever).
+            if let Some(icp_features) = &self.icp_features
+                && icp_features.registry.is_some()
+            {
+                self.sync_registry_to_canister(nns_subnet);
+            }
         }
 
         // Drop the StateMachine, waiting until no other Arc holders remain.
