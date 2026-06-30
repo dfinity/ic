@@ -123,9 +123,7 @@ def main():
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
     parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
-    # mkfs.fat is the same binary as mkfs.vfat (upstream ships the latter as a
-    # symlink); behaviour does not depend on the name it is invoked under.
-    parser.add_argument("--mkfs-fat", help="Path to the mkfs.fat (mkfs.vfat) tool", type=str, required=True)
+    parser.add_argument("--mkfs-fat", help="Path to the mkfs.fat tool", type=str, required=True)
     parser.add_argument("--mtools", help="Path to the mtools tool", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])

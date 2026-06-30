@@ -227,26 +227,6 @@ alias(
     }),
 )
 
-### dosfstools, used to build (mkfs.fat) and label (fatlabel) FAT filesystem images
-
-# Both aliases resolve to the dosfstools package, which builds the mkfs.fat and
-# fatlabel binaries; consumers pick the binary they need by basename.
-alias(
-    name = "mkfs.fat",
-    actual = select({
-        "@bazel_tools//src/conditions:linux_x86_64": "@dosfstools//:mkfs.fat",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
-alias(
-    name = "fatlabel",
-    actual = select({
-        "@bazel_tools//src/conditions:linux_x86_64": "@dosfstools//:fatlabel",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
 ### e2fsdroid, used to populate ext4 filesystem images (fs_config + SELinux contexts)
 
 alias(

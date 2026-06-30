@@ -313,17 +313,12 @@ impl Registry {
             let target_subnet_in_routing_table = routing_table
                 .iter()
                 .any(|(_range, sid)| *sid == target_subnet_id);
-            // If the source subnet has been deleted, assign_canister still
-            // successfully removes the canister from the source subnet's canister ranges.
-            // If the target subnet has been deleted, assign_canister introduces a new
-            // canister range for it, which is cleaned up below.
             for canister_id in canister_ids {
-                routing_table.assign_canister(canister_id, target_subnet_id);
-            }
-            if !target_subnet_in_routing_table {
-                // Target subnet has no canister ranges in the routing table (e.g., it has
-                // been deleted): remove any canister ranges just assigned to it.
-                routing_table.remove_subnet(target_subnet_id);
+                if target_subnet_in_routing_table {
+                    routing_table.assign_canister(canister_id, target_subnet_id);
+                } else {
+                    routing_table.unassign_canister(canister_id);
+                }
             }
             routing_table.optimize();
         })

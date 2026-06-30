@@ -2774,7 +2774,6 @@ impl StateMachine {
             let receipt_share = CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::from(request_id),
-                    registry_version,
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),
