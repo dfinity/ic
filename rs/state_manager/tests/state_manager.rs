@@ -5536,7 +5536,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         network_topology.nns_subnet_id = subnet_test_id(42);
         network_topology.set_subnets(subnets);
 
-        state.metadata.network_topology = network_topology.into();
+        state.metadata.network_topology = Arc::new(network_topology);
         state.metadata.node_public_keys = node_public_keys;
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
@@ -5945,7 +5945,7 @@ fn certified_read_can_exclude_canister_ranges() {
         network_topology.set_subnets(subnets);
         network_topology.set_routing_table(routing_table);
 
-        state.metadata.network_topology = network_topology.into();
+        state.metadata.network_topology = Arc::new(network_topology);
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 

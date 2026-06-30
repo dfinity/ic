@@ -627,7 +627,7 @@ impl StateMachine for FakeStateMachine {
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
-        state.metadata.network_topology = network_topology.into();
+        state.metadata.network_topology = Arc::new(network_topology);
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
