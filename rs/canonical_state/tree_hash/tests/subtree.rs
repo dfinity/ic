@@ -437,7 +437,7 @@ fn messages(n: usize) -> Messages {
 /// Rebuilds a stubbed message leaf from its source `Arc` (mirrors the per-variant
 /// `expand_*` message expanders in production).
 fn expand_test_message(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
-    let bytes = source.downcast::<Vec<u8>>();
+    let bytes = source.downcast_arc::<Vec<u8>>();
     hash_lazy_tree(&LazyTree::Blob(bytes.as_slice(), None), None)
 }
 
