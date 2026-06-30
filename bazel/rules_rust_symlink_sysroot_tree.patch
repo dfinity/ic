@@ -1,22 +1,28 @@
-# Symlink the linker target's runfiles into the generated sysroot: https://github.com/bazelbuild/rules_rust/issues/3733
+# Symlink both the linker binary and its runfiles into the generated sysroot: https://github.com/bazelbuild/rules_rust/issues/3733
 #
 # `_symlink_sysroot_tree` takes a `target_files` argument (used by the linker to
-# pass `rust-lld`'s runfiles, i.e. the bundled self-contained linker wrappers
-# `lib/rustlib/<target>/bin/gcc-ld/*` such as `gcc-ld/ld.lld`), but the loop
-# iterated `target.files` instead of `target_files`. As a result the `gcc-ld/*`
-# files were never symlinked into the generated sysroot and thus never became
-# declared inputs of the `Rustc` actions.
+# pass `rust-lld`'s runfiles -- the bundled self-contained linker wrappers
+# `lib/rustlib/<target>/bin/gcc-ld/*`, e.g. `gcc-ld/ld.lld`), but the loop
+# iterated `target.files` and ignored `target_files`. So only one of the two
+# sets ever made it into the generated sysroot, and thus into the declared
+# inputs of the `Rustc` actions:
+#   * `target.files`  -> the `rust-lld` binary at `lib/rustlib/<target>/bin/rust-lld`,
+#     which rustc invokes directly to link wasm32 canisters.
+#   * `target_files`  -> the `gcc-ld/*` wrappers, which rustc uses via
+#     `-fuse-ld=lld -B<sysroot>/lib/rustlib/<target>/bin/gcc-ld` when it defaults
+#     to lld on x86_64-unknown-linux-gnu.
 #
-# Since rustc defaults to lld on x86_64-unknown-linux-gnu (it links via
-# `-fuse-ld=lld -B<sysroot>/lib/rustlib/<target>/bin/gcc-ld`), local
-# (non-sandboxed) builds still found `gcc-ld/ld.lld` on disk, but remote
-# execution -- which ships only an action's declared inputs -- failed every
-# Rustc link action (starting with the bootstrap `process_wrapper`) with:
+# Local (non-sandboxed) builds found whichever file was missing on disk, but
+# remote execution ships only an action's declared inputs, so a missing file
+# failed every affected Rustc link action with either
 #   error: the self-contained linker was requested, but it wasn't found in the
-#   target's sysroot, or in rustc's sysroot
+#   target's sysroot, or in rustc's sysroot          (x86_64, missing gcc-ld)
+# or
+#   error: linker `rust-lld` not found               (wasm32, missing rust-lld)
 #
-# `target_files` defaults to `target.files` when omitted, so the other callers
-# (rustc_lib, llvm_tools, rust_std) are unaffected.
+# Symlink the union of both sets. `target_files` defaults to `target.files`, so
+# the other callers (rustc_lib, llvm_tools, rust_std) are unaffected (the depset
+# deduplicates).
 diff --git a/rust/toolchain.bzl b/rust/toolchain.bzl
 --- a/rust/toolchain.bzl
 +++ b/rust/toolchain.bzl
@@ -25,7 +31,7 @@ diff --git a/rust/toolchain.bzl b/rust/toolchain.bzl
      if target_files == None:
          target_files = target.files
 -    for file in target.files.to_list():
-+    for file in target_files.to_list():
++    for file in depset(transitive = [target.files, target_files]).to_list():
          # Parse the path to the file relative to the workspace root so a
          # symlink matching this path can be created within the sysroot.
  
