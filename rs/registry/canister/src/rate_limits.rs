@@ -523,7 +523,7 @@ mod tests {
             elevated_operator,
             ELEVATED_NODE_OPERATOR_MAX_SPIKE,
         );
-        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
+        assert_eq!(result, Err(Some(RateLimiterError::NotEnoughCapacity)));
 
         // A standard provider's operator is still bound by the standard spike.
         let result = registry.try_reserve_capacity_for_node_operator_operation(
