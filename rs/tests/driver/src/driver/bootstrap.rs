@@ -866,6 +866,8 @@ fn create_setupos_config_image(
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
+    // The MKFS_FAT/MCOPY/MLABEL env vars are set on the test process by the system_test rule and
+    // inherited by this child script.
     let status = Command::new(build_setupos_config_image)
         .arg(config_dir)
         .arg(data_dir)
