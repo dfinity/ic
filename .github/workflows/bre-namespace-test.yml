@@ -86,19 +86,25 @@ jobs:
           #
           # The Namespace RBE config makes 'remote' the only spawn strategy, but some
           # actions/tests are intentionally not remote-executable -- e.g. bazel_skylib's
-          # copy_file (tagged 'no-remote') and rules_python's compile_pip_requirements
-          # '.test' target (tagged 'no-remote-exec', 'requires-network'). Those would
-          # otherwise fail with "<Mnemonic> spawn cannot be executed with any of the
-          # available strategies: [remote]". Adding 'local' as a fallback lets Bazel run
-          # exactly those spawns on the runner while everything else still runs remotely
-          # (Bazel only falls back when the action forbids remote execution; it does not
-          # mask remote failures of normal actions). This overrides the remote-only
-          # --spawn_strategy from the Namespace bazelrc because command-line flags win.
+          # copy_file (tagged 'no-remote'), rules_python's compile_pip_requirements
+          # '.test' target (tagged 'no-remote-exec', 'requires-network') and genrules
+          # marked 'local = True' (e.g. //rs/tests:libvirtd and //rs/tests:dnsmasq, which
+          # copy host binaries). Those would otherwise fail with "<Mnemonic> spawn cannot
+          # be executed with any of the available strategies: [remote]". Adding 'local' as
+          # a fallback lets Bazel run exactly those spawns on the runner while everything
+          # else still runs remotely (Bazel only falls back when the action forbids remote
+          # execution; it does not mask remote failures of normal actions). We set the
+          # genrule strategy separately because genrules resolve their strategy via
+          # --genrule_strategy / --strategy=Genrule, not --spawn_strategy. These
+          # command-line flags override the remote-only strategies from the Namespace
+          # bazelrc because command-line flags win, and --strategy=Genrule overrides both
+          # --spawn_strategy and --genrule_strategy for the Genrule mnemonic.
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
             test \
             --spawn_strategy=remote,local \
+            --strategy=Genrule=remote,local \
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly \
             --remote_default_exec_properties=container-image="$worker_image" \
             --keep_going \
