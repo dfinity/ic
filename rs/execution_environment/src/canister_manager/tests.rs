@@ -56,7 +56,8 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
-        subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
+        subnet_call_context_manager::InstallCodeCallId,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -339,12 +340,10 @@ fn initial_state(subnet_id: SubnetId, use_specified_ids_routing_table: bool) -> 
         })
         .unwrap()
     };
-    state
-        .metadata
-        .network_topology
-        .set_routing_table(routing_table);
-
-    state.metadata.network_topology.nns_subnet_id = subnet_id;
+    state.metadata.modify_network_topology(|nt| {
+        nt.set_routing_table(routing_table);
+        nt.nns_subnet_id = subnet_id;
+    });
     state.metadata.init_allocation_ranges_if_empty().unwrap();
     state
 }
@@ -405,7 +404,7 @@ fn install_code(
         None,
         old_canister,
         time,
-        Arc::new(network_topology),
+        network_topology,
         execution_parameters,
         round_limits,
         CompilationCostHandling::CountFullAmount,

@@ -4,6 +4,7 @@ use super::subnet_call_context_manager::{
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
+use crate::metadata_state::testing::SystemMetadataTesting;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use crate::{CanisterPriority, InputQueueType};
 use assert_matches::assert_matches;
@@ -180,7 +181,7 @@ fn init_allocation_ranges_if_empty() {
     };
 
     let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = network_topology.into();
 
     assert_eq!(
         CanisterIdRanges::try_from(vec![]).unwrap(),
@@ -261,7 +262,7 @@ fn peek_and_commit_new_canister_id() {
         nns_subnet_id: other_subnet_id,
         ..Default::default()
     };
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = network_topology.into();
 
     assert_eq!(None, system_metadata.last_generated_canister_id);
     assert_eq!(2, system_metadata.canister_allocation_ranges.len());
@@ -348,7 +349,7 @@ fn system_metadata_roundtrip_encoding() {
         nns_subnet_id: other_subnet_id,
         ..Default::default()
     };
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = network_topology.into();
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
     let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
@@ -748,7 +749,9 @@ fn system_metadata_online_split() {
     system_metadata.last_generated_canister_id = Some(CANISTER_2);
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
-    system_metadata.network_topology.routing_table = Arc::new(routing_table);
+    system_metadata.modify_network_topology(|nt| {
+        nt.routing_table = Arc::new(routing_table);
+    });
     system_metadata.subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()

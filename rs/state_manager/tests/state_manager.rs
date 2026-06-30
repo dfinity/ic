@@ -28,7 +28,10 @@ use ic_replicated_state::{
     ReplicatedState, Stream, SubnetTopology,
     canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
-    metadata_state::{ApiBoundaryNodeEntry, testing::NetworkTopologyTesting},
+    metadata_state::{
+        ApiBoundaryNodeEntry,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    },
     page_map::{PageIndex, Shard, StorageLayout},
     testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
@@ -5533,7 +5536,7 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         network_topology.nns_subnet_id = subnet_test_id(42);
         network_topology.set_subnets(subnets);
 
-        state.metadata.network_topology = network_topology;
+        state.metadata.network_topology = network_topology.into();
         state.metadata.node_public_keys = node_public_keys;
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
@@ -5942,7 +5945,7 @@ fn certified_read_can_exclude_canister_ranges() {
         network_topology.set_subnets(subnets);
         network_topology.set_routing_table(routing_table);
 
-        state.metadata.network_topology = network_topology;
+        state.metadata.network_topology = network_topology.into();
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 
@@ -8164,10 +8167,9 @@ fn can_split_with_inflight_restore_snapshot() {
                 CanisterIdRange {start: CANISTER_3, end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
             })
             .unwrap();
-            state
-                .metadata
-                .network_topology
-                .set_routing_table(routing_table.clone());
+            state.metadata.modify_network_topology(|nt| {
+                nt.set_routing_table(routing_table.clone());
+            });
 
             // Expected state after splitting.
             let mut expected = state.clone();

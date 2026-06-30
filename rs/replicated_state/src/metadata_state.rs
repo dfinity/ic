@@ -87,7 +87,7 @@ pub struct SystemMetadata {
     /// increasing).
     pub batch_time: Time,
 
-    pub network_topology: NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
 
     pub own_subnet_id: SubnetId,
 
@@ -2067,6 +2067,21 @@ impl UnflushedCheckpointOps {
 
 pub mod testing {
     use super::*;
+
+    /// Exposes `SystemMetadata` internals for use in tests.
+    pub trait SystemMetadataTesting {
+        /// Mutates the network topology in place: clones the value out of the
+        /// `Arc`, applies `f`, and stores the result back.
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
+    }
+
+    impl SystemMetadataTesting for SystemMetadata {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
+            let mut network_topology = (*self.network_topology).clone();
+            f(&mut network_topology);
+            self.network_topology = Arc::new(network_topology);
+        }
+    }
 
     /// Exposes `NetworkTopology` internals for use in tests.
     pub trait NetworkTopologyTesting {

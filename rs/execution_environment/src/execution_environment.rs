@@ -3465,7 +3465,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,
-            Arc::new(state.metadata.network_topology.clone()),
+            state.metadata.network_topology.clone(),
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
@@ -4130,7 +4130,7 @@ impl ExecutionEnvironment {
             prepaid_execution_cycles,
             old_canister,
             state.time(),
-            Arc::new(state.metadata.network_topology.clone()),
+            state.metadata.network_topology.clone(),
             execution_parameters,
             round_limits,
             compilation_cost_handling,
@@ -4308,7 +4308,7 @@ impl ExecutionEnvironment {
                     ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
                 };
                 let round = RoundContext {
-                    network_topology: Arc::new(state.metadata.network_topology.clone()),
+                    network_topology: state.metadata.network_topology.clone(),
                     hypervisor: &self.hypervisor,
                     cycles_account_manager: &self.cycles_account_manager,
                     counters: round_counters,

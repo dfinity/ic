@@ -19,7 +19,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_metrics::{
@@ -38,6 +38,7 @@ use ic_types_cycles::{
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[test]
@@ -498,18 +499,17 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    state
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .insert(
-            CanisterIdRange {
-                start: canister_test_id(0),
-                end: canister_test_id(3),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
+    state.metadata.modify_network_topology(|nt| {
+        nt.routing_table_mut()
+            .insert(
+                CanisterIdRange {
+                    start: canister_test_id(0),
+                    end: canister_test_id(3),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+    });
 
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);
@@ -558,18 +558,17 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    state
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .insert(
-            CanisterIdRange {
-                start: canister_test_id(0),
-                end: canister_test_id(5),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
+    state.metadata.modify_network_topology(|nt| {
+        nt.routing_table_mut()
+            .insert(
+                CanisterIdRange {
+                    start: canister_test_id(0),
+                    end: canister_test_id(5),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+    });
 
     let registry = MetricsRegistry::new();
     let state_metrics = ReplicatedStateMetrics::new(&registry);

@@ -80,7 +80,8 @@ mod tests {
             CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
         },
         metadata_state::{
-            ApiBoundaryNodeEntry, Stream, SubnetMetrics, testing::NetworkTopologyTesting,
+            ApiBoundaryNodeEntry, Stream, SubnetMetrics,
+            testing::{NetworkTopologyTesting, SystemMetadataTesting},
         },
         page_map::{PAGE_SIZE, PageIndex},
         testing::{ReplicatedStateTesting, StreamTesting},
@@ -321,14 +322,13 @@ mod tests {
             })
             .unwrap();
 
-            state.metadata.network_topology.set_subnets(btreemap! {
-                own_subnet_id => Default::default(),
-                other_subnet_id => Default::default(),
+            state.metadata.modify_network_topology(|nt| {
+                nt.set_subnets(btreemap! {
+                    own_subnet_id => Default::default(),
+                    other_subnet_id => Default::default(),
+                });
+                nt.set_routing_table(routing_table);
             });
-            state
-                .metadata
-                .network_topology
-                .set_routing_table(routing_table);
             state.metadata.prev_state_hash =
                 Some(CryptoHashOfPartialState::new(CryptoHash(vec![3, 2, 1])));
 

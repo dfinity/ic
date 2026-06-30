@@ -64,7 +64,10 @@ mod tests {
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
-        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology, testing::NetworkTopologyTesting},
+        metadata_state::{
+            ApiBoundaryNodeEntry, SubnetTopology,
+            testing::{NetworkTopologyTesting, SystemMetadataTesting},
+        },
         page_map::PageMap,
         testing::{ReplicatedStateTesting, StreamTesting},
     };
@@ -766,55 +769,57 @@ mod tests {
     fn test_traverse_subnet() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.set_subnets(btreemap! {
-            // For test coverage, this test adds one subnet for each subnet type
-            subnet_test_id(0) => SubnetTopology {
-                public_key: vec![1, 2, 3, 4],
-                nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::default(),
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-            subnet_test_id(1) => SubnetTopology {
-                public_key: vec![5, 6, 7, 8],
-                nodes: BTreeSet::new(),
-                subnet_type: SubnetType::System,
-                subnet_features: SubnetFeatures::default(),
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-            subnet_test_id(2) => SubnetTopology {
-                public_key: vec![9, 10, 11, 12],
-                nodes: BTreeSet::new(),
-                subnet_type: SubnetType::VerifiedApplication,
-                subnet_features: SubnetFeatures::default(),
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-            subnet_test_id(3) => SubnetTopology {
-                public_key: vec![13, 14, 15, 16],
-                nodes: BTreeSet::new(),
-                subnet_type: SubnetType::CloudEngine,
-                subnet_features: SubnetFeatures::default(),
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            }
+        state.metadata.modify_network_topology(|nt| {
+            nt.set_subnets(btreemap! {
+                // For test coverage, this test adds one subnet for each subnet type
+                subnet_test_id(0) => SubnetTopology {
+                    public_key: vec![1, 2, 3, 4],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::Application,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+                subnet_test_id(1) => SubnetTopology {
+                    public_key: vec![5, 6, 7, 8],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::System,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+                subnet_test_id(2) => SubnetTopology {
+                    public_key: vec![9, 10, 11, 12],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::VerifiedApplication,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+                subnet_test_id(3) => SubnetTopology {
+                    public_key: vec![13, 14, 15, 16],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::CloudEngine,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                }
+            });
+            nt.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    id_range(0, 10) => subnet_test_id(0),
+                    id_range(11, 20) => subnet_test_id(1),
+                    id_range(21, 30) => subnet_test_id(0),
+                    id_range(31, 40) => subnet_test_id(2),
+                    id_range(41, 50) => subnet_test_id(3),
+                })
+                .unwrap(),
+            );
         });
-        state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                id_range(0, 10) => subnet_test_id(0),
-                id_range(11, 20) => subnet_test_id(1),
-                id_range(21, 30) => subnet_test_id(0),
-                id_range(31, 40) => subnet_test_id(2),
-                id_range(41, 50) => subnet_test_id(3),
-            })
-            .unwrap(),
-        );
         state.metadata.node_public_keys = btreemap! {
             node_test_id(2) => vec![9, 10, 11, 12],
         };
@@ -1032,38 +1037,40 @@ mod tests {
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.network_topology.set_subnets(btreemap! {
-            subnet_test_id(0) => SubnetTopology {
-                public_key: vec![1, 2, 3, 4],
-                nodes: BTreeSet::new(),
-                subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::default(),
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-            subnet_test_id(1) => SubnetTopology {
-                public_key: vec![5, 6, 7, 8],
-                nodes: BTreeSet::new(),
-                subnet_type: SubnetType::VerifiedApplication,
-                subnet_features: SubnetFeatures::default(),
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            }
+        state.metadata.modify_network_topology(|nt| {
+            nt.set_subnets(btreemap! {
+                subnet_test_id(0) => SubnetTopology {
+                    public_key: vec![1, 2, 3, 4],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::Application,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+                subnet_test_id(1) => SubnetTopology {
+                    public_key: vec![5, 6, 7, 8],
+                    nodes: BTreeSet::new(),
+                    subnet_type: SubnetType::VerifiedApplication,
+                    subnet_features: SubnetFeatures::default(),
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                }
+            });
+            nt.set_routing_table(
+                RoutingTable::try_from(btreemap! {
+                    id_range(0, 10) => subnet_test_id(0),
+                    id_range(21, 30) => subnet_test_id(0),
+                    id_range(36, 40) => subnet_test_id(0),
+                    id_range(51, 51) => subnet_test_id(0),
+                    id_range(61, 70) => subnet_test_id(0),
+                    id_range(81, 90) => subnet_test_id(0),
+                    id_range(105, 110) => subnet_test_id(0),
+                })
+                .unwrap(),
+            );
         });
-        state.metadata.network_topology.set_routing_table(
-            RoutingTable::try_from(btreemap! {
-                id_range(0, 10) => subnet_test_id(0),
-                id_range(21, 30) => subnet_test_id(0),
-                id_range(36, 40) => subnet_test_id(0),
-                id_range(51, 51) => subnet_test_id(0),
-                id_range(61, 70) => subnet_test_id(0),
-                id_range(81, 90) => subnet_test_id(0),
-                id_range(105, 110) => subnet_test_id(0),
-            })
-            .unwrap(),
-        );
 
         let height = 0;
 
