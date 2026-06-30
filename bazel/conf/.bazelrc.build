@@ -118,10 +118,6 @@ cquery --ui_event_filters=-info,-debug --noshow_progress
 # on this (not yet clear why)
 common --remote_download_all
 
-# This option (in conjunction with remote cache issues) creates build failures
-#   https://github.com/bazelbuild/bazel/issues/22387
-common --noexperimental_inmemory_dotd_files
-
 # This is particularly helpful for canbench, but other tests that follow this
 # convention would also benefit. If the test does not support this, this "almost
 # certainly" does no harm.
