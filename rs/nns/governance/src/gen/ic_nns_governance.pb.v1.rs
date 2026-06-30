@@ -5120,7 +5120,7 @@ pub enum NnsFunction {
     /// the Wasm module of the target canister, the proposal can also set the
     /// authorization information and the allocations.
     NnsCanisterUpgrade = 4,
-    /// A proposal to bless a new version to which the replicas can be
+    /// (obsolete) A proposal to bless a new version to which the replicas can be
     /// upgraded.
     /// The proposal registers a replica version (identified by the hash of the
     /// installation image) in the registry. Besides creating a record for that
@@ -5223,7 +5223,7 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
-    /// A proposal to retire previously elected and unused replica versions.
+    /// (obsolete) A proposal to retire previously elected and unused replica versions.
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
     RetireReplicaVersion = 36,
