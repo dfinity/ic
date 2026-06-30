@@ -3,13 +3,14 @@
 # output) since it contains non-deterministic content (absolute paths,
 # timestamps). On failure the log is still printed for debugging.
 diff --git a/foreign_cc/private/framework.bzl b/foreign_cc/private/framework.bzl
+index b822e2b..058f7a3 100644
 --- a/foreign_cc/private/framework.bzl
 +++ b/foreign_cc/private/framework.bzl
-@@ -647,6 +647,7 @@ def wrap_outputs(ctx, lib_name, configure_name, script_text, env_prelude, build_
-         "\n".join([
-             "##rm_rf## $$BUILD_TMPDIR$$",
-             "##rm_rf## $$EXT_BUILD_DEPS$$",
+@@ -720,6 +720,7 @@ def wrap_outputs(ctx, lib_name, configure_name, script_text, env_prelude, build_
+             # parent temp dir too. On non-Windows this var is unset.
+             "if [ -n \"${RFCC_SHORT_PATH_ROOT:-}\" ]; then",
+             "##rm_rf## ${RFCC_SHORT_PATH_ROOT}",
 +            "echo > $$BUILD_LOG$$",
+             "fi",
          ]),
      )
-     cleanup_on_failure_function = create_function(
