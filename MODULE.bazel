@@ -1218,6 +1218,14 @@ new_local_repository(
     path = "/usr",
 )
 
+http_archive(
+    name = "dnsmasq",
+    build_file = "@//third_party:BUILD.dnsmasq.bazel",
+    sha256 = "a038282c6528a2b8c240c1fdddc8e5363f69ebe778b51736b373604021c8671f",
+    strip_prefix = "dnsmasq-2.92",
+    url = "https://github.com/imp/dnsmasq/archive/refs/tags/v2.92.tar.gz",
+)
+
 # Mainnet canister references
 
 canisters = use_repo_rule("//bazel:mainnet-canisters.bzl", "canisters")
