@@ -176,15 +176,13 @@ fn main() -> Result<()> {
         //  TODO(DSM-118): The replica may occasionally be started 3 times (instead of the usual 2) if
         // it crashes again briefly during the catch-up process after the divergence. Consider reducing
         // this number if the underlying issue has been resolved.
-        .update_orchestrator_metrics_to_check(
-            "orchestrator_replica_process_start_attempts_total",
-            3,
-        )
+        .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 3)
         // One of the nodes has a corrupted state which could cause a panic in the replica like:
         //   thread 'MR Batch Processor' (1588) panicked at rs/state_manager/src/lib.rs:1036:17:
         //   Unexpected sandbox state for canister ...
         // Since this is expected we allow all panics in the "MR Batch Processor" thread:
         .add_unallowed_log_pattern_except("panicked", "MR Batch Processor")
+        .add_unallowed_log_pattern_except("panicked", "rs/state_manager/src/allowed_panics.rs")
         .execute_from_args()?;
     Ok(())
 }

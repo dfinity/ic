@@ -12,6 +12,7 @@ use crate::execution_environment::{
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
@@ -47,7 +48,7 @@ pub fn execute_call_or_task(
     time: Time,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
@@ -77,8 +78,7 @@ pub fn execute_call_or_task(
                         message_memory_usage,
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
-                        subnet_size,
-                        round.cost_schedule,
+                        subnet_cycles_config,
                         reveal_top_up,
                         wasm_execution_mode,
                     ) {
@@ -132,7 +132,7 @@ pub fn execute_call_or_task(
         call_or_task,
         prepaid_execution_cycles,
         execution_parameters,
-        subnet_size,
+        subnet_cycles_config,
         time,
         request_metadata,
         canister_id: clean_canister.canister_id(),
@@ -197,8 +197,8 @@ pub fn execute_call_or_task(
         FuncRef::Method(original.method.clone()),
         original.request_metadata.clone(),
         round_limits,
-        round.network_topology,
-        round.cost_schedule,
+        round.network_topology.clone(),
+        original.subnet_cycles_config,
     );
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -283,8 +283,7 @@ fn finish_err(
         instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
-        original.subnet_size,
-        round.cost_schedule,
+        original.subnet_cycles_config,
         wasm_execution_mode,
         round.log,
     );
@@ -309,7 +308,7 @@ struct OriginalContext {
     prepaid_execution_cycles: CompoundCycles<Instructions>,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
-    subnet_size: usize,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     time: Time,
     request_metadata: RequestMetadata,
     canister_id: CanisterId,
@@ -517,8 +516,7 @@ impl CallOrTaskHelper {
                 new_memory_usage,
                 new_message_memory_usage,
                 new_reserved_balance,
-                original.subnet_size,
-                round.cost_schedule,
+                original.subnet_cycles_config,
                 reveal_top_up,
             )
         {
@@ -552,7 +550,7 @@ impl CallOrTaskHelper {
                     &mut output,
                     round_limits,
                     round.time,
-                    round.network_topology,
+                    &round.network_topology,
                     round.hypervisor.subnet_id(),
                     round.hypervisor.metrics(),
                     round.log,
@@ -576,7 +574,7 @@ impl CallOrTaskHelper {
                     .apply_changes(
                         round.time,
                         &mut self.canister.system_state,
-                        round.network_topology,
+                        &round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,
                         round.hypervisor.metrics(),
@@ -660,8 +658,7 @@ impl CallOrTaskHelper {
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
-            original.subnet_size,
-            round.cost_schedule,
+            original.subnet_cycles_config,
             wasm_execution_mode,
             round.log,
         );

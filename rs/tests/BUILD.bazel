@@ -25,6 +25,7 @@ PACKAGES = [
     "@resolute//gzip/amd64",
     "@resolute//libssl3t64/amd64",
     "@resolute//libunwind8/amd64",
+    "@resolute//libvirt0-hwe/amd64",
     "@resolute//mtools/amd64",
     "@resolute//openssh-client/amd64",
     "@resolute//rsync/amd64",
@@ -39,14 +40,6 @@ tar(
     mtree = [
         # needed as dpkg assumes sh is installed in a typical debian installation.
         "./usr/bin/sh type=link link=/bin/bash",
-    ],
-)
-
-tar(
-    name = "mkfsvfat",
-    mtree = [
-        # symlink instead of updating the PATH
-        "./usr/bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
     ],
 )
 
@@ -90,7 +83,6 @@ UBUNTU_PACKAGES = [
 
     # symlinks
     ":awk",
-    ":mkfsvfat",
     ":sh",
 ] + PACKAGES
 
@@ -261,4 +253,22 @@ genrule(
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
     cmd = "sed < $< 's/$$/-test/' > $@",
+)
+
+genrule(
+    name = "libvirtd",
+    outs = ["libvirtd.bin"],
+    cmd = "cp -L /usr/sbin/libvirtd $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+genrule(
+    name = "dnsmasq",
+    outs = ["dnsmasq.bin"],
+    cmd = "cp -L /usr/sbin/dnsmasq $@",
+    local = True,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
 )

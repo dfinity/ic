@@ -60,6 +60,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         _memory_limits: MemoryLimits,
+        _page_overhead: u64,
         _subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where

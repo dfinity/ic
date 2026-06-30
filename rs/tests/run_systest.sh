@@ -13,9 +13,29 @@ export -n \
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS \
     RUN_SCRIPT_VOLATILE_STATUS_PATH
 
+if [ "${SYSTEM_TEST_BACKEND:-}" != "local" ]; then
+    # To eliminate unstable inter-DC network traffic, we want:
+    #
+    #   * Testnets of Farm-based system-tests to be allocated to the Farm DC
+    #     in which the K8s cluster is hosted that is running the test
+    #     either from CI or from a devenv
+    #     unless overridden by the DC environment variable.
+    #   * IC-OS images needed by that testnet to be served from that same K8s cluster.
+    #
+    # The name of the K8s cluster is extracted from the in-cluster K8s API server certificate SAN.
+    cluster=$(timeout 15 openssl s_client -connect kubernetes.default.svc:443 </dev/null 2>/dev/null \
+        | openssl x509 -noout -text 2>/dev/null \
+        | grep -m1 -oE 'api\.[a-z0-9][a-z0-9-]*\.dfinity\.network' \
+        | sed -E 's/^api\.(.*)\.dfinity\.network$/\1/')
+    export DC="${DC:-${cluster%%-*}}"
+fi
+
 # RUN_SCRIPT_ICOS_IMAGES:
-# For every ic-os image specified, first ensure it's in remote
-# storage, then export its download URL and HASH as environment variables.
+# For every ic-os image specified, export its HASH. When not using the local
+# backend we first ensure the image is in remote storage and also export its
+# download URL. Under the local backend the image is served from a local file
+# by the test driver's file server (see `serve_files_task`), so only the HASH is
+# needed here; the driver derives the (content-addressed) URL itself.
 if [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
     # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
     # into an array
@@ -25,15 +45,22 @@ if [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
         image_var_prefix=${image%:*}
         image_filename=${image#*:}
 
-        # ensure the dep is uploaded
-        image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
-        echo "  -> $image_filename=$image_download_url" >&2
+        if [ "${SYSTEM_TEST_BACKEND:-}" = "local" ]; then
+            # The image is served locally from its file path; compute its sha256
+            # so the test driver can advertise it under a content-addressed URL.
+            image_download_hash="$(sha256sum "$image_filename" | cut -d' ' -f1)"
+            export "${image_var_prefix}_HASH=$image_download_hash"
+        else
+            # ensure the dep is uploaded
+            image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename" "$cluster")
+            echo "  -> $image_filename=$image_download_url" >&2
 
-        # Since this is a CAS url, we assume the last URL path part is the sha256
-        image_download_hash="${image_download_url##*/}"
-        # set the environment variables for the test
-        export "${image_var_prefix}_URL=$image_download_url"
-        export "${image_var_prefix}_HASH=$image_download_hash"
+            # Since this is a CAS url, we assume the last URL path part is the sha256
+            image_download_hash="${image_download_url##*/}"
+            # set the environment variables for the test
+            export "${image_var_prefix}_URL=$image_download_url"
+            export "${image_var_prefix}_HASH=$image_download_hash"
+        fi
     done
 fi
 
@@ -80,9 +107,44 @@ done
 
 # Set environment variables based on volatile status variables:
 export FARM_METADATA="$(grep '^FARM_METADATA ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2-)"
-DC="$(grep '^DC ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2- || true)"
-if [ -n "$DC" ]; then
-    export DC
+
+# Optionally sync Grafana dashboards from the dfinity-ops/k8s repo so they can be
+# provisioned on the Prometheus VM (see prometheus_vm.rs). This is enabled by setting
+# IC_DASHBOARDS_BRANCH to the desired branch of the k8s repo. The resulting directory is
+# exported as IC_DASHBOARDS_DIR which is read by the test driver (and forwarded to the
+# colocated UVM by colocate_test.rs). If IC_DASHBOARDS_DIR is already set (e.g. pointing
+# at a local clone) we use that directly and skip the checkout.
+if [ -n "${IC_DASHBOARDS_DIR:-}" ]; then
+    # A dashboards directory was provided directly. The driver is later executed with
+    # `env -C "$TEST_TMPDIR"`, so normalize a relative path to an absolute one now;
+    # otherwise it would be resolved against $TEST_TMPDIR and the dashboards wouldn't
+    # be found. Keep the original value if realpath fails (best-effort, non-fatal).
+    export IC_DASHBOARDS_DIR="$(realpath "$IC_DASHBOARDS_DIR" 2>/dev/null || echo "$IC_DASHBOARDS_DIR")"
+elif [ -n "${IC_DASHBOARDS_BRANCH:-}" ]; then
+    dashboards_repo="$TEST_TMPDIR/k8s_dashboards"
+    rm -rf "$dashboards_repo" || true
+    echo "Syncing Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH' ..." >&2
+    # Keep the clone fully non-interactive so it can't hang a Bazel run:
+    # - BatchMode disables password/passphrase prompts.
+    # - StrictHostKeyChecking=accept-new auto-accepts the host key on first contact
+    #   (but still rejects a changed key) instead of prompting to confirm it.
+    # - An isolated UserKnownHostsFile under $TEST_TMPDIR avoids touching or locking
+    #   the user's ~/.ssh/known_hosts. Its value is single-quoted because git runs
+    #   GIT_SSH_COMMAND through a shell, so a $TEST_TMPDIR containing spaces would
+    #   otherwise be split into multiple arguments.
+    # - ConnectTimeout + a single ConnectionAttempt bound how long we wait on
+    #   network/DNS issues so this best-effort sync fails fast instead of stalling.
+    if GIT_SSH_COMMAND="ssh -oBatchMode=yes -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile='$TEST_TMPDIR/k8s_known_hosts' -oConnectTimeout=15 -oConnectionAttempts=1" \
+        git clone --depth 1 --filter=blob:none --no-checkout --branch "$IC_DASHBOARDS_BRANCH" \
+        git@github.com:dfinity-ops/k8s.git "$dashboards_repo" \
+        && git -C "$dashboards_repo" config core.sparseCheckout true \
+        && echo "bases/apps/ic-dashboards" >>"$dashboards_repo/.git/info/sparse-checkout" \
+        && git -C "$dashboards_repo" checkout HEAD; then
+        export IC_DASHBOARDS_DIR="$dashboards_repo/bases/apps/ic-dashboards"
+        echo "Synced Grafana dashboards to $IC_DASHBOARDS_DIR" >&2
+    else
+        echo "WARNING: failed to sync Grafana dashboards from k8s branch '$IC_DASHBOARDS_BRANCH'; continuing without them" >&2
+    fi
 fi
 
 exec \

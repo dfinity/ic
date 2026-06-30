@@ -38,6 +38,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         cycles_debit: Cycles::zero(),
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
+        minimum_incoming_canister_call_cycles: Cycles::zero(),
         status: CanisterStatus::Stopped,
         rounds_scheduled: 0,
         scheduled_as_first: 0,

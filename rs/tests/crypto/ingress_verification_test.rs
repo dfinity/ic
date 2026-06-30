@@ -19,9 +19,10 @@ use ic_system_test_driver::util::{
 };
 use ic_types::crypto::Signable;
 use ic_types::messages::{
-    Blob, Certificate, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
-    HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery,
-    MessageId, RawSignedSenderInfo, SenderInfoContent, SignedDelegation,
+    Blob, Certificate, Delegation, DelegationPermissions, HttpCallContent, HttpCanisterUpdate,
+    HttpQueryContent, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+    HttpRequestEnvelope, HttpUserQuery, MessageId, RawSignedSenderInfo, SenderInfoContent,
+    SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
@@ -43,6 +44,7 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(requests_with_delegations))
                 .add_test(systest!(requests_with_delegations_with_targets))
+                .add_test(systest!(requests_with_delegation_permissions))
                 .add_test(systest!(requests_with_delegation_loop))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations))
                 .add_test(systest!(requests_with_sender_info))
@@ -670,6 +672,146 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                             scenario.note
                         );
                         response.expect_text_error(&scenario.expected_err.clone().unwrap());
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Tests for the optional `permissions` field on delegations: `"queries"`
+// restricts the sender to query calls and read_state requests (update calls
+// are rejected), `"all"` (and an absent field) permits everything, and any
+// other value invalidates the delegation for all request kinds.
+pub fn requests_with_delegation_permissions(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let test_info = TestInformation {
+                url: node_url,
+                canister_id: canister_id_from_principal(&canister.canister_id()),
+            };
+
+            // Expected outcome for a delegation chain carrying some
+            // `permissions` values.
+            enum Outcome {
+                /// Query and read_state succeed; update calls are rejected
+                /// with an error whose text contains the given substring.
+                QueriesOnly { err: &'static str },
+                /// All request kinds succeed.
+                All,
+            }
+
+            struct PermissionsTest {
+                note: &'static str,
+                // The `permissions` value of each delegation in the chain
+                // (`None` means the field is omitted for that delegation).
+                permissions: Vec<Option<DelegationPermissions>>,
+                outcome: Outcome,
+            }
+
+            let update_not_permitted = "Update calls are not permitted";
+
+            let scenarios = [
+                PermissionsTest {
+                    note: "single delegation restricted to queries",
+                    permissions: vec![Some(DelegationPermissions::Queries)],
+                    outcome: Outcome::QueriesOnly {
+                        err: update_not_permitted,
+                    },
+                },
+                PermissionsTest {
+                    note: "single delegation permitting all",
+                    permissions: vec![Some(DelegationPermissions::All)],
+                    outcome: Outcome::All,
+                },
+                PermissionsTest {
+                    note: "queries restriction in the first of two delegations",
+                    permissions: vec![Some(DelegationPermissions::Queries), None],
+                    outcome: Outcome::QueriesOnly {
+                        err: update_not_permitted,
+                    },
+                },
+                PermissionsTest {
+                    note: "queries restriction in the second of two delegations",
+                    permissions: vec![
+                        Some(DelegationPermissions::All),
+                        Some(DelegationPermissions::Queries),
+                    ],
+                    outcome: Outcome::QueriesOnly {
+                        err: update_not_permitted,
+                    },
+                },
+            ];
+
+            for scenario in &scenarios {
+                let delegation_count = scenario.permissions.len();
+                let mut identities = Vec::with_capacity(delegation_count + 1);
+                for _ in 0..=delegation_count {
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
+                    identities.push(GenericIdentity::new(id_type, rng));
+                }
+
+                let delegations =
+                    create_delegations_with_permissions(&identities, &scenario.permissions);
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
+
+                for &api_ver in ALL_QUERY_API_VERSIONS {
+                    let response = perform_query_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    // Query calls are permitted regardless of the outcome.
+                    response.expect_query_ok(api_ver);
+                }
+
+                for &api_ver in ALL_READ_STATE_API_VERSIONS {
+                    let response = perform_read_state_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    // read_state requests are permitted regardless of the outcome.
+                    response.expect_read_state_ok(api_ver);
+                }
+
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    let response = perform_update_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        sender,
+                        signer,
+                        &delegations,
+                    )
+                    .await;
+                    match scenario.outcome {
+                        Outcome::All => response.expect_update_ok(api_ver),
+                        Outcome::QueriesOnly { err } => {
+                            assert_eq!(
+                                response.status(),
+                                400,
+                                "Scenario {} (update) using v{api_ver} unexpectedly succeeded",
+                                scenario.note
+                            );
+                            response.expect_text_error(err);
+                        }
                     }
                 }
             }
@@ -1563,17 +1705,38 @@ fn create_delegations_with_targets(
             let delegation = if targets[i - 1].is_empty() {
                 Delegation::new(identities[i].public_key_der(), delegation_expiry)
             } else {
-                Delegation::new_with_targets(
-                    identities[i].public_key_der(),
-                    delegation_expiry,
-                    targets[i - 1].clone(),
-                )
+                Delegation::new(identities[i].public_key_der(), delegation_expiry)
+                    .with_targets(targets[i - 1].clone())
             };
 
             let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
 
             delegations.push(signed_delegation);
         }
+    }
+
+    delegations
+}
+
+fn create_delegations_with_permissions(
+    identities: &[GenericIdentity],
+    permissions: &[Option<DelegationPermissions>],
+) -> Vec<SignedDelegation> {
+    let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
+
+    let delegation_count = identities.len() - 1;
+    let mut delegations = Vec::with_capacity(delegation_count);
+
+    for i in 1..=delegation_count {
+        let delegation = match permissions[i - 1] {
+            Some(permissions) => Delegation::new(identities[i].public_key_der(), delegation_expiry)
+                .with_permissions(permissions),
+            None => Delegation::new(identities[i].public_key_der(), delegation_expiry),
+        };
+
+        let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
+
+        delegations.push(signed_delegation);
     }
 
     delegations

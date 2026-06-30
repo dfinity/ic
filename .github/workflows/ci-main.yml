@@ -33,7 +33,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:55273ed5dc904e737bec678c8e7705aba76cc4b8b039574d5485f1d95d0193d3
+      image: ghcr.io/dfinity/ic-build@sha256:a50deb1a24fafa90553a1ba65551a4e8d955bce42e8f0d9d8e53ecc82f8f9c35
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -281,6 +281,10 @@ jobs:
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
+
+      # GitHub runners override the container's entrypoint which is ci/container/init.sh
+      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
+      - run: ci/container/init.sh
 
       - name: Run Tests
         uses: ./.github/actions/bazel

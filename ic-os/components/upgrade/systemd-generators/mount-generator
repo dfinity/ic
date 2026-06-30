@@ -133,10 +133,13 @@ function make_var_cryptsetup() {
     echo "After=cryptsetup-pre.target"
     echo "Before=blockdev@dev-mapper-var_crypt.target"
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
+    echo "Before=var.mount"
     echo "Conflicts=umount.target"
     echo "Before=cryptsetup.target"
     echo "Requires=init-config.service"
     echo "After=init-config.service"
+    echo "Wants=ic-node-tmpfiles.service"
+    echo "After=ic-node-tmpfiles.service" # needed for metrics
     # We need /boot/config for the decryption key (unless SEV is enabled)
     echo "RequiresMountsFor=/boot/config"
     echo "BindsTo=${SYSTEMD_DEVICE}"

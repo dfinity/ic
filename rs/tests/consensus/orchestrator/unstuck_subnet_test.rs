@@ -69,7 +69,7 @@ fn test(test_env: TestEnv) {
     info!(logger, "Target version: {}", target_version);
 
     // Note: we're pulling a wrong URL on purpose to simulate a failed upgrade
-    let upgrade_url = get_guestos_initial_update_img_url();
+    let upgrade_url = get_guestos_initial_update_img_url(&test_env);
     let expected_sha256 = get_guestos_update_img_sha256();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
     block_on(elect_replica_version(
@@ -120,7 +120,7 @@ fn test(test_env: TestEnv) {
     }
 
     info!(logger, "Download and save the proper image file...");
-    let guestos_update_img_url = get_guestos_update_img_url();
+    let guestos_update_img_url = get_guestos_update_img_url(&test_env);
     let command = format!(
         r#"set -e
         sudo chmod 777 /var/lib/ic/data/images
