@@ -39,18 +39,6 @@ build --strip=never
 # Build everything ic-os without sandbox
 build --strategy_regexp=ic-os[:/].*=local
 
-# bazel_skylib's copy_file (and copy_directory) tag their actions as "no-remote"
-# (see COPY_EXECUTION_REQUIREMENTS in @bazel_skylib//rules/private:copy_common.bzl)
-# because copying is IO-bound and pointless to run remotely. Under remote
-# execution (e.g. Namespace BRE), where the globally configured spawn strategy
-# can be remote-only, these actions have no eligible strategy and fail with
-# "CopyFile spawn cannot be executed with any of the available strategies:
-# [remote]". A per-mnemonic --strategy overrides --spawn_strategy, so force these
-# copy actions to run locally; this is a no-op for non-remote-execution builds,
-# where they already run locally.
-build --strategy=CopyFile=local
-build --strategy=CopyDirectory=local
-
 build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'
 
 common --flag_alias=release_build=//bazel:release_build
