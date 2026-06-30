@@ -1,12 +1,12 @@
 use std::convert::Infallible;
 
 use candid::{CandidType, Principal, Reserved};
-use ic_cdk::management_canister::ListCanisterSnapshotsArgs;
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::{Call, CallFailed, Error as CallError, RejectCode},
     management_canister::{
-        CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
+        CanisterInfoArgs, CanisterInfoResult, ListCanisterSnapshotsArgs, canister_info,
+        list_canister_snapshots,
     },
     println,
 };
