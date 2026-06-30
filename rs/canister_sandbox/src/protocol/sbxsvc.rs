@@ -494,7 +494,7 @@ mod tests {
                         SubnetId::new(canister_test_id(1).get()),
                         CyclesAccountManagerConfig::application_subnet(),
                     ),
-                    &NetworkTopology::default(),
+                    std::sync::Arc::new(NetworkTopology::default()),
                     NumInstructions::new(42),
                     ComputeAllocation::zero(),
                     123,

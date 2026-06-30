@@ -129,7 +129,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Some(vec![0; 256]),
                 time,
                 execution_parameters,
-                &network_topology,
+                network_topology,
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
