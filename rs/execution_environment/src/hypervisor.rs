@@ -314,7 +314,7 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         state_changes_error: &IntCounter,
         call_tree_metrics: &dyn CallTreeMetrics,
@@ -336,7 +336,7 @@ impl Hypervisor {
             func_ref,
             RequestMetadata::for_new_call_tree(time),
             round_limits,
-            network_topology,
+            network_topology.clone(),
             subnet_cycles_config,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
@@ -355,7 +355,7 @@ impl Hypervisor {
             &mut output,
             round_limits,
             time,
-            network_topology,
+            &network_topology,
             self.own_subnet_id,
             &self.metrics,
             &self.log,
@@ -381,7 +381,7 @@ impl Hypervisor {
         func_ref: FuncRef,
         request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> WasmExecutionResult {
         assert_ge!(

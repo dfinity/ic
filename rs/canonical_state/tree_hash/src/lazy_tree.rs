@@ -188,8 +188,11 @@ impl SubtreeSource {
         Arc::as_ptr(&self.source) as *const ()
     }
 
-    /// Borrows the source as a `&T`, for a [`SubtreeExpander`] to rebuild the
+    /// Borrows the source as a `&T`. Used by a [`SubtreeExpander`] to rebuild the
     /// subtree from its source without bumping the `Arc`'s refcount.
+    ///
+    /// Expanders that need shared ownership (i.e. to move the `Arc` somewhere) use
+    /// [`downcast_arc`](Self::downcast_arc).
     ///
     /// Panics if this handle was not created from an `Arc<T>`.
     pub fn downcast<T: Any + Send + Sync>(&self) -> &T {
@@ -199,6 +202,23 @@ impl SubtreeSource {
                 std::any::type_name::<T>()
             )
         })
+    }
+
+    /// Recovers shared ownership of the source as an `Arc<T>`. Used by a
+    /// [`SubtreeExpander`] that has to *move* the `Arc` into the rebuilt subtree;
+    /// expanders that only need to read the source should use the clone-free
+    /// [`downcast`](Self::downcast) instead.
+    ///
+    /// Panics if this handle was not created from an `Arc<T>`.
+    pub fn downcast_arc<T: Any + Send + Sync>(&self) -> Arc<T> {
+        Arc::clone(&self.source)
+            .downcast::<T>()
+            .unwrap_or_else(|_| {
+                panic!(
+                    "subtree source is not an Arc<{}>",
+                    std::any::type_name::<T>()
+                )
+            })
     }
 
     /// Rebuilds the subtree's [`HashTree`](crate::hash_tree::HashTree) from this
