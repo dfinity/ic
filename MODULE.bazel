@@ -935,6 +935,15 @@ http_archive(
     url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
 )
 
+# We pull in the binary artifact to break a circular dependency
+# between repositories: `canbench` is hosted in a separate repository
+# and depends on `pocket_ic` hosted in this repository;
+# this prevents us from bumping `reqwest` from 0.12 to 0.13
+# in `canbench` and `pocket_ic` in an atomic step if we want to build
+# both from sources => we pull in `canbench` as a binary artifact instead.
+# Bumping `reqwest` from 0.12 to 0.13 in an atomic step is required
+# because having both version in the dependency tree (of this repository)
+# causes issues.
 http_file(
     name = "canbench_bin",
     downloaded_file_path = "canbench",
