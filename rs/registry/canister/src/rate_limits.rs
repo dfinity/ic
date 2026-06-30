@@ -531,6 +531,6 @@ mod tests {
             standard_operator,
             over_standard_spike,
         );
-        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
+        assert_eq!(result, Err(Some(RateLimiterError::NotEnoughCapacity)));
     }
 }
