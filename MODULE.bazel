@@ -43,9 +43,9 @@ register_toolchains(
 # particular which otherwise cannot use the zig toolchain)
 archive_override(
     module_name = "rules_foreign_cc",
-    sha256 = "7f05eb9cc4b1c600c643e69221c88203244ccadc75ae28c4ade960f0f0742f26",
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
+    sha256 = "7f05eb9cc4b1c600c643e69221c88203244ccadc75ae28c4ade960f0f0742f26",
     strip_prefix = "rules_foreign_cc-f68b351c4691e747f889dc5e4c2cac3cd3b66ea2",
     type = "tar.gz",
     urls = ["https://codeload.github.com/bazel-contrib/rules_foreign_cc/tar.gz/f68b351c4691e747f889dc5e4c2cac3cd3b66ea2"],
