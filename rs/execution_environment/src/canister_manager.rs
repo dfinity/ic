@@ -848,7 +848,7 @@ impl CanisterManager {
         prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         mut canister: CanisterState,
         time: Time,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
@@ -927,10 +927,10 @@ impl CanisterManager {
 
         match context.mode {
             CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
-                execute_install(context, canister, original, round.clone(), round_limits)
+                execute_install(context, canister, original, round, round_limits)
             }
             CanisterInstallModeV2::Upgrade(..) => {
-                execute_upgrade(context, canister, original, round.clone(), round_limits)
+                execute_upgrade(context, canister, original, round, round_limits)
             }
         }
     }

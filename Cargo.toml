@@ -761,9 +761,9 @@ num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
 object = "0.37.3"
-opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.32.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["grpc-tonic", "trace"] }
+opentelemetry_sdk = { version = "0.32.1", features = ["trace"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "alloc",
     "arithmetic",
@@ -904,7 +904,7 @@ tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
 tracing-journald = "0.3"
-tracing-opentelemetry = "0.28.0"
+tracing-opentelemetry = "0.33.0"
 tracing-subscriber = { version = "0.3.19", features = [
     "env-filter",
     "fmt",

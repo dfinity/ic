@@ -129,7 +129,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 execution_parameters,
                 subnet_available_memory,
                 hypervisor,
-                &network_topology,
+                network_topology,
                 &no_op_logger(),
                 exec_env.state_changes_error(),
                 &IngressFilterMetrics::new(&MetricsRegistry::new()),

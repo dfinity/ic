@@ -216,7 +216,7 @@ pub struct RoundCounters<'a> {
 /// Contains round-specific context necessary for resuming a paused execution.
 #[derive(Clone)]
 pub struct RoundContext<'a> {
-    pub network_topology: &'a NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
     pub hypervisor: &'a Hypervisor,
     pub cycles_account_manager: &'a CyclesAccountManager,
     pub counters: RoundCounters<'a>,
@@ -2330,7 +2330,7 @@ impl ExecutionEnvironment {
         };
 
         let round = RoundContext {
-            network_topology: &network_topology,
+            network_topology: network_topology.clone(),
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             counters: round_counters,
@@ -3322,7 +3322,7 @@ impl ExecutionEnvironment {
         };
 
         let round = RoundContext {
-            network_topology: &network_topology,
+            network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             counters: round_counters,
@@ -3465,7 +3465,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,
-            &state.metadata.network_topology,
+            Arc::new(state.metadata.network_topology.clone()),
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
@@ -4130,7 +4130,7 @@ impl ExecutionEnvironment {
             prepaid_execution_cycles,
             old_canister,
             state.time(),
-            &state.metadata.network_topology,
+            Arc::new(state.metadata.network_topology.clone()),
             execution_parameters,
             round_limits,
             compilation_cost_handling,
@@ -4308,7 +4308,7 @@ impl ExecutionEnvironment {
                     ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
                 };
                 let round = RoundContext {
-                    network_topology: &state.metadata.network_topology,
+                    network_topology: Arc::new(state.metadata.network_topology.clone()),
                     hypervisor: &self.hypervisor,
                     cycles_account_manager: &self.cycles_account_manager,
                     counters: round_counters,
@@ -4997,7 +4997,7 @@ pub fn execute_canister(
                     ingress_with_cycles_error: &exec_env.metrics.ingress_with_cycles_error,
                 };
                 let round_context = RoundContext {
-                    network_topology: &network_topology,
+                    network_topology,
                     hypervisor: &exec_env.hypervisor,
                     cycles_account_manager: &exec_env.cycles_account_manager,
                     counters: round_counters,

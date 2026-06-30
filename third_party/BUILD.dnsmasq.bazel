@@ -1,0 +1,18 @@
+"""
+The dnsmasq binary, used by local system tests, built from source.
+"""
+
+load("@rules_foreign_cc//foreign_cc:make.bzl", "make")
+
+# Used in make build
+filegroup(
+    name = "all",
+    srcs = glob(["**"]),
+)
+
+make(
+    name = "dnsmasq",
+    lib_source = ":all",
+    out_bin_dir = "sbin",
+    out_binaries = ["dnsmasq"],
+)

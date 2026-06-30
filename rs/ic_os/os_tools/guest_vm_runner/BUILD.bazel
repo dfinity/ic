@@ -105,9 +105,11 @@ rust_test(
     crate_features = ["dev"],
     data = glob(["golden/*"]) + [
         "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
     ],
     env = {
         "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
     },
     deps = [
         # Keep sorted.
@@ -126,8 +128,16 @@ rust_test(
         "dev",
         "integration_tests",
     ],
-    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
-    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
+    data = glob(["golden/*"]) + [
+        "//ic-os/guestos/envs/prod:disk-img-for-tests.tar",
+        "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
+    ],
+    env = {
+        "ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)",
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
+    },
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = [
