@@ -10,6 +10,7 @@ archive_override(
     patches = [
         "//bazel:rules_rust_strip_level.patch",
         "//bazel:rules_rust_package_alias.patch",
+        "//bazel:rules_rust_symlink_sysroot_tree.patch",
     ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.69.0/rules_rust-0.69.0.tar.gz"],
 )
