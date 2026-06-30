@@ -9,6 +9,7 @@ use crate::{
 use attestation_testing::attestation_report::{
     AttestationReportBuilder, FakeAttestationReportSigner,
 };
+use sev::firmware::guest::GuestPolicy;
 use sev::parser::ByteParser;
 
 const CHIP_ID: [u8; 64] = [3; 64];
@@ -39,10 +40,14 @@ fn generate_valid_attestation_package() -> SevAttestationPackage {
         .expect("Failed to encode custom data for SEV")
         .to_bytes();
 
+    let mut guest_policy = GuestPolicy::default();
+    guest_policy.set_debug_allowed(false);
+
     let attestation_report = AttestationReportBuilder::new()
         .with_custom_data(custom_data_bytes)
         .with_measurement(MEASUREMENT)
         .with_chip_id(CHIP_ID)
+        .with_guest_policy(guest_policy)
         .build_signed(&signer);
 
     let attestation_report_bytes = attestation_report
@@ -69,6 +74,7 @@ fn test_valid_attestation_package() {
     .verify_measurement(&[MEASUREMENT])
     .verify_custom_data(&CUSTOM_DATA)
     .verify_chip_id(&[CHIP_ID])
+    .verify_guest_policy()
     .expect("Failed to verify attestation package")
     .attestation_report();
 

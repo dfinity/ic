@@ -673,7 +673,7 @@ impl InstallCodeHelper {
             .apply_changes(
                 original.time,
                 &mut self.canister.system_state,
-                round.network_topology,
+                &round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
                 round.hypervisor.metrics(),
