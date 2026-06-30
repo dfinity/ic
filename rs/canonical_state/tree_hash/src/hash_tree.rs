@@ -779,9 +779,16 @@ impl HashTree {
             if pos.kind() == NodeKind::Stub {
                 // A stub, only storing its root digest.
                 return match t {
-                    // Requested partial tree descends into the subtree: rebuild it from source and
-                    // continue witness generation there.
-                    LabeledTree::SubTree(children) if !children.is_empty() => {
+                    // Witness only needs the precomputed digest.
+                    LabeledTree::SubTree(children) if children.is_empty() => {
+                        Ok(B::make_pruned(ht.digest(pos).clone()))
+                    }
+
+                    // Requested partial tree descends into the subtree or requests its leaf value:
+                    // rebuild the subtree from source and continue witness generation there. (A
+                    // stubbed subtree may itself be a single leaf, e.g. a stream message, in which
+                    // case `t` is a `Leaf` whose value the witness must carry.)
+                    _ => {
                         // Sanity check: a complete `HashTree` has no bucket offset.
                         debug_assert_eq!(ht.bucket_offset, 0);
 
@@ -791,9 +798,6 @@ impl HashTree {
                             .expect("expanding a stub should not fail");
                         go::<B>(&expanded, NodeId::empty(), expanded.root, t)
                     }
-
-                    // Witness only needs the precomputed digest.
-                    _ => Ok(B::make_pruned(ht.digest(pos).clone())),
                 };
             }
 
