@@ -13,6 +13,7 @@ use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{NumBytes, NumInstructions, Time};
 use prometheus::IntCounter;
+use std::sync::Arc;
 
 /// Executes the system method `canister_inspect_message`.
 ///
@@ -26,7 +27,7 @@ pub fn execute_inspect_message(
     execution_parameters: ExecutionParameters,
     subnet_available_memory: SubnetAvailableMemory,
     hypervisor: &Hypervisor,
-    network_topology: &NetworkTopology,
+    network_topology: Arc<NetworkTopology>,
     logger: &ReplicaLogger,
     state_changes_error: &IntCounter,
     ingress_filter_metrics: &IngressFilterMetrics,

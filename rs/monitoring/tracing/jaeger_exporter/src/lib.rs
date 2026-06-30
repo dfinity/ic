@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use opentelemetry::{KeyValue, trace::TracerProvider};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
-use opentelemetry_sdk::{Resource, runtime as sdk_runtime, trace as sdk_trace};
+use opentelemetry_sdk::{Resource, trace as sdk_trace};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{Layer, Registry};
 
@@ -22,13 +22,14 @@ pub fn jaeger_exporter(
         .with_protocol(opentelemetry_otlp::Protocol::Grpc)
         .build()?;
 
-    let tracer = sdk_trace::TracerProvider::builder()
+    let tracer = sdk_trace::SdkTracerProvider::builder()
         .with_sampler(sdk_trace::Sampler::TraceIdRatioBased(0.01))
-        .with_resource(Resource::new(vec![KeyValue::new(
-            "service.name",
-            service_name,
-        )]))
-        .with_batch_exporter(span_exporter, sdk_runtime::Tokio)
+        .with_resource(
+            Resource::builder()
+                .with_attribute(KeyValue::new("service.name", service_name))
+                .build(),
+        )
+        .with_batch_exporter(span_exporter)
         .build();
 
     Ok(OpenTelemetryLayer::new(tracer.tracer("jaeger-exporter")))
