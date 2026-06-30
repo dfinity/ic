@@ -1,9 +1,18 @@
-load("@rules_cc//cc:cc_import.bzl", "cc_import")
+"""
+TODO
+"""
 
-# Use libvirt from the host environment
-cc_import(
+load("@rules_foreign_cc//foreign_cc:meson.bzl", "meson")
+
+# Used in make build
+filegroup(
+    name = "all",
+    srcs = glob(["*"], exclude=["tests"]) + glob(["src/**", "scripts/**", "include/**", "tools/**", "build-aux/**", "po/**"]),
+)
+
+meson(
     name = "libvirt",
-    hdrs = glob(["include/libvirt/*.h"]),
-    shared_library = "lib/x86_64-linux-gnu/libvirt.so",
-    visibility = ["//visibility:public"],
+    lib_source = ":all",
+    # out_bin_dir = "sbin",
+    # out_binaries = ["dnsmasq"],
 )

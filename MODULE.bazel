@@ -1215,10 +1215,19 @@ new_local_repository(
 
 # Use libvirt from the host environment
 # Used for managing virtual machines programmatically.
-new_local_repository(
+# new_local_repository(
+#     name = "libvirt",
+#     build_file = "@//third_party:BUILD.libvirt.bazel",
+#     path = "/usr",
+# )
+
+
+http_archive(
     name = "libvirt",
     build_file = "@//third_party:BUILD.libvirt.bazel",
-    path = "/usr",
+    sha256 = "c29ff80b9d7ec8144377e4e698d7fd25e42758a71a216b52b3409d5d1293c15a",
+    strip_prefix = "libvirt-12.4.0",
+    url = "https://github.com/libvirt/libvirt/archive/refs/tags/v12.4.0.tar.gz",
 )
 
 http_archive(
