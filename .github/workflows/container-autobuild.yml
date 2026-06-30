@@ -137,8 +137,12 @@ jobs:
 
           # Mirror the (unchanged) ic-build image -- just pushed to GHCR and pinned by
           # digest -- into the Namespace tenant registry. Namespace BRE workers boot
-          # from this image.
-          src="ghcr.io/dfinity/ic-build@sha256:cb929d45e83f893f4b03fde1d596dd1acc3211d367f0b8b0195c13c72ee329de"
+          # from this image. NOTE: the repo is kept in a variable (rather than a literal
+          # "ghcr.io/dfinity/ic-build@...") so the 'update-image-references' sed below --
+          # which rewrites ghcr.io/dfinity/ic-build(:|@)... across .github/workflow*/* --
+          # does not clobber this dynamic digest reference into a hardcoded one.
+          ic_build_repo="ghcr.io/dfinity/ic-build"
+          src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
           worker_repo="${NSC_CONTAINER_REGISTRY}/ic-build-worker"
           worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
 
