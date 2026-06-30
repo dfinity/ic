@@ -440,11 +440,12 @@ mod verify_sigs_batch {
     use crate::common::test_utils::basic_sig;
     use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
     use crate::common::test_utils::crypto_component::crypto_component_with_csp;
-    use crate::sign::tests::REG_V2;
+    use crate::sign::tests::{REG_V1, REG_V2};
     use ic_crypto_temp_crypto::NodeKeysToGenerate;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_types::signature::BasicSigBatchEntry;
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 
     fn two_node_crypto_components() -> (TempCryptoComponent, TempCryptoComponent) {
@@ -473,6 +474,20 @@ mod verify_sigs_batch {
         (crypto_1, crypto_2)
     }
 
+    /// Builds a batch entry at `REG_V2` (the version these tests register keys at).
+    fn entry<'a>(
+        signer: NodeId,
+        signature: &'a BasicSigOf<SignableMock>,
+        message: &'a SignableMock,
+    ) -> BasicSigBatchEntry<'a, SignableMock> {
+        BasicSigBatchEntry {
+            signer,
+            signature,
+            message,
+            registry_version: REG_V2,
+        }
+    }
+
     #[test]
     fn should_correctly_verify_batch_with_single_signature() {
         let crypto = TempCryptoComponent::builder()
@@ -483,11 +498,8 @@ mod verify_sigs_batch {
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let sig = crypto.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_1, &sig, &msg)];
-        assert_matches!(
-            crypto.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![entry(NODE_1, &sig, &msg)];
+        assert_matches!(crypto.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -499,11 +511,8 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_1), (NODE_2, &sig_2, &msg_2)];
-        assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![entry(NODE_1, &sig_1, &msg_1), entry(NODE_2, &sig_2, &msg_2)];
+        assert_matches!(crypto_1.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -518,11 +527,8 @@ mod verify_sigs_batch {
         let sig_1 = crypto.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_1), (NODE_1, &sig_2, &msg_2)];
-        assert_matches!(
-            crypto.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![entry(NODE_1, &sig_1, &msg_1), entry(NODE_1, &sig_2, &msg_2)];
+        assert_matches!(crypto.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -533,11 +539,8 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg), (NODE_2, &sig_2, &msg)];
-        assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
-            Ok(())
-        );
+        let inputs = vec![entry(NODE_1, &sig_1, &msg), entry(NODE_2, &sig_2, &msg)];
+        assert_matches!(crypto_1.verify_basic_sig_batch_multi_msg(&inputs), Ok(()));
     }
 
     #[test]
@@ -549,10 +552,10 @@ mod verify_sigs_batch {
         let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
         let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_2), (NODE_2, &sig_2, &msg_1)];
+        let inputs = vec![entry(NODE_1, &sig_1, &msg_2), entry(NODE_2, &sig_2, &msg_1)];
 
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::SignatureVerification { .. })
         );
     }
@@ -571,10 +574,13 @@ mod verify_sigs_batch {
             BasicSigOf::new(BasicSig(bytes))
         };
 
-        let inputs = vec![(NODE_1, &sig_1, &msg_1), (NODE_2, &sig_2_corrupted, &msg_2)];
+        let inputs = vec![
+            entry(NODE_1, &sig_1, &msg_1),
+            entry(NODE_2, &sig_2_corrupted, &msg_2),
+        ];
 
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::SignatureVerification { .. })
         );
     }
@@ -591,10 +597,10 @@ mod verify_sigs_batch {
             rng,
         );
 
-        let empty_inputs: Vec<(NodeId, &BasicSigOf<SignableMock>, &SignableMock)> = vec![];
+        let empty_inputs: Vec<BasicSigBatchEntry<'_, SignableMock>> = vec![];
 
         assert_matches!(
-            crypto.verify_basic_sig_batch_multi_msg(&empty_inputs, REG_V2),
+            crypto.verify_basic_sig_batch_multi_msg(&empty_inputs),
             Err(CryptoError::InvalidArgument { message })
             if message.contains("Empty signature batch. At least one signature should be included in the batch.")
         );
@@ -607,11 +613,82 @@ mod verify_sigs_batch {
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let sig = crypto_1.sign_basic(&msg).unwrap();
 
-        let inputs = vec![(NODE_3, &sig, &msg)];
+        let inputs = vec![entry(NODE_3, &sig, &msg)];
 
         assert_matches!(
-            crypto_1.verify_basic_sig_batch_multi_msg(&inputs, REG_V2),
+            crypto_1.verify_basic_sig_batch_multi_msg(&inputs),
             Err(CryptoError::PublicKeyNotFound { .. })
+        );
+    }
+
+    #[test]
+    fn should_resolve_each_signers_public_key_at_its_own_registry_version() {
+        // Register NODE_1's signing key at REG_V1 and NODE_2's at the later
+        // REG_V2, sharing a single registry. NODE_2's key is therefore present
+        // at REG_V2 but absent at REG_V1.
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+        let crypto_1 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V1)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_1)
+            .build();
+        let crypto_2 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_2)
+            .build();
+        registry_client.reload();
+
+        let msg_1 = SignableMock::new(b"Hello World!".to_vec());
+        let msg_2 = SignableMock::new(b"Goodbye World!".to_vec());
+        let sig_1 = crypto_1.sign_basic(&msg_1).unwrap();
+        let sig_2 = crypto_2.sign_basic(&msg_2).unwrap();
+
+        let node_1_entry = |registry_version| BasicSigBatchEntry {
+            signer: NODE_1,
+            signature: &sig_1,
+            message: &msg_1,
+            registry_version,
+        };
+        let node_2_entry = |registry_version| BasicSigBatchEntry {
+            signer: NODE_2,
+            signature: &sig_2,
+            message: &msg_2,
+            registry_version,
+        };
+
+        assert_matches!(
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V1), node_2_entry(REG_V2)]),
+            Ok(())
+        );
+
+        assert_matches!(
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V2), node_2_entry(REG_V2)]),
+            Ok(())
+        );
+
+        assert_matches!(
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V2), node_2_entry(REG_V1)]),
+            Err(CryptoError::PublicKeyNotFound { node_id, registry_version, .. })
+            if node_id == NODE_2 && registry_version == REG_V1
+        );
+
+        assert_matches!(
+            crypto_1
+                .verify_basic_sig_batch_multi_msg(&[node_1_entry(REG_V1), node_2_entry(REG_V1)]),
+            Err(CryptoError::PublicKeyNotFound { node_id, registry_version, .. })
+            if node_id == NODE_2 && registry_version == REG_V1
         );
     }
 }
