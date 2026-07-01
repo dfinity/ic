@@ -262,46 +262,23 @@ impl StateMachine for StateMachineImpl {
         let balance_before_routing = state_after_execution.balance_with_messages();
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
-        message_routing_timer.observe_duration();
 
         // Enqueue synthetic rejects for callbacks to canisters on deleted subnets before
         // enforcing the best-effort memory limit, so best-effort rejects are subject to shedding.
         // Called after `build_streams()` so that output-queue requests to deleted subnets
         // are already rejected with `DestinationInvalid` (more precise) by `build_streams()`.
-        // Skipped when the subnet list in network topology is unchanged since the last call.
-        let current_subnet_ids: Vec<SubnetId> = state_after_stream_builder
-            .metadata
-            .network_topology
-            .subnets()
-            .keys()
-            .cloned()
-            .collect();
-        let subnet_list_changed = state_after_stream_builder
-            .metadata
-            .subnet_ids_at_last_reject_generation
-            .as_ref()
-            != Some(&current_subnet_ids);
-        if subnet_list_changed {
-            let errors = state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
-            for error in &errors {
-                // Critical error, responses should always be inducted successfully.
-                error!(
-                    self.log,
-                    "{}: Inducting synthetic reject response for deleted subnet failed: {}",
-                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
-                    error
-                );
-                self.metrics.critical_error_induct_response_failed.inc();
-            }
-            // Only update the subnet list if all responses were successfully inducted.
-            // On error, retry next round (already-enqueued responses are filtered by
-            // `has_enqueued_response`, so only the relevant callbacks are retried).
-            if errors.is_empty() {
-                state_after_stream_builder
-                    .metadata
-                    .subnet_ids_at_last_reject_generation = Some(current_subnet_ids);
-            }
+        let errors = state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
+        for error in &errors {
+            // Critical error, responses should always be inducted successfully.
+            error!(
+                self.log,
+                "{}: Inducting synthetic reject response for deleted subnet failed: {}",
+                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                error
+            );
+            self.metrics.critical_error_induct_response_failed.inc();
         }
+        message_routing_timer.observe_duration();
 
         // Shed enough messages to stay below the best-effort message memory limit.
         let shed_messages_timer = self.metrics.start_phase_timer(PHASE_SHED_MESSAGES);

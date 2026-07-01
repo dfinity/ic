@@ -910,7 +910,26 @@ impl ReplicatedState {
     /// would result in a critical error in `build_streams()` if `build_streams()`
     /// tried to reject an unbounded-wait request in an output queue to a deleted subnet
     /// for which a reject response has already been generated.
+    ///
+    /// Skipped if the subnet list in the network topology is unchanged since the
+    /// last call that successfully inducted all of its reject responses (tracked via
+    /// `subnet_ids_at_last_reject_generation`). On error, the subnet list is left
+    /// unchanged, so generation is retried on the next call; already-enqueued
+    /// responses are filtered out by `has_enqueued_response`, so only the callbacks
+    /// that failed to be inducted are retried.
     pub fn generate_reject_responses_for_deleted_subnets(&mut self) -> Vec<StateError> {
+        let current_subnet_ids: Vec<SubnetId> = self
+            .metadata
+            .network_topology
+            .subnets()
+            .keys()
+            .cloned()
+            .collect();
+        if self.metadata.subnet_ids_at_last_reject_generation.as_ref() == Some(&current_subnet_ids)
+        {
+            return Vec::new();
+        }
+
         let network_topology = &self.metadata.network_topology;
 
         // Collect reject responses for callbacks whose respondent has no route in
@@ -958,6 +977,10 @@ impl ReplicatedState {
             {
                 errors.push(error);
             }
+        }
+        // Only update the subnet list if all responses were successfully inducted.
+        if errors.is_empty() {
+            self.metadata.subnet_ids_at_last_reject_generation = Some(current_subnet_ids);
         }
         errors
     }
