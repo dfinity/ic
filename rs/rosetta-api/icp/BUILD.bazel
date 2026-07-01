@@ -10,7 +10,7 @@ load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
-ROSETTA_VERSION = "2.1.9"
+ROSETTA_VERSION = "2.1.10"
 
 rust_library(
     name = "rosetta-api",
