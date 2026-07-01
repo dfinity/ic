@@ -194,6 +194,7 @@ fn with_add_node_ip_rate_limiter<R>(f: impl FnOnce(&mut InMemoryRateLimiter<Stri
     ADD_NODE_IP_RATE_LIMITER.with_borrow_mut(f)
 }
 
+#[derive(Debug)]
 pub struct RateLimitReservation {
     operator_reservation: Reservation<String>,
     provider_reservation: Reservation<String>,
@@ -530,7 +531,7 @@ mod tests {
             elevated_operator,
             ELEVATED_NODE_OPERATOR_MAX_SPIKE,
         );
-        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
+        assert_eq!(result.unwrap_err(), RateLimiterError::NotEnoughCapacity);
 
         // A standard provider's operator is still bound by the standard spike.
         let result = registry.try_reserve_capacity_for_node_operator_operation(
@@ -538,6 +539,6 @@ mod tests {
             standard_operator,
             over_standard_spike,
         );
-        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
+        assert_eq!(result.unwrap_err(), RateLimiterError::NotEnoughCapacity);
     }
 }
