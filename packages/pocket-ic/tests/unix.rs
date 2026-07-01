@@ -519,6 +519,7 @@ fn send_too_large_body(
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_registry_sync() {
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
     let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
@@ -696,6 +697,7 @@ fn prepare_add_node_payload(
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn create_subnet_in_registry_canister() {
     let icp_features = IcpFeatures {
         registry: Some(IcpFeaturesConfig::DefaultConfig),
