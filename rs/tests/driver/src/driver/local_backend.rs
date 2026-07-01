@@ -324,6 +324,14 @@ impl LocalBackend {
         // are no-ops when not root.
         own_tree_by_nobody_if_root(&xdg_runtime_dir)?;
         own_tree_by_nobody_if_root(&libvirt_dir)?;
+        // Ownership alone is not enough: `nobody` must also be able to *traverse*
+        // into these paths. Bazel / the RBE executor may stage the execroot under
+        // a `0700`-owned directory (e.g. beneath the build user's private `$HOME`)
+        // that `nobody` cannot enter, so grant search (`o+x`) along the ancestor
+        // chain of `working_dir` — the libvirtd config and, later, the per-VM disks
+        // QEMU opens live under it. `$XDG_RUNTIME_DIR` is under `/tmp` (already
+        // world-traversable) so needs no such grant.
+        grant_traverse_to_nobody_if_root(&working_dir)?;
         // Likewise relax `/dev/kvm` and `/dev/net/tun` so the `nobody` QEMU can
         // open them (mirrors `ci/container/init.sh`, which does not run on the
         // RBE workers). Done once here in the setup process; the nodes are global.
@@ -337,6 +345,11 @@ impl LocalBackend {
         info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
         let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
+        // `nobody` `exec`s this binary directly (unlike QEMU/dnsmasq, which live
+        // in world-accessible system paths or are `exec`d by root), so every
+        // component of its runfiles path — as given and after symlink resolution
+        // — must be traversable by `nobody` too.
+        grant_traverse_to_nobody_if_root(&libvirtd_path)?;
         // We deliberately do not keep the `Child` handle. libvirtd must outlive
         // this (setup) process so forked task subprocesses can `connect_only` to
         // its socket; dropping the handle is harmless because
@@ -1341,6 +1354,63 @@ fn own_tree_by_nobody(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// When running as root, grant `nobody` permission to *traverse* to `path` by
+/// adding the directory search bit (`o+x`, never `o+r`) to every ancestor
+/// directory — both of `path` as given and of its symlink-resolved form — up to
+/// the filesystem root.
+///
+/// The `nobody`-dropped libvirtd must `exec` its (runfiles) binary and reach the
+/// per-test working dir, but Bazel / the RBE executor may stage those under a
+/// directory the build user owns `0700` (e.g. an execroot beneath a private
+/// `$HOME`), which `nobody` cannot enter — the `exec`/open then fails with
+/// `EACCES`. Adding only the search bit grants traversal without exposing
+/// directory listings, and relies on the root parent's `CAP_DAC_OVERRIDE` to
+/// chmod regardless of owner. A no-op when not root.
+fn grant_traverse_to_nobody_if_root(path: &Path) -> Result<()> {
+    if !running_as_root() {
+        return Ok(());
+    }
+    // The symlink-resolved, absolute form: `exec`/open checks search permission
+    // on every component of the *resolved* path.
+    if let Ok(canonical) = path.canonicalize() {
+        grant_ancestor_search(&canonical);
+    }
+    // Also the path as given (made absolute): when it is itself a symlink (Bazel
+    // runfiles usually are), its own directory chain is checked too.
+    let as_given = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+    grant_ancestor_search(&as_given);
+    Ok(())
+}
+
+/// Add the "other" search bit (`o+x`) to `path` (if a directory) and every
+/// ancestor directory up to the root. Only `o+x` is added because `nobody` is
+/// never the owner or in the group of these root/build-user-owned directories,
+/// so it traverses them as *other*; the `nobody`-owned leaves it must write are
+/// handled separately by [`own_by_nobody_if_root`]. Best-effort per component; a
+/// component that cannot be stat'd or chmod'd is skipped (the eventual
+/// `exec`/open would surface a real failure).
+fn grant_ancestor_search(path: &Path) {
+    let mut current = Some(path);
+    while let Some(dir) = current {
+        if let Ok(meta) = std::fs::symlink_metadata(dir)
+            && meta.is_dir()
+        {
+            let mode = meta.permissions().mode();
+            let with_search = mode | 0o001;
+            if with_search != mode {
+                let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(with_search));
+            }
+        }
+        current = dir.parent();
+    }
 }
 
 /// Relax `/dev/kvm` and `/dev/net/tun` to `0666` when the driver runs as root,
