@@ -911,16 +911,7 @@ impl ReplicatedState {
     /// tried to reject an unbounded-wait request in an output queue to a deleted subnet
     /// for which a reject response has already been generated.
     pub fn generate_reject_responses_for_deleted_subnets(&mut self) -> Vec<StateError> {
-        let routing_table = self.routing_table();
-        // Collect subnet IDs to also skip callbacks to management canisters of other subnets
-        // (where respondent = subnet_id, which has no entry in the routing table).
-        let subnet_ids: BTreeSet<SubnetId> = self
-            .metadata
-            .network_topology
-            .subnets()
-            .keys()
-            .cloned()
-            .collect();
+        let network_topology = &self.metadata.network_topology;
         let own_subnet_type = self.metadata.own_subnet_type;
 
         // Collect per-canister (callback_id, respondent, deadline) tuples where
@@ -934,11 +925,7 @@ impl ReplicatedState {
             };
             for (callback_id, callback) in ccm.callbacks().iter() {
                 let respondent = callback.respondent;
-                // Skip if respondent has a route in the routing table (canister on an active subnet)
-                // or if respondent's principal ID is a subnet ID in the current topology
-                // (management canister calls to any subnet, including own subnet).
-                if routing_table.lookup_entry(respondent).is_none()
-                    && !subnet_ids.contains(&SubnetId::from(respondent.get()))
+                if network_topology.route(respondent.get()).is_none()
                     && !canister
                         .system_state
                         .queues()
