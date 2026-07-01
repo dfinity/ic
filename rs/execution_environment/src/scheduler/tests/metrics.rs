@@ -38,7 +38,6 @@ use ic_types_cycles::{
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
-use std::sync::Arc;
 use std::time::Duration;
 
 #[test]
