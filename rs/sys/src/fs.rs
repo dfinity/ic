@@ -1199,20 +1199,23 @@ mod tests {
 
         #[test]
         fn should_return_error_if_permission_is_denied() {
-            let temp_dir =
-                tempfile::TempDir::new().expect("failed to create a temporary directory");
-            let test_file = temp_dir.as_ref().join("test_file");
-            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
-            std::fs::set_permissions(&test_file, Permissions::from_mode(0o400))
-                .expect("Could not set the permissions of the test file.");
-            assert_matches!(
-                open_existing_file_for_write(&test_file),
-                Err(err) if err.kind() == PermissionDenied
-            );
-            std::fs::set_permissions(&test_file, Permissions::from_mode(0o700)).expect(
-                "failed to change permissions of test_file so that writing is possible \
+            ic_test_utilities_privileges::run_as_nobody_if_root(|| {
+                let temp_dir =
+                    tempfile::TempDir::new().expect("failed to create a temporary directory");
+                let test_file = temp_dir.as_ref().join("test_file");
+                write_string_using_tmp_file(&test_file, "test content")
+                    .expect("error writing to file");
+                std::fs::set_permissions(&test_file, Permissions::from_mode(0o400))
+                    .expect("Could not set the permissions of the test file.");
+                assert_matches!(
+                    open_existing_file_for_write(&test_file),
+                    Err(err) if err.kind() == PermissionDenied
+                );
+                std::fs::set_permissions(&test_file, Permissions::from_mode(0o700)).expect(
+                    "failed to change permissions of test_file so that writing is possible \
                 again, so that the directory can automatically be cleaned up",
-            );
+                );
+            });
         }
     }
 
@@ -1265,20 +1268,23 @@ mod tests {
 
         #[test]
         fn should_return_error_if_permission_is_denied() {
-            let temp_dir =
-                tempfile::TempDir::new().expect("failed to create a temporary directory");
-            let test_file = temp_dir.as_ref().join("test_file");
-            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
-            std::fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
-                .expect("Could not set the permissions of the test file.");
-            assert_matches!(
-                remove_file(test_file),
-                Err(err) if err.kind() == PermissionDenied
-            );
-            std::fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
-                "failed to change permissions of test_file so that writing is possible \
+            ic_test_utilities_privileges::run_as_nobody_if_root(|| {
+                let temp_dir =
+                    tempfile::TempDir::new().expect("failed to create a temporary directory");
+                let test_file = temp_dir.as_ref().join("test_file");
+                write_string_using_tmp_file(&test_file, "test content")
+                    .expect("error writing to file");
+                std::fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
+                    .expect("Could not set the permissions of the test file.");
+                assert_matches!(
+                    remove_file(test_file),
+                    Err(err) if err.kind() == PermissionDenied
+                );
+                std::fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+                    "failed to change permissions of test_file so that writing is possible \
                 again, so that the directory can automatically be cleaned up",
-            );
+                );
+            });
         }
     }
 }

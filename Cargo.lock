@@ -8573,6 +8573,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-in-memory-logger",
+ "ic-test-utilities-privileges",
  "ic-test-utilities-time",
  "ic-types",
  "ic-types-test-utils",
@@ -14776,6 +14777,7 @@ dependencies = [
  "ic-test-utilities-io",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
+ "ic-test-utilities-privileges",
  "ic-test-utilities-state",
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
@@ -14907,6 +14909,7 @@ dependencies = [
  "cvt",
  "hex",
  "ic-crypto-sha2",
+ "ic-test-utilities-privileges",
  "lazy_static",
  "libc",
  "nix 0.24.3",
@@ -15273,6 +15276,13 @@ version = "0.9.0"
 dependencies = [
  "ic-metrics",
  "prometheus",
+]
+
+[[package]]
+name = "ic-test-utilities-privileges"
+version = "0.9.0"
+dependencies = [
+ "nix 0.24.3",
 ]
 
 [[package]]
