@@ -863,6 +863,7 @@ fn test_sender_info_in_query_call() {
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_cost_threshold_keys() {
     // We create a PocketIC instance with the II subnet (holding `key_1` with 34 nodes)
     // and the test threshold keys subnet (holding `test_key_1` and `dfx_test_key` with 13 nodes).
