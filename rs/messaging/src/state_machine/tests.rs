@@ -17,7 +17,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, nonzero_values};
+use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec, nonzero_values};
 use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::batch::BatchBuilder;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
@@ -498,8 +498,10 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         )
         .unwrap();
 
-    // Responses in the canister output queue for build_streams() to reject
-    // (refund cycles are observed in the DroppedMessages metric, no critical error).
+    // Responses in the canister output queue for build_streams() to discard (refund cycles
+    // are observed in the DroppedMessages metric). The bounded-wait ones are discarded
+    // silently; the unbounded-wait ones additionally raise a critical error, since a
+    // guaranteed response with no route should never happen other than for a deleted subnet.
     // For every such response, we have to first push and then pop a matching input request
     // to create an output queue reservation.
     // Regular responses: remote_canister → local_canister.
@@ -721,9 +723,14 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             .unwrap_or(0);
         assert_eq!(dropped_cycles, resp_refund.get() * 4);
 
-        // No critical errors.
-        assert!(
-            nonzero_values(fetch_int_counter_vec(&metrics_registry, "critical_errors")).is_empty()
+        // Two critical errors: the unbounded-wait output-queue responses (1 from the canister,
+        // 1 from the subnet) discarded by build_streams() due to having no route.
+        assert_eq!(
+            nonzero_values(metric_vec(&[(
+                &[("error", "mr_stream_builder_response_destination_not_found")],
+                2,
+            )])),
+            nonzero_values(fetch_int_counter_vec(&metrics_registry, "critical_errors"))
         );
     });
 }
