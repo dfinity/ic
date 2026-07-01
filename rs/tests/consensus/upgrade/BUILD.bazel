@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MAINNET_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -53,6 +53,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs (1 System + 4 Application).
     env = MAINNET_ENV,
     guestos = "mainnet_app",
     guestos_update = True,
@@ -70,6 +71,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs (1 System + 4 Application).
     env = MAINNET_ENV,
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -103,6 +105,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     env = MAINNET_ENV,
     guestos = "mainnet_app",
     guestos_update = True,
@@ -120,6 +123,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 24,
     },
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 4 IC Node VMs * 6 vCPUs.
     env = MAINNET_ENV,
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -150,6 +154,7 @@ rust_binary(
 
 system_test_nns(
     name = "upgrade_downgrade_unassigned_nodes_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs (1 System + 1 unassigned).
     env = MAINNET_ENV,
     guestos = "mainnet_app",
     guestos_update = True,
@@ -161,6 +166,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_downgrade_old_unassigned_nodes_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs (1 System + 1 unassigned).
     env = MAINNET_ENV,
     guestos = "mainnet_nns",
     guestos_update = True,
@@ -172,6 +178,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_with_alternative_urls",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "long_test",

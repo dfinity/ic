@@ -13,9 +13,29 @@ export -n \
     RUN_SCRIPT_RUNTIME_DEP_ENV_VARS \
     RUN_SCRIPT_VOLATILE_STATUS_PATH
 
+if [ "${SYSTEM_TEST_BACKEND:-}" != "local" ]; then
+    # To eliminate unstable inter-DC network traffic, we want:
+    #
+    #   * Testnets of Farm-based system-tests to be allocated to the Farm DC
+    #     in which the K8s cluster is hosted that is running the test
+    #     either from CI or from a devenv
+    #     unless overridden by the DC environment variable.
+    #   * IC-OS images needed by that testnet to be served from that same K8s cluster.
+    #
+    # The name of the K8s cluster is extracted from the in-cluster K8s API server certificate SAN.
+    cluster=$(timeout 15 openssl s_client -connect kubernetes.default.svc:443 </dev/null 2>/dev/null \
+        | openssl x509 -noout -text 2>/dev/null \
+        | grep -m1 -oE 'api\.[a-z0-9][a-z0-9-]*\.dfinity\.network' \
+        | sed -E 's/^api\.(.*)\.dfinity\.network$/\1/')
+    export DC="${DC:-${cluster%%-*}}"
+fi
+
 # RUN_SCRIPT_ICOS_IMAGES:
-# For every ic-os image specified, first ensure it's in remote
-# storage, then export its download URL and HASH as environment variables.
+# For every ic-os image specified, export its HASH. When not using the local
+# backend we first ensure the image is in remote storage and also export its
+# download URL. Under the local backend the image is served from a local file
+# by the test driver's file server (see `serve_files_task`), so only the HASH is
+# needed here; the driver derives the (content-addressed) URL itself.
 if [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
     # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
     # into an array
@@ -25,15 +45,22 @@ if [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
         image_var_prefix=${image%:*}
         image_filename=${image#*:}
 
-        # ensure the dep is uploaded
-        image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
-        echo "  -> $image_filename=$image_download_url" >&2
+        if [ "${SYSTEM_TEST_BACKEND:-}" = "local" ]; then
+            # The image is served locally from its file path; compute its sha256
+            # so the test driver can advertise it under a content-addressed URL.
+            image_download_hash="$(sha256sum "$image_filename" | cut -d' ' -f1)"
+            export "${image_var_prefix}_HASH=$image_download_hash"
+        else
+            # ensure the dep is uploaded
+            image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename" "$cluster")
+            echo "  -> $image_filename=$image_download_url" >&2
 
-        # Since this is a CAS url, we assume the last URL path part is the sha256
-        image_download_hash="${image_download_url##*/}"
-        # set the environment variables for the test
-        export "${image_var_prefix}_URL=$image_download_url"
-        export "${image_var_prefix}_HASH=$image_download_hash"
+            # Since this is a CAS url, we assume the last URL path part is the sha256
+            image_download_hash="${image_download_url##*/}"
+            # set the environment variables for the test
+            export "${image_var_prefix}_URL=$image_download_url"
+            export "${image_var_prefix}_HASH=$image_download_hash"
+        fi
     done
 fi
 
@@ -72,18 +99,30 @@ for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep_hash="$(sha256sum <<<"$old_dep" | cut -d' ' -f1)"
     old_dep_name="$(basename "$old_dep")"
     new_dep="$old_dep_hash-$old_dep_name"
+    # mcopy/mlabel are mtools applets that dispatch on argv[0], so their symlink
+    # must keep the exact basename; skip the disambiguating hash prefix for them.
+    case "$old_dep_name" in
+        mcopy | mlabel) new_dep="$old_dep_name" ;;
+    esac
     old_dep_abs="$(realpath $old_dep)"
-    echo "Linking runtime dependency for $env_var: $runtime_dep_base/$new_dep -> $old_dep_abs" >&2
     ln -sf "$old_dep_abs" "$runtime_deps/$new_dep"
-    export "$env_var=$runtime_dep_base/$new_dep"
+
+    # Most deps resolve at $runtime_dep_base (the in-container path for colocated
+    # tests, the local path otherwise). MKFS_FAT/MCOPY are an exception: the
+    # colocated *wrapper* itself dereferences them on the host (UniversalVm::start
+    # builds the driver VM's config image locally), so they must resolve locally;
+    # colocate_test.rs rewrites them to the in-container path in the environment
+    # it forwards to the inner test driver.
+    dep_base="$runtime_dep_base"
+    case "$env_var" in
+        MKFS_FAT | MCOPY) dep_base="$runtime_deps" ;;
+    esac
+    echo "Linking runtime dependency for $env_var: $dep_base/$new_dep -> $old_dep_abs" >&2
+    export "$env_var=$dep_base/$new_dep"
 done
 
 # Set environment variables based on volatile status variables:
 export FARM_METADATA="$(grep '^FARM_METADATA ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2-)"
-DC="$(grep '^DC ' "$RUN_SCRIPT_VOLATILE_STATUS_PATH" | cut -d' ' -f2- || true)"
-if [ -n "$DC" ]; then
-    export DC
-fi
 
 # Optionally sync Grafana dashboards from the dfinity-ops/k8s repo so they can be
 # provisioned on the Prometheus VM (see prometheus_vm.rs). This is enabled by setting

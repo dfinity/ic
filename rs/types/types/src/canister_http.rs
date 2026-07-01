@@ -181,18 +181,6 @@ pub enum Replication {
     },
 }
 
-impl Replication {
-    /// Returns true if the given node is authorized to sign a share, assuming
-    /// it is part of the canister HTTP committee.
-    pub fn is_authorized_signer(&self, signer: &NodeId) -> bool {
-        match self {
-            Replication::FullyReplicated => true,
-            Replication::NonReplicated(node_id) => node_id == signer,
-            Replication::Flexible { committee, .. } => committee.contains(signer),
-        }
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {
@@ -1041,7 +1029,6 @@ pub struct CanisterHttpResponseMetadata {
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
     pub is_reject: bool,
-    pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
 
@@ -1052,14 +1039,12 @@ impl CountBytes for CanisterHttpResponseMetadata {
             content_hash,
             content_size,
             is_reject,
-            registry_version,
             replica_version,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
             + size_of_val(content_size)
             + size_of_val(is_reject)
-            + size_of_val(registry_version)
             + replica_version.as_ref().len()
     }
 }
@@ -1099,10 +1084,6 @@ impl CanisterHttpResponseReceipt {
 
     pub fn is_reject(&self) -> bool {
         self.metadata.is_reject
-    }
-
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
     }
 
     pub fn replica_version(&self) -> &ReplicaVersion {
@@ -1164,12 +1145,6 @@ impl CountBytes for CanisterHttpResponseProof {
                 .values()
                 .map(|s| std::mem::size_of::<NodeId>() + s.count_bytes())
                 .sum::<usize>()
-    }
-}
-
-impl CanisterHttpResponseProof {
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
     }
 }
 
@@ -1380,28 +1355,6 @@ mod tests {
             let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
             assert_eq!(initial, round_trip);
         }
-    }
-
-    #[test]
-    fn replication_authorized_signer() {
-        let node1 = node_test_id(1);
-        let node2 = node_test_id(2);
-
-        let fully_replicated = Replication::FullyReplicated;
-        assert!(fully_replicated.is_authorized_signer(&node1));
-        assert!(fully_replicated.is_authorized_signer(&node2));
-
-        let non_replicated = Replication::NonReplicated(node1);
-        assert!(non_replicated.is_authorized_signer(&node1));
-        assert!(!non_replicated.is_authorized_signer(&node2));
-
-        let flexible = Replication::Flexible {
-            committee: BTreeSet::from([node1, node_test_id(3)]),
-            min_responses: 1,
-            max_responses: 2,
-        };
-        assert!(flexible.is_authorized_signer(&node1));
-        assert!(!flexible.is_authorized_signer(&node2));
     }
 
     #[rstest]

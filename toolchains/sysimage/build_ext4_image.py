@@ -227,7 +227,7 @@ def main():
         image_file,
         str(image_size),
     ]
-    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(mke2fs_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
 
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
@@ -263,7 +263,7 @@ def main():
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
-    subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(e2fsdroid_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:

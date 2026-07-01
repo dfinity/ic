@@ -109,6 +109,9 @@ class Args:
     # Path to the setupos-inject-config tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
+    # Path to the mcopy tool from mtools
+    mcopy_tool: Optional[str] = None
+
     # Time to wait between each remote deployment, in minutes
     wait_time: int = field(default=DEFAULT_SETUPOS_WAIT_TIME_MINS, alias="-t")
 
@@ -116,7 +119,7 @@ class Args:
     parallel: int = 1
 
     # Path to an idrac script, which we use to find the directory. If None, pip bin directory will be used.
-    idrac_script: Optional[str] = None
+    idrac_script_dir: Optional[str] = None
 
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
@@ -160,6 +163,7 @@ class Args:
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
+            assert self.mcopy_tool, "mcopy tool required to modify image"
         ipv4_args = [
             self.inject_image_ipv4_address,
             self.inject_image_ipv4_gateway,
@@ -431,7 +435,17 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 
 def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
-    command = f"{sys.executable} {idrac_script_dir}/{script_and_args}"
+    script_name, _, args = script_and_args.partition(" ")
+
+    script_path = next(idrac_script_dir.glob(f"*.data/scripts/{script_name}"), None)
+    if not script_path:
+        raise FileNotFoundError(
+            f"Could not find '{script_name}' inside any *.data/scripts/ directory under {idrac_script_dir}"
+        )
+
+    command = f"{sys.executable} {script_path} {args}".strip()
+
+    log.info(f"Invoking subprocess command: {command}")
     result = invoke.run(command)
 
     if result and not result.ok:
@@ -706,6 +720,7 @@ def upload_to_file_share(
 
 def inject_config_into_image(
     setupos_inject_config_path: Path,
+    mcopy_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
     node_reward_type: str,
@@ -731,6 +746,9 @@ def inject_config_into_image(
         return os.access(p, os.X_OK)
 
     assert setupos_inject_config_path.exists() and is_executable(setupos_inject_config_path)
+
+    # Absolute path: setupos-inject-config runs mcopy with its own working directory.
+    mcopy = os.path.abspath(mcopy_path)
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
@@ -764,6 +782,7 @@ def inject_config_into_image(
     invoke.run(
         f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
         echo=True,
+        env={"MCOPY": mcopy},
     )
 
     # Reuse the name of the compressed image path in the working directory
@@ -783,7 +802,7 @@ def main():
     network_image_url: str = f"http://{args.file_share_url}/{args.file_share_image_filename}"
     log.info(f"Using network_image_url: {network_image_url}")
 
-    idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
+    idrac_script_dir = Path(args.idrac_script_dir) if args.idrac_script_dir else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
     ini_filename: str = args.ini_filename
@@ -836,6 +855,7 @@ def main():
             tmpdir = tempfile.mkdtemp()
             modified_image_path = inject_config_into_image(
                 Path(args.inject_configuration_tool),
+                Path(args.mcopy_tool),
                 Path(tmpdir),
                 Path(args.upload_img),
                 args.inject_image_node_reward_type,

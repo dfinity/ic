@@ -9161,6 +9161,24 @@ fn wasm_memory_limit_cannot_exceed_256_tb() {
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 }
 
+#[test]
+fn wasm_memory_threshold_cannot_exceed_256_tb() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    // Setting the threshold to 2^48 works.
+    test.canister_update_wasm_memory_threshold(canister_id, NumBytes::new(1 << 48))
+        .unwrap();
+
+    // Setting the threshold above 2^48 fails.
+    let err = test
+        .canister_update_wasm_memory_threshold(canister_id, NumBytes::new((1 << 48) + 1))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
 // Test the result that is close to 2^64.
 #[test]
 fn ic0_canister_cycle_balance_u64() {

@@ -231,7 +231,7 @@ mod tests {
             0,
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
             IS_WASM64_EXECUTION,
-            NetworkTopology::default(),
+            std::sync::Arc::new(NetworkTopology::default()),
         )
     }
 

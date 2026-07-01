@@ -1,9 +1,11 @@
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "rosetta_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM (add_fast_single_node_subnet) * 6 vCPUs.
     tags = [
         "colocate",
         "long_test",  # the P90 duration was over 7 minutes in the week starting on 2025-08-21
@@ -37,6 +39,7 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_follow_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM (add_fast_single_node_subnet) * 6 vCPUs + 1 Rosetta UniversalVm * 6 vCPUs (deployed by rosetta_test_lib::setup).
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

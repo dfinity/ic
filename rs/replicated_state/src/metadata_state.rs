@@ -62,7 +62,7 @@ pub struct SystemMetadata {
     /// system.
     pub ingress_history: IngressHistoryState,
 
-    /// XNet stream state indexed by the _destination_ subnet id.
+    /// XNet stream state indexed by the _destination_ subnet ID.
     pub(super) streams: Arc<StreamMap>,
 
     /// Scheduling priorities of the canisters on this subnet.
@@ -87,7 +87,7 @@ pub struct SystemMetadata {
     /// increasing).
     pub batch_time: Time,
 
-    pub network_topology: NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
 
     pub own_subnet_id: SubnetId,
 
@@ -174,7 +174,7 @@ pub struct SystemMetadata {
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
-    /// by aggregating them and storing a running total over multiple days by node id and
+    /// by aggregating them and storing a running total over multiple days by node ID and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 
@@ -252,7 +252,7 @@ pub struct NetworkTopology {
     full_topology: Option<FullTopology>,
 
     /// Subnet to which `SetupInitialDKG` management canister calls are routed
-    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
 }
@@ -383,7 +383,7 @@ impl NetworkTopology {
             .unwrap_or(&self.routing_table)
     }
 
-    /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
+    /// Find the subnet for `principal_id`. The input can either be a canister ID, or a subnet ID.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
         if self.subnets.contains_key(&as_subnet_id) {
@@ -1613,7 +1613,7 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
-        // Store the associated expiry time for the given message id only for a
+        // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
         if let IngressStatus::Known { state, .. } = &status
@@ -1654,11 +1654,17 @@ impl IngressHistoryState {
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
-    /// message id.
+    /// message ID.
     pub fn statuses(&self) -> impl Iterator<Item = (&MessageId, &IngressStatus)> {
         self.statuses
             .iter()
             .map(|(id, status)| (id, status.as_ref()))
+    }
+
+    /// Returns an iterator over the backing `Arc<IngressStatus>` of each entry,
+    /// sorted lexicographically by message ID.
+    pub fn statuses_arc(&self) -> impl Iterator<Item = (&MessageId, &Arc<IngressStatus>)> {
+        self.statuses.iter()
     }
 
     /// Returns an iterator over pruning times statuses, sorted
@@ -2075,6 +2081,17 @@ impl UnflushedCheckpointOps {
 
 pub mod testing {
     use super::*;
+
+    /// Exposes `SystemMetadata` internals for use in tests.
+    pub trait SystemMetadataTesting {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
+    }
+
+    impl SystemMetadataTesting for SystemMetadata {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
+            f(Arc::make_mut(&mut self.network_topology));
+        }
+    }
 
     /// Exposes `NetworkTopology` internals for use in tests.
     pub trait NetworkTopologyTesting {

@@ -11,7 +11,10 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable}
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, Stream, SubnetTopology,
-    metadata_state::{StreamMap, testing::NetworkTopologyTesting},
+    metadata_state::{
+        StreamMap,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    },
     replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
     testing::{OutputRequestBuilder, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
@@ -38,6 +41,7 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_12; // g24bn-xymaa-aaaaa-aaaap-yai
 const REMOTE_SUBNET: SubnetId = SUBNET_23; // 5h3gz-qaxaa-aaaaa-aaaap-yai
@@ -2837,13 +2841,15 @@ fn induct_stream_slices_drops_refund_at_engine_boundary() {
             }],
             |stream_handler, mut state, slices, metrics| {
                 // Mark REMOTE_SUBNET as a CloudEngine.
-                state.metadata.network_topology.subnets_mut().insert(
-                    REMOTE_SUBNET,
-                    SubnetTopology {
-                        subnet_type: SubnetType::CloudEngine,
-                        ..Default::default()
-                    },
-                );
+                state.metadata.modify_network_topology(|network_topology| {
+                    network_topology.subnets_mut().insert(
+                        REMOTE_SUBNET,
+                        SubnetTopology {
+                            subnet_type: SubnetType::CloudEngine,
+                            ..Default::default()
+                        },
+                    );
+                });
 
                 // Expected state: a stream with one accept signal, no induction, cycles lost.
                 let refund = *refund_in_slice(slices.get(&REMOTE_SUBNET), 0);
@@ -3312,13 +3318,15 @@ fn induct_stream_slices_engine_src_guaranteed_response_request_critical_error() 
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Expect a stream with a reject signal (EngineNotAllowed) for the guaranteed-response request.
             let mut expected_state = state.clone();
@@ -3361,13 +3369,15 @@ fn induct_stream_slices_engine_src_best_effort_request_inducted() {
         btreemap![],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Build a best-effort request (deadline != NO_DEADLINE, payment = 0).
             let best_effort_request = RequestBuilder::new()
@@ -3412,13 +3422,15 @@ fn induct_stream_slices_engine_src_best_effort_request_with_cycles_rejected() {
         btreemap![],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Build a best-effort request carrying cycles
             // (deadline != NO_DEADLINE, payment > 0).
@@ -3487,13 +3499,15 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
         }],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Build a best-effort response with no cycles using the callback registered by setup.
             let best_effort_response = ResponseBuilder::new()
@@ -3552,13 +3566,15 @@ fn induct_stream_slices_engine_boundary_drops_forged_response() {
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // Expected state: response dropped (no induction), accept signal pushed,
             // cycles attached to the forged response observed as lost.
@@ -3615,13 +3631,15 @@ fn induct_stream_slices_engine_boundary_strips_and_inducts_guaranteed_response()
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // The framework attaches cycles to the response, so the stripping is meaningful.
             assert!(response_in_slice(slices.get(&REMOTE_SUBNET), 0).refund > Cycles::zero());
@@ -3682,13 +3700,15 @@ fn induct_stream_slices_engine_boundary_drops_best_effort_response_with_cycles()
         }],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.network_topology.subnets_mut().insert(
-                REMOTE_SUBNET,
-                SubnetTopology {
-                    subnet_type: SubnetType::CloudEngine,
-                    ..Default::default()
-                },
-            );
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
 
             // A best-effort response carrying cycles, matching the callback registered by setup.
             let payment = Cycles::new(1_000);
@@ -3819,17 +3839,14 @@ fn with_test_setup_and_config(
             routing_table.lookup_entry(*REMOTE_CANISTER)
         );
         assert!(routing_table.lookup_entry(*UNKNOWN_CANISTER).is_none());
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
-            state
-                .metadata
-                .network_topology
-                .subnets_mut()
-                .insert(subnet, Default::default());
-        }
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
+                network_topology
+                    .subnets_mut()
+                    .insert(subnet, Default::default());
+            }
+        });
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
         let mut canister_state = CanisterStateBuilder::new()
@@ -4377,7 +4394,9 @@ fn prepare_canister_migration(
     canister_migrations
         .insert_ranges(canister_id_ranges, from_subnet, to_subnet)
         .unwrap();
-    state.metadata.network_topology.canister_migrations = Arc::new(canister_migrations);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.canister_migrations = Arc::new(canister_migrations);
+    });
 
     state
 }
@@ -4404,10 +4423,9 @@ fn complete_canister_migration(
     routing_table
         .assign_ranges(canister_id_ranges, destination)
         .unwrap();
-    state
-        .metadata
-        .network_topology
-        .set_routing_table(routing_table);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
+    });
 
     state
 }

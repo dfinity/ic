@@ -27,10 +27,3 @@ if [ -n "${CI_JOB_NAME:-}" ]; then
     FARM_METADATA="$FARM_METADATA;JOB_NAME=$CI_JOB_NAME"
 fi
 echo "FARM_METADATA $FARM_METADATA"
-
-# Output the DC (Data Center) where the CI job is being run as a volatile variable in case NODE_NAME is set.
-# This is used to allocate a Farm testnet to the local DC in CI (Search for allocate_testnet_to_local_dc)
-# NODE_NAME is assumed to be in the format <dc-name>-<node-id>, e.g. "dm1-dll01"
-if [ -n "${NODE_NAME:-}" ]; then
-    echo "DC ${NODE_NAME%%-*}"
-fi
