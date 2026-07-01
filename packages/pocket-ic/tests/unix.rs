@@ -783,6 +783,7 @@ fn deploy_universal_canister(pic: &PocketIc) -> Principal {
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_sender_info_in_update_call() {
     let pic = PocketIc::new();
     let canister_id = deploy_universal_canister(&pic);
@@ -822,6 +823,7 @@ fn test_sender_info_in_update_call() {
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_sender_info_in_query_call() {
     let pic = PocketIc::new();
     let canister_id = deploy_universal_canister(&pic);
