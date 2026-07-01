@@ -910,11 +910,10 @@ impl StreamBuilder for StreamBuilderImpl {
 ///
 /// Must be called after `build_streams()`: `build_streams()` unconditionally
 /// rejects any request in an output queue with no route (e.g. destined for a
-/// deleted subnet), ensuring such callbacks already have an enqueued response
-/// and are skipped by this function. Calling before `build_streams()`
-/// would result in a critical error in `build_streams()` if `build_streams()`
-/// tried to reject an unbounded-wait request in an output queue to a deleted subnet
-/// for which a reject response has already been generated.
+/// deleted subnet), never expecting to deal with duplicate responses. Producing
+/// a reject response for an unbounded-wait callback before `build_streams()` has
+/// had a chance to produce a reject response for the corresponding request would
+/// trigger a critical error in `build_streams()`.
 ///
 /// Skipped if the subnet list in the network topology is unchanged since the
 /// last call that successfully inducted all of its reject responses (tracked via
