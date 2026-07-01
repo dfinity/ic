@@ -223,7 +223,7 @@ jobs:
         shell: bash
         run: |
           # Determine bazel_args based on event type or branch name
-          bazel_args=( --config=flaky_retry --skip_incompatible_explicit_targets ) # auto retry eg systests
+          bazel_args=( --config=flaky_retry ) # auto retry eg systests
           if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
               bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
           elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
