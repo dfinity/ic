@@ -195,8 +195,8 @@ pub struct SystemMetadata {
     pub logs_migrated: bool,
 
     /// The subnet list from network topology that was last used by
-    /// `generate_reject_responses_for_deleted_subnets()`. The function is
-    /// skipped if the subnet list has not changed since the last call.
+    /// `generate_reject_responses_for_deleted_subnets()`. The function
+    /// exits early if the subnet list has not changed since the last call.
     ///
     /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
