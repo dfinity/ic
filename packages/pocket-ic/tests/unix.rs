@@ -269,18 +269,6 @@ impl Drop for HttpServer {
 // on the Windows host while the PocketIC server (making the canister HTTP outcall) runs in WSL.
 #[test]
 fn test_canister_http_in_live_mode() {
-    // This test spawns a loopback HTTP server in the test process and has the PocketIC server
-    // make a canister HTTP outcall to it. That does not work under Bazel Remote Execution (the
-    // `bazel-test-bre` CI job), where the remote executor cannot reach the test's HTTP server.
-    // That job sets `POCKET_IC_SKIP_HTTP_LIVE_MODE_TEST` (via `--test_env`) to skip this test
-    // there only; in every other environment the env var is unset and the test runs normally.
-    if std::env::var("POCKET_IC_SKIP_HTTP_LIVE_MODE_TEST").is_ok() {
-        eprintln!(
-            "Skipping test_canister_http_in_live_mode because POCKET_IC_SKIP_HTTP_LIVE_MODE_TEST is set."
-        );
-        return;
-    }
-
     // We create a PocketIC instance with an NNS subnet
     // (the "live" mode requires the NNS subnet).
     let mut pic = PocketIcBuilder::new()
