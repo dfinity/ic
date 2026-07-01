@@ -912,13 +912,11 @@ impl ReplicatedState {
     /// for which a reject response has already been generated.
     pub fn generate_reject_responses_for_deleted_subnets(&mut self) -> Vec<StateError> {
         let network_topology = &self.metadata.network_topology;
-        let own_subnet_type = self.metadata.own_subnet_type;
 
-        // Collect per-canister (callback_id, respondent, deadline) tuples where
-        // the respondent is on a deleted subnet and no response has been enqueued yet.
-        // Grouped by canister_id so each canister is removed and reinserted exactly once.
-        let mut rejects: BTreeMap<CanisterId, Vec<(CallbackId, CanisterId, CoarseTime)>> =
-            BTreeMap::new();
+        // Collect reject responses for callbacks whose respondent has no route in
+        // the current network topology (i.e. is on a deleted subnet, or is the
+        // management canister of a deleted subnet) and has no response enqueued yet.
+        let mut rejects = Vec::new();
         for (canister_id, canister) in self.canister_states.all_iter() {
             let Some(ccm) = canister.system_state.call_context_manager() else {
                 continue;
@@ -931,48 +929,35 @@ impl ReplicatedState {
                         .queues()
                         .has_enqueued_response(callback_id)
                 {
-                    rejects.entry(*canister_id).or_default().push((
-                        *callback_id,
+                    rejects.push(RequestOrResponse::Response(Arc::new(Response {
+                        originator: *canister_id,
                         respondent,
-                        callback.deadline,
-                    ));
+                        originator_reply_callback: *callback_id,
+                        refund: Cycles::zero(),
+                        // Use the same reject code and message as canister uninstallation, but do
+                        // not refund cycles here: the deleted subnet may have partially executed
+                        // the request and consumed some or all of the payment/refund cycles.
+                        response_payload: Payload::Reject(
+                            RejectContext::new_with_message_length_limit(
+                                RejectCode::CanisterReject,
+                                "Canister has been uninstalled.",
+                                MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                            ),
+                        ),
+                        deadline: callback.deadline,
+                    })));
                 }
             }
         }
 
         let mut available_guaranteed_response_memory = 0;
         let mut errors = Vec::new();
-        for (canister_id, callbacks) in rejects {
-            let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let canister_state = Arc::make_mut(&mut canister);
-            for (callback_id, respondent, deadline) in callbacks {
-                let response = RequestOrResponse::Response(Arc::new(Response {
-                    originator: canister_id,
-                    respondent,
-                    originator_reply_callback: callback_id,
-                    refund: Cycles::zero(),
-                    // Use the same reject code and message as canister uninstallation, but do not
-                    // refund cycles here: the deleted subnet may have partially executed the request
-                    // and consumed some or all of the payment/refund cycles.
-                    response_payload: Payload::Reject(
-                        RejectContext::new_with_message_length_limit(
-                            RejectCode::CanisterReject,
-                            "Canister has been uninstalled.",
-                            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-                        ),
-                    ),
-                    deadline,
-                }));
-                if let Err((error, _)) = canister_state.push_input(
-                    response,
-                    &mut available_guaranteed_response_memory,
-                    own_subnet_type,
-                    InputQueueType::RemoteSubnet,
-                ) {
-                    errors.push(error);
-                }
+        for response in rejects {
+            if let Err((error, _)) =
+                self.push_input(response, &mut available_guaranteed_response_memory)
+            {
+                errors.push(error);
             }
-            self.canister_states.insert(canister);
         }
         errors
     }
