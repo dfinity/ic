@@ -737,7 +737,6 @@ fn build_streams_with_best_effort_messages_impl(
 
         let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
-        // Set the subnet types of the local and remote subnets.
         provided_state.metadata.modify_network_topology(|network_topology| {
             // Set the subnet types of the local and remote subnets.
             network_topology.set_subnets(btreemap! {
@@ -1221,8 +1220,8 @@ fn build_streams_with_refunds(
             system_subnet_stream_msg_limit,
         );
 
-        // Set the type of both subnets and map canisters to subnets.
         provided_state.metadata.modify_network_topology(|network_topology| {
+            // Set the type of both subnets.
             network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
                 REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
@@ -1631,9 +1630,9 @@ fn test_observe_misrouted_messages_on_splitting_subnet() {
         let canister_on_b = canister_test_id(400);
         let canister_on_z = canister_test_id(500);
 
-        // Routing table: `migrating_canister` is still hosted by the local subnet;
-        // `migrated_canister` has already migrated from the local subnet to B.
         state.metadata.modify_network_topology(|network_topology| {
+            // Routing table: `migrating_canister` is still hosted by the local subnet;
+            // `migrated_canister` has already migrated from the local subnet to B.
             network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
@@ -1743,9 +1742,9 @@ fn test_observe_misrouted_messages_on_third_party_subnet() {
         let canister_on_b = canister_test_id(500);
         let canister_on_z = canister_test_id(600);
 
-        // Routing table: `migrating_canister` is still hosted by subnet A;
-        // `migrated_canister` has already migrated from A to B.
         state.metadata.modify_network_topology(|network_topology| {
+            // Routing table: `migrating_canister` is still hosted by subnet A;
+            // `migrated_canister` has already migrated from A to B.
             network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
