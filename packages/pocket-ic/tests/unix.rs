@@ -269,7 +269,6 @@ impl Drop for HttpServer {
 // This test does not work on Windows since the test HTTP webserver is spawned by the test driver
 // on the Windows host while the PocketIC server (making the canister HTTP outcall) runs in WSL.
 #[test]
-
 fn test_canister_http_in_live_mode() {
     // We create a PocketIC instance with an NNS subnet
     // (the "live" mode requires the NNS subnet).
@@ -349,7 +348,6 @@ fn test_raw_gateway() {
 }
 
 #[test]
-
 fn test_custom_blockmaker_metrics() {
     const HOURS_IN_SECONDS: u64 = 60 * 60;
 
@@ -445,7 +443,6 @@ fn test_custom_blockmaker_metrics() {
 
 // This test times out on Windows.
 #[test]
-
 fn payload_too_large() {
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
@@ -519,7 +516,6 @@ fn send_too_large_body(
 }
 
 #[test]
-
 fn test_registry_sync() {
     let registry_canister_id = Principal::from_text("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
     let governance_canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
@@ -697,7 +693,6 @@ fn prepare_add_node_payload(
 }
 
 #[test]
-
 fn create_subnet_in_registry_canister() {
     let icp_features = IcpFeatures {
         registry: Some(IcpFeaturesConfig::DefaultConfig),
@@ -783,7 +778,6 @@ fn deploy_universal_canister(pic: &PocketIc) -> Principal {
 }
 
 #[test]
-
 fn test_sender_info_in_update_call() {
     let pic = PocketIc::new();
     let canister_id = deploy_universal_canister(&pic);
@@ -823,7 +817,6 @@ fn test_sender_info_in_update_call() {
 }
 
 #[test]
-
 fn test_sender_info_in_query_call() {
     let pic = PocketIc::new();
     let canister_id = deploy_universal_canister(&pic);
@@ -863,7 +856,6 @@ fn test_sender_info_in_query_call() {
 }
 
 #[test]
-
 fn test_cost_threshold_keys() {
     // We create a PocketIC instance with the II subnet (holding `key_1` with 34 nodes)
     // and the test threshold keys subnet (holding `test_key_1` and `dfx_test_key` with 13 nodes).
