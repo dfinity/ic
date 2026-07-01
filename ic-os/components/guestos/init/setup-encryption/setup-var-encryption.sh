@@ -80,4 +80,6 @@ else
         # and continue operating.
         cryptsetup luksClose old_var_crypt || echo "Failed to close old /var crypto partition"
     fi
+
+    udevadm trigger --settle --action=change /dev/mapper/var_crypt
 fi

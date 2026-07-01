@@ -134,6 +134,7 @@ function make_var_cryptsetup() {
     echo "Before=blockdev@dev-mapper-var_crypt.target"
     echo "Wants=blockdev@dev-mapper-var_crypt.target"
     echo "Before=var.mount"
+    echo "Before=systemd-fsck@dev-mapper-var_crypt.service"
     echo "Conflicts=umount.target"
     echo "Before=cryptsetup.target"
     echo "Requires=init-config.service"
