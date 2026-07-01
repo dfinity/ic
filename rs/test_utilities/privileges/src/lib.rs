@@ -11,7 +11,7 @@
 //! [`run_as_nobody_if_root`] runs a closure as the unprivileged `nobody` user
 //! when the current process is root, and unchanged (in-process) otherwise.
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 mod imp {
     use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::{ForkResult, Gid, Uid, fork, geteuid, setgid, setgroups, setuid};
@@ -144,11 +144,11 @@ mod imp {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub use imp::run_as_nobody_if_root;
 
-/// On non-unix platforms, dropping privileges is a no-op: `action` runs directly.
-#[cfg(not(unix))]
+/// On non-Linux platforms, dropping privileges is a no-op: `action` runs directly.
+#[cfg(not(target_os = "linux"))]
 pub fn run_as_nobody_if_root<F: FnOnce()>(action: F) {
     action();
 }
