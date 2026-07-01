@@ -37,6 +37,13 @@ const ADD_NODE_IP_REFILL_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS;
 // of trusted node providers onboard nodes in bulk (e.g. on-demand cloud
 // provisioning) without being blocked by the standard limits. They are set to
 // 10x the standard limits. The per-IP `add_node` limiter still applies.
+//
+// Why elevated (rather than the standard) limits are needed: to prepare for the
+// launch of cloud engines we need a large-ish initial pool of nodes from which
+// to form engines. The standard limits are designed for the steady-state flow
+// of mutations, not these one-time large bursts, so they would get in the way
+// of that onboarding. Granting elevated limits to specific node providers is
+// safe because we trust them not to abuse this privilege.
 // TODO: Remove this exception once it is no longer needed.
 const ELEVATED_NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY: u64 =
     10 * NODE_PROVIDER_MAX_AVG_OPERATIONS_PER_DAY;
@@ -523,7 +530,7 @@ mod tests {
             elevated_operator,
             ELEVATED_NODE_OPERATOR_MAX_SPIKE,
         );
-        assert_eq!(result, Err(Some(RateLimiterError::NotEnoughCapacity)));
+        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
 
         // A standard provider's operator is still bound by the standard spike.
         let result = registry.try_reserve_capacity_for_node_operator_operation(
@@ -531,6 +538,6 @@ mod tests {
             standard_operator,
             over_standard_spike,
         );
-        assert_eq!(result, Err(Some(RateLimiterError::NotEnoughCapacity)));
+        assert_eq!(result.err(), Some(RateLimiterError::NotEnoughCapacity));
     }
 }
