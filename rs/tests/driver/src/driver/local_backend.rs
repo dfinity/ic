@@ -184,7 +184,7 @@ impl LocalBackend {
     ///   `capsh` raises the caps into its inheritable+ambient sets and `exec`s
     ///   `/bin/sh -c <script>`; ambient caps survive the `exec`, so the script's
     ///   commands run with them even though the shell is not capability-endowed.
-    /// - Root (e.g. the `bazel-test-bre` RBE cluster): `capsh` is both unnecessary
+    /// - Root (e.g. the `bazel-test-rbe` RBE cluster): `capsh` is both unnecessary
     ///   and harmful. A root process already holds these caps — in the nested
     ///   user namespace the RBE executor runs the action in, root owns the
     ///   namespace and thus its full capability set — and its children inherit
@@ -325,7 +325,7 @@ impl LocalBackend {
         )
         .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
 
-        // If the driver itself runs as root (e.g. the `bazel-test-bre` RBE
+        // If the driver itself runs as root (e.g. the `bazel-test-rbe` RBE
         // cluster), libvirtd would start in *system* mode — it selects system
         // vs. session purely by `geteuid() == 0` — breaking every session-mode
         // assumption in this module. We spawn it as `nobody` below to keep it in
@@ -1316,7 +1316,7 @@ const NOBODY_GID: u32 = 65534;
 
 /// Whether the driver process is running as root (effective uid 0).
 ///
-/// The `bazel-test-bre` RBE cluster runs `_local` test actions as root. A
+/// The `bazel-test-rbe` RBE cluster runs `_local` test actions as root. A
 /// monolithic `libvirtd` selects *system* vs. *session* mode purely by
 /// `geteuid() == 0`, so as root it would ignore `$XDG_RUNTIME_DIR` and place a
 /// privileged socket under `/run`, breaking this module's session-mode design.

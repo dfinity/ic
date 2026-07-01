@@ -134,7 +134,7 @@ rust_test(
         # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
         "test_all_platforms",
-        # TODO: the test hangs on the bazel-test-bre job
+        # TODO: the test hangs on the bazel-test-rbe job
         "manual",
     ],
     deps = [

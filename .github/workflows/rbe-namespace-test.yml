@@ -1,7 +1,7 @@
-name: BRE Namespace Test
+name: RBE Namespace Test
 
-# Experimental: run `bazel test` on Namespace runners using Bazel Remote
-# Execution (BRE). Actions execute on Namespace workers booted from a custom
+# Experimental: run `bazel test` on Namespace runners using Remote
+# Build Execution (RBE). Actions execute on Namespace workers booted from a custom
 # worker image (a mirror of ic-build) that is built, optimized and pinned by the
 # `container-autobuild.yml` workflow.
 #
@@ -29,8 +29,8 @@ permissions:
   contents: read
 
 jobs:
-  bazel-test-bre:
-    name: Bazel Test (Namespace BRE)
+  bazel-test-rbe:
+    name: Bazel Test (Remote Build Execution @ Namespace)
     runs-on: namespace-profile-amd64-linux-32x64
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:b3209ba49237175d9f4339daa4b0828f1eee0cf9bd8ccd193af7be4a9663d919
@@ -46,7 +46,7 @@ jobs:
         - /var/run/nsc/:/var/run/nsc/
     timeout-minutes: 120
     # Opt-in while experimental: manual dispatch, pushes to dev-gh-* branches, or
-    # non-fork pull requests labeled 'CI_BRE'. Only on the public repo, where
+    # non-fork pull requests labeled 'CI_RBE'. Only on the public repo, where
     # Namespace runners are configured (otherwise the job would get stuck). Fork
     # PRs are excluded because this job runs on a privileged Namespace runner with
     # pre-authenticated 'nsc' and must never execute untrusted PR code.
@@ -54,7 +54,7 @@ jobs:
       github.repository == 'dfinity/ic' &&
       ( github.event_name != 'pull_request' ||
         ( github.event.pull_request.head.repo.full_name == github.repository &&
-          contains(github.event.pull_request.labels.*.name, 'CI_BRE') ) )
+          contains(github.event.pull_request.labels.*.name, 'CI_RBE') ) )
     steps:
       - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel Remote Execution
@@ -67,7 +67,7 @@ jobs:
           nsc bazel execution setup --bazelrc=/tmp/bazel-rbe.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
-      - name: Bazel Test with BRE
+      - name: Bazel Test with RBE
         shell: bash
         env:
           BAZEL_TARGETS: ${{ github.event.inputs.targets || '//...' }}
@@ -75,7 +75,7 @@ jobs:
           set -euo pipefail
 
           # Custom worker image: a mirror of ic-build, pinned to an immutable digest
-          # and optimized for BRE. The ref below (Namespace tenant registry + digest)
+          # and optimized for RBE. The ref below (Namespace tenant registry + digest)
           # is kept up to date automatically by the 'update-image-references' job in
           # container-autobuild.yml.
           # NOTE: the placeholder digest below is replaced on the first ic-build
