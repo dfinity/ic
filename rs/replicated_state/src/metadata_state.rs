@@ -100,8 +100,6 @@ pub struct SystemMetadata {
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 
-    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
-
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
     /// `None` otherwise.
@@ -255,6 +253,9 @@ pub struct NetworkTopology {
     /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
+
+    /// API boundary nodes, indexed by `NodeId`.
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -284,6 +285,7 @@ impl Default for NetworkTopology {
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
             default_initial_dkg_subnet_id: None,
+            api_boundary_nodes: Default::default(),
         }
     }
 }
@@ -300,6 +302,7 @@ impl NetworkTopology {
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
         default_initial_dkg_subnet_id: Option<SubnetId>,
+        api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     ) -> Self {
         Self {
             subnets,
@@ -311,6 +314,7 @@ impl NetworkTopology {
             bitcoin_mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         }
     }
 
@@ -555,7 +559,6 @@ impl SystemMetadata {
             own_subnet_features: SubnetFeatures::default(),
             own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
             split_from: None,
             subnet_split_from: None,
 
@@ -868,7 +871,6 @@ impl SystemMetadata {
             own_resource_limits: _,
             // Overwritten as soon as the round begins, no explicit action needed.
             node_public_keys: _,
-            api_boundary_nodes: _,
             ref mut split_from,
             subnet_split_from,
             subnet_call_context_manager: _,
@@ -976,7 +978,6 @@ impl SystemMetadata {
             own_subnet_features,
             own_resource_limits,
             node_public_keys,
-            api_boundary_nodes,
             split_from,
             mut subnet_split_from,
             mut subnet_call_context_manager,
@@ -1083,7 +1084,6 @@ impl SystemMetadata {
             own_resource_limits,
             // Already populated from the registry.
             node_public_keys,
-            api_boundary_nodes,
             split_from,
             subnet_split_from,
             subnet_call_context_manager,
@@ -2209,7 +2209,6 @@ pub mod testing {
             own_subnet_features: SubnetFeatures::default(),
             own_resource_limits: Default::default(),
             node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
             split_from: None,
             subnet_split_from: None,
             prev_state_hash: Default::default(),
