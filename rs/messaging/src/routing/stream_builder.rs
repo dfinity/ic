@@ -9,7 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::{
     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, PeekableOutputIterator, ReplicatedStateMessageRouting,
 };
-use ic_replicated_state::{ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, StateError, Stream};
 use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
@@ -446,6 +446,8 @@ impl StreamBuilderImpl {
         let mut oversized_requests = Vec::new();
         let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
         let mut engine_response_dropped_cycles = Cycles::zero();
+        let mut dropped_response_cycles = Cycles::zero();
+        let own_cost_schedule = state.get_own_cost_schedule();
 
         let mut output_iter = state.output_into_iter();
 
@@ -619,7 +621,11 @@ impl StreamBuilderImpl {
                     };
                 }
 
-                // Destination subnet not found.
+                // Destination subnet not found: process the message immediately.
+                // It is important to process the message immediately so that
+                // `generate_reject_responses_for_deleted_subnets` does not
+                // produce a response that would trigger a critical error in a subsequent
+                // `build_streams` that does not expect to deal with duplicate responses.
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
@@ -630,9 +636,9 @@ impl StreamBuilderImpl {
                         }
                         RequestOrResponse::Response(rep) => {
                             // A Response: discard it.
-                            if rep.is_best_effort() && rep.refund.is_zero() {
-                                // Expected when the destination subnet has been deleted: bounded-wait
-                                // responses with no cycles refund can be safely discarded.
+                            if rep.is_best_effort() {
+                                // Bounded-wait responses can be discarded silently, e.g.,
+                                // when the destination subnet has been deleted.
                                 debug!(
                                     self.log,
                                     "Discarding bounded-wait response, destination not found: {:?}",
@@ -641,7 +647,7 @@ impl StreamBuilderImpl {
                             } else {
                                 error!(
                                     self.log,
-                                    "{}: Discarding response, destination not found: {:?}",
+                                    "{}: Discarding unbounded-wait response, destination not found: {:?}",
                                     CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
                                     rep
                                 );
@@ -649,12 +655,20 @@ impl StreamBuilderImpl {
                                     .critical_error_response_destination_not_found
                                     .inc();
                             }
+                            dropped_response_cycles += rep.refund;
                         }
                     }
                 }
             };
         }
         drop(output_iter);
+
+        if !dropped_response_cycles.is_zero() {
+            state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                dropped_response_cycles,
+                own_cost_schedule,
+            ));
+        }
 
         for req in requests_to_reject {
             let dst_canister_id = req.receiver;
@@ -849,4 +863,89 @@ impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
         self.build_streams_impl(state)
     }
+}
+
+/// Generates synthetic reject responses for callbacks to deleted subnets.
+///
+/// Must be called after `build_streams()`: `build_streams()` unconditionally
+/// rejects any request in an output queue with no route (e.g. destined for a
+/// deleted subnet), never expecting to deal with duplicate responses. Producing
+/// a reject response for an unbounded-wait callback before `build_streams()` has
+/// had a chance to produce a reject response for the corresponding request would
+/// trigger a critical error in `build_streams()`.
+///
+/// Skipped if the subnet list in the network topology is unchanged since the
+/// last call that successfully inducted all of its reject responses (tracked via
+/// `subnet_ids_at_last_reject_generation`). On error, the subnet list is left
+/// unchanged, so generation is retried on the next call; already-enqueued
+/// responses are filtered out by `has_enqueued_response`, so only the callbacks
+/// that failed to be inducted are retried.
+pub(crate) fn generate_reject_responses_for_deleted_subnets(
+    state: &mut ReplicatedState,
+) -> Vec<StateError> {
+    let network_topology = &state.metadata.network_topology;
+    let current_subnet_ids: Vec<SubnetId> = network_topology.subnets().keys().cloned().collect();
+    if state.metadata.subnet_ids_at_last_reject_generation.as_ref() == Some(&current_subnet_ids) {
+        return Vec::new();
+    }
+
+    // Collect reject responses for callbacks whose respondent has no route in
+    // the current network topology (i.e. is on a deleted subnet, or is the
+    // management canister of a deleted subnet) and has no response enqueued yet.
+    let mut rejects = Vec::new();
+    for (canister_id, canister) in state.canister_states().all_iter() {
+        let Some(ccm) = canister.system_state.call_context_manager() else {
+            continue;
+        };
+        for (callback_id, callback) in ccm.callbacks().iter() {
+            let respondent = callback.respondent;
+            if network_topology.route(respondent.get()).is_none()
+                && !canister
+                    .system_state
+                    .queues()
+                    .has_enqueued_response(callback_id)
+            {
+                rejects.push(RequestOrResponse::Response(Arc::new(Response {
+                    originator: *canister_id,
+                    respondent,
+                    originator_reply_callback: *callback_id,
+                    refund: Cycles::zero(),
+                    // Use the same reject code and message as canister uninstallation, but do
+                    // not refund cycles here: the deleted subnet may have partially executed
+                    // the request and consumed some or all of the payment/refund cycles.
+                    // `RejectCode::DestinationInvalid` (as used by `build_streams()`) would not
+                    // be accurate: it implies that the request was never processed, whereas here
+                    // the deleted subnet may have already pulled the request from the stream
+                    // without yet signaling back.
+                    response_payload: Payload::Reject(
+                        RejectContext::new_with_message_length_limit(
+                            RejectCode::CanisterReject,
+                            "Canister has been uninstalled.",
+                            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                        ),
+                    ),
+                    deadline: callback.deadline,
+                })));
+            }
+        }
+    }
+
+    // Responses never consume guaranteed-response memory: guaranteed responses fill a slot
+    // reserved when the corresponding request was enqueued, and best-effort responses don't
+    // use guaranteed-response memory at all (see `can_push`). Since we only push responses
+    // here, the available-memory budget is never consulted, so a value of zero is safe.
+    let mut available_guaranteed_response_memory = 0;
+    let mut errors = Vec::new();
+    for response in rejects {
+        if let Err((error, _)) =
+            state.push_input(response, &mut available_guaranteed_response_memory)
+        {
+            errors.push(error);
+        }
+    }
+    // Only update the subnet list if all responses were successfully inducted.
+    if errors.is_empty() {
+        state.metadata.subnet_ids_at_last_reject_generation = Some(current_subnet_ids);
+    }
+    errors
 }
