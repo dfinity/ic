@@ -27,6 +27,7 @@ use slog::{Logger, info, warn};
 use std::collections::HashMap;
 use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -312,10 +313,27 @@ impl LocalBackend {
         )
         .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
 
-        // The backend is fully unprivileged: libvirtd runs as the current user
-        // in session mode with a per-user QEMU driver. No `sudo`, no system-wide
-        // bridge, no `virtlogd`. The few operations needing elevated networking
-        // caps (bridge and TAPs) go through the narrow [`net_admin`] launcher.
+        // If the driver itself runs as root (e.g. the `bazel-test-bre` RBE
+        // cluster), libvirtd would start in *system* mode — it selects system
+        // vs. session purely by `geteuid() == 0` — breaking every session-mode
+        // assumption in this module. We spawn it as `nobody` below to keep it in
+        // session mode; hand `nobody` ownership of everything it (and the QEMU
+        // processes its session driver spawns as the same user) must read or
+        // write: the `$XDG_RUNTIME_DIR` tree (unix socket + per-VM runtime state
+        // + QMP monitor sockets) and the libvirt dir (conf + pid + log). These
+        // are no-ops when not root.
+        own_tree_by_nobody_if_root(&xdg_runtime_dir)?;
+        own_tree_by_nobody_if_root(&libvirt_dir)?;
+        // Likewise relax `/dev/kvm` and `/dev/net/tun` so the `nobody` QEMU can
+        // open them (mirrors `ci/container/init.sh`, which does not run on the
+        // RBE workers). Done once here in the setup process; the nodes are global.
+        relax_vm_device_nodes_if_root(&logger);
+
+        // The backend runs unprivileged: libvirtd uses a per-user session QEMU
+        // driver — as the invoking user, or `nobody` when the driver is root.
+        // No `sudo`, no system-wide bridge, no `virtlogd`. The few operations
+        // needing elevated networking caps (bridge and TAPs) go through the
+        // narrow [`net_admin`] launcher.
         info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
 
         let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
@@ -326,8 +344,8 @@ impl LocalBackend {
         // running and is reparented to the child-subreaper parent when this
         // process exits; it is stopped in `delete_group` via its pid-file and
         // SIGKILLed by `kill_all_descendants` as a final safety net.
-        Command::new(&libvirtd_path)
-            .arg("--config")
+        let mut cmd = Command::new(&libvirtd_path);
+        cmd.arg("--config")
             .arg(&conf_path)
             .arg("--pid-file")
             .arg(&pid_path)
@@ -335,9 +353,16 @@ impl LocalBackend {
             .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("spawning libvirtd")?;
+            .stderr(Stdio::null());
+        // When the driver runs as root, drop libvirtd to `nobody` so it stays in
+        // session mode (see the ownership handover above). The standard library
+        // applies `gid` before `uid`; we set only the primary gid, leaving
+        // root's supplementary groups in place, which is harmless in the test
+        // sandbox. Not root -> spawn as the current (already unprivileged) user.
+        if running_as_root() {
+            cmd.uid(NOBODY_UID).gid(NOBODY_GID);
+        }
+        cmd.spawn().context("spawning libvirtd")?;
 
         // Wait for the socket to appear.
         let deadline = Instant::now() + Duration::from_secs(30);
@@ -630,6 +655,9 @@ impl LocalBackend {
         std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
             format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
         })?;
+        // `dnsmasq` drops to `--user` (`nobody` when root) after writing its
+        // pid-file, so it must be able to write its lease/log files here.
+        own_by_nobody_if_root(&dnsmasq_dir)?;
         let pid_path = self.dnsmasq_pid_path(bridge);
         let lease_path = dnsmasq_dir.join(format!("{bridge}.leases"));
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
@@ -867,6 +895,9 @@ impl LocalBackend {
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)
             .with_context(|| format!("creating VM dir {}", vm_dir.display()))?;
+        // When root, hand the VM dir (and each disk below) to `nobody` so the
+        // `nobody` QEMU can read/write them; see `own_by_nobody_if_root`.
+        own_by_nobody_if_root(&vm_dir)?;
 
         let mut paths = Vec::with_capacity(images.len());
         for (i, src) in images.iter().enumerate() {
@@ -875,6 +906,7 @@ impl LocalBackend {
             extract_image(src, &dst, &self.logger)?;
             pad_to_request_alignment(&dst)?;
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o600))?;
+            own_by_nobody_if_root(&dst)?;
             paths.push(dst);
         }
         // Record the extra disks in the metadata persisted by `create_vm` so
@@ -974,6 +1006,9 @@ impl LocalBackend {
 
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)?;
+        // When root, hand the VM dir to `nobody` so the `nobody` QEMU can create
+        // its `console.log` and (below) open its disk overlay.
+        own_by_nobody_if_root(&vm_dir)?;
         let primary_disk = vm_dir.join("primary.qcow2");
         // Only materialize the primary disk on first boot. On a later `start_vm`
         // (e.g. a test that did `vm().kill()` then `vm().start()`) the qcow2
@@ -1037,6 +1072,7 @@ impl LocalBackend {
                 );
             }
             std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
+            own_by_nobody_if_root(&primary_disk)?;
         }
 
         let mac = vm_mac(group_name, vm_name);
@@ -1246,10 +1282,101 @@ fn open_connect(socket_path: &Path, logger: &Logger) -> Result<Connect> {
     Ok(connect)
 }
 
-/// The current user's login name, used to tag TAP device ownership so an
-/// unprivileged QEMU may open them. Falls back to the `USER` environment
-/// variable and finally to `ubuntu` (the container's default user).
+/// The conventional uid/gid of the unprivileged `nobody`/`nogroup` user. Using
+/// the numeric ids directly (matching `ic_test_utilities::privileges`) avoids a
+/// `/etc/passwd` lookup. The backend drops libvirtd (and the QEMU/`dnsmasq`
+/// processes that follow it) to these ids when the driver runs as root.
+const NOBODY_UID: u32 = 65534;
+const NOBODY_GID: u32 = 65534;
+
+/// Whether the driver process is running as root (effective uid 0).
+///
+/// The `bazel-test-bre` RBE cluster runs `_local` test actions as root. A
+/// monolithic `libvirtd` selects *system* vs. *session* mode purely by
+/// `geteuid() == 0`, so as root it would ignore `$XDG_RUNTIME_DIR` and place a
+/// privileged socket under `/run`, breaking this module's session-mode design.
+/// When this returns true the backend drops libvirtd/QEMU/`dnsmasq` to `nobody`
+/// to stay in session mode; the normal (unprivileged `ubuntu`) dev-container
+/// case returns false and behaves exactly as before.
+fn running_as_root() -> bool {
+    nix::unistd::geteuid().as_raw() == 0
+}
+
+/// Give `nobody` ownership of `path` when the driver runs as root (a no-op
+/// otherwise), so the `nobody`-dropped libvirtd/QEMU/`dnsmasq` can access files
+/// the root driver created. Only ownership changes, not the mode: a `0600`
+/// overlay stays `0600` but becomes `nobody`-writable. The root parent keeps
+/// `CAP_DAC_OVERRIDE`, so it retains full access to everything it hands over.
+fn own_by_nobody_if_root(path: &Path) -> Result<()> {
+    if running_as_root() {
+        std::os::unix::fs::chown(path, Some(NOBODY_UID), Some(NOBODY_GID))
+            .with_context(|| format!("chowning {} to nobody", path.display()))?;
+    }
+    Ok(())
+}
+
+/// Like [`own_by_nobody_if_root`] but recurses into `path` when it is a
+/// directory, used for trees the `nobody`-dropped libvirtd fully owns at runtime
+/// (its `$XDG_RUNTIME_DIR` and libvirt state dir). A no-op when not root.
+fn own_tree_by_nobody_if_root(path: &Path) -> Result<()> {
+    if !running_as_root() {
+        return Ok(());
+    }
+    own_tree_by_nobody(path)
+}
+
+fn own_tree_by_nobody(path: &Path) -> Result<()> {
+    let meta = std::fs::symlink_metadata(path)
+        .with_context(|| format!("stat {} for chown", path.display()))?;
+    std::os::unix::fs::chown(path, Some(NOBODY_UID), Some(NOBODY_GID))
+        .with_context(|| format!("chowning {} to nobody", path.display()))?;
+    // Our trees contain no symlinks, so following `is_dir` is fine.
+    if meta.is_dir() {
+        for entry in std::fs::read_dir(path)
+            .with_context(|| format!("reading dir {} for chown", path.display()))?
+        {
+            let entry =
+                entry.with_context(|| format!("reading dir entry under {}", path.display()))?;
+            own_tree_by_nobody(&entry.path())?;
+        }
+    }
+    Ok(())
+}
+
+/// Relax `/dev/kvm` and `/dev/net/tun` to `0666` when the driver runs as root,
+/// so the `nobody`-dropped QEMU can open them: the domain XML requests
+/// `<domain type='kvm'>` (needs `/dev/kvm`) and attaches to a `managed='no'`
+/// TAP, for which QEMU opens `/dev/net/tun`. These nodes are normally
+/// `root`-owned `0660`/`0600`. This mirrors what `ci/container/init.sh` does for
+/// the unprivileged dev-container user; that entrypoint does not run on the RBE
+/// workers, so we do it here. Best-effort: absent nodes are skipped and a
+/// failure only warns (the eventual VM start would surface it).
+fn relax_vm_device_nodes_if_root(logger: &Logger) {
+    if !running_as_root() {
+        return;
+    }
+    for dev in ["/dev/kvm", "/dev/net/tun"] {
+        let path = Path::new(dev);
+        if path.exists()
+            && let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666))
+        {
+            warn!(logger, "Could not relax {dev} permissions to 0666: {e}");
+        }
+    }
+}
+
+/// The user name that owns the per-VM TAP devices (so the QEMU that libvirtd
+/// spawns may open them) and that `dnsmasq` drops to.
+///
+/// When the driver runs as root, libvirtd — and therefore QEMU and `dnsmasq` —
+/// is dropped to `nobody` (see [`running_as_root`]), so the TAPs must be owned
+/// by, and `dnsmasq` must target, `nobody` as well. Otherwise it is the invoking
+/// user (the unprivileged dev-container case) from `USER`, finally falling back
+/// to `ubuntu` (the container's default user).
 fn current_username() -> String {
+    if running_as_root() {
+        return "nobody".to_string();
+    }
     std::env::var("USER").unwrap_or_else(|_| "ubuntu".to_string())
 }
 
