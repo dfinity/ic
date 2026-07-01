@@ -14039,6 +14039,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-wasm",
+ "ic-test-utilities-privileges",
  "ic-wasm",
  "itertools 0.12.1",
  "json-patch",
