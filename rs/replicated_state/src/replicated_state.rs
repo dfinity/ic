@@ -36,7 +36,7 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesAccountManagerSubnetConfig,
     CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
@@ -48,7 +48,7 @@ use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
 #[cfg(debug_assertions)]
-use ic_types_cycles::{CyclesUseCase, NominalCycles};
+use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
