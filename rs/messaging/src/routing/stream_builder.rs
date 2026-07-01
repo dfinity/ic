@@ -671,30 +671,6 @@ impl StreamBuilderImpl {
         }
 
         for req in requests_to_reject {
-            // A response may already be enqueued if `critical_error_infinite_loops` was raised in
-            // a previous `build_streams()` call, causing it to exit early and leave some output
-            // messages to a deleted subnet unprocessed; `generate_reject_responses_for_deleted_subnets`
-            // subsequently processed such a message and enqueued a response.
-            // Skip to avoid a duplicate response.
-            if state.canister_state(&req.sender).is_some_and(|c| {
-                c.system_state
-                    .queues()
-                    .has_enqueued_response(&req.sender_reply_callback)
-            }) {
-                debug_assert!(
-                    false,
-                    "Already have a response enqueued for a request to be rejected"
-                );
-                error!(
-                    self.log,
-                    "{}: Already have a response enqueued for a request to be rejected",
-                    CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
-                );
-                self.metrics
-                    .critical_error_response_destination_not_found
-                    .inc();
-                continue;
-            }
             let dst_canister_id = req.receiver;
             self.reject_local_request(
                 &mut state,
