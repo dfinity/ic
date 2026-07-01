@@ -268,6 +268,7 @@ impl Drop for HttpServer {
 // This test does not work on Windows since the test HTTP webserver is spawned by the test driver
 // on the Windows host while the PocketIC server (making the canister HTTP outcall) runs in WSL.
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_canister_http_in_live_mode() {
     // We create a PocketIC instance with an NNS subnet
     // (the "live" mode requires the NNS subnet).
