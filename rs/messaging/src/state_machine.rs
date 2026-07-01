@@ -265,8 +265,8 @@ impl StateMachine for StateMachineImpl {
 
         // Enqueue synthetic rejects for callbacks to canisters on deleted subnets before
         // enforcing the best-effort memory limit, so best-effort rejects are subject to shedding.
-        // Called after `build_streams()` so that output-queue requests to deleted subnets
-        // are already rejected with `DestinationInvalid` (more precise) by `build_streams()`.
+        // Must be called after `build_streams()`, see the comment on
+        // `generate_reject_responses_for_deleted_subnets()`.
         let errors = state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
         for error in &errors {
             // Critical error, responses should always be inducted successfully.
