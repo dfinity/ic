@@ -903,12 +903,13 @@ impl ReplicatedState {
 
     /// Generates synthetic reject responses for callbacks to deleted subnets.
     ///
-    /// Should be called after `build_streams()`: `build_streams()` unconditionally
+    /// Must be called after `build_streams()`: `build_streams()` unconditionally
     /// rejects any request in an output queue with no route (e.g. destined for a
     /// deleted subnet), ensuring such callbacks already have an enqueued response
-    /// and are skipped by this function. Calling before `build_streams()` is not
-    /// incorrect, but may result in a less precise error message for those callbacks
-    /// (the reject from `build_streams()` contains `DestinationInvalid` which is more precise).
+    /// and are skipped by this function. Calling before `build_streams()`
+    /// would result in a critical error in `build_streams()` if `build_streams()`
+    /// tried to reject an unbounded-wait request in an output queue to a deleted subnet
+    /// for which a reject response has already been generated.
     pub fn generate_reject_responses_for_deleted_subnets(&mut self) -> Vec<StateError> {
         let routing_table = self.routing_table();
         // Collect subnet IDs to also skip callbacks to management canisters of other subnets
