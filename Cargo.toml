@@ -452,6 +452,7 @@ members = [
     "rs/test_utilities/load_wasm",
     "rs/test_utilities/logger",
     "rs/test_utilities/metrics",
+    "rs/test_utilities/privileges",
     "rs/test_utilities/registry",
     "rs/test_utilities/serialization",
     "rs/test_utilities/state",
@@ -757,7 +758,10 @@ num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
 object = "0.37.3"
 opentelemetry = { version = "0.32.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["grpc-tonic", "trace"] }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = [
+    "grpc-tonic",
+    "trace",
+] }
 opentelemetry_sdk = { version = "0.32.1", features = ["trace"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "alloc",

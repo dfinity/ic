@@ -183,41 +183,43 @@ fn can_make_a_checkpoint() {
 
 #[test]
 fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
-    with_test_replica_logger(|log| {
-        let tmp = tmpdir("checkpoint");
-        let root = tmp.path().to_path_buf();
-        let checkpoints_dir = root.join(CHECKPOINTS_DIR);
-        let (_tip_handler, tip_channel, _layout, state_manager_metrics) = init(&root, &log);
-        const HEIGHT: Height = Height::new(42);
-        let canister_id = canister_test_id(10);
-        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        state.put_canister_state(new_canister_state(
-            canister_id,
-            user_test_id(24).get(),
-            INITIAL_CYCLES,
-            NumSeconds::from(100_000),
-        ));
+    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
+        with_test_replica_logger(|log| {
+            let tmp = tmpdir("checkpoint");
+            let root = tmp.path().to_path_buf();
+            let checkpoints_dir = root.join(CHECKPOINTS_DIR);
+            let (_tip_handler, tip_channel, _layout, state_manager_metrics) = init(&root, &log);
+            const HEIGHT: Height = Height::new(42);
+            let canister_id = canister_test_id(10);
+            let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+            state.put_canister_state(new_canister_state(
+                canister_id,
+                user_test_id(24).get(),
+                INITIAL_CYCLES,
+                NumSeconds::from(100_000),
+            ));
 
-        mark_readonly(&checkpoints_dir).unwrap();
+            mark_readonly(&checkpoints_dir).unwrap();
 
-        // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
-        let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
+            // Scratchpad directory is "tmp/scatchpad_{hex(height)}"
+            let expected_scratchpad_dir = root.join("tmp").join("scratchpad_000000000000002a");
 
-        let replicated_state = make_unvalidated_checkpoint(
-            state,
-            HEIGHT,
-            &tip_channel,
-            &state_manager_metrics.checkpoint_metrics,
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        );
+            let replicated_state = make_unvalidated_checkpoint(
+                state,
+                HEIGHT,
+                &tip_channel,
+                &state_manager_metrics.checkpoint_metrics,
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            );
 
-        match replicated_state {
-            Err(_) => assert!(
-                !expected_scratchpad_dir.exists(),
-                "Expected incomplete scratchpad to be deleted"
-            ),
-            Ok(_) => panic!("Expected checkpointing to fail"),
-        }
+            match replicated_state {
+                Err(_) => assert!(
+                    !expected_scratchpad_dir.exists(),
+                    "Expected incomplete scratchpad to be deleted"
+                ),
+                Ok(_) => panic!("Expected checkpointing to fail"),
+            }
+        });
     });
 }
 
@@ -368,20 +370,22 @@ fn returns_not_found_for_missing_checkpoints() {
 
 #[test]
 fn reports_an_error_on_misconfiguration() {
-    with_test_replica_logger(|log| {
-        let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
-        let root = tmp.path().to_path_buf();
+    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
+        with_test_replica_logger(|log| {
+            let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
+            let root = tmp.path().to_path_buf();
 
-        mark_readonly(&root).unwrap();
+            mark_readonly(&root).unwrap();
 
-        let layout = StateLayout::try_new(log, root, &MetricsRegistry::new());
+            let layout = StateLayout::try_new(log, root, &MetricsRegistry::new());
 
-        assert!(layout.is_err());
-        let err_msg = layout.err().unwrap().to_string();
-        assert!(
-            err_msg.contains("Permission denied"),
-            "Expected a permission error, got {err_msg}"
-        );
+            assert!(layout.is_err());
+            let err_msg = layout.err().unwrap().to_string();
+            assert!(
+                err_msg.contains("Permission denied"),
+                "Expected a permission error, got {err_msg}"
+            );
+        });
     });
 }
 
