@@ -295,7 +295,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     // Use a canister ID outside the routing table range so it has no route,
     // causing the stream builder to generate a reject for output requests.
     let remote_canister_id = CANISTER_RANGE_B.start;
-    let subnet_as_canister_id = CanisterId::from(SUBNET_2);
+    let remote_subnet_as_canister_id = CanisterId::from(SUBNET_2);
     let deadline = CoarseTime::from_secs_since_unix_epoch(u32::MAX);
     // Cycles attached to output-queue requests: refunded in reject responses.
     // The three amounts below are chosen a couple of orders of magnitude apart so no
@@ -337,12 +337,12 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             UNIX_EPOCH,
         )
         .unwrap();
-    // Subnet requests: local_canister → subnet_as_canister_id (SUBNET_2's mgmt canister).
+    // Subnet requests: local_canister → remote_subnet_as_canister_id (SUBNET_2's mgmt canister).
     canister_state
         .push_output_request(
             OutputRequestBuilder::default()
                 .sender(local_canister_id)
-                .receiver(subnet_as_canister_id)
+                .receiver(remote_subnet_as_canister_id)
                 .payment(stream_cycles)
                 .deadline(deadline)
                 .build(),
@@ -353,7 +353,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         .push_output_request(
             OutputRequestBuilder::default()
                 .sender(local_canister_id)
-                .receiver(subnet_as_canister_id)
+                .receiver(remote_subnet_as_canister_id)
                 .payment(stream_cycles)
                 .deadline(NO_DEADLINE)
                 .build(),
@@ -426,9 +426,9 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             response_payload: Payload::Data(vec![]),
             deadline: NO_DEADLINE,
         })));
-        // Subnet responses: subnet_as_canister_id → local_canister.
+        // Subnet responses: remote_subnet_as_canister_id → local_canister.
         stream.push(StreamMessage::Response(Arc::new(Response {
-            originator: subnet_as_canister_id,
+            originator: remote_subnet_as_canister_id,
             respondent: local_canister_id,
             originator_reply_callback: CallbackId::from(0),
             refund: stream_cycles,
@@ -436,7 +436,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             deadline,
         })));
         stream.push(StreamMessage::Response(Arc::new(Response {
-            originator: subnet_as_canister_id,
+            originator: remote_subnet_as_canister_id,
             respondent: local_canister_id,
             originator_reply_callback: CallbackId::from(1),
             refund: stream_cycles,
@@ -477,12 +477,12 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             UNIX_EPOCH,
         )
         .unwrap();
-    // Subnet requests: local_canister → subnet_as_canister_id (SUBNET_2's mgmt canister).
+    // Subnet requests: local_canister → remote_subnet_as_canister_id (SUBNET_2's mgmt canister).
     canister_state
         .push_output_request(
             OutputRequestBuilder::default()
                 .sender(local_canister_id)
-                .receiver(subnet_as_canister_id)
+                .receiver(remote_subnet_as_canister_id)
                 .payment(req_payment)
                 .deadline(deadline)
                 .build(),
@@ -493,7 +493,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         .push_output_request(
             OutputRequestBuilder::default()
                 .sender(local_canister_id)
-                .receiver(subnet_as_canister_id)
+                .receiver(remote_subnet_as_canister_id)
                 .payment(req_payment)
                 .deadline(NO_DEADLINE)
                 .build(),
@@ -554,7 +554,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         response_payload: Payload::Data(vec![]),
         deadline: NO_DEADLINE,
     }));
-    // Subnet responses: subnet_as_canister_id → local_canister.
+    // Subnet responses: remote_subnet_as_canister_id → local_canister.
     initial_state
         .push_input(
             RequestBuilder::new()
