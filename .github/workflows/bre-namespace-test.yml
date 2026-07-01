@@ -107,6 +107,13 @@ jobs:
           # command-line flags override the remote-only strategies from the Namespace
           # bazelrc because command-line flags win, and --strategy=Genrule overrides both
           # --spawn_strategy and --genrule_strategy for the Genrule mnemonic.
+          #
+          # //packages/pocket-ic:unix's 'test_canister_http_in_live_mode' cannot run under BRE:
+          # it spawns a loopback HTTP server in the test process and has the (remote) PocketIC
+          # server make a canister HTTP outcall to it, which the remote executor cannot reach.
+          # We set POCKET_IC_SKIP_HTTP_LIVE_MODE_TEST via --test_env so that single test returns
+          # early here only; every other test ignores the (to them unknown) env var. --test_env
+          # applies to all test actions but leaves build/compile actions (and their cache) intact.
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
@@ -115,5 +122,6 @@ jobs:
             --strategy=Genrule=remote,local \
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly \
             --remote_default_exec_properties=container-image="$worker_image" \
+            --test_env=POCKET_IC_SKIP_HTTP_LIVE_MODE_TEST=1 \
             --keep_going \
             "${target_patterns[@]}"
