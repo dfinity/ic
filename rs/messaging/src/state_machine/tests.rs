@@ -179,7 +179,7 @@ fn state_machine_populates_network_topology() {
         ));
 
         assert_ne!(
-            &fixture.initial_state.metadata.network_topology,
+            fixture.initial_state.metadata.network_topology.as_ref(),
             &fixture.network_topology
         );
 
@@ -194,7 +194,10 @@ fn state_machine_populates_network_topology() {
             Default::default(),
         );
 
-        assert_eq!(&state.metadata.network_topology, &fixture.network_topology);
+        assert_eq!(
+            state.metadata.network_topology.as_ref(),
+            &fixture.network_topology
+        );
     });
 }
 

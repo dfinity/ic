@@ -259,7 +259,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         None,
     );
 
-    metadata.network_topology = network_topology;
+    metadata.network_topology = Arc::new(network_topology);
     metadata.batch_time = UNIX_EPOCH;
 
     Labeled::new(
