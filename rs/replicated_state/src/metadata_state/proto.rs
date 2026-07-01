@@ -362,7 +362,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     subnet_stream: Some(stream.into()),
                 })
                 .collect(),
-            network_topology: Some((&item.network_topology).into()),
+            network_topology: Some((&*item.network_topology).into()),
             subnet_call_context_manager: Some((&item.subnet_call_context_manager).into()),
             subnet_split_from: item.subnet_split_from.map(subnet_id_into_protobuf),
             state_sync_version: item.state_sync_version as u32,
@@ -543,10 +543,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             ingress_history: Default::default(),
             streams: Arc::new(streams),
             subnet_schedule,
-            network_topology: try_from_option_field(
+            network_topology: Arc::new(try_from_option_field(
                 item.network_topology,
                 "SystemMetadata::network_topology",
-            )?,
+            )?),
             state_sync_version: item
                 .state_sync_version
                 .try_into()
