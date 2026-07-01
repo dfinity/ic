@@ -130,4 +130,5 @@ jobs:
             --experimental_remote_cache_lease_extension \
             --experimental_remote_cache_eviction_retries=10 \
             --keep_going \
+            --test_output=errors \
             "${target_patterns[@]}"
