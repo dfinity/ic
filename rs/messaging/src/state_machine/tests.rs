@@ -185,7 +185,7 @@ fn state_machine_populates_network_topology() {
 
         let state = state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
+            Arc::new(fixture.network_topology.clone()),
             provided_batch,
             Default::default(),
             Default::default(),
@@ -219,7 +219,7 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
 
         state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
+            Arc::new(fixture.network_topology.clone()),
             provided_batch,
             Default::default(),
             Default::default(),
@@ -432,7 +432,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
 
         let mut state = state_machine.execute_round(
             initial_state,
-            network_topology,
+            Arc::new(network_topology),
             provided_batch,
             Default::default(),
             Default::default(),
@@ -582,7 +582,7 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
 
         state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
+            Arc::new(fixture.network_topology.clone()),
             split_batch,
             Default::default(),
             Default::default(),
@@ -700,7 +700,7 @@ fn test_batch_time_impl(
 
         let state = state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
+            Arc::new(fixture.network_topology.clone()),
             provided_batch,
             Default::default(),
             Default::default(),

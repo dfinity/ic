@@ -619,7 +619,7 @@ impl StateMachine for FakeStateMachine {
     fn execute_round(
         &self,
         mut state: ReplicatedState,
-        network_topology: NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         _batch: Batch,
         subnet_features: SubnetFeatures,
         resource_limits: ResourceLimits,
@@ -627,7 +627,7 @@ impl StateMachine for FakeStateMachine {
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
-        state.metadata.network_topology = Arc::new(network_topology);
+        state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
@@ -679,27 +679,17 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         metrics: metrics.clone(),
         log,
         malicious_flags: MaliciousFlags::default(),
+        cached_registry_read: Mutex::default(),
     };
     (batch_processor, metrics, state_manager, registry_settings)
 }
 
 /// Convenience wrapper for `BatchProcessorImpl::try_to_read_registry()`.
-#[allow(clippy::type_complexity)]
 fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
     own_subnet_id: SubnetId,
-) -> Result<
-    (
-        NetworkTopology,
-        SubnetFeatures,
-        ResourceLimits,
-        RegistryExecutionSettings,
-        NodePublicKeys,
-        ApiBoundaryNodes,
-    ),
-    ReadRegistryError,
-> {
+) -> Result<ReadRegistryResult, ReadRegistryError> {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
     batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
 }
@@ -1026,7 +1016,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
         assert_ne!(
-            &network_topology,
+            network_topology.as_ref(),
             latest_state.metadata.network_topology.as_ref()
         );
         assert_ne!(
@@ -1054,7 +1044,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(
-            &network_topology,
+            network_topology.as_ref(),
             latest_state.metadata.network_topology.as_ref()
         );
         assert_eq!(
@@ -1079,6 +1069,87 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(
             *registry_settings.lock().unwrap(),
             registry_execution_settings,
+        );
+    });
+}
+
+/// Tests that `BatchProcessorImpl::read_registry()` caches its result keyed by the
+/// registry version: a second read at the same version is served from the cache,
+/// while a read at a different version ignores the cached entry and re-reads.
+#[test]
+fn read_registry_caches_by_registry_version() {
+    with_test_replica_logger(|log| {
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let own_subnet_record = SubnetRecord {
+            max_number_of_canisters: 784,
+            ..Default::default()
+        };
+        let own_transcript = dummy_transcript_for_tests();
+        let nns_subnet_id = subnet_test_id(42);
+
+        let input = TestRecords {
+            subnet_ids: Valid([own_subnet_id]),
+            subnet_records: [Valid(&own_subnet_record)],
+            ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+            nns_subnet_id: Valid(nns_subnet_id),
+            chain_key_enabled_subnets: &BTreeMap::default(),
+            provisional_whitelist: Missing,
+            routing_table: Missing,
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
+        };
+
+        let fixture = RegistryFixture::new();
+        fixture.write_test_records(&input).unwrap();
+        let version = fixture.registry.get_latest_version();
+
+        let (batch_processor, _, _, _) =
+            make_batch_processor(fixture.registry.clone(), log.clone());
+
+        // The first read populates the cache for `version`.
+        let real = batch_processor.read_registry(version, own_subnet_id);
+        assert_eq!(real.0.nns_subnet_id, nns_subnet_id);
+        assert_eq!(
+            batch_processor
+                .cached_registry_read
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .0,
+            version
+        );
+
+        // Build a distinguishable sentinel result to poison the cache with.
+        let sentinel_nns = subnet_test_id(999);
+        let mut sentinel = real.clone();
+        Arc::make_mut(&mut sentinel.0).nns_subnet_id = sentinel_nns;
+
+        // A cached entry under the *same* version is served from the cache (fast path):
+        // the read returns the sentinel, not the registry contents.
+        *batch_processor.cached_registry_read.lock().unwrap() = Some((version, sentinel.clone()));
+        assert_eq!(
+            batch_processor
+                .read_registry(version, own_subnet_id)
+                .0
+                .nns_subnet_id,
+            sentinel_nns,
+        );
+
+        // A cached entry under a *different* version is ignored; the registry is
+        // re-read and the real topology is returned (and re-cached for `version`).
+        *batch_processor.cached_registry_read.lock().unwrap() =
+            Some((version.increment(), sentinel));
+        assert_eq!(
+            batch_processor
+                .read_registry(version, own_subnet_id)
+                .0
+                .nns_subnet_id,
+            nns_subnet_id,
         );
     });
 }

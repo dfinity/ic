@@ -594,6 +594,9 @@ where
     log: ReplicaLogger,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
+    /// Caches the most recent `read_registry` result so it can be reused within
+    /// subsequent rounds whose registry version is unchanged (the common case).
+    cached_registry_read: Mutex<Option<(RegistryVersion, ReadRegistryResult)>>,
 }
 
 /// Errors that can occur when reading from the registry.
@@ -642,6 +645,16 @@ pub(crate) type NodePublicKeys = BTreeMap<NodeId, Vec<u8>>;
 
 /// A mapping from node IDs to ApiBoundaryNodeEntry.
 pub(crate) type ApiBoundaryNodes = BTreeMap<NodeId, ApiBoundaryNodeEntry>;
+
+/// The tuple of values returned by [`BatchProcessorImpl::read_registry`].
+type ReadRegistryResult = (
+    Arc<NetworkTopology>,
+    SubnetFeatures,
+    ResourceLimits,
+    RegistryExecutionSettings,
+    NodePublicKeys,
+    ApiBoundaryNodes,
+);
 
 impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     #[allow(clippy::too_many_arguments)]
@@ -712,6 +725,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             metrics,
             log,
             malicious_flags,
+            cached_registry_read: Mutex::default(),
         }
     }
 
@@ -724,17 +738,19 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-    ) -> (
-        NetworkTopology,
-        SubnetFeatures,
-        ResourceLimits,
-        RegistryExecutionSettings,
-        NodePublicKeys,
-        ApiBoundaryNodes,
-    ) {
-        loop {
+    ) -> ReadRegistryResult {
+        // Fast path: the registry at a given version is immutable and the version
+        // is unchanged across most rounds, so reuse the cached read when it matches.
+        if let Some((cached_version, cached_result)) =
+            self.cached_registry_read.lock().unwrap().as_ref()
+            && *cached_version == registry_version
+        {
+            return cached_result.clone();
+        }
+
+        let result = loop {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
-                Ok(result) => return result,
+                Ok(result) => break result,
                 Err(ReadRegistryError::Persistent(error_message)) => {
                     // Increment the critical error counter in case of a persistent error.
                     self.metrics.critical_error_failed_to_read_registry.inc();
@@ -756,7 +772,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 }
             }
             sleep(std::time::Duration::from_millis(100));
-        }
+        };
+
+        *self.cached_registry_read.lock().unwrap() = Some((registry_version, result.clone()));
+        result
     }
 
     /// Loads the `NetworkTopology`, `SubnetFeatures`, execution settings and
@@ -765,22 +784,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     /// All of the above are required for deterministic processing, so if any
     /// entry is missing or cannot be decoded; or reading the registry fails; the
     /// call fails and returns an error.
-    #[allow(clippy::type_complexity)]
     fn try_to_read_registry(
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-    ) -> Result<
-        (
-            NetworkTopology,
-            SubnetFeatures,
-            ResourceLimits,
-            RegistryExecutionSettings,
-            NodePublicKeys,
-            ApiBoundaryNodes,
-        ),
-        ReadRegistryError,
-    > {
+    ) -> Result<ReadRegistryResult, ReadRegistryError> {
         let subnet_record = self
             .registry
             .get_subnet_record(own_subnet_id, registry_version)
@@ -793,11 +801,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .unwrap_or(SubnetType::CloudEngine);
 
         let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
-        let network_topology = self.try_to_populate_network_topology(
+        let network_topology = Arc::new(self.try_to_populate_network_topology(
             registry_version,
             own_subnet_id,
             own_subnet_type,
-        )?;
+        )?);
 
         let provisional_whitelist = self
             .registry

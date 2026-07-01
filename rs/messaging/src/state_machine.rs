@@ -31,7 +31,7 @@ pub(crate) trait StateMachine: Send {
     fn execute_round(
         &self,
         state: ReplicatedState,
-        network_topology: NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         batch: Batch,
         subnet_features: SubnetFeatures,
         resource_limits: ResourceLimits,
@@ -105,7 +105,7 @@ impl StateMachine for StateMachineImpl {
     fn execute_round(
         &self,
         mut state: ReplicatedState,
-        network_topology: NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         batch: Batch,
         subnet_features: SubnetFeatures,
         resource_limits: ResourceLimits,
@@ -127,7 +127,7 @@ impl StateMachine for StateMachineImpl {
             )
         }
 
-        state.metadata.network_topology = Arc::new(network_topology);
+        state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
