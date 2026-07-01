@@ -9,7 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::{
     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, PeekableOutputIterator, ReplicatedStateMessageRouting,
 };
-use ic_replicated_state::{ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, StateError, Stream};
 use ic_types::messages::{
     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
     RejectContext, Request, RequestOrResponse, Response, StreamMessage,
@@ -904,4 +904,89 @@ impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
         self.build_streams_impl(state)
     }
+}
+
+/// Generates synthetic reject responses for callbacks to deleted subnets.
+///
+/// Must be called after `build_streams()`: `build_streams()` unconditionally
+/// rejects any request in an output queue with no route (e.g. destined for a
+/// deleted subnet), ensuring such callbacks already have an enqueued response
+/// and are skipped by this function. Calling before `build_streams()`
+/// would result in a critical error in `build_streams()` if `build_streams()`
+/// tried to reject an unbounded-wait request in an output queue to a deleted subnet
+/// for which a reject response has already been generated.
+///
+/// Skipped if the subnet list in the network topology is unchanged since the
+/// last call that successfully inducted all of its reject responses (tracked via
+/// `subnet_ids_at_last_reject_generation`). On error, the subnet list is left
+/// unchanged, so generation is retried on the next call; already-enqueued
+/// responses are filtered out by `has_enqueued_response`, so only the callbacks
+/// that failed to be inducted are retried.
+pub(crate) fn generate_reject_responses_for_deleted_subnets(
+    state: &mut ReplicatedState,
+) -> Vec<StateError> {
+    let current_subnet_ids: Vec<SubnetId> = state
+        .metadata
+        .network_topology
+        .subnets()
+        .keys()
+        .cloned()
+        .collect();
+    if state.metadata.subnet_ids_at_last_reject_generation.as_ref() == Some(&current_subnet_ids) {
+        return Vec::new();
+    }
+
+    let network_topology = &state.metadata.network_topology;
+
+    // Collect reject responses for callbacks whose respondent has no route in
+    // the current network topology (i.e. is on a deleted subnet, or is the
+    // management canister of a deleted subnet) and has no response enqueued yet.
+    let mut rejects = Vec::new();
+    for (canister_id, canister) in state.canister_states().all_iter() {
+        let Some(ccm) = canister.system_state.call_context_manager() else {
+            continue;
+        };
+        for (callback_id, callback) in ccm.callbacks().iter() {
+            let respondent = callback.respondent;
+            if network_topology.route(respondent.get()).is_none()
+                && !canister
+                    .system_state
+                    .queues()
+                    .has_enqueued_response(callback_id)
+            {
+                rejects.push(RequestOrResponse::Response(Arc::new(Response {
+                    originator: *canister_id,
+                    respondent,
+                    originator_reply_callback: *callback_id,
+                    refund: Cycles::zero(),
+                    // Use the same reject code and message as canister uninstallation, but do
+                    // not refund cycles here: the deleted subnet may have partially executed
+                    // the request and consumed some or all of the payment/refund cycles.
+                    response_payload: Payload::Reject(
+                        RejectContext::new_with_message_length_limit(
+                            RejectCode::CanisterReject,
+                            "Canister has been uninstalled.",
+                            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                        ),
+                    ),
+                    deadline: callback.deadline,
+                })));
+            }
+        }
+    }
+
+    let mut available_guaranteed_response_memory = 0;
+    let mut errors = Vec::new();
+    for response in rejects {
+        if let Err((error, _)) =
+            state.push_input(response, &mut available_guaranteed_response_memory)
+        {
+            errors.push(error);
+        }
+    }
+    // Only update the subnet list if all responses were successfully inducted.
+    if errors.is_empty() {
+        state.metadata.subnet_ids_at_last_reject_generation = Some(current_subnet_ids);
+    }
+    errors
 }

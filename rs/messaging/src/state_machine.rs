@@ -2,7 +2,9 @@ use crate::message_routing::{
     ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
 };
 use crate::routing::demux::Demux;
-use crate::routing::stream_builder::StreamBuilder;
+use crate::routing::stream_builder::{
+    StreamBuilder, generate_reject_responses_for_deleted_subnets,
+};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
@@ -267,7 +269,7 @@ impl StateMachine for StateMachineImpl {
         // enforcing the best-effort memory limit, so best-effort rejects are subject to shedding.
         // Must be called after `build_streams()`, see the comment on
         // `generate_reject_responses_for_deleted_subnets()`.
-        let errors = state_after_stream_builder.generate_reject_responses_for_deleted_subnets();
+        let errors = generate_reject_responses_for_deleted_subnets(&mut state_after_stream_builder);
         for error in &errors {
             // Critical error, responses should always be inducted successfully.
             error!(
