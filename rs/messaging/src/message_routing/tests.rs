@@ -679,7 +679,7 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         metrics: metrics.clone(),
         log,
         malicious_flags: MaliciousFlags::default(),
-        cached_registry_read: Mutex::default(),
+        cached_registry_read: RefCell::default(),
     };
     (batch_processor, metrics, state_manager, registry_settings)
 }
@@ -1073,11 +1073,13 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
     });
 }
 
-/// Tests that `BatchProcessorImpl::read_registry()` caches its result keyed by the
-/// registry version: a second read at the same version is served from the cache,
-/// while a read at a different version ignores the cached entry and re-reads.
+/// Tests that `BatchProcessorImpl::read_registry()` caches its result keyed by
+/// `(registry version, own subnet ID)`: a second read with the same key is served
+/// from the cache, while a read with either a different version or a different
+/// own subnet ID (e.g. across an online subnet split) ignores the cached entry
+/// and re-reads.
 #[test]
-fn read_registry_caches_by_registry_version() {
+fn read_registry_caches_by_registry_version_and_subnet_id() {
     with_test_replica_logger(|log| {
         use Integrity::*;
 
@@ -1110,28 +1112,26 @@ fn read_registry_caches_by_registry_version() {
         let (batch_processor, _, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
 
-        // The first read populates the cache for `version`.
+        // The first read populates the cache for `(version, own_subnet_id)`.
         let real = batch_processor.read_registry(version, own_subnet_id);
         assert_eq!(real.0.nns_subnet_id, nns_subnet_id);
-        assert_eq!(
-            batch_processor
-                .cached_registry_read
-                .lock()
-                .unwrap()
-                .as_ref()
-                .unwrap()
-                .0,
-            version
-        );
+        {
+            let cached = batch_processor.cached_registry_read.borrow();
+            let (cached_version, cached_subnet_id, _) = cached.as_ref().unwrap();
+            assert_eq!(*cached_version, version);
+            assert_eq!(*cached_subnet_id, own_subnet_id);
+        }
 
         // Build a distinguishable sentinel result to poison the cache with.
         let sentinel_nns = subnet_test_id(999);
         let mut sentinel = real.clone();
         Arc::make_mut(&mut sentinel.0).nns_subnet_id = sentinel_nns;
 
-        // A cached entry under the *same* version is served from the cache (fast path):
-        // the read returns the sentinel, not the registry contents.
-        *batch_processor.cached_registry_read.lock().unwrap() = Some((version, sentinel.clone()));
+        // A cached entry under the *same* (version, subnet ID) is served from the
+        // cache (fast path): the read returns the sentinel, not the registry
+        // contents.
+        *batch_processor.cached_registry_read.borrow_mut() =
+            Some((version, own_subnet_id, sentinel.clone()));
         assert_eq!(
             batch_processor
                 .read_registry(version, own_subnet_id)
@@ -1140,10 +1140,24 @@ fn read_registry_caches_by_registry_version() {
             sentinel_nns,
         );
 
-        // A cached entry under a *different* version is ignored; the registry is
-        // re-read and the real topology is returned (and re-cached for `version`).
-        *batch_processor.cached_registry_read.lock().unwrap() =
-            Some((version.increment(), sentinel));
+        // A cached entry under a *different version* (same subnet ID) is ignored;
+        // the registry is re-read and the real topology is returned.
+        *batch_processor.cached_registry_read.borrow_mut() =
+            Some((version.increment(), own_subnet_id, sentinel.clone()));
+        assert_eq!(
+            batch_processor
+                .read_registry(version, own_subnet_id)
+                .0
+                .nns_subnet_id,
+            nns_subnet_id,
+        );
+
+        // A cached entry under the *same version* but a *different subnet ID* is
+        // also ignored — this is the scenario that arises across an online subnet
+        // split.
+        let other_subnet_id = subnet_test_id(14);
+        *batch_processor.cached_registry_read.borrow_mut() =
+            Some((version, other_subnet_id, sentinel));
         assert_eq!(
             batch_processor
                 .read_registry(version, own_subnet_id)

@@ -55,6 +55,7 @@ use prometheus::{
     Gauge, Histogram, HistogramTimer, HistogramVec, IntCounter, IntCounterVec, IntGauge,
     IntGaugeVec,
 };
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -594,9 +595,10 @@ where
     log: ReplicaLogger,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
-    /// Caches the most recent `read_registry` result so it can be reused within
-    /// subsequent rounds whose registry version is unchanged (the common case).
-    cached_registry_read: Mutex<Option<(RegistryVersion, ReadRegistryResult)>>,
+    /// Caches the latest `read_registry` result so it can be reused within
+    /// subsequent rounds whose registry version and own subnet ID are unchanged
+    /// (the common case).
+    cached_registry_read: RefCell<Option<(RegistryVersion, SubnetId, ReadRegistryResult)>>,
 }
 
 /// Errors that can occur when reading from the registry.
@@ -725,7 +727,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             metrics,
             log,
             malicious_flags,
-            cached_registry_read: Mutex::default(),
+            cached_registry_read: RefCell::default(),
         }
     }
 
@@ -739,11 +741,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
     ) -> ReadRegistryResult {
-        // Fast path: the registry at a given version is immutable and the version
-        // is unchanged across most rounds, so reuse the cached read when it matches.
-        if let Some((cached_version, cached_result)) =
-            self.cached_registry_read.lock().unwrap().as_ref()
+        // Fast path: the registry at a given version is immutable, and the version
+        // (and own subnet ID) is unchanged across most rounds, so reuse the cached
+        // read when both match.
+        if let Some((cached_version, cached_subnet_id, cached_result)) =
+            self.cached_registry_read.borrow().as_ref()
             && *cached_version == registry_version
+            && *cached_subnet_id == own_subnet_id
         {
             return cached_result.clone();
         }
@@ -774,7 +778,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             sleep(std::time::Duration::from_millis(100));
         };
 
-        *self.cached_registry_read.lock().unwrap() = Some((registry_version, result.clone()));
+        *self.cached_registry_read.borrow_mut() =
+            Some((registry_version, own_subnet_id, result.clone()));
         result
     }
 
@@ -1394,8 +1399,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             CertificationScope::Metadata
         };
 
-        // TODO (MR-29) Cache network topology and subnet_features; and populate only
-        // if version referenced in batch changes.
         let registry_version = batch.registry_version;
         let (
             network_topology,
