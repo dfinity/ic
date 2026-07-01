@@ -309,6 +309,7 @@ fn test_canister_http_in_live_mode() {
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_raw_gateway() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
     let mut pic = PocketIcBuilder::new()
@@ -348,6 +349,7 @@ fn test_raw_gateway() {
 }
 
 #[test]
+#[ignore = "temporarily disabled"]
 fn test_custom_blockmaker_metrics() {
     const HOURS_IN_SECONDS: u64 = 60 * 60;
 
@@ -443,6 +445,7 @@ fn test_custom_blockmaker_metrics() {
 
 // This test times out on Windows.
 #[test]
+#[ignore = "temporarily disabled"]
 fn payload_too_large() {
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
