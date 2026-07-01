@@ -960,6 +960,10 @@ pub(crate) fn generate_reject_responses_for_deleted_subnets(
                     // Use the same reject code and message as canister uninstallation, but do
                     // not refund cycles here: the deleted subnet may have partially executed
                     // the request and consumed some or all of the payment/refund cycles.
+                    // `RejectCode::DestinationInvalid` (as used by `build_streams()`) would not
+                    // be accurate: it implies that the request was never processed, whereas here
+                    // the deleted subnet may have already pulled the request from the stream
+                    // without yet signaling back.
                     response_payload: Payload::Reject(
                         RejectContext::new_with_message_length_limit(
                             RejectCode::CanisterReject,
