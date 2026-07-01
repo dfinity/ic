@@ -297,9 +297,9 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     let remote_canister_id = CANISTER_RANGE_B.start;
     let remote_subnet_as_canister_id = CanisterId::from(SUBNET_2);
     let deadline = CoarseTime::from_secs_since_unix_epoch(u32::MAX);
-    // Cycles attached to output-queue requests: refunded in reject responses.
     // The three amounts below are chosen a couple of orders of magnitude apart so no
     // small integer multiple of one can be mistaken for another in the assertions below.
+    // Cycles attached to output-queue requests: refunded in reject responses.
     let req_payment = Cycles::new(1_000_000);
     // Cycles attached to output-queue responses: observed in DroppedMessages metric.
     let resp_refund = Cycles::new(100_000_000);
