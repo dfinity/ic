@@ -877,7 +877,7 @@ impl ReplicatedState {
         self.metadata.streams.get(destination_subnet_id)
     }
 
-    /// Discards outgoing streams targeting subnets no longer present in the network topology.
+    /// Discards streams to subnets no longer present in the network topology.
     ///
     /// Safe to call because the XNet payload builder excludes deleted subnets
     /// from the set of subnets it pulls slices for, and XNet payload validation
