@@ -42,8 +42,6 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Misrouted messages currently in streams, by remote subnet.
     pub stream_misrouted_messages: IntGaugeVec,
-    /// Critical error counter for detected infinite loops while routing.
-    pub critical_error_infinite_loops: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
@@ -78,7 +76,6 @@ const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
 const LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED: &str = "engine_not_allowed";
 
-const CRITICAL_ERROR_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
 const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
     "mr_stream_builder_response_destination_not_found";
@@ -129,8 +126,6 @@ impl StreamBuilderMetrics {
             "Count of misrouted messages in streams, by remote subnet. Only populated for subnets currently involved in a canister migration.",
             &[LABEL_REMOTE],
         );
-        let critical_error_infinite_loops =
-            metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
@@ -172,7 +167,6 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             stream_misrouted_messages,
-            critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
             critical_error_induct_response_failed,
@@ -454,7 +448,6 @@ impl StreamBuilderImpl {
         let mut engine_response_dropped_cycles = Cycles::zero();
 
         let mut output_iter = state.output_into_iter();
-        let mut last_output_size = usize::MAX;
 
         // Route all messages into the appropriate stream or generate reject Responses
         // when unable to (no route to canister). When a stream's byte size reaches or
@@ -462,21 +455,6 @@ impl StreamBuilderImpl {
         while let Some(msg) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
-            // Safeguard to guarantee that iteration always terminates. Will always loop at
-            // least once, if messages are available.
-            let output_size = output_iter.size();
-            debug_assert!(output_size < last_output_size);
-            if output_size >= last_output_size {
-                error!(
-                    self.log,
-                    "{}: Infinite loop detected in StreamBuilder::build_streams @{}.",
-                    CRITICAL_ERROR_INFINITE_LOOP,
-                    output_size
-                );
-                self.metrics.critical_error_infinite_loops.inc();
-                break;
-            }
-            last_output_size = output_size;
 
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.

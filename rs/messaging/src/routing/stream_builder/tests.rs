@@ -2046,7 +2046,6 @@ fn assert_eq_critical_errors(
 ) {
     assert_eq!(
         nonzero_values(metric_vec(&[
-            (&[("error", &CRITICAL_ERROR_INFINITE_LOOP)], 0),
             (
                 &[("error", &CRITICAL_ERROR_PAYLOAD_TOO_LARGE)],
                 payload_too_large
