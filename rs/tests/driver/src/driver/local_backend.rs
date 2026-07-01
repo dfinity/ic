@@ -171,24 +171,36 @@ impl LocalBackend {
     }
 
     /// Build a [`Command`] that runs a short shell `script` with `CAP_NET_ADMIN`
-    /// (and `CAP_NET_RAW`/`CAP_NET_BIND_SERVICE`) raised into the ambient set,
-    /// so the program(s) it `exec`s inherit them.
+    /// (and `CAP_NET_RAW`/`CAP_NET_BIND_SERVICE`) available to the program(s) it
+    /// `exec`s.
     ///
-    /// This is the *only* privileged primitive the backend uses — narrow
-    /// capabilities, never root — needed for the few operations the kernel gates
-    /// behind them: creating the per-group bridge and TAP devices, and letting
-    /// the group's `dnsmasq` bind UDP port 67 for DHCPv4.
+    /// These are the *only* privileged operations the backend needs: creating the
+    /// per-group bridge and TAP devices, and letting the group's `dnsmasq` bind
+    /// UDP port 67 for DHCPv4.
     ///
-    /// The capabilities come from the [`NET_ADMIN_LAUNCHER`] binary, a
-    /// file-capability-endowed `capsh` provisioned in the container image (see
-    /// `ci/container/Dockerfile`). `capsh` raises the caps into its
-    /// inheritable+ambient sets and `exec`s `/bin/sh -c <script>`; ambient caps
-    /// survive the `exec`, so the script's commands run with them even though the
-    /// shell binary is not capability-endowed.
+    /// - Unprivileged (the normal dev-container case): the caps come from the
+    ///   [`NET_ADMIN_LAUNCHER`] binary, a file-capability-endowed `capsh`
+    ///   provisioned in the container image (see `ci/container/Dockerfile`).
+    ///   `capsh` raises the caps into its inheritable+ambient sets and `exec`s
+    ///   `/bin/sh -c <script>`; ambient caps survive the `exec`, so the script's
+    ///   commands run with them even though the shell is not capability-endowed.
+    /// - Root (e.g. the `bazel-test-bre` RBE cluster): `capsh` is both unnecessary
+    ///   and harmful. A root process already holds these caps — in the nested
+    ///   user namespace the RBE executor runs the action in, root owns the
+    ///   namespace and thus its full capability set — and its children inherit
+    ///   them. Meanwhile `capsh`'s *file* capabilities are not honored across that
+    ///   namespace boundary, so its inheritable-set step fails with `EPERM`
+    ///   (`Unable to set inheritable capabilities`). So run `/bin/sh -c <script>`
+    ///   directly; `ip`/`dnsmasq` inherit root's caps.
     ///
     /// `script` must only interpolate sanitized, shell-safe tokens (interface
     /// names and IPv6 prefixes are restricted to `[0-9a-f:.-]`).
     fn net_admin(script: &str) -> Command {
+        if running_as_root() {
+            let mut cmd = Command::new("/bin/sh");
+            cmd.arg("-c").arg(script);
+            return cmd;
+        }
         let net_admin_launcher = get_dependency_path_from_env("NET_ADMIN_LAUNCHER_PATH");
         let mut cmd = Command::new(net_admin_launcher);
         cmd.arg("--inh=cap_net_admin,cap_net_raw,cap_net_bind_service")
