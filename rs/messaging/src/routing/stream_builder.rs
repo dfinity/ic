@@ -930,6 +930,10 @@ pub(crate) fn generate_reject_responses_for_deleted_subnets(
         }
     }
 
+    // Responses never consume guaranteed-response memory: guaranteed responses fill a slot
+    // reserved when the corresponding request was enqueued, and best-effort responses don't
+    // use guaranteed-response memory at all (see `can_push`). Since we only push responses
+    // here, the available-memory budget is never consulted, so a value of zero is safe.
     let mut available_guaranteed_response_memory = 0;
     let mut errors = Vec::new();
     for response in rejects {
