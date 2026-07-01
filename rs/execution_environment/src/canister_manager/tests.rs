@@ -340,9 +340,9 @@ fn initial_state(subnet_id: SubnetId, use_specified_ids_routing_table: bool) -> 
         })
         .unwrap()
     };
-    state.metadata.modify_network_topology(|nt| {
-        nt.set_routing_table(routing_table);
-        nt.nns_subnet_id = subnet_id;
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
+        network_topology.nns_subnet_id = subnet_id;
     });
     state.metadata.init_allocation_ranges_if_empty().unwrap();
     state

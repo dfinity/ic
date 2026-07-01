@@ -1285,7 +1285,7 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
         let canister = Arc::make_mut(&mut canister_arc);
-        let network_topology = state.metadata.network_topology.clone();
+        let network_topology = Arc::clone(&state.metadata.network_topology);
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1434,7 +1434,7 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
-        let network_topology = state.metadata.network_topology.clone();
+        let network_topology = Arc::clone(&state.metadata.network_topology);
         let response_arc = Arc::new(response);
         // We push and then immediately pop the response from the canister queues
         // to ensure all invariants on the canister (system) state are preserved.
@@ -1852,7 +1852,7 @@ impl ExecutionTest {
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
         for canister_id in canister_ids {
-            let network_topology = state.metadata.network_topology.clone();
+            let network_topology = Arc::clone(&state.metadata.network_topology);
             let mut canister = canisters.remove(&canister_id).unwrap();
             loop {
                 match canister.next_execution() {
@@ -1922,7 +1922,7 @@ impl ExecutionTest {
         let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
-        let network_topology = state.metadata.network_topology.clone();
+        let network_topology = Arc::clone(&state.metadata.network_topology);
         let mut canister = canisters.remove(&canister_id).unwrap();
         match canister.next_execution() {
             NextExecution::None => {
@@ -3013,12 +3013,14 @@ impl ExecutionTestBuilder {
                 },
             );
 
-            state.metadata.modify_network_topology(|nt| {
+            state.metadata.modify_network_topology(|network_topology| {
                 if *is_enabled {
-                    nt.chain_key_enabled_subnets
+                    network_topology
+                        .chain_key_enabled_subnets
                         .insert(key_id.clone(), vec![self.own_subnet_id]);
                 }
-                nt.subnets_mut()
+                network_topology
+                    .subnets_mut()
                     .get_mut(&self.own_subnet_id)
                     .unwrap()
                     .chain_keys_held
@@ -3026,9 +3028,11 @@ impl ExecutionTestBuilder {
             });
         }
 
-        state.metadata.modify_network_topology(|nt| {
-            nt.bitcoin_mainnet_canister_id = self.execution_config.bitcoin.mainnet_canister_id;
-            nt.bitcoin_testnet_canister_id = self.execution_config.bitcoin.testnet_canister_id;
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.bitcoin_mainnet_canister_id =
+                self.execution_config.bitcoin.mainnet_canister_id;
+            network_topology.bitcoin_testnet_canister_id =
+                self.execution_config.bitcoin.testnet_canister_id;
         });
 
         let chain_key_subnet_public_keys = self

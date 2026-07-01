@@ -769,8 +769,8 @@ mod tests {
     fn test_traverse_subnet() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 // For test coverage, this test adds one subnet for each subnet type
                 subnet_test_id(0) => SubnetTopology {
                     public_key: vec![1, 2, 3, 4],
@@ -809,7 +809,7 @@ mod tests {
                     subnet_admins: BTreeSet::new(),
                 }
             });
-            nt.set_routing_table(
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     id_range(0, 10) => subnet_test_id(0),
                     id_range(11, 20) => subnet_test_id(1),
@@ -1037,8 +1037,8 @@ mod tests {
     fn test_traverse_large_or_empty_routing_table() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 subnet_test_id(0) => SubnetTopology {
                     public_key: vec![1, 2, 3, 4],
                     nodes: BTreeSet::new(),
@@ -1058,7 +1058,7 @@ mod tests {
                     subnet_admins: BTreeSet::new(),
                 }
             });
-            nt.set_routing_table(
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     id_range(0, 10) => subnet_test_id(0),
                     id_range(21, 30) => subnet_test_id(0),

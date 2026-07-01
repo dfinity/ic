@@ -2841,8 +2841,8 @@ fn induct_stream_slices_drops_refund_at_engine_boundary() {
             }],
             |stream_handler, mut state, slices, metrics| {
                 // Mark REMOTE_SUBNET as a CloudEngine.
-                state.metadata.modify_network_topology(|nt| {
-                    nt.subnets_mut().insert(
+                state.metadata.modify_network_topology(|network_topology| {
+                    network_topology.subnets_mut().insert(
                         REMOTE_SUBNET,
                         SubnetTopology {
                             subnet_type: SubnetType::CloudEngine,
@@ -3318,8 +3318,8 @@ fn induct_stream_slices_engine_src_guaranteed_response_request_critical_error() 
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3369,8 +3369,8 @@ fn induct_stream_slices_engine_src_best_effort_request_inducted() {
         btreemap![],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3422,8 +3422,8 @@ fn induct_stream_slices_engine_src_best_effort_request_with_cycles_rejected() {
         btreemap![],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3499,8 +3499,8 @@ fn induct_stream_slices_engine_src_best_effort_response_inducted() {
         }],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as CloudEngine.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3566,8 +3566,8 @@ fn induct_stream_slices_engine_boundary_drops_forged_response() {
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3631,8 +3631,8 @@ fn induct_stream_slices_engine_boundary_strips_and_inducts_guaranteed_response()
         }],
         |stream_handler, mut state, slices, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3700,8 +3700,8 @@ fn induct_stream_slices_engine_boundary_drops_best_effort_response_with_cycles()
         }],
         |stream_handler, mut state, _, metrics| {
             // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
-            state.metadata.modify_network_topology(|nt| {
-                nt.subnets_mut().insert(
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
                     REMOTE_SUBNET,
                     SubnetTopology {
                         subnet_type: SubnetType::CloudEngine,
@@ -3839,10 +3839,12 @@ fn with_test_setup_and_config(
             routing_table.lookup_entry(*REMOTE_CANISTER)
         );
         assert!(routing_table.lookup_entry(*UNKNOWN_CANISTER).is_none());
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(routing_table);
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
             for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
-                nt.subnets_mut().insert(subnet, Default::default());
+                network_topology
+                    .subnets_mut()
+                    .insert(subnet, Default::default());
             }
         });
 
@@ -4392,8 +4394,8 @@ fn prepare_canister_migration(
     canister_migrations
         .insert_ranges(canister_id_ranges, from_subnet, to_subnet)
         .unwrap();
-    state.metadata.modify_network_topology(|nt| {
-        nt.canister_migrations = Arc::new(canister_migrations);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.canister_migrations = Arc::new(canister_migrations);
     });
 
     state
@@ -4421,8 +4423,8 @@ fn complete_canister_migration(
     routing_table
         .assign_ranges(canister_id_ranges, destination)
         .unwrap();
-    state.metadata.modify_network_topology(|nt| {
-        nt.set_routing_table(routing_table);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
     });
 
     state

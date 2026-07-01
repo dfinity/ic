@@ -984,8 +984,8 @@ impl SchedulerTestBuilder {
 
         let mut registry_settings = self.registry_settings;
 
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(generate_subnets(
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(generate_subnets(
                 vec![self.own_subnet_id, self.nns_subnet_id],
                 self.nns_subnet_id,
                 None,
@@ -995,8 +995,8 @@ impl SchedulerTestBuilder {
                 self.cost_schedule,
                 self.subnet_admins,
             ));
-            nt.set_routing_table(routing_table);
-            nt.nns_subnet_id = self.nns_subnet_id;
+            network_topology.set_routing_table(routing_table);
+            network_topology.nns_subnet_id = self.nns_subnet_id;
         });
         state.metadata.batch_time = self.batch_time;
 
@@ -1004,10 +1004,12 @@ impl SchedulerTestBuilder {
         subnet_config.scheduler_config = self.scheduler_config.clone();
 
         for key_id in &self.master_public_key_ids {
-            state.metadata.modify_network_topology(|nt| {
-                nt.chain_key_enabled_subnets
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology
+                    .chain_key_enabled_subnets
                     .insert(key_id.clone(), vec![self.own_subnet_id]);
-                nt.subnets_mut()
+                network_topology
+                    .subnets_mut()
                     .get_mut(&self.own_subnet_id)
                     .unwrap()
                     .chain_keys_held

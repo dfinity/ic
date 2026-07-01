@@ -1825,12 +1825,16 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    test.state_mut().metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
-            .assign_canister(canister_id_1, own_subnet_id);
-        nt.routing_table_mut()
-            .assign_canister(canister_id_2, own_subnet_id);
-    });
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, own_subnet_id);
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, own_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Retains the `StopCanisterCall` and does not produce a response.
@@ -1844,10 +1848,13 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates canister 1 to another subnet.
-    test.state_mut().metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
-            .assign_canister(canister_id_1, other_subnet_id);
-    });
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `StopCanisterCall` and produced a reject response.
@@ -1901,10 +1908,13 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
-    test.state_mut().metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
-            .assign_canister(canister_id_2, other_subnet_id);
-    });
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `StopCanisterCall` and set the ingress state to `Failed`.

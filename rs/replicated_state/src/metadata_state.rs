@@ -2070,16 +2070,12 @@ pub mod testing {
 
     /// Exposes `SystemMetadata` internals for use in tests.
     pub trait SystemMetadataTesting {
-        /// Mutates the network topology in place: clones the value out of the
-        /// `Arc`, applies `f`, and stores the result back.
         fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
     }
 
     impl SystemMetadataTesting for SystemMetadata {
         fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
-            let mut network_topology = (*self.network_topology).clone();
-            f(&mut network_topology);
-            self.network_topology = Arc::new(network_topology);
+            f(Arc::make_mut(&mut self.network_topology));
         }
     }
 

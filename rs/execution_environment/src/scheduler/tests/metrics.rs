@@ -499,8 +499,9 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(1)));
     state.put_canister_state(get_running_canister(canister_test_id(2)));
 
-    state.metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology
+            .routing_table_mut()
             .insert(
                 CanisterIdRange {
                     start: canister_test_id(0),
@@ -558,8 +559,9 @@ fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     state.put_canister_state(get_running_canister(canister_test_id(2)));
     state.put_canister_state(get_running_canister(canister_test_id(100)));
 
-    state.metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology
+            .routing_table_mut()
             .insert(
                 CanisterIdRange {
                     start: canister_test_id(0),

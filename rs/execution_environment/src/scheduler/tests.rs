@@ -680,10 +680,13 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
     assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
-    test.state_mut().metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
-            .assign_canister(canister_id, own_subnet_id);
-    });
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id, own_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Retains the `RawRandContext` and does not produce a response.
@@ -698,10 +701,13 @@ fn online_split_cleans_in_progress_raw_rand_requests() {
     assert!(!test.state().subnet_queues().has_output());
 
     // Simulate a subnet split that migrates the canister to another subnet.
-    test.state_mut().metadata.modify_network_topology(|nt| {
-        nt.routing_table_mut()
-            .assign_canister(canister_id, other_subnet_id);
-    });
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `RawRandContext` and produced a reject response.

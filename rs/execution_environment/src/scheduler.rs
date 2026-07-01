@@ -525,7 +525,7 @@ impl SchedulerImpl {
                 active_canisters_partitioned_by_cores,
                 current_round,
                 state.time(),
-                state.metadata.network_topology.clone(),
+                Arc::clone(&state.metadata.network_topology),
                 subnet_cycles_config,
                 &mut round_limits,
                 state.resource_limits(),
@@ -678,7 +678,7 @@ impl SchedulerImpl {
 
             // Start execution of the canisters on each thread.
             for (canisters, result) in execution_data_by_thread {
-                let network_topology = network_topology.clone();
+                let network_topology = Arc::clone(&network_topology);
                 let metrics = Arc::clone(&self.metrics);
                 let logger = new_logger!(self.log; messaging.round => round_id.get());
                 let rate_limiting_of_heap_delta = self.rate_limiting_of_heap_delta;
@@ -1700,7 +1700,7 @@ fn execute_canisters_on_thread(
                 canister_arc,
                 instruction_limits.clone(),
                 config.max_instructions_per_query_message,
-                network_topology.clone(),
+                Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
                 resource_limits,

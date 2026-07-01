@@ -749,8 +749,8 @@ fn system_metadata_online_split() {
     system_metadata.last_generated_canister_id = Some(CANISTER_2);
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
-    system_metadata.modify_network_topology(|nt| {
-        nt.routing_table = Arc::new(routing_table);
+    system_metadata.modify_network_topology(|network_topology| {
+        network_topology.routing_table = Arc::new(routing_table);
     });
     system_metadata.subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),

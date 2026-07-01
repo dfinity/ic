@@ -8167,8 +8167,8 @@ fn can_split_with_inflight_restore_snapshot() {
                 CanisterIdRange {start: CANISTER_3, end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
             })
             .unwrap();
-            state.metadata.modify_network_topology(|nt| {
-                nt.set_routing_table(routing_table.clone());
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table.clone());
             });
 
             // Expected state after splitting.

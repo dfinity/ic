@@ -148,9 +148,9 @@ impl ReplicatedStateBuilder {
             )
             .unwrap();
 
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(routing_table);
-            nt.subnets_mut().insert(
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            network_topology.subnets_mut().insert(
                 self.subnet_id,
                 SubnetTopology {
                     public_key: vec![],
@@ -788,8 +788,8 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
-    state.metadata.modify_network_topology(|nt| {
-        nt.set_routing_table({
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table({
             let mut rt = ic_registry_routing_table::RoutingTable::new();
             rt.insert(
                 ic_registry_routing_table::CanisterIdRange {
@@ -1225,9 +1225,11 @@ fn new_replicated_state_with_output_queues(
             own_subnet_id,
         )
         .unwrap();
-    replicated_state.metadata.modify_network_topology(|nt| {
-        nt.set_routing_table(routing_table);
-    });
+    replicated_state
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+        });
 
     replicated_state.put_canister_states(CanisterStates::new(canister_states));
     if let Some(subnet_queues) = subnet_queues {

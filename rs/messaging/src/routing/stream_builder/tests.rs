@@ -172,8 +172,8 @@ fn reject_local_request() {
 fn build_streams_success() {
     with_test_replica_logger(|log| {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(RoutingTable::try_from(
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
                 btreemap! {
                     CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
                 },
@@ -297,9 +297,11 @@ fn build_streams_local_canisters() {
         let routing_table = RoutingTable::try_from(btreemap! {
             CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => LOCAL_SUBNET,
         }).unwrap();
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(routing_table.clone());
-        });
+        provided_state
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table.clone());
+            });
 
         // Set up the expected Stream from the messages.
         let expected_stream = Stream::new(
@@ -323,9 +325,11 @@ fn build_streams_local_canisters() {
             streams.insert(LOCAL_SUBNET, expected_stream);
         });
 
-        expected_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(routing_table.clone());
-        });
+        expected_state
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table.clone());
+            });
 
         let result_state = stream_builder.build_streams(provided_state);
 
@@ -382,8 +386,8 @@ fn build_streams_at_limit_leaves_state_untouched_impl(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(RoutingTable::try_from(
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
                 btreemap! {
                     CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
                 },
@@ -473,8 +477,8 @@ fn build_streams_respects_limits(
             target_stream_size_bytes,
             SYSTEM_SUBNET_STREAM_MSG_LIMIT,
         );
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(RoutingTable::try_from(
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
                 btreemap! {
                     CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
                 },
@@ -642,13 +646,13 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Ensure the routing table knows about the `REMOTE_SUBNET`.
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(RoutingTable::try_from(
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(RoutingTable::try_from(
                 btreemap! {
                     CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
                 },
             ).unwrap());
-            nt.subnets_mut().insert(REMOTE_SUBNET, Default::default());
+            network_topology.subnets_mut().insert(REMOTE_SUBNET, Default::default());
         });
 
         // Set up the provided_canister_states.
@@ -734,14 +738,14 @@ fn build_streams_with_best_effort_messages_impl(
         let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
         // Set the subnet types of the local and remote subnets.
-        provided_state.metadata.modify_network_topology(|nt| {
+        provided_state.metadata.modify_network_topology(|network_topology| {
             // Set the subnet types of the local and remote subnets.
-            nt.set_subnets(btreemap! {
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology {subnet_type: local_subnet_type, ..Default::default()},
                 REMOTE_SUBNET => SubnetTopology {subnet_type: remote_subnet_type, ..Default::default()},
             });
             // Ensure that the routing table knows about `LOCAL_SUBNET` and `REMOTE_SUBNET`.
-            nt.set_routing_table(RoutingTable::try_from(
+            network_topology.set_routing_table(RoutingTable::try_from(
                 btreemap! {
                     CanisterIdRange{ start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                     CanisterIdRange{ start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -825,12 +829,12 @@ fn build_streams_engine_src_rejects_guaranteed_response_request() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
                 REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
             });
-            nt.set_routing_table(
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                     CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -894,12 +898,12 @@ fn build_streams_engine_src_rejects_cycles_request() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
                 REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
             });
-            nt.set_routing_table(
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                     CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -966,12 +970,12 @@ fn build_streams_engine_src_drops_cycles_response() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
                 REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
             });
-            nt.set_routing_table(
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                     CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -1038,12 +1042,12 @@ fn build_streams_engine_src_strips_and_routes_guaranteed_response() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         provided_state.metadata.own_subnet_type = SubnetType::CloudEngine;
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology { subnet_type: SubnetType::CloudEngine, ..Default::default() },
                 REMOTE_SUBNET => SubnetTopology { subnet_type: SubnetType::Application, ..Default::default() },
             });
-            nt.set_routing_table(
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                     CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -1107,12 +1111,12 @@ fn build_streams_drops_refunds_at_engine_boundary() {
             let (stream_builder, mut provided_state, _) = new_fixture(&log);
 
             provided_state.metadata.own_subnet_type = own_subnet_type;
-            provided_state.metadata.modify_network_topology(|nt| {
-                nt.set_subnets(btreemap! {
+            provided_state.metadata.modify_network_topology(|network_topology| {
+                network_topology.set_subnets(btreemap! {
                     LOCAL_SUBNET => SubnetTopology { subnet_type: own_subnet_type, ..Default::default() },
                     REMOTE_SUBNET => SubnetTopology { subnet_type: remote_subnet_type, ..Default::default() },
                 });
-                nt.set_routing_table(
+                network_topology.set_routing_table(
                     RoutingTable::try_from(btreemap! {
                         CanisterIdRange { start: local_canister_id, end: local_canister_id } => LOCAL_SUBNET,
                         CanisterIdRange { start: remote_canister_id, end: remote_canister_id } => REMOTE_SUBNET,
@@ -1218,13 +1222,13 @@ fn build_streams_with_refunds(
         );
 
         // Set the type of both subnets and map canisters to subnets.
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_subnets(btreemap! {
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_subnets(btreemap! {
                 LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
                 REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
             });
             // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
-            nt.set_routing_table(RoutingTable::try_from(
+            network_topology.set_routing_table(RoutingTable::try_from(
                 btreemap! {
                     CanisterIdRange{ start: first_local_canister, end: last_local_canister } => LOCAL_SUBNET,
                     CanisterIdRange{ start: first_remote_canister, end: last_remote_canister } => REMOTE_SUBNET,
@@ -1514,8 +1518,8 @@ fn build_streams_with_oversized_payloads() {
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
 
         // Map local canister to `LOCAL_SUBNET` and remote canister to `REMOTE_SUBNET`.
-        provided_state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(
+        provided_state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
                     CanisterIdRange{ start: remote_canister, end: remote_canister } => REMOTE_SUBNET,
@@ -1629,8 +1633,8 @@ fn test_observe_misrouted_messages_on_splitting_subnet() {
 
         // Routing table: `migrating_canister` is still hosted by the local subnet;
         // `migrated_canister` has already migrated from the local subnet to B.
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
                     CanisterIdRange{ start: migrating_canister, end: migrating_canister } => LOCAL_SUBNET,
@@ -1642,7 +1646,7 @@ fn test_observe_misrouted_messages_on_splitting_subnet() {
             );
             // Canister migrations: both `migrating_canister` and `migrated_canister` are
             // migrating from the local subnet to B.
-            nt.canister_migrations = Arc::new(
+            network_topology.canister_migrations = Arc::new(
                 CanisterMigrations::try_from(btreemap! {
                     CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
                     CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![LOCAL_SUBNET, REMOTE_SUBNET_B],
@@ -1741,8 +1745,8 @@ fn test_observe_misrouted_messages_on_third_party_subnet() {
 
         // Routing table: `migrating_canister` is still hosted by subnet A;
         // `migrated_canister` has already migrated from A to B.
-        state.metadata.modify_network_topology(|nt| {
-            nt.set_routing_table(
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(
                 RoutingTable::try_from(btreemap! {
                     CanisterIdRange{ start: local_canister, end: local_canister } => LOCAL_SUBNET,
                     CanisterIdRange{ start: canister_on_a, end: canister_on_a } => REMOTE_SUBNET_A,
@@ -1755,7 +1759,7 @@ fn test_observe_misrouted_messages_on_third_party_subnet() {
             );
             // Canister migrations: both `migrating_canister` and `migrated_canister` are
             // migrating from A to B.
-            nt.canister_migrations = Arc::new(
+            network_topology.canister_migrations = Arc::new(
                 CanisterMigrations::try_from(btreemap! {
                     CanisterIdRange{ start: migrated_canister, end: migrated_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
                     CanisterIdRange{ start: migrating_canister, end: migrating_canister } => vec![REMOTE_SUBNET_A, REMOTE_SUBNET_B],
