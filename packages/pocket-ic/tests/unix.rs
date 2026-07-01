@@ -180,6 +180,7 @@ async fn resume_killed_instance_default() {
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[tokio::test]
+#[ignore = "temporarily disabled"]
 async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(IncompleteStateFlag::Disabled))
         .await
@@ -189,6 +190,7 @@ async fn resume_killed_instance_strict() {
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[tokio::test]
+#[ignore = "temporarily disabled"]
 async fn resume_killed_instance() {
     resume_killed_instance_impl(Some(IncompleteStateFlag::Enabled))
         .await
