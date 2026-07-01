@@ -304,12 +304,14 @@ fn state_machine_handles_messages_to_deleted_subnet() {
     let stream_cycles = Cycles::new(10_000_000_000);
 
     // For stream requests, we have to first push the requests to the canister output queue
-    // and then drain that queue which removes the requests again,
-    // but leaves callbacks + reservations intact.
+    // and then drain that queue, forwarding each drained request onto the stream — this leaves
+    // callbacks + reservations intact while the request itself ends up on the stream.
     // The reservations must remain because generate_reject_responses_for_deleted_subnets()
     // calls push_input() to deliver each synthetic reject, which requires a matching slot.
     // For stream responses, no such preparation is required and
     // they can be pushed to the stream directly below.
+    //
+    // Regular requests: local_canister → remote_canister.
     canister_state
         .push_output_request(
             OutputRequestBuilder::default()
@@ -332,6 +334,7 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             UNIX_EPOCH,
         )
         .unwrap();
+    // Subnet requests: local_canister → subnet_as_canister_id (SUBNET_2's mgmt canister).
     canister_state
         .push_output_request(
             OutputRequestBuilder::default()
@@ -354,6 +357,21 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             UNIX_EPOCH,
         )
         .unwrap();
+    // Drain the output queue, forwarding each request onto the stream to the deleted subnet.
+    let mut requests_to_stream = Vec::new();
+    canister_state
+        .system_state
+        .output_queues_for_each(|_, msg| {
+            requests_to_stream.push(msg.clone());
+            Ok(())
+        });
+    initial_state.modify_streams(|streams| {
+        let stream = streams.entry(SUBNET_2).or_default();
+        for msg in requests_to_stream {
+            stream.push(msg.into());
+        }
+    });
+
     // The following two requests won't have a corresponding entry in the stream,
     // thus corresponding to requests that have already been delivered.
     canister_state
@@ -378,50 +396,16 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             UNIX_EPOCH,
         )
         .unwrap();
-    // Finally, drain the canister output queue.
+    // Drain the output queue, discarding the "already delivered" requests.
     canister_state
         .system_state
         .output_queues_for_each(|_, _| Ok(()));
 
-    // Push regular/subnet bounded-wait/unbounded-wait requests/responses
-    // to the stream to the deleted subnet — all are dropped silently when the stream is discarded.
+    // Push regular/subnet bounded-wait/unbounded-wait responses to the stream to the deleted
+    // subnet — all are dropped silently when the stream is discarded.
     // Cycles in dropped stream messages are intentionally not observed as lost.
     initial_state.modify_streams(|streams| {
         let stream = streams.entry(SUBNET_2).or_default();
-        // Regular requests: local_canister → remote_canister.
-        stream.push(StreamMessage::Request(Arc::new(
-            RequestBuilder::new()
-                .sender(local_canister_id)
-                .receiver(remote_canister_id)
-                .payment(stream_cycles)
-                .deadline(deadline)
-                .build(),
-        )));
-        stream.push(StreamMessage::Request(Arc::new(
-            RequestBuilder::new()
-                .sender(local_canister_id)
-                .receiver(remote_canister_id)
-                .payment(stream_cycles)
-                .deadline(NO_DEADLINE)
-                .build(),
-        )));
-        // Subnet requests: local_canister → subnet_as_canister_id (SUBNET_2's mgmt canister).
-        stream.push(StreamMessage::Request(Arc::new(
-            RequestBuilder::new()
-                .sender(local_canister_id)
-                .receiver(subnet_as_canister_id)
-                .payment(stream_cycles)
-                .deadline(deadline)
-                .build(),
-        )));
-        stream.push(StreamMessage::Request(Arc::new(
-            RequestBuilder::new()
-                .sender(local_canister_id)
-                .receiver(subnet_as_canister_id)
-                .payment(stream_cycles)
-                .deadline(NO_DEADLINE)
-                .build(),
-        )));
         // Regular responses: remote_canister → local_canister.
         stream.push(StreamMessage::Response(Arc::new(Response {
             originator: remote_canister_id,
