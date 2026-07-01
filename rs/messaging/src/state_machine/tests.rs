@@ -279,7 +279,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
         .times(1)
         .returning(|state, _, _, _, _, _, _, _| state);
 
-    // Build up a state with a stream to SUBNET_2, which is not in the network topology.
+    // Build up a state with messages in output queues and
+    // a stream to SUBNET_2, which is not in the network topology.
     let mut initial_state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
     let mut subnet_available_memory = i64::MAX / 2;
 
