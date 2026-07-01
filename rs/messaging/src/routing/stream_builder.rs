@@ -883,18 +883,11 @@ impl StreamBuilder for StreamBuilderImpl {
 pub(crate) fn generate_reject_responses_for_deleted_subnets(
     state: &mut ReplicatedState,
 ) -> Vec<StateError> {
-    let current_subnet_ids: Vec<SubnetId> = state
-        .metadata
-        .network_topology
-        .subnets()
-        .keys()
-        .cloned()
-        .collect();
+    let network_topology = &state.metadata.network_topology;
+    let current_subnet_ids: Vec<SubnetId> = network_topology.subnets().keys().cloned().collect();
     if state.metadata.subnet_ids_at_last_reject_generation.as_ref() == Some(&current_subnet_ids) {
         return Vec::new();
     }
-
-    let network_topology = &state.metadata.network_topology;
 
     // Collect reject responses for callbacks whose respondent has no route in
     // the current network topology (i.e. is on a deleted subnet, or is the
