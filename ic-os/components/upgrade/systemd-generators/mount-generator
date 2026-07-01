@@ -153,6 +153,8 @@ function make_var_cryptsetup() {
     echo "KeyringMode=shared"
     echo "ExecStart=/opt/ic/bin/setup-var-encryption.sh /dev/disk/by-partuuid/${PARTUUID} /dev/disk/by-partuuid/${ALT_PARTUUID}"
     echo "ExecStop=/lib/systemd/systemd-cryptsetup detach var_crypt"
+    echo "StandardOutput=journal+console"
+    echo "StandardError=journal+console"
 }
 
 CURRENT_SYSTEM=$(get_boot_arg_value dfinity.system)
