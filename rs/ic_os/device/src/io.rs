@@ -3,7 +3,7 @@ use std::io;
 use std::time::Duration;
 
 // TODO: Make this configurable
-const RETRY_MAX_ATTEMPTS: i32 = 10;
+const RETRY_MAX_ATTEMPTS: u32 = 10;
 
 /// Retries a function, returning its result if it succeeds, or retrying if it fails with
 /// the specified error.
