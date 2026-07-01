@@ -196,12 +196,11 @@ impl LocalBackend {
     /// `script` must only interpolate sanitized, shell-safe tokens (interface
     /// names and IPv6 prefixes are restricted to `[0-9a-f:.-]`).
     fn net_admin(script: &str) -> Command {
-        // Experiment:
-        // if running_as_root() {
-        //     let mut cmd = Command::new("/bin/sh");
-        //     cmd.arg("-c").arg(script);
-        //     return cmd;
-        // }
+        if running_as_root() {
+            let mut cmd = Command::new("/bin/sh");
+            cmd.arg("-c").arg(script);
+            return cmd;
+        }
         let net_admin_launcher = get_dependency_path_from_env("NET_ADMIN_LAUNCHER_PATH");
         let mut cmd = Command::new(net_admin_launcher);
         cmd.arg("--inh=cap_net_admin,cap_net_raw,cap_net_bind_service")
