@@ -53,7 +53,7 @@ pub use canister_threshold_sig::{
 mod tests;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 
 impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, H: Signable> BasicSigner<H>
     for CryptoComponentImpl<C, R>
@@ -212,8 +212,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
 
     fn verify_basic_sig_batch_multi_msg(
         &self,
-        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
-        registry_version: RegistryVersion,
+        inputs: &[BasicSigBatchEntry<'_, H>],
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -223,15 +222,13 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
-            crypto.signature => format!("{:?}", inputs.iter().map(|(s, sig, _)| (s, sig)).collect::<Vec<_>>()),
+            crypto.signature => format!("{:?}", inputs.iter().map(|entry| (entry.signer, entry.signature, entry.registry_version)).collect::<Vec<_>>()),
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch_multi_msg(
             &self.csprng,
             self.registry_client.as_ref(),
             inputs,
-            registry_version,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,

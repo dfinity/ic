@@ -1044,22 +1044,23 @@ crate.spec(
         "trace",
     ],
     package = "opentelemetry",
-    version = "^0.27.0",
+    version = "^0.32.0",
 )
 crate.spec(
+    default_features = False,
     features = [
         "grpc-tonic",
+        "trace",
     ],
     package = "opentelemetry-otlp",
-    version = "^0.27.0",
+    version = "^0.32.0",
 )
 crate.spec(
     features = [
         "trace",
-        "rt-tokio",
     ],
     package = "opentelemetry_sdk",
-    version = "^0.27.1",
+    version = "^0.32.1",
 )
 crate.spec(
     default_features = False,
@@ -1783,7 +1784,7 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-opentelemetry",
-    version = "^0.28.0",
+    version = "^0.33.0",
 )
 crate.spec(
     package = "tracing-serde",
@@ -2184,6 +2185,10 @@ crate.annotation(
 crate.annotation(
     crate = "metrics-proxy",
     gen_binaries = ["metrics-proxy"],
+)
+crate.annotation(
+    crate = "ic-gateway",
+    gen_binaries = ["ic-gateway"],
 )
 crate.splicing_config(
     resolver_version = "2",

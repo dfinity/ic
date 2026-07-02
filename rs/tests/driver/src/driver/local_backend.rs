@@ -885,6 +885,79 @@ impl LocalBackend {
         Ok(())
     }
 
+    /// Extract `src` into a shared, content-addressed base image exactly once
+    /// and return its path (`image_cache/<key>.img` under `working_dir`).
+    ///
+    /// [`start_vm`](Self::start_vm) boots every IC node in a testnet from the
+    /// *same* primary GuestOS image. Decompressing a multi-gibibyte
+    /// `*.tar.zst` / `*.img.zst` once per node is wasteful, so the first caller
+    /// for a given `src` extracts it here while concurrent callers (other setup
+    /// threads, or a forked task subprocess running `vm.start()`) block on a
+    /// per-key file lock and then observe the finished base. Each VM gets a thin
+    /// qcow2 overlay backed by this base (see [`start_vm`]), so the base is kept
+    /// read-only and never written to.
+    ///
+    /// The cache lives under `working_dir` (same filesystem as the per-VM disks,
+    /// torn down with the group). The base is keyed by a hash of the `src`
+    /// *path*: within a single bazel invocation a given image always resolves to
+    /// the same immutable runfiles path, so the path identifies the content
+    /// without reading the (large) file to hash it.
+    ///
+    /// The returned path is absolute (`working_dir` is canonicalized during
+    /// backend setup) and each VM's qcow2 overlay records it as its backing
+    /// file, so the base must not be relocated while overlays reference it. It
+    /// isn't: it stays under `working_dir` and is torn down together with the
+    /// overlays at the end of the group.
+    fn ensure_base_image(&self, src: &Path) -> Result<PathBuf> {
+        use ic_crypto_sha2::Sha256;
+        use std::os::unix::io::AsRawFd;
+
+        let cache_dir = self.active_local_backend.working_dir.join("image_cache");
+        std::fs::create_dir_all(&cache_dir)
+            .with_context(|| format!("creating image cache dir {}", cache_dir.display()))?;
+
+        let key = hex::encode(&Sha256::hash(src.to_string_lossy().as_bytes())[0..16]);
+        let base = cache_dir.join(format!("{key}.img"));
+
+        // Serialize extraction of a given `src` across threads *and* processes
+        // with a blocking, exclusive advisory lock on a per-key lock file. Only
+        // the first holder extracts; others wake to find `base` already present.
+        let lock_path = cache_dir.join(format!("{key}.lock"));
+        // `append` (rather than `write`) gives the open a defined, non-truncating
+        // behavior; the file is only a lock holder, never written to.
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&lock_path)
+            .with_context(|| format!("opening image cache lock {}", lock_path.display()))?;
+        nix::fcntl::flock(lock.as_raw_fd(), nix::fcntl::FlockArg::LockExclusive)
+            .with_context(|| format!("locking image cache lock {}", lock_path.display()))?;
+        // The lock is released when `lock` is dropped at the end of this function
+        // (its `File` closes the fd, which drops the advisory lock). Rust opens
+        // files `O_CLOEXEC`, so a forked task subprocess that `exec`s does not
+        // inherit this fd and therefore cannot keep the lock held after we
+        // return.
+
+        if !base.exists() {
+            // Extract to a temp file on the same filesystem, then atomically
+            // rename it into place, so a crash never leaves a partial base that a
+            // later caller would mistake for a complete one.
+            let tmp = cache_dir.join(format!("{key}.tmp.{}", std::process::id()));
+            extract_image(src, &tmp, &self.logger)?;
+            // The base is shared and read-only; each VM writes to its own overlay.
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o444))
+                .with_context(|| format!("chmod base image {}", tmp.display()))?;
+            std::fs::rename(&tmp, &base).with_context(|| {
+                format!(
+                    "publishing base image {} -> {}",
+                    tmp.display(),
+                    base.display()
+                )
+            })?;
+        }
+        Ok(base)
+    }
+
     /// Build the libvirt domain XML for `vm_name` and start it.
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
         // Recover the per-VM state persisted by `create_vm` /
@@ -901,13 +974,11 @@ impl LocalBackend {
 
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)?;
-        let primary_disk = vm_dir.join("primary.img");
+        let primary_disk = vm_dir.join("primary.qcow2");
         // Only materialize the primary disk on first boot. On a later `start_vm`
-        // (e.g. a test that did `vm().kill()` then `vm().start()`) the extracted
-        // `primary.img` already exists and holds the node's persisted state.
-        // Re-extracting the pristine image would wipe it,
-        // so the node would come back as freshly provisioned and never rejoin.
-        // Reuse the existing disk, mirroring a real VM reboot.
+        // (e.g. a test that did `vm().kill()` then `vm().start()`) the qcow2
+        // overlay already exists and holds the node's persisted writes; reusing
+        // it mirrors a real VM reboot. Re-creating it would discard that state.
         if !primary_disk.exists() {
             let local_src = match &primary_image {
                 DiskImage::Local { path, .. } => path.clone(),
@@ -919,17 +990,53 @@ impl LocalBackend {
                     );
                 }
             };
-            extract_image(&local_src, &primary_disk, &self.logger)?;
-            std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
+            // Extract the shared pristine image once into the content-addressed
+            // base cache, then give this VM a thin copy-on-write qcow2 overlay
+            // backed by it. Creating the overlay is near-instant and filesystem
+            // independent (unlike `cp --reflink`, which needs a CoW filesystem);
+            // the VM's writes stay in its own overlay while the base is shared
+            // read-only across all nodes.
+            let base = self.ensure_base_image(&local_src)?;
+            info!(
+                self.logger,
+                "Creating qcow2 overlay {} backed by {}",
+                primary_disk.display(),
+                base.display()
+            );
+            let mut cmd = Command::new("qemu-img");
+            cmd.arg("create")
+                .arg("-q")
+                .arg("-f")
+                .arg("qcow2")
+                .arg("-F")
+                .arg("raw")
+                .arg("-b")
+                .arg(&base)
+                .arg(&primary_disk);
+            // Grow the overlay's virtual size to `min_gib`, but only when it
+            // exceeds the base image's size (the base is raw, so its byte length
+            // is its virtual size). This is grow-only: a request smaller than the
+            // base leaves the overlay at the base size.
             if let Some(min_gib) = min_gib {
-                let _ = Command::new("truncate")
-                    .arg(format!("--size=>{min_gib}G"))
-                    .arg(&primary_disk)
-                    .status()
-                    .with_context(|| {
-                        format!("truncating {} to {min_gib}G", primary_disk.display())
-                    })?;
+                let base_virtual = std::fs::metadata(&base)
+                    .with_context(|| format!("stat base image {}", base.display()))?
+                    .len();
+                if min_gib.saturating_mul(1024 * 1024 * 1024) > base_virtual {
+                    cmd.arg(format!("{min_gib}G"));
+                }
             }
+            let output = cmd.output().with_context(|| {
+                format!("running qemu-img create for {}", primary_disk.display())
+            })?;
+            if !output.status.success() {
+                bail!(
+                    "creating qcow2 overlay {} failed with status {}: {}",
+                    primary_disk.display(),
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                );
+            }
+            std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
         }
 
         let mac = vm_mac(group_name, vm_name);
@@ -972,6 +1079,7 @@ impl LocalBackend {
         let mut disks = Vec::new();
         disks.push(DiskEntry {
             file: primary_disk.display().to_string(),
+            driver_type: "qcow2".to_string(),
             target: "vda".to_string(),
             bus: "virtio".to_string(),
         });
@@ -979,6 +1087,7 @@ impl LocalBackend {
             let letter = (b'b' + i as u8) as char;
             disks.push(DiskEntry {
                 file: p.display().to_string(),
+                driver_type: "raw".to_string(),
                 target: format!("vd{letter}"),
                 bus: "virtio".to_string(),
             });
@@ -1172,8 +1281,20 @@ fn extract_image(src: &Path, dst: &Path, logger: &Logger) -> Result<()> {
             src.display(),
             dst.display()
         );
-        // Extract into a fresh tempdir to find the disk-image entry.
-        let tmp = parent.join(format!(".extract-{}", std::process::id()));
+        // Extract into a fresh tempdir to find the disk-image entry. The dir
+        // name is unique per process *and* per thread, and also includes the
+        // destination file name, so concurrent extractions of *different* images
+        // into the same parent directory — e.g. distinct base images under
+        // `image_cache`, which are guarded by distinct per-key locks — cannot
+        // collide on the scratch dir.
+        let tmp = parent.join(format!(
+            ".extract-{}-{:?}-{}",
+            std::process::id(),
+            std::thread::current().id(),
+            dst.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        ));
         std::fs::create_dir_all(&tmp)?;
         let status = Command::new("tar")
             .arg("-xf")
@@ -1271,6 +1392,7 @@ fn pad_to_request_alignment(path: &Path) -> Result<()> {
 #[derive(Clone)]
 struct DiskEntry {
     file: String,
+    driver_type: String,
     target: String,
     bus: String,
 }

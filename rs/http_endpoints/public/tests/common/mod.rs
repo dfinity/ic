@@ -187,7 +187,7 @@ pub fn default_read_certified_state(
 )> {
     let height = latest_state.height();
     let lazy_tree = replicated_state_as_lazy_tree(latest_state.get_ref(), height);
-    let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+    let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
     let partial_tree = materialize_partial(&lazy_tree, labeled_tree, None);
     let mht = hash_tree.witness::<MixedHashTree>(&partial_tree).unwrap();
     let cert = Certification {
@@ -259,7 +259,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         None,
     );
 
-    metadata.network_topology = network_topology;
+    metadata.network_topology = Arc::new(network_topology);
     metadata.batch_time = UNIX_EPOCH;
 
     Labeled::new(

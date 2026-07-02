@@ -193,6 +193,9 @@ pub struct StateManagerMetrics {
     merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
+    hash_tree_size: Histogram,
+    hash_tree_reused_stubs: Histogram,
+    hash_tree_parallel_built_children: Histogram,
     fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
     skip_optimization_missing_cert_count: IntCounter,
@@ -489,6 +492,27 @@ impl StateManagerMetrics {
             "Largest index in the latest hash tree.",
         );
 
+        let hash_tree_size = metrics_registry.histogram(
+            "state_manager_hash_tree_size",
+            "Number of digests in the hash tree.",
+            // 1, 2, 5, …, 1M, 2M, 5M
+            decimal_buckets(0, 6),
+        );
+
+        let hash_tree_reused_stubs = metrics_registry.histogram(
+            "state_manager_hash_tree_reused_stubs",
+            "Number of digests (stubs) reused from the previous hash tree.",
+            // 1, 2, 5, …, 1M, 2M, 5M
+            decimal_buckets(0, 6),
+        );
+
+        let hash_tree_parallel_built_children = metrics_registry.histogram(
+            "state_manager_hash_tree_parallel_built_children",
+            "Number of children built in parallel during the construction of the hash tree.",
+            // 1, 2, 5, …, 1M, 2M, 5M
+            decimal_buckets(0, 6),
+        );
+
         let fast_forward_height = metrics_registry.int_gauge(
             "state_manager_fast_forward_height",
             "Height below which states do not need to be cloned and hashed.",
@@ -535,6 +559,9 @@ impl StateManagerMetrics {
             merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
+            hash_tree_size,
+            hash_tree_reused_stubs,
+            hash_tree_parallel_built_children,
             fast_forward_height,
             no_state_clone_count,
             skip_optimization_missing_cert_count,
@@ -1913,15 +1940,23 @@ impl StateManagerImpl {
             })
     }
 
+    /// Computes the certification metadata (hash tree, root hash, height
+    /// witness) for `state` at `height`.
+    ///
+    /// If a `baseline` hash tree (typically the immediately preceding height's)
+    /// is provided, the stubbed subtrees that are unchanged relative to the
+    /// baseline (i.e. backed by the same `Arc`) are reused instead of being
+    /// recomputed.
     fn compute_certification_metadata(
         state: &ReplicatedState,
         height: Height,
+        baseline: Option<&HashTree>,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)?;
+        let hash_tree = hash_lazy_tree(&lazy_tree, baseline)?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1961,8 +1996,9 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            let certification = Self::compute_certification_metadata(&state, height, metrics, log)
-                .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
+            let certification =
+                Self::compute_certification_metadata(&state, height, None, metrics, log)
+                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
             info!(
                 log,
                 "Certification hash for height {} at startup: {:?}",
@@ -2052,7 +2088,7 @@ impl StateManagerImpl {
         states: &mut RwLockWriteGuard<'_, SharedState>,
     ) {
         let lazy_tree = replicated_state_as_lazy_tree(&state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree)
+        let hash_tree = hash_lazy_tree(&lazy_tree, None)
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let height_witness = state_height_witness(&lazy_tree, &hash_tree, &self.metrics);
@@ -2740,10 +2776,18 @@ fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
 
 /// Helper function to set metrics related to hash trees
 fn update_hash_tree_metrics(hash_tree: &HashTree, metrics: &StateManagerMetrics) {
-    metrics.latest_hash_tree_size.set(hash_tree.size() as i64);
+    let hash_tree_size = hash_tree.size();
+    metrics.latest_hash_tree_size.set(hash_tree_size as i64);
     metrics
         .latest_hash_tree_max_index
         .set(hash_tree.max_index() as i64);
+    metrics.hash_tree_size.observe(hash_tree_size as f64);
+    metrics
+        .hash_tree_reused_stubs
+        .observe(hash_tree.reused_stubs() as f64);
+    metrics
+        .hash_tree_parallel_built_children
+        .observe(hash_tree.parallel_built_children() as f64);
 }
 
 impl StateManager for StateManagerImpl {
@@ -3381,6 +3425,7 @@ impl StateManager for StateManagerImpl {
                 let certification = StateManagerImpl::compute_certification_metadata(
                     initial_state,
                     prev_height,
+                    None,
                     &self.metrics,
                     &self.log,
                 )
@@ -3703,9 +3748,23 @@ fn spawn_hash_thread(
                             max_certified_height_tx,
                             state_metadata,
                         } => {
+                            // Reuse the most recent resident hash tree as a baseline: the state being
+                            // hashed derives from it via copy-on-write, so unchanged stubbed subtrees share
+                            // the same underlying `Arc` and can be reused directly.
+                            let baseline = states
+                                .read()
+                                .certifications_metadata
+                                .last_key_value()
+                                .and_then(|(_, md)| {
+                                    md.hash_tree.as_ref().map(|(tree, _)| Arc::clone(tree))
+                                });
                             let mut certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
-                                    &state, height, &metrics, &log,
+                                    &state,
+                                    height,
+                                    baseline.as_deref(),
+                                    &metrics,
+                                    &log,
                                 )
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to compute hash tree: {:?}", err)

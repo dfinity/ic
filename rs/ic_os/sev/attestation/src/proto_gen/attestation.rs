@@ -57,7 +57,7 @@ pub struct VerificationError {
     /// be added (i.e. the new message type fields should be a superset of the
     /// fields of VerificationErrorDescription) and then the type can be replaced
     /// with the new message type in the detail variant.
-    #[prost(oneof = "verification_error::Detail", tags = "2, 3, 4, 5, 6, 7, 8")]
+    #[prost(oneof = "verification_error::Detail", tags = "2, 3, 4, 5, 6, 7, 8, 9")]
     pub detail: ::core::option::Option<verification_error::Detail>,
 }
 /// Nested message and enum types in `VerificationError`.
@@ -94,6 +94,9 @@ pub mod verification_error {
         /// The signature in the attestation report is not by the VCEK
         #[prost(message, tag = "8")]
         InvalidSignature(super::VerificationErrorDescription),
+        /// The policy is invalid
+        #[prost(message, tag = "9")]
+        InvalidPolicy(super::VerificationErrorDescription),
     }
 }
 #[derive(

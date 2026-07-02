@@ -138,6 +138,15 @@ def system_test(
 
     _runtime_deps["TEST_BIN"] = test_driver_target
 
+    # Bazel-built FAT tools the driver uses to assemble config images for
+    # universal VMs / SetupOS / GuestOS, instead of system dosfstools/mtools.
+    # These are set on the test process and read (by name) from the driver and
+    # the config-image scripts it spawns; see run_systest.sh (symlink handling)
+    # and colocate_test.rs.
+    _runtime_deps["MKFS_FAT"] = "@dosfstools//:mkfs.fat"
+    _runtime_deps["MCOPY"] = "@mtools//:mcopy"
+    _runtime_deps["MLABEL"] = "@mtools//:mlabel"
+
     env_var_files = {}
     icos_images = dict()
 
@@ -261,7 +270,7 @@ def system_test(
     # network namespace, where the user-namespaced sandbox process lacks effective
     # CAP_NET_ADMIN and bridge creation fails with
     #`RTNETLINK answers: Operation not permitted`.
-    farm_tags = tags + ["requires-network"]
+    farm_tags = tags + ["requires-network", "farm_system_test"]
 
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
@@ -456,16 +465,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_vfat",
         srcs = [":" + name + "_size"],
         outs = [name + "_vfat.img"],
-        tools = ["//:mkfs.fat"],
-        # //:mkfs.fat resolves to the dosfstools bundle (mkfs.fat + fatlabel),
-        # so pick out the mkfs.fat binary by name.
+        tools = ["@dosfstools//:mkfs.fat"],
         cmd = """
-        mkfs_fat=
-        for f in $(locations //:mkfs.fat); do
-            case "$$f" in */mkfs.fat) mkfs_fat="$$f" ;; esac
-        done
         truncate -s $$(cat $<) $@
-        "$$mkfs_fat" -i "0" -n CONFIG $@
+        $(location @dosfstools//:mkfs.fat) -i 0 -n CONFIG $@
         """,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],

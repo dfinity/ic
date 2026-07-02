@@ -10,14 +10,14 @@ use_repo(ext, "rules_buf_toolchains")
 register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
-bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "rules_cc", version = "0.2.18")
 bazel_dep(name = "platforms", version = "1.1.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
 single_version_override(
@@ -30,7 +30,7 @@ single_version_override(
 )
 
 # configure/make dependencies
-bazel_dep(name = "rules_foreign_cc", version = "0.15.1")
+bazel_dep(name = "rules_foreign_cc", version = "0.15.2")
 
 register_toolchains(
     "@rules_foreign_cc//toolchains:preinstalled_pkgconfig_toolchain",
@@ -39,14 +39,16 @@ register_toolchains(
 
 # Use a patch to work around determinism issues in make & pkgconfig toolchains
 # https://github.com/bazel-contrib/rules_foreign_cc/issues/1313
+# Also we use HEAD to have the latest version of the dependencies (Meson in
+# particular which otherwise cannot use the zig toolchain)
 archive_override(
     module_name = "rules_foreign_cc",
-    integrity = "sha256-MnWXKJE8N2ukWwEWhptxtoscLr+PK897QSIrwHt3PXM=",
     patch_strip = 1,
     patches = ["//bazel:rules_foreign_cc.patch"],
-    strip_prefix = "rules_foreign_cc-0.15.1",
+    sha256 = "7f05eb9cc4b1c600c643e69221c88203244ccadc75ae28c4ade960f0f0742f26",
+    strip_prefix = "rules_foreign_cc-f68b351c4691e747f889dc5e4c2cac3cd3b66ea2",
     type = "tar.gz",
-    urls = ["https://github.com/bazel-contrib/rules_foreign_cc/releases/download/0.15.1/rules_foreign_cc-0.15.1.tar.gz"],
+    urls = ["https://codeload.github.com/bazel-contrib/rules_foreign_cc/tar.gz/f68b351c4691e747f889dc5e4c2cac3cd3b66ea2"],
 )
 
 # Misc tools
@@ -60,7 +62,7 @@ include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
-bazel_dep(name = "rules_python", version = "1.7.0")
+bazel_dep(name = "rules_python", version = "1.9.0")
 
 python_version = "3.12"
 
@@ -1216,6 +1218,14 @@ new_local_repository(
     name = "libvirt",
     build_file = "@//third_party:BUILD.libvirt.bazel",
     path = "/usr",
+)
+
+http_archive(
+    name = "dnsmasq",
+    build_file = "@//third_party:BUILD.dnsmasq.bazel",
+    sha256 = "a038282c6528a2b8c240c1fdddc8e5363f69ebe778b51736b373604021c8671f",
+    strip_prefix = "dnsmasq-2.92",
+    url = "https://github.com/imp/dnsmasq/archive/refs/tags/v2.92.tar.gz",
 )
 
 # Mainnet canister references

@@ -22,7 +22,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     {% for d in disks %}
     <disk type='file' device='disk'>
-      <driver name='qemu' type='raw' cache='none' discard='unmap'/>
+      <driver name='qemu' type='{{ d.driver_type }}' cache='none' discard='unmap'/>
       <source file='{{ d.file }}'/>
       <target dev='{{ d.target }}' bus='{{ d.bus }}'/>
     </disk>

@@ -57,7 +57,7 @@ use ic_replicated_state::{
     canister_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
     },
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     page_map::{
         PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
         test_utils::base_only_storage_layout,
@@ -828,6 +828,22 @@ impl ExecutionTest {
         self.subnet_message(Method::UpdateSettings, payload)
     }
 
+    pub fn canister_update_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
     pub fn canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         &mut self,
         canister_id: CanisterId,
@@ -1269,7 +1285,7 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
         let canister = Arc::make_mut(&mut canister_arc);
-        let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let network_topology = Arc::clone(&state.metadata.network_topology);
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1418,7 +1434,7 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
-        let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let network_topology = Arc::clone(&state.metadata.network_topology);
         let response_arc = Arc::new(response);
         // We push and then immediately pop the response from the canister queues
         // to ensure all invariants on the canister (system) state are preserved.
@@ -1836,7 +1852,7 @@ impl ExecutionTest {
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
         for canister_id in canister_ids {
-            let network_topology = Arc::new(state.metadata.network_topology.clone());
+            let network_topology = Arc::clone(&state.metadata.network_topology);
             let mut canister = canisters.remove(&canister_id).unwrap();
             loop {
                 match canister.next_execution() {
@@ -1906,7 +1922,7 @@ impl ExecutionTest {
         let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
-        let network_topology = Arc::new(state.metadata.network_topology.clone());
+        let network_topology = Arc::clone(&state.metadata.network_topology);
         let mut canister = canisters.remove(&canister_id).unwrap();
         match canister.next_execution() {
             NextExecution::None => {
@@ -2921,7 +2937,7 @@ impl ExecutionTestBuilder {
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
 
         if let Some(network_topology) = self.network_topology.take() {
-            state.metadata.network_topology = network_topology;
+            state.metadata.network_topology = Arc::new(network_topology);
         } else {
             let mut subnets = vec![self.own_subnet_id, self.nns_subnet_id];
             subnets.extend(self.caller_subnet_id.iter().copied());
@@ -2938,7 +2954,7 @@ impl ExecutionTestBuilder {
                 self.subnet_admins,
             ));
             network_topology.set_routing_table(routing_table);
-            state.metadata.network_topology = network_topology;
+            state.metadata.network_topology = Arc::new(network_topology);
         }
         state.metadata.init_allocation_ranges_if_empty().unwrap();
         state.metadata.bitcoin_get_successors_follow_up_responses =
@@ -2997,28 +3013,27 @@ impl ExecutionTestBuilder {
                 },
             );
 
-            if *is_enabled {
-                state
-                    .metadata
-                    .network_topology
-                    .chain_key_enabled_subnets
-                    .insert(key_id.clone(), vec![self.own_subnet_id]);
-            }
-            state
-                .metadata
-                .network_topology
-                .subnets_mut()
-                .get_mut(&self.own_subnet_id)
-                .unwrap()
-                .chain_keys_held
-                .insert(key_id.clone());
+            state.metadata.modify_network_topology(|network_topology| {
+                if *is_enabled {
+                    network_topology
+                        .chain_key_enabled_subnets
+                        .insert(key_id.clone(), vec![self.own_subnet_id]);
+                }
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&self.own_subnet_id)
+                    .unwrap()
+                    .chain_keys_held
+                    .insert(key_id.clone());
+            });
         }
 
-        state.metadata.network_topology.bitcoin_mainnet_canister_id =
-            self.execution_config.bitcoin.mainnet_canister_id;
-
-        state.metadata.network_topology.bitcoin_testnet_canister_id =
-            self.execution_config.bitcoin.testnet_canister_id;
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.bitcoin_mainnet_canister_id =
+                self.execution_config.bitcoin.mainnet_canister_id;
+            network_topology.bitcoin_testnet_canister_id =
+                self.execution_config.bitcoin.testnet_canister_id;
+        });
 
         let chain_key_subnet_public_keys = self
             .chain_keys_enabled_status

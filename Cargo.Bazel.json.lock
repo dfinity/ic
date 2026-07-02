@@ -1,5 +1,5 @@
 {
-  "checksum": "83af1c004c066c78c1b17ad2f185607d1f4f8b6c4f2eb1122ecfa3e2e6272cc2",
+  "checksum": "c109b10f71849d7a3ee6bc3c6048eb3f9292e14d2324a211251418e2cf8c3dce",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -225,7 +225,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -401,7 +401,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -536,7 +536,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -695,7 +695,7 @@
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -2021,7 +2021,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -4276,7 +4276,7 @@
               "target": "slab"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -5269,7 +5269,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -5458,7 +5458,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -5564,7 +5564,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -5670,7 +5670,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -22837,15 +22837,15 @@
               "target": "openssh_keys"
             },
             {
-              "id": "opentelemetry 0.27.0",
+              "id": "opentelemetry 0.32.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-otlp 0.27.0",
+              "id": "opentelemetry-otlp 0.32.0",
               "target": "opentelemetry_otlp"
             },
             {
-              "id": "opentelemetry_sdk 0.27.1",
+              "id": "opentelemetry_sdk 0.32.1",
               "target": "opentelemetry_sdk"
             },
             {
@@ -23359,7 +23359,7 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.6.6",
+              "id": "tower-http 0.6.11",
               "target": "tower_http"
             },
             {
@@ -23375,7 +23375,7 @@
               "target": "tower_governor"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -23391,7 +23391,7 @@
               "target": "tracing_journald"
             },
             {
-              "id": "tracing-opentelemetry 0.28.0",
+              "id": "tracing-opentelemetry 0.33.0",
               "target": "tracing_opentelemetry"
             },
             {
@@ -23403,7 +23403,7 @@
               "target": "tracing_slog"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             },
             {
@@ -31594,7 +31594,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -31687,7 +31687,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -33333,7 +33333,7 @@
               "target": "tokio_rustls"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -33469,7 +33469,7 @@
               "target": "tokio_rustls"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -34625,7 +34625,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -35213,7 +35213,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -35986,7 +35986,7 @@
               "target": "tower_governor"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -37194,15 +37194,15 @@
               "target": "tokio_util"
             },
             {
-              "id": "tower-http 0.6.6",
+              "id": "tower-http 0.6.11",
               "target": "tower_http"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -37338,7 +37338,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -37510,7 +37510,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -37767,6 +37767,18 @@
               ]
             }
           }
+        },
+        {
+          "Binary": {
+            "crate_name": "ic-gateway",
+            "crate_root": "src/main.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
         }
       ],
       "library_target_name": "ic_gateway",
@@ -37949,15 +37961,15 @@
               "target": "tower"
             },
             {
-              "id": "tower-http 0.6.6",
+              "id": "tower-http 0.6.11",
               "target": "tower_http"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             },
             {
@@ -37965,7 +37977,7 @@
               "target": "tracing_serde"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             },
             {
@@ -42653,53 +42665,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "iri-string 0.7.8": {
-      "name": "iri-string",
-      "version": "0.7.8",
-      "package_url": "https://github.com/lo48576/iri-string",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/iri-string/0.7.8/download",
-          "sha256": "dbc5ebe9c3a1a7a5127f920a418f7585e9e758e911d0466ed004f393b0e380b2"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "iri_string",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "iri_string",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.7.8"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.txt"
     },
     "is-terminal 0.4.9": {
       "name": "is-terminal",
@@ -54913,14 +54878,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry 0.27.0": {
+    "opentelemetry 0.32.0": {
       "name": "opentelemetry",
-      "version": "0.27.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
+      "version": "0.32.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.27.0/download",
-          "sha256": "0f3cebff57f7dbd1255b44d8bddc2cebeb0ea677dbaa2e25a3070a91b318f660"
+          "url": "https://static.crates.io/crates/opentelemetry/0.32.0/download",
+          "sha256": "b0142c63252a9e054e68a4c61a5778f7b14f576274d593f8ce883d191a099682"
         }
       },
       "targets": [
@@ -54945,10 +54910,16 @@
         "crate_features": {
           "common": [
             "default",
+            "futures",
+            "futures-core",
+            "futures-sink",
+            "internal-logs",
             "logs",
             "metrics",
             "pin-project-lite",
-            "trace"
+            "thiserror",
+            "trace",
+            "tracing"
           ],
           "selects": {}
         },
@@ -54963,16 +54934,16 @@
               "target": "futures_sink"
             },
             {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
               "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.44",
+              "target": "tracing"
             }
           ],
           "selects": {
@@ -54985,22 +54956,22 @@
           }
         },
         "edition": "2021",
-        "version": "0.27.0"
+        "version": "0.32.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": null
     },
-    "opentelemetry-otlp 0.27.0": {
+    "opentelemetry-otlp 0.32.0": {
       "name": "opentelemetry-otlp",
-      "version": "0.27.0",
+      "version": "0.32.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-otlp",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.27.0/download",
-          "sha256": "91cf61a1868dacc576bf2b2a1c3e9ab150af7272909e80085c3173384fe11f76"
+          "url": "https://static.crates.io/crates/opentelemetry-otlp/0.32.0/download",
+          "sha256": "9966929966d17620d7c316c643ba62631826e10021409357772d5eea84f62c35"
         }
       },
       "targets": [
@@ -55024,48 +54995,40 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "grpc-tonic",
             "http",
-            "internal-logs",
-            "logs",
-            "metrics",
             "prost",
             "tokio",
             "tonic",
-            "trace",
-            "tracing"
+            "tonic-types",
+            "trace"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.31",
-              "target": "futures_core"
-            },
-            {
               "id": "http 1.3.1",
               "target": "http"
             },
             {
-              "id": "opentelemetry 0.27.0",
+              "id": "opentelemetry 0.32.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-proto 0.27.0",
+              "id": "opentelemetry-proto 0.32.0",
               "target": "opentelemetry_proto"
             },
             {
-              "id": "opentelemetry_sdk 0.27.1",
+              "id": "opentelemetry_sdk 0.32.1",
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "prost 0.13.3",
+              "id": "prost 0.14.1",
               "target": "prost"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             },
             {
@@ -55073,33 +55036,24 @@
               "target": "tokio"
             },
             {
-              "id": "tonic 0.12.3",
+              "id": "tonic 0.14.2",
               "target": "tonic"
             },
             {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
+              "id": "tonic-types 0.14.5",
+              "target": "tonic_types"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.27.0"
+        "version": "0.32.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": null
     },
     "opentelemetry-prometheus 0.14.1": {
       "name": "opentelemetry-prometheus",
@@ -55170,14 +55124,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry-proto 0.27.0": {
+    "opentelemetry-proto 0.32.0": {
       "name": "opentelemetry-proto",
-      "version": "0.27.0",
+      "version": "0.32.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-proto",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-proto/0.27.0/download",
-          "sha256": "a6e05acbfada5ec79023c85368af14abd0b307c015e9064d249b2a950ef459a6"
+          "url": "https://static.crates.io/crates/opentelemetry-proto/0.32.0/download",
+          "sha256": "56d658ba1faf63f7b9c492cfbe6e0ec365440a16132d3270c1065f7b33f1b638"
         }
       },
       "targets": [
@@ -55203,10 +55157,9 @@
           "common": [
             "gen-tonic",
             "gen-tonic-messages",
-            "logs",
-            "metrics",
             "prost",
             "tonic",
+            "tonic-prost",
             "trace"
           ],
           "selects": {}
@@ -55214,32 +55167,36 @@
         "deps": {
           "common": [
             {
-              "id": "opentelemetry 0.27.0",
+              "id": "opentelemetry 0.32.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry_sdk 0.27.1",
+              "id": "opentelemetry_sdk 0.32.1",
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "prost 0.13.3",
+              "id": "prost 0.14.1",
               "target": "prost"
             },
             {
-              "id": "tonic 0.12.3",
+              "id": "tonic 0.14.2",
               "target": "tonic"
+            },
+            {
+              "id": "tonic-prost 0.14.5",
+              "target": "tonic_prost"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.0"
+        "version": "0.32.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": null
     },
     "opentelemetry-semantic-conventions 0.13.0": {
       "name": "opentelemetry-semantic-conventions",
@@ -55589,14 +55546,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry_sdk 0.27.1": {
+    "opentelemetry_sdk 0.32.1": {
       "name": "opentelemetry_sdk",
-      "version": "0.27.1",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
+      "version": "0.32.1",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-sdk",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.27.1/download",
-          "sha256": "231e9d6ceef9b0b2546ddf52335785ce41252bc7474ee8ba05bfad277be13ab8"
+          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.32.1/download",
+          "sha256": "9b59f80e1ac4d5ff7a2db8fb6c80badb7f0f3f858211fba08dd9aaec750894f9"
         }
       },
       "targets": [
@@ -55620,20 +55577,13 @@
         ],
         "crate_features": {
           "common": [
-            "async-trait",
             "default",
-            "glob",
             "internal-logs",
             "logs",
             "metrics",
             "percent-encoding",
             "rand",
-            "rt-tokio",
-            "serde_json",
-            "tokio",
-            "tokio-stream",
-            "trace",
-            "tracing"
+            "trace"
           ],
           "selects": {}
         },
@@ -55652,11 +55602,7 @@
               "target": "futures_util"
             },
             {
-              "id": "glob 0.3.1",
-              "target": "glob"
-            },
-            {
-              "id": "opentelemetry 0.27.0",
+              "id": "opentelemetry 0.32.0",
               "target": "opentelemetry"
             },
             {
@@ -55664,49 +55610,31 @@
               "target": "percent_encoding"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.9.4",
               "target": "rand"
             },
             {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.48.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-stream 0.1.17",
-              "target": "tokio_stream"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(not(target_has_atomic = \"64\"))": [
+              {
+                "id": "portable-atomic 1.11.0",
+                "target": "portable_atomic"
+              }
+            ]
+          }
         },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.27.1"
+        "version": "0.32.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
         "Apache-2.0"
       ],
-      "license_file": "LICENSE"
+      "license_file": null
     },
     "option-ext 0.2.0": {
       "name": "option-ext",
@@ -59314,7 +59242,7 @@
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -59322,7 +59250,7 @@
               "target": "tracing_appender"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -59389,7 +59317,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -64007,7 +63935,7 @@
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -64095,7 +64023,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -64159,7 +64087,7 @@
               "target": "socket2"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -68066,7 +67994,7 @@
                 "target": "tower"
               },
               {
-                "id": "tower-http 0.6.6",
+                "id": "tower-http 0.6.11",
                 "target": "tower_http"
               },
               {
@@ -80538,7 +80466,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -81546,7 +81474,7 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -85262,7 +85190,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -85405,7 +85333,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -85498,6 +85426,116 @@
         },
         "edition": "2021",
         "version": "0.12.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tonic-prost 0.14.5": {
+      "name": "tonic-prost",
+      "version": "0.14.5",
+      "package_url": "https://github.com/hyperium/tonic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tonic-prost/0.14.5/download",
+          "sha256": "a55376a0bbaa4975a3f10d009ad763d8f4108f067c7c2e74f3001fb49778d309"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tonic_prost",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tonic_prost",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.11.1",
+              "target": "bytes"
+            },
+            {
+              "id": "prost 0.14.1",
+              "target": "prost"
+            },
+            {
+              "id": "tonic 0.14.2",
+              "target": "tonic"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.14.5"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "tonic-types 0.14.5": {
+      "name": "tonic-types",
+      "version": "0.14.5",
+      "package_url": "https://github.com/hyperium/tonic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tonic-types/0.14.5/download",
+          "sha256": "2a875a902255423d34c1f20838ab374126db8eb41625b7947a1d54113b0b7399"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tonic_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tonic_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "prost 0.14.1",
+              "target": "prost"
+            },
+            {
+              "id": "prost-types 0.14.1",
+              "target": "prost_types"
+            },
+            {
+              "id": "tonic 0.14.2",
+              "target": "tonic"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.14.5"
       },
       "license": "MIT",
       "license_ids": [
@@ -85608,7 +85646,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -85733,7 +85771,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -85826,7 +85864,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -85841,14 +85879,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.6.6": {
+    "tower-http 0.6.11": {
       "name": "tower-http",
-      "version": "0.6.6",
+      "version": "0.6.11",
       "package_url": "https://github.com/tower-rs/tower-http",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.6.6/download",
-          "sha256": "adc82fd73de2a9722ac5da747f12383d2bfdb93591ee6c58486e0097890f05f2"
+          "url": "https://static.crates.io/crates/tower-http/0.6.11/download",
+          "sha256": "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
         }
       },
       "targets": [
@@ -85873,7 +85911,6 @@
         "crate_features": {
           "common": [
             "add-extension",
-            "async-compression",
             "compression-br",
             "compression-deflate",
             "compression-full",
@@ -85884,7 +85921,6 @@
             "futures-core",
             "limit",
             "request-id",
-            "tokio",
             "tokio-util",
             "tower",
             "trace",
@@ -85895,23 +85931,19 @@
           "selects": {
             "aarch64-apple-darwin": [
               "follow-redirect",
-              "futures-util",
-              "iri-string"
+              "futures-util"
             ],
             "aarch64-unknown-linux-gnu": [
               "follow-redirect",
-              "futures-util",
-              "iri-string"
+              "futures-util"
             ],
             "x86_64-apple-darwin": [
               "follow-redirect",
-              "futures-util",
-              "iri-string"
+              "futures-util"
             ],
             "x86_64-unknown-linux-gnu": [
               "follow-redirect",
-              "futures-util",
-              "iri-string"
+              "futures-util"
             ]
           }
         },
@@ -85970,7 +86002,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -85985,8 +86017,8 @@
                 "target": "futures_util"
               },
               {
-                "id": "iri-string 0.7.8",
-                "target": "iri_string"
+                "id": "url 2.5.4",
+                "target": "url"
               }
             ],
             "aarch64-unknown-linux-gnu": [
@@ -85995,8 +86027,8 @@
                 "target": "futures_util"
               },
               {
-                "id": "iri-string 0.7.8",
-                "target": "iri_string"
+                "id": "url 2.5.4",
+                "target": "url"
               }
             ],
             "x86_64-apple-darwin": [
@@ -86005,8 +86037,8 @@
                 "target": "futures_util"
               },
               {
-                "id": "iri-string 0.7.8",
-                "target": "iri_string"
+                "id": "url 2.5.4",
+                "target": "url"
               }
             ],
             "x86_64-unknown-linux-gnu": [
@@ -86015,14 +86047,14 @@
                 "target": "futures_util"
               },
               {
-                "id": "iri-string 0.7.8",
-                "target": "iri_string"
+                "id": "url 2.5.4",
+                "target": "url"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.6.6"
+        "version": "0.6.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -86299,7 +86331,7 @@
               "target": "tower"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -86387,7 +86419,7 @@
               "target": "tower"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -86403,14 +86435,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing 0.1.41": {
+    "tracing 0.1.44": {
       "name": "tracing",
-      "version": "0.1.41",
+      "version": "0.1.44",
       "package_url": "https://github.com/tokio-rs/tracing",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing/0.1.41/download",
-          "sha256": "784e0ac535deb450455cbfa28a6f0df145ea1bb7ae51b821cf5e7927fdcfbdd0"
+          "url": "https://static.crates.io/crates/tracing/0.1.44/download",
+          "sha256": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
         }
       },
       "targets": [
@@ -86453,7 +86485,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             }
           ],
@@ -86463,13 +86495,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "tracing-attributes 0.1.28",
+              "id": "tracing-attributes 0.1.31",
               "target": "tracing_attributes"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.41"
+        "version": "0.1.44"
       },
       "license": "MIT",
       "license_ids": [
@@ -86521,7 +86553,7 @@
               "target": "time"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -86536,14 +86568,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-attributes 0.1.28": {
+    "tracing-attributes 0.1.31": {
       "name": "tracing-attributes",
-      "version": "0.1.28",
+      "version": "0.1.31",
       "package_url": "https://github.com/tokio-rs/tracing",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-attributes/0.1.28/download",
-          "sha256": "395ae124c09f9e6918a2310af6038fba074bcf474ac352496d5910dd59a2226d"
+          "url": "https://static.crates.io/crates/tracing-attributes/0.1.31/download",
+          "sha256": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
         }
       },
       "targets": [
@@ -86583,7 +86615,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.28"
+        "version": "0.1.31"
       },
       "license": "MIT",
       "license_ids": [
@@ -86591,14 +86623,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-core 0.1.33": {
+    "tracing-core 0.1.36": {
       "name": "tracing-core",
-      "version": "0.1.33",
+      "version": "0.1.36",
       "package_url": "https://github.com/tokio-rs/tracing",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-core/0.1.33/download",
-          "sha256": "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
+          "url": "https://static.crates.io/crates/tracing-core/0.1.36/download",
+          "sha256": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
         }
       },
       "targets": [
@@ -86638,7 +86670,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.33"
+        "version": "0.1.36"
       },
       "license": "MIT",
       "license_ids": [
@@ -86689,11 +86721,11 @@
               "target": "lazy_static"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -86744,11 +86776,11 @@
               "target": "libc"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -86810,7 +86842,7 @@
               "target": "once_cell"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             }
           ],
@@ -86865,15 +86897,15 @@
               "target": "opentelemetry"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -86888,14 +86920,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-opentelemetry 0.28.0": {
+    "tracing-opentelemetry 0.33.0": {
       "name": "tracing-opentelemetry",
-      "version": "0.28.0",
+      "version": "0.33.0",
       "package_url": "https://github.com/tokio-rs/tracing-opentelemetry",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.28.0/download",
-          "sha256": "97a971f6058498b5c0f1affa23e7ea202057a7301dbff68e968b2d578bcbd053"
+          "url": "https://static.crates.io/crates/tracing-opentelemetry/0.33.0/download",
+          "sha256": "adbc64cba7137545b8044cb1fe9814f7aacf3c6b5f9b45be8bb5db538befdb26"
         }
       },
       "targets": [
@@ -86929,27 +86961,19 @@
         "deps": {
           "common": [
             {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry 0.27.0",
+              "id": "opentelemetry 0.32.0",
               "target": "opentelemetry"
-            },
-            {
-              "id": "opentelemetry_sdk 0.27.1",
-              "target": "opentelemetry_sdk"
             },
             {
               "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             },
             {
@@ -86957,7 +86981,7 @@
               "target": "tracing_log"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -86975,7 +86999,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.28.0"
+        "version": "0.33.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -87019,7 +87043,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             }
           ],
@@ -87070,7 +87094,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             }
           ],
@@ -87132,7 +87156,7 @@
               "target": "slog"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             }
           ],
@@ -87147,14 +87171,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-subscriber 0.3.20": {
+    "tracing-subscriber 0.3.23": {
       "name": "tracing-subscriber",
-      "version": "0.3.20",
+      "version": "0.3.23",
       "package_url": "https://github.com/tokio-rs/tracing",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.20/download",
-          "sha256": "2054a14f5307d601f88daf0553e1cbf472acc4f2c51afab632431cdcd72124d5"
+          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.23/download",
+          "sha256": "cb7f578e5945fb242538965c2d0b04418d38ec25c79d160cd279bf0731c8d319"
         }
       },
       "targets": [
@@ -87244,11 +87268,11 @@
               "target": "time"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.33",
+              "id": "tracing-core 0.1.36",
               "target": "tracing_core"
             },
             {
@@ -87263,7 +87287,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.20"
+        "version": "0.3.23"
       },
       "license": "MIT",
       "license_ids": [
@@ -87478,7 +87502,7 @@
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -87590,7 +87614,7 @@
               "target": "tokio"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -87978,11 +88002,11 @@
               "target": "tokio_util"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.20",
+              "id": "tracing-subscriber 0.3.23",
               "target": "tracing_subscriber"
             }
           ],
@@ -89967,7 +89991,7 @@
               "target": "snafu"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             },
             {
@@ -90668,7 +90692,7 @@
               "target": "tower_service"
             },
             {
-              "id": "tracing 0.1.41",
+              "id": "tracing 0.1.44",
               "target": "tracing"
             }
           ],
@@ -101100,6 +101124,7 @@
   },
   "binary_crates": [
     "canbench 0.4.1",
+    "ic-gateway 0.2.0",
     "ic-wasm 0.9.11",
     "metrics-proxy 0.1.0"
   ],
@@ -101333,6 +101358,7 @@
       "x86_64-apple-darwin",
       "x86_64-unknown-linux-gnu"
     ],
+    "cfg(not(target_has_atomic = \"64\"))": [],
     "cfg(not(windows))": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
@@ -101614,9 +101640,9 @@
     "object 0.37.3",
     "once_cell 1.21.3",
     "openssh-keys 0.5.0",
-    "opentelemetry 0.27.0",
-    "opentelemetry-otlp 0.27.0",
-    "opentelemetry_sdk 0.27.1",
+    "opentelemetry 0.32.0",
+    "opentelemetry-otlp 0.32.0",
+    "opentelemetry_sdk 0.32.1",
     "p256 0.13.2",
     "p384 0.13.1",
     "pairing 0.23.0",
@@ -101751,18 +101777,18 @@
     "tonic 0.12.3",
     "tonic-build 0.12.3",
     "tower 0.5.2",
-    "tower-http 0.6.6",
+    "tower-http 0.6.11",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.7.0",
-    "tracing 0.1.41",
+    "tracing 0.1.44",
     "tracing-appender 0.2.3",
     "tracing-flame 0.2.0",
     "tracing-journald 0.3.2",
-    "tracing-opentelemetry 0.28.0",
+    "tracing-opentelemetry 0.33.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
-    "tracing-subscriber 0.3.20",
+    "tracing-subscriber 0.3.23",
     "trust-dns-resolver 0.22.0",
     "tui-textarea 0.7.0",
     "turmoil 0.6.4",

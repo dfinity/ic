@@ -99,10 +99,26 @@ for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep_hash="$(sha256sum <<<"$old_dep" | cut -d' ' -f1)"
     old_dep_name="$(basename "$old_dep")"
     new_dep="$old_dep_hash-$old_dep_name"
+    # mcopy/mlabel are mtools applets that dispatch on argv[0], so their symlink
+    # must keep the exact basename; skip the disambiguating hash prefix for them.
+    case "$old_dep_name" in
+        mcopy | mlabel) new_dep="$old_dep_name" ;;
+    esac
     old_dep_abs="$(realpath $old_dep)"
-    echo "Linking runtime dependency for $env_var: $runtime_dep_base/$new_dep -> $old_dep_abs" >&2
     ln -sf "$old_dep_abs" "$runtime_deps/$new_dep"
-    export "$env_var=$runtime_dep_base/$new_dep"
+
+    # Most deps resolve at $runtime_dep_base (the in-container path for colocated
+    # tests, the local path otherwise). MKFS_FAT/MCOPY are an exception: the
+    # colocated *wrapper* itself dereferences them on the host (UniversalVm::start
+    # builds the driver VM's config image locally), so they must resolve locally;
+    # colocate_test.rs rewrites them to the in-container path in the environment
+    # it forwards to the inner test driver.
+    dep_base="$runtime_dep_base"
+    case "$env_var" in
+        MKFS_FAT | MCOPY) dep_base="$runtime_deps" ;;
+    esac
+    echo "Linking runtime dependency for $env_var: $dep_base/$new_dep -> $old_dep_abs" >&2
+    export "$env_var=$dep_base/$new_dep"
 done
 
 # Set environment variables based on volatile status variables:

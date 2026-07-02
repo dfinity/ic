@@ -10,7 +10,7 @@ load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
-ROSETTA_VERSION = "2.1.9"
+ROSETTA_VERSION = "2.1.10"
 
 rust_library(
     name = "rosetta-api",
@@ -53,7 +53,6 @@ rust_library(
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:lazy_static",
         "@crate_index//:num-bigint",
-        "@crate_index//:rand",
         "@crate_index//:reqwest",
         "@crate_index//:rusqlite",
         "@crate_index//:serde",
@@ -108,7 +107,6 @@ rust_binary(
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:lazy_static",
         "@crate_index//:num-bigint",
-        "@crate_index//:rand",
         "@crate_index//:reqwest",
         "@crate_index//:rolling-file",
         "@crate_index//:rusqlite",
@@ -167,7 +165,6 @@ rust_binary(
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:lazy_static",
         "@crate_index//:num-bigint",
-        "@crate_index//:rand",
         "@crate_index//:reqwest",
         "@crate_index//:rolling-file",
         "@crate_index//:rusqlite",
@@ -244,7 +241,6 @@ rust_test(
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
         "@crate_index//:prost",
-        "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:reqwest",
         "@crate_index//:rolling-file",
@@ -338,7 +334,6 @@ rust_test_suite_with_extra_srcs(
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
         "@crate_index//:prost",
-        "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:reqwest",
         "@crate_index//:rolling-file",
@@ -451,7 +446,6 @@ rust_test(
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
         "@crate_index//:prost",
-        "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:reqwest",
         "@crate_index//:rolling-file",
