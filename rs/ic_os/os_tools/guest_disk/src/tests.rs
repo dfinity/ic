@@ -15,6 +15,7 @@ use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
     CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
+use prometheus::Registry;
 use sev::Generation;
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
@@ -419,7 +420,9 @@ fn test_sev_key_init_and_reopen() {
         if partition == Partition::Store {
             assert!(fixture.store_luks_header_path.exists());
             assert!(fixture.has_detached_luks2_header());
-            assert!(fixture.has_attached_luks2_header());
+            // The store partition is formatted with a detached header only; no attached
+            // LUKS header should be present on the data device.
+            assert!(!fixture.has_attached_luks2_header());
         }
     }
 }
@@ -445,10 +448,12 @@ fn test_sev_format_writes_keyslot_metadata() {
 
 #[test]
 fn test_detached_header_is_only_used_for_store_when_sev_is_enabled() {
-    for (enable_sev, partition, expect_detached_header) in [
-        (false, Partition::Store, false),
-        (true, Partition::Store, true),
-        (true, Partition::Var, false),
+    // When the store partition uses a detached header, there must not be an attached
+    // LUKS header on the data device. The var partition always uses an attached header.
+    for (enable_sev, partition, expect_detached_header, expect_attached_header) in [
+        (false, Partition::Store, false, true),
+        (true, Partition::Store, true, false),
+        (true, Partition::Var, false, true),
     ] {
         let mut fixture = TestFixture::new(enable_sev);
 
@@ -474,6 +479,14 @@ fn test_detached_header_is_only_used_for_store_when_sev_is_enabled() {
             partition,
             enable_sev
         );
+
+        assert_eq!(
+            fixture.has_attached_luks2_header(),
+            expect_attached_header,
+            "unexpected attached LUKS header state for {:?} with SEV enabled = {}",
+            partition,
+            enable_sev
+        );
     }
 }
 
@@ -492,7 +505,6 @@ fn test_fail_to_open_if_device_is_not_formatted() {
 fn test_format_store_refuses_existing_detached_header() {
     let temp_dir = tempdir().unwrap();
     let store_luks_header_path = temp_dir.path().join("store.header");
-    let metrics_file = temp_dir.path().join("metrics.prom");
 
     fs::write(&store_luks_header_path, b"stale header")
         .expect("Failed to write stale detached Store header");
@@ -502,7 +514,7 @@ fn test_format_store_refuses_existing_detached_header() {
         previous_key_path: temp_dir.path().join("previous_key"),
         store_luks_header_path: store_luks_header_path.clone(),
         guest_vm_type: GuestVMType::Default,
-        metrics_file,
+        metrics_registry: Registry::new(),
     };
 
     let err = guest_disk::DiskEncryption::format(
@@ -598,7 +610,6 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     assert_device_has_content(Path::new("/dev/mapper/store-crypt"), b"hello world");
     assert!(fixture.store_luks_header_path.exists());
     assert!(fixture.has_detached_luks2_header());
-    assert!(fixture.has_attached_luks2_header());
 
     // Check that the previous key file has been deleted.
     assert!(!fixture.previous_key_path.exists());
@@ -611,12 +622,14 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         PREVIOUS_KEY,
     )
     .expect("previous key should unlock the store partition");
+
+    // The attached header is wiped during open() when a detached header is available.
     check_encryption_key(
         &fixture.device.path().unwrap(),
         LuksHeaderLocation::Attached,
         PREVIOUS_KEY,
     )
-    .expect("previous key should unlock the attached Store header for rollback");
+    .expect_err("attached Store header should have been wiped during open()");
 
     let sev_key = derive_key_from_sev_measurement(
         &mut fixture.sev_firmware_builder.build(),
@@ -633,13 +646,13 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     )
     .expect("SEV key should unlock the store partition");
 
-    // Attached is not updated with new key, only detached
+    // The attached header has been wiped, so no key should unlock it.
     check_encryption_key(
         &fixture.device.path().unwrap(),
         LuksHeaderLocation::Attached,
         sev_key.as_bytes(),
     )
-    .expect_err("SEV key should not unlock the attached Store header for rollback");
+    .expect_err("attached Store header should have been wiped during open()");
 
     check_encryption_key(
         &fixture.device.path().unwrap(),
@@ -834,7 +847,6 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
         .open(Partition::Store)
         .expect("Failed to open store partition");
     assert!(fixture.has_detached_luks2_header());
-    assert!(fixture.has_attached_luks2_header());
     assert_eq!(fixture.active_keyslot_count(Partition::Store), 1);
 }
 
@@ -1043,6 +1055,8 @@ fn test_can_open_store_with_detached_header_after_attached_header_is_corrupted()
     let mut fixture = TestFixture::new(true);
 
     fixture.format(Partition::Store).unwrap();
+    // The store partition is formatted with a detached header only, so corrupting the area
+    // where an attached header would be must not affect the result.
     corrupt_attached_luks_header(&fixture.device.path().unwrap());
 
     let result = fixture
@@ -1102,13 +1116,112 @@ fn test_open_store_succeeds_with_detached_header_after_attached_header_is_corrup
     fixture.format(Partition::Store).unwrap();
 
     assert!(fixture.store_luks_header_path.exists());
-    assert!(fixture.has_attached_luks2_header());
+    // The store partition is formatted with a detached header only; there is no attached
+    // LUKS header on the data device.
+    assert!(!fixture.has_attached_luks2_header());
 
+    // Corrupting the area on the data device where an attached header would have been must
+    // not affect opening because only the detached header is used.
     corrupt_attached_luks_header(&fixture.device.path().unwrap());
 
     fixture
         .open(Partition::Store)
         .expect("opening Store should succeed with the detached header even if the attached header is corrupted");
+
+    assert!(Path::new("/dev/mapper/store-crypt").exists());
+}
+
+/// Test that the attached LUKS header is NOT wiped when the detached header cannot be read by
+/// libcryptsetup.
+#[test]
+fn test_open_store_keeps_attached_header_when_detached_header_is_corrupt() {
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+
+    let mut fixture = TestFixture::new(true);
+
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY)
+        .expect("Failed to write previous key for testing");
+
+    // Simulate a legacy device that has both an attached and a detached header.
+    format_crypt_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Attached,
+        PREVIOUS_KEY,
+    )
+    .expect("Failed to format device with attached header");
+
+    assert!(fixture.has_attached_luks2_header());
+
+    // Corrupt the detached header so libcryptsetup can no longer read it.
+    fs::write(&fixture.store_luks_header_path, b"not a valid LUKS header")
+        .expect("Failed to corrupt detached header");
+
+    // Opening the store must fail because the detached header is unreadable.
+    fixture
+        .open(Partition::Store)
+        .expect_err("opening Store should fail when the detached header is corrupt");
+
+    // Crucially, the attached header must still be present: the wipe guard must have refused
+    // to wipe it because the detached header could not be verified.
+    assert!(
+        fixture.has_attached_luks2_header(),
+        "attached LUKS header must not be wiped when the detached header is unreadable"
+    );
+}
+
+/// Test that opening the store partition wipes a legacy attached LUKS header when a detached
+/// header is available. This simulates upgrading from an older GuestOS that wrote both an
+/// attached and a detached header.
+#[test]
+fn test_open_store_wipes_attached_header_when_detached_header_is_available() {
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+
+    let mut fixture = TestFixture::new(true);
+
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY)
+        .expect("Failed to write previous key for testing");
+
+    // Simulate a legacy device that has both an attached and a detached header.
+    format_crypt_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Attached,
+        PREVIOUS_KEY,
+    )
+    .expect("Failed to format device with attached header");
+
+    backup_luks_header_to_file(
+        &fixture.device.path().unwrap(),
+        &fixture.store_luks_header_path,
+    )
+    .expect("Failed to create detached header backup");
+
+    // Both headers should be present before opening.
+    assert!(fixture.has_attached_luks2_header());
+    assert!(fixture.has_detached_luks2_header());
+
+    // Opening the store should wipe the attached header.
+    fixture
+        .open(Partition::Store)
+        .expect("opening Store should succeed");
+
+    // The attached header should now be gone.
+    assert!(
+        !fixture.has_attached_luks2_header(),
+        "attached LUKS header should have been wiped during open()"
+    );
+    // The detached header must still be present and valid.
+    assert!(
+        fixture.has_detached_luks2_header(),
+        "detached LUKS header should still be present after open()"
+    );
+    assert!(fixture.store_luks_header_path.exists());
+
+    deactive_crypt_device_with_check("store-crypt");
+
+    // Opening again should still succeed (using only the detached header).
+    fixture
+        .open(Partition::Store)
+        .expect("opening Store should succeed again after attached header wipe");
 
     assert!(Path::new("/dev/mapper/store-crypt").exists());
 }
@@ -1283,6 +1396,92 @@ fn test_metrics_export() {
     assert!(
         metrics_content.contains("passes_verification=\"true\""),
         "Missing or incorrect passes_verification label: {metrics_content}"
+    );
+}
+
+#[test]
+fn test_store_attached_luks2_header_status_metric_absent() {
+    let mut fixture = TestFixture::new(true);
+
+    // Format the store partition with a detached header only; there is no attached header on the
+    // data device.
+    fixture
+        .format(Partition::Store)
+        .expect("Failed to format store partition");
+
+    fixture
+        .open(Partition::Store)
+        .expect("Failed to open store partition");
+
+    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Store))
+        .expect("Failed to read metrics file");
+
+    assert!(
+        metrics_content.contains("guest_disk_store_attached_luks2_header_status"),
+        "Missing attached LUKS2 header status metric: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("status=\"absent\""),
+        "Expected status=\"absent\" label: {metrics_content}"
+    );
+    assert!(
+        !metrics_content.contains("status=\"present\""),
+        "Did not expect status=\"present\" label: {metrics_content}"
+    );
+}
+
+#[test]
+fn test_store_attached_luks2_header_status_metric_present() {
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+
+    let mut fixture = TestFixture::new(true);
+
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY)
+        .expect("Failed to write previous key for testing");
+
+    // Simulate a legacy device that has both an attached and a detached header.
+    format_crypt_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Attached,
+        PREVIOUS_KEY,
+    )
+    .expect("Failed to format device with attached header");
+
+    backup_luks_header_to_file(
+        &fixture.device.path().unwrap(),
+        &fixture.store_luks_header_path,
+    )
+    .expect("Failed to create detached header backup");
+
+    assert!(fixture.has_attached_luks2_header());
+
+    fixture
+        .open(Partition::Store)
+        .expect("opening Store should succeed");
+
+    // After opening, the attached header is wiped because a detached header is available.
+    // The metric reflects the end result, so it must report "absent".
+    assert!(
+        !fixture.has_attached_luks2_header(),
+        "attached LUKS header should have been wiped during open()"
+    );
+
+    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Store))
+        .expect("Failed to read metrics file");
+
+    assert!(
+        metrics_content.contains("guest_disk_store_attached_luks2_header_status"),
+        "Missing attached LUKS2 header status metric: {metrics_content}"
+    );
+    assert!(
+        metrics_content.contains("status=\"absent\""),
+        "Expected status=\"absent\" after wipe: {metrics_content}"
+    );
+    // The LUKS parameters metric must still be present (not overwritten by the header status
+    // metric).
+    assert!(
+        metrics_content.contains("guest_disk_encryption_info"),
+        "Missing encryption info metric: {metrics_content}"
     );
 }
 
