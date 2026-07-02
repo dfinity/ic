@@ -9,6 +9,7 @@ archive_override(
     patch_strip = 1,
     patches = [
         "//bazel:rules_rust_strip_level.patch",
+        "//bazel:rules_rust_dep_env.patch",
     ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.71.3/rules_rust-0.71.3.tar.gz"],
 )
