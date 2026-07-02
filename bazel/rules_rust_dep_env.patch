@@ -1,4 +1,4 @@
-]633;E;echo "# Fix cross-crate DEP_* env vars: rules_rust 0.71.x redacts the producer's out_dir";574ffe17-0879-48ea-adf3-e01ddf2cb3c9]633;C# Fix cross-crate DEP_* env vars: rules_rust 0.71.x redacts the producer's out_dir
+# Fix cross-crate DEP_* env vars: rules_rust 0.71.x redacts the producer's out_dir
 # to a generic ${out_dir} token in dep env files, but those files are consumed by
 # downstream crates' build scripts whose --out-dir differs, leaving the token
 # unresolved (e.g. libssh2-sys failing to find zlib.h from libz-sys's DEP_Z_INCLUDE).
