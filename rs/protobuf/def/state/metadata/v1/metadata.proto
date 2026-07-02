@@ -339,6 +339,12 @@ message NodePublicKeyEntry {
   bytes public_key = 2;
 }
 
+message OwnSubnetInfo {
+  registry.subnet.v1.SubnetFeatures subnet_features = 1;
+  registry.subnet.v1.ResourceLimits resource_limits = 2;
+  repeated NodePublicKeyEntry node_public_keys = 3;
+}
+
 message ApiBoundaryNodeEntry {
   types.v1.NodeId node_id = 1;
   string domain = 2;
@@ -378,6 +384,8 @@ message SystemMetadata {
   NetworkTopology network_topology = 6;
   types.v1.SubnetId own_subnet_id = 7;
   SubnetCallContextManager subnet_call_context_manager = 8;
+  OwnSubnetInfo own_subnet_info = 26;
+
   types.v1.SubnetId subnet_split_from = 23;
 
   // Canister ID ranges allocated (exclusively) to this subnet, to generate
@@ -400,6 +408,10 @@ message SystemMetadata {
 
   uint64 heap_delta_estimate = 11;
 
+  // `own_subnet_features`, `node_public_keys` and `own_resource_limits` moved 
+  // into `own_subnet_info` (field 26); these are kept as legacy mirrors (still
+  // written and read back) so that checkpoints remain compatible in both
+  // directions across the transition.
   registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
 
   SubnetMetrics subnet_metrics = 15;

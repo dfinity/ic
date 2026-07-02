@@ -283,7 +283,7 @@ mod tests {
                 |_| {},
             );
 
-            state.metadata.node_public_keys = btreemap! {
+            std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],
                 node_test_id(2) => vec![2; 44],
             };

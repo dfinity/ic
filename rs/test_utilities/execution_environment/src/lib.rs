@@ -2982,10 +2982,11 @@ impl ExecutionTestBuilder {
             );
         }
 
+        let own_subnet_info = std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info);
         if self.subnet_features.is_empty() {
-            state.metadata.own_subnet_features = SubnetFeatures::default();
+            own_subnet_info.subnet_features = SubnetFeatures::default();
         } else {
-            state.metadata.own_subnet_features =
+            own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
 
