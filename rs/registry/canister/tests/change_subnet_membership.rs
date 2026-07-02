@@ -27,6 +27,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use pocket_ic::PocketIcBuilder;
+use pocket_ic::RejectResponse;
 use pocket_ic::nonblocking::PocketIc;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
@@ -570,7 +571,7 @@ async fn test_engine_controller_cannot_change_membership_of_non_cloud_engine_sub
 
     // Now the engine controller submits the exact same payload; since the
     // target subnet is not a CloudEngine, the call must be rejected.
-    let response = pocket_ic
+    let response: Result<Vec<u8>, RejectResponse> = pocket_ic
         .update_call(
             REGISTRY_CANISTER_ID.get().0,
             ENGINE_CONTROLLER_CANISTER_ID.get().0,
