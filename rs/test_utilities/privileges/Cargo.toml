@@ -8,3 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 nix = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

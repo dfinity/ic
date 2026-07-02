@@ -15468,6 +15468,7 @@ name = "ic-test-utilities-privileges"
 version = "0.9.0"
 dependencies = [
  "nix 0.24.3",
+ "tempfile",
 ]
 
 [[package]]

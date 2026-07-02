@@ -13,12 +13,15 @@
 
 #[cfg(target_os = "linux")]
 mod imp {
+    use nix::libc;
     use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::{ForkResult, Gid, Uid, fork, geteuid, setgid, setgroups, setuid};
+    use std::ffi::CString;
     use std::io::{PipeWriter, Read, Write};
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{PermissionsExt, chown};
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// The conventional uid/gid of the unprivileged `nobody`/`nogroup` user.
     /// Using the numeric id directly means no `/etc/passwd` entry is required.
@@ -49,7 +52,13 @@ mod imp {
     ///   spawned by `action` also run as `nobody`.
     /// * Temporary directories must be derived from `TMPDIR`/`TEST_TMPDIR` (as
     ///   `tempfile` and `ic_test_utilities_tmpdir::tmpdir` are); the child points
-    ///   both at a world-writable, `nobody`-owned base.
+    ///   both at a `nobody`-owned base with mode `0700`, prepared by the parent.
+    /// * The parent test process may be multi-threaded, and after `fork` the
+    ///   child must not wait on locks that another parent thread held at fork
+    ///   time. The temp base and the `putenv(3)` strings are therefore prepared
+    ///   in the parent before forking, and the child avoids `std::env::set_var`
+    ///   (and with it `std`'s global environment lock), using only direct
+    ///   syscalls to drop privileges and `_exit(2)` to terminate.
     pub fn run_as_nobody_if_root<F: FnOnce()>(action: F) {
         if geteuid().as_raw() != 0 {
             action();
@@ -58,7 +67,70 @@ mod imp {
         run_forked(action);
     }
 
+    /// The temp-dir redirection for the child, prepared in the parent (where
+    /// allocating and taking locks is safe, since no fork has happened yet).
+    struct TmpDirRedirect {
+        /// The `nobody`-owned (mode `0700`) base directory for the child's
+        /// temporary files, removed by the parent once the child has exited.
+        base: PathBuf,
+        /// `putenv`-style `NAME=VALUE` strings. After `putenv(3)` the child's
+        /// `environ` references them directly, so they must stay allocated for
+        /// the child's whole lifetime. This holds because the child `_exit`s
+        /// inside `run_forked`, while this struct is still live in its frame.
+        env_entries: [CString; 2],
+    }
+
+    impl TmpDirRedirect {
+        /// Creates the base directory (as root, in the parent) and hands it
+        /// over to `nobody` with mode `0700`, so the unprivileged child owns
+        /// everything beneath it and no world-writable directory is created.
+        fn prepare() -> Self {
+            // Distinguishes concurrently prepared bases within one process.
+            static SEQ: AtomicUsize = AtomicUsize::new(0);
+            let base = std::env::temp_dir().join(format!(
+                "ic-nobody-{}-{}",
+                std::process::id(),
+                SEQ.fetch_add(1, Ordering::Relaxed)
+            ));
+            // `create_dir` rather than `create_dir_all`: fail instead of
+            // silently adopting a pre-existing directory of unknown ownership.
+            std::fs::create_dir(&base).expect("failed to create the nobody temp base");
+            chown(&base, Some(NOBODY), Some(NOBODY)).expect("failed to chown the nobody temp base");
+            std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700))
+                .expect("failed to chmod the nobody temp base");
+            let entry = |name: &str| {
+                CString::new(format!("{name}={}", base.display()))
+                    .expect("temp base path contains an interior NUL byte")
+            };
+            Self {
+                env_entries: [entry("TMPDIR"), entry("TEST_TMPDIR")],
+                base,
+            }
+        }
+
+        /// Points `TMPDIR`/`TEST_TMPDIR` at the prepared base; runs in the
+        /// forked child.
+        ///
+        /// Uses `putenv(3)` with the pre-allocated strings instead of
+        /// `std::env::set_var`, because the latter takes `std`'s global
+        /// environment lock: if another thread of the parent held it at `fork`
+        /// time, it would never be released in the child.
+        fn apply_in_child(&self) -> nix::Result<()> {
+            for entry in &self.env_entries {
+                // SAFETY: `entry` points to a valid, NUL-terminated string that
+                // stays allocated for the child's whole lifetime (see the
+                // `env_entries` field documentation).
+                if unsafe { libc::putenv(entry.as_ptr() as *mut libc::c_char) } != 0 {
+                    return Err(nix::errno::Errno::last());
+                }
+            }
+            Ok(())
+        }
+    }
+
     fn run_forked<F: FnOnce()>(action: F) {
+        // Prepared before forking; see `TmpDirRedirect`.
+        let redirect = TmpDirRedirect::prepare();
         // Pipe used to forward the child's panic message to the parent.
         let (mut reader, writer) = std::io::pipe().expect("failed to create pipe");
 
@@ -66,16 +138,19 @@ mod imp {
             ForkResult::Child => {
                 drop(reader);
                 let mut writer = writer;
-                let code = run_child(action, &mut writer);
-                // Skip destructors / at-exit handlers inherited from the parent.
-                std::process::exit(code);
+                let code = run_child(action, &redirect, &mut writer);
+                // `_exit(2)` rather than `exit(3)`: skip the `atexit(3)`
+                // handlers and stdio flushing inherited from the parent, which
+                // must not run in the forked child of a (potentially
+                // multi-threaded) test process.
+                unsafe { libc::_exit(code) }
             }
             ForkResult::Parent { child } => {
                 drop(writer);
                 let mut message = String::new();
                 let _ = reader.read_to_string(&mut message);
                 let status = waitpid(child, None).expect("waitpid failed");
-                let _ = std::fs::remove_dir_all(nobody_tmp_base(child.as_raw()));
+                let _ = std::fs::remove_dir_all(&redirect.base);
                 match status {
                     WaitStatus::Exited(_, 0) => {}
                     WaitStatus::Exited(_, code) if code == PANIC_EXIT_CODE => {
@@ -91,8 +166,12 @@ mod imp {
 
     /// Runs `action` in the forked child as `nobody`, returning the process exit
     /// code: `0` on success, [`PANIC_EXIT_CODE`] on panic.
-    fn run_child<F: FnOnce()>(action: F, writer: &mut PipeWriter) -> i32 {
-        if let Err(err) = redirect_tmp_and_drop_privileges() {
+    fn run_child<F: FnOnce()>(
+        action: F,
+        redirect: &TmpDirRedirect,
+        writer: &mut PipeWriter,
+    ) -> i32 {
+        if let Err(err) = redirect_tmp_and_drop_privileges(redirect) {
             let _ = write!(writer, "failed to drop privileges to nobody: {err}");
             return PANIC_EXIT_CODE;
         }
@@ -105,25 +184,8 @@ mod imp {
         }
     }
 
-    /// A world-writable base directory, created (as root) before privileges are
-    /// dropped, in which the `nobody` child owns everything it creates.
-    fn nobody_tmp_base(pid: i32) -> PathBuf {
-        std::env::temp_dir().join(format!("ic-nobody-{pid}"))
-    }
-
-    fn redirect_tmp_and_drop_privileges() -> nix::Result<()> {
-        // Point the temp-dir helpers at a base the `nobody` child can own, so
-        // that files it creates (and then restricts) deny `nobody` as an owner.
-        let base = nobody_tmp_base(std::process::id() as i32);
-        std::fs::create_dir_all(&base).map_err(|_| nix::errno::Errno::EACCES)?;
-        std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o777))
-            .map_err(|_| nix::errno::Errno::EACCES)?;
-        // SAFETY: the child is single-threaded after `fork`, so mutating the
-        // environment here cannot race with other threads.
-        unsafe {
-            std::env::set_var("TMPDIR", &base);
-            std::env::set_var("TEST_TMPDIR", &base);
-        }
+    fn redirect_tmp_and_drop_privileges(redirect: &TmpDirRedirect) -> nix::Result<()> {
+        redirect.apply_in_child()?;
 
         // Order matters: drop the supplementary groups and gid while we still
         // hold `CAP_SETGID` (i.e. before dropping the uid).
