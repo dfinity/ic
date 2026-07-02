@@ -1,5 +1,5 @@
 {
-  "checksum": "56cfd4773096f7fda05b2512904723c02b1dc2d9c0ac0433c3e68582af1cb0a5",
+  "checksum": "c19078f9cd882fc228f7bb8d94437446b00320b3fe2bf5dd342d438fcf79b8f3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6582,7 +6582,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -20517,7 +20517,7 @@
               "target": "once_cell"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             }
           ],
@@ -21659,7 +21659,7 @@
               "target": "once_cell"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -23271,7 +23271,7 @@
               "target": "quote"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -27092,7 +27092,7 @@
               "target": "open_fastrlp"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -28412,7 +28412,7 @@
               "target": "byteorder"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -36542,7 +36542,7 @@
               "target": "prost_types"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -38538,7 +38538,7 @@
               "target": "pem"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -38779,7 +38779,7 @@
               "target": "prometheus"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -39946,7 +39946,7 @@
               "target": "pairing"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -40045,7 +40045,7 @@
               "target": "pairing"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -50764,7 +50764,7 @@
               "target": "prometheus_parse"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -53887,7 +53887,7 @@
               "target": "num_traits"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -56812,7 +56812,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -56924,7 +56924,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -59534,7 +59534,7 @@
               "target": "phf_shared"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             }
           ],
@@ -59585,7 +59585,7 @@
               "target": "phf_shared"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             }
           ],
@@ -60022,7 +60022,7 @@
         "deps": {
           "common": [
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -63253,7 +63253,7 @@
               "target": "num_traits"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -65166,7 +65166,7 @@
               "target": "log"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             }
           ],
@@ -65920,14 +65920,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rand 0.8.5": {
+    "rand 0.8.6": {
       "name": "rand",
-      "version": "0.8.5",
+      "version": "0.8.6",
       "package_url": "https://github.com/rust-random/rand",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rand/0.8.5/download",
-          "sha256": "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+          "url": "https://static.crates.io/crates/rand/0.8.6/download",
+          "sha256": "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
         }
       },
       "targets": [
@@ -66001,7 +66001,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.8.5"
+        "version": "0.8.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -66630,7 +66630,7 @@
               "target": "num_traits"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             }
           ],
@@ -69286,7 +69286,7 @@
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.6.2",
+                "id": "rustls-platform-verifier 0.7.0",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69328,7 +69328,7 @@
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.6.2",
+                "id": "rustls-platform-verifier 0.7.0",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69440,7 +69440,7 @@
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.6.2",
+                "id": "rustls-platform-verifier 0.7.0",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -69482,7 +69482,7 @@
                 "target": "rustls_pki_types"
               },
               {
-                "id": "rustls-platform-verifier 0.6.2",
+                "id": "rustls-platform-verifier 0.7.0",
                 "target": "rustls_platform_verifier"
               },
               {
@@ -74685,7 +74685,7 @@
               "alias": "hashes"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -81411,7 +81411,7 @@
               "target": "log"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -83167,7 +83167,7 @@
               "target": "pin_project"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -84908,7 +84908,7 @@
               "target": "pbkdf2"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -87412,7 +87412,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -89381,7 +89381,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -89701,7 +89701,7 @@
               "target": "log"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -89959,7 +89959,7 @@
               "target": "indexmap"
             },
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             },
             {
@@ -90379,7 +90379,7 @@
         "deps": {
           "common": [
             {
-              "id": "rand 0.8.5",
+              "id": "rand 0.8.6",
               "target": "rand"
             }
           ],
@@ -103575,7 +103575,7 @@
     "quinn 0.11.11",
     "quinn-udp 0.5.5",
     "quote 1.0.42",
-    "rand 0.8.5",
+    "rand 0.8.6",
     "rand_chacha 0.3.1",
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
