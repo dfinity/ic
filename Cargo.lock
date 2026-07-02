@@ -15467,7 +15467,18 @@ dependencies = [
 name = "ic-test-utilities-privileges"
 version = "0.9.0"
 dependencies = [
+ "ic-test-utilities-privileges-macros",
  "nix 0.24.3",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-test-utilities-privileges-macros"
+version = "0.9.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

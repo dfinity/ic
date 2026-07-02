@@ -181,7 +181,11 @@ fn can_make_a_checkpoint() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         with_test_replica_logger(|log| {
@@ -368,7 +372,11 @@ fn returns_not_found_for_missing_checkpoints() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn reports_an_error_on_misconfiguration() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         with_test_replica_logger(|log| {

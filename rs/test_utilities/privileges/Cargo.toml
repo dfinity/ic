@@ -7,4 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-test-utilities-privileges-macros = { path = "macros" }
 nix = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -386,7 +386,11 @@ fn should_be_idempotent_when_opening_secret_key_store() {
     }
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_to_read_only_secret_key_store_directory() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         let rng = &mut reproducible_rng();
@@ -418,7 +422,11 @@ fn should_fail_to_write_to_read_only_secret_key_store_directory() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_to_secret_key_store_directory_without_execute_permissions() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
@@ -450,7 +458,11 @@ fn should_fail_to_write_to_secret_key_store_directory_without_execute_permission
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
@@ -1304,8 +1316,12 @@ mod zeroize_old_secret_key_store {
     }
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
 #[should_panic(expected = "Error reading SKS data: Permission denied")]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);

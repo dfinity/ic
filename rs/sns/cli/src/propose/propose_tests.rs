@@ -32,7 +32,11 @@ fn test_ensure_file_exists_and_is_writeable_succeeds_when_creating_file() {
     fs::remove_file(temp_file_path).expect("Failed to remove file");
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn test_ensure_file_exists_and_is_writeable_fails_if_non_writeable() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         // Setup
@@ -75,7 +79,11 @@ fn test_save_proposal_id_to_file_succeeds() {
     assert_eq!(expected_proposal_id, actual_proposal_id);
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn test_save_proposal_id_to_file_fails_if_write_fails() {
     ic_test_utilities_privileges::run_as_nobody_if_root(|| {
         // Setup
