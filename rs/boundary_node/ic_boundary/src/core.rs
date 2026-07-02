@@ -140,7 +140,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     }
 
     // Install crypto-provider
-    rustls::crypto::ring::default_provider()
+    rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .map_err(|_| anyhow!("unable to install Rustls crypto provider"))?;
 

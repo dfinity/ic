@@ -193,6 +193,14 @@ pub struct SystemMetadata {
     /// per replica process (since the flag is hardcoded into the binary).
     #[validate_eq(Ignore)]
     pub logs_migrated: bool,
+
+    /// The subnet list from network topology that was last used by
+    /// `generate_reject_responses_for_deleted_subnets()`. The function
+    /// exits early if the subnet list has not changed since the last call.
+    ///
+    /// Transient: reset to `None` on checkpoint load.
+    #[validate_eq(Ignore)]
+    pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -564,6 +572,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         }
     }
 
@@ -874,6 +883,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
             logs_migrated: _,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -979,6 +989,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             logs_migrated,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1089,6 +1100,9 @@ impl SystemMetadata {
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
             logs_migrated,
+            // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
+            // runs unconditionally on the first post-split round.
+            subnet_ids_at_last_reject_generation: None,
         })
     }
 
@@ -2208,6 +2222,7 @@ pub mod testing {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         };
     }
 }
