@@ -355,7 +355,7 @@ pub fn wipe_attached_luks_header(device_path: &Path) -> Result<()> {
             )
         })?;
     device
-        .write_all(&vec![0u8; header_size_bytes as usize])
+        .write_all(&vec![0_u8; header_size_bytes as usize])
         .with_context(|| {
             format!(
                 "Failed to wipe LUKS header on device {}",
