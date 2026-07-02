@@ -1,11 +1,14 @@
 use crate::crypt::{
-    LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata,
-    backup_luks_header_to_file, check_encryption_key, destroy_keyslots_except, format_crypt_device,
+    LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata, check_encryption_key,
+    destroy_keyslots_except, format_crypt_device, has_attached_luks_header, open_luks2_device,
+    wipe_attached_luks_header,
 };
+use crate::metrics::export_attached_luks2_header_status;
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail};
 use attestation::attestation_report::AttestationReportExt;
 use config_types::GuestVMType;
+use prometheus::Registry;
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 use sev_guest::firmware::SevGuestFirmware;
@@ -18,39 +21,76 @@ pub struct SevDiskEncryption {
     pub previous_key_path: PathBuf,
     pub store_luks_header_path: PathBuf,
     pub guest_vm_type: GuestVMType,
-    pub metrics_file: PathBuf,
+    pub metrics_registry: Registry,
 }
 
 impl SevDiskEncryption {
-    fn ensure_detached_store_luks_header(&self, device_path: &Path) -> Result<()> {
-        let detached_header_exists = self.store_luks_header_path.exists();
+    /// Records the attached LUKS2 header status in the metrics registry. Failures are logged as
+    /// warnings and never propagated, because a metrics export failure must not prevent the
+    /// partition from being opened.
+    fn export_attached_header_status(
+        &self,
+        device_path: &Path,
+        attached_header_present: Result<bool>,
+    ) {
+        if let Err(e) = export_attached_luks2_header_status(
+            &self.metrics_registry,
+            device_path,
+            attached_header_present,
+        ) {
+            warn!("Failed to export attached LUKS2 header status metric: {e:#}");
+        }
+    }
 
-        info!(
-            "Backing up attached Store LUKS header from {} to {}",
-            device_path.display(),
-            self.store_luks_header_path.display()
-        );
-        if let Err(err) = backup_luks_header_to_file(device_path, &self.store_luks_header_path)
-            .with_context(|| {
-                format!(
-                    "Failed to persist detached Store LUKS header to {}",
-                    self.store_luks_header_path.display()
-                )
-            })
-        {
-            if !detached_header_exists {
-                return Err(err);
-            }
-
+    /// Checks whether the device carries an attached (on-device) LUKS2 header. If a detached
+    /// header is available and an attached header is still present, the attached header is wiped
+    /// so that only the detached header is used going forward. Finally, the attached-header status
+    /// is recorded in the metrics registry.
+    ///
+    /// TODO: once no nodes with attached Store LUKS headers remain, remove this logic.
+    fn wipe_and_export_attached_luks2_header(&self, device_path: &Path) {
+        let attached_header_present = has_attached_luks_header(device_path).unwrap_or_else(|e| {
             warn!(
-                "Failed to refresh detached Store LUKS header from attached header on {}: \
-                {err:#}. Using existing detached header at {}",
-                device_path.display(),
-                self.store_luks_header_path.display()
+                "Failed to check for attached LUKS2 header on {}: {e:#}. \
+                Continuing without wiping.",
+                device_path.display()
             );
+            false
+        });
+
+        if self.store_luks_header_path.exists() && attached_header_present {
+            if let Err(e) = open_luks2_device(
+                device_path,
+                LuksHeaderLocation::Detached(&self.store_luks_header_path),
+            ) {
+                warn!(
+                    "Refusing to wipe attached LUKS2 header on {}: detached header {} \
+                    cannot be read by libcryptsetup: {e:#}",
+                    device_path.display(),
+                    self.store_luks_header_path.display()
+                );
+            } else {
+                info!(
+                    "Detached Store LUKS header available and attached header still present \
+                    on {}. Wiping attached header.",
+                    device_path.display()
+                );
+                if let Err(e) = wipe_attached_luks_header(device_path) {
+                    warn!(
+                        "Failed to wipe attached LUKS2 header on {}: {e:#}. \
+                        Continuing with detached header.",
+                        device_path.display()
+                    );
+                }
+            }
         }
 
-        Ok(())
+        self.export_attached_header_status(
+            device_path,
+            // Note that we don't use `attached_header_present` here, because the header may
+            // have been wiped above.
+            has_attached_luks_header(device_path),
+        );
     }
 
     fn setup_store_with_previous_key(
@@ -75,7 +115,7 @@ impl SevDiskEncryption {
             &previous_key,
             activate_flags(Partition::Store),
             /*verify_luks_params=*/ true,
-            Some(self.metrics_file.as_path()),
+            Some(&self.metrics_registry),
         )
         .context("Failed to unlock store partition with previous key")?;
 
@@ -147,12 +187,14 @@ impl DiskEncryption for SevDiskEncryption {
                     key.as_bytes(),
                     activate_flags(partition),
                     /*verify_luks_params=*/ true,
-                    Some(&self.metrics_file),
+                    Some(&self.metrics_registry),
                 )
                 .context("Failed to open crypt device for var partition")?;
             }
 
             Partition::Store => {
+                self.wipe_and_export_attached_luks2_header(device_path);
+
                 // Try to read the previous SEV key. This is the key that the previous version of the
                 // GuestOS used to unlock the store (data) partition. During the upgrade this key is
                 // written to `previous_key_path`. After the upgrade, when the GuestOS boots for the
@@ -186,7 +228,7 @@ impl DiskEncryption for SevDiskEncryption {
                     key.as_bytes(),
                     activate_flags(partition),
                     /*verify_luks_params=*/ true,
-                    Some(&self.metrics_file),
+                    Some(&self.metrics_registry),
                 )
                 .context("Failed to initialize crypt device for store partition")?;
             }
@@ -196,14 +238,6 @@ impl DiskEncryption for SevDiskEncryption {
     }
 
     fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()> {
-        if partition == Partition::Store && self.store_luks_header_path.exists() {
-            bail!(
-                "Refusing to format Store because detached LUKS header {} already exists. Remove \
-                the stale header first if you really want to reformat the device.",
-                self.store_luks_header_path.display()
-            );
-        }
-
         let key = derive_key_from_sev_measurement(
             self.sev_firmware.as_mut(),
             Key::DiskEncryptionKey { device_path },
@@ -211,19 +245,26 @@ impl DiskEncryption for SevDiskEncryption {
         .context("Failed to derive SEV key for disk encryption")?;
 
         let sev_metadata = self.get_sev_metadata_for_luks()?;
-        // For now, we use attached headers and for store partition, we create a detached
-        // backup. Once all GuestOS-s support detached headers, we can switch to using only detached
-        // headers.
-        // TODO: Remove attached header usage for store partition
+
+        let header_location = match partition {
+            Partition::Store => {
+                if self.store_luks_header_path.exists() {
+                    bail!(
+                        "Refusing to format Store because detached LUKS header {} already exists. \
+                        Remove the stale header first if you really want to reformat the device.",
+                        self.store_luks_header_path.display()
+                    );
+                }
+                LuksHeaderLocation::Detached(&self.store_luks_header_path)
+            }
+            Partition::Var => LuksHeaderLocation::Attached,
+        };
+
         let (mut crypt_device, keyslot) =
-            format_crypt_device(device_path, LuksHeaderLocation::Attached, key.as_bytes())
+            format_crypt_device(device_path, header_location, key.as_bytes())
                 .context("Failed to format partition")?;
         add_sev_metadata(&mut crypt_device, keyslot, sev_metadata)
             .context("Failed to write SEV keyslot metadata")?;
-
-        if partition == Partition::Store {
-            self.ensure_detached_store_luks_header(device_path)?;
-        }
 
         Ok(())
     }
@@ -274,9 +315,6 @@ pub trait DiskCryptoOps: Send + Sync {
         store_luks_header_path: &Path,
         sev_firmware: &mut dyn SevGuestFirmware,
     ) -> Result<bool>;
-
-    /// Persists a detached LUKS header for the Store partition at `luks_header_path`.
-    fn backup_luks_header(&self, device_path: &Path, luks_header_path: &Path) -> Result<()>;
 }
 
 pub struct DefaultSevStoreCryptoOps;
@@ -295,9 +333,5 @@ impl DiskCryptoOps for DefaultSevStoreCryptoOps {
             store_luks_header_path,
             sev_firmware,
         )
-    }
-
-    fn backup_luks_header(&self, device_path: &Path, luks_header_path: &Path) -> Result<()> {
-        backup_luks_header_to_file(device_path, luks_header_path)
     }
 }

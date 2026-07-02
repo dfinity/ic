@@ -8,7 +8,7 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig, SubnetConfig},
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::{
@@ -1072,10 +1072,7 @@ impl SchedulerTestBuilder {
             embedders_config: self.hypervisor_config.clone(),
             ..ic_config::execution_environment::Config::default()
         };
-        let wasm_executor = Arc::new(TestWasmExecutor::new(
-            Arc::clone(&cycles_account_manager),
-            registry_settings.subnet_size,
-        ));
+        let wasm_executor = Arc::new(TestWasmExecutor::new(Arc::clone(&cycles_account_manager)));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_manager = Arc::new(FakeStateManager::new());
 
@@ -1247,12 +1244,9 @@ struct TestWasmExecutor {
 }
 
 impl TestWasmExecutor {
-    fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
+    fn new(cycles_account_manager: Arc<CyclesAccountManager>) -> Self {
         Self {
-            core: Mutex::new(TestWasmExecutorCore::new(
-                cycles_account_manager,
-                subnet_size,
-            )),
+            core: Mutex::new(TestWasmExecutorCore::new(cycles_account_manager)),
         }
     }
 }
@@ -1312,12 +1306,11 @@ struct TestWasmExecutorCore {
     schedule: Vec<(ExecutionRound, CanisterId, NumInstructions)>,
     next_message_id: u32,
     round: ExecutionRound,
-    subnet_size: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 impl TestWasmExecutorCore {
-    fn new(cycles_account_manager: Arc<CyclesAccountManager>, subnet_size: usize) -> Self {
+    fn new(cycles_account_manager: Arc<CyclesAccountManager>) -> Self {
         Self {
             messages: HashMap::new(),
             system_tasks: HashMap::new(),
@@ -1325,7 +1318,6 @@ impl TestWasmExecutorCore {
             next_message_id: 0,
             round: ExecutionRound::new(0),
             cycles_account_manager,
-            subnet_size,
         }
     }
 
@@ -1499,11 +1491,7 @@ impl TestWasmExecutorCore {
         let call_message_id = self.next_message_id();
         let response_message_id = self.next_message_id();
         let closure = WasmClosure::new(0, response_message_id.into());
-        let subnet_cycles_config = CyclesAccountManagerSubnetConfig::new(
-            self.subnet_size,
-            system_state.cost_schedule(),
-            DEFAULT_REFERENCE_SUBNET_SIZE,
-        );
+        let subnet_cycles_config = system_state.subnet_cycles_config();
         let prepayment_for_response_execution = self
             .cycles_account_manager
             .prepayment_for_response_execution(

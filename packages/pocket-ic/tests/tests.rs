@@ -2422,6 +2422,7 @@ fn call_request(
         canister_id,
         method_name: "whoami".to_string(),
         arg: Encode!(&()).unwrap(),
+        sender_info: None,
     };
     let envelope = Envelope {
         content: std::borrow::Cow::Borrowed(&content),
