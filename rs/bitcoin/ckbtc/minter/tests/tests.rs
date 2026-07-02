@@ -1503,7 +1503,7 @@ impl CkBtcSetup {
     pub fn print_minter_canister_logs(&self) {
         let log = self.env.canister_log(self.minter_id);
         let mut records = log.records().iter().collect::<Vec<_>>();
-        records.sort_by(|a, b| a.idx.cmp(&b.idx));
+        records.sort_by_key(|a| a.idx);
         for entry in records {
             println!(
                 "[{}] {}: {}",

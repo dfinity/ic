@@ -228,7 +228,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         // Flatten the partial block into a single Vec
         let reconstructed_block = std::iter::once(partial_block)
-            .chain(results.into_iter())
+            .chain(results)
             .flatten()
             .collect::<Vec<_>>();
 

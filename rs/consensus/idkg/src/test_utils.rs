@@ -765,8 +765,8 @@ pub(crate) fn get_dealings_and_support(
 ) -> (BTreeMap<NodeId, SignedIDkgDealing>, Vec<IDkgDealingSupport>) {
     let dealings = env.nodes.create_and_verify_signed_dealings(params);
     let supports = dealings
-        .iter()
-        .flat_map(|(_, dealing)| {
+        .values()
+        .flat_map(|dealing| {
             env.nodes.filter_by_receivers(&params).map(|signer| {
                 let c: Arc<dyn ConsensusCrypto> = signer.crypto();
                 let sig_share = c
