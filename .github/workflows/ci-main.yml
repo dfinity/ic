@@ -282,6 +282,10 @@ jobs:
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
 
+      # GitHub runners override the container's entrypoint which is ci/container/init.sh
+      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
+      - run: ci/container/init.sh
+
       - name: Run Tests
         uses: ./.github/actions/bazel
         with:

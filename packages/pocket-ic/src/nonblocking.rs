@@ -1420,6 +1420,8 @@ impl PocketIc {
             (TakeCanisterSnapshotArgs {
                 canister_id,
                 replace_snapshot,
+                uninstall_code: None,
+                sender_canister_version: None,
             },),
         )
         .await
@@ -1598,6 +1600,19 @@ impl PocketIc {
     #[instrument(ret(Display), skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string()))]
     pub async fn canister_exists(&self, canister_id: CanisterId) -> bool {
         self.get_subnet(canister_id).await.is_some()
+    }
+
+    /// Deletes a subnet. Panics if the subnet does not exist or is a named subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub async fn delete_subnet(&self, subnet_id: SubnetId) {
+        let endpoint = "update/delete_subnet";
+        self.post::<(), RawSubnetId>(
+            endpoint,
+            RawSubnetId {
+                subnet_id: subnet_id.as_slice().to_vec(),
+            },
+        )
+        .await;
     }
 
     /// Returns the subnet ID of the canister if the canister exists.

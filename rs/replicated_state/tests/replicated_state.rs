@@ -12,22 +12,26 @@ use ic_management_canister_types_private::{
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, ExecutionTask, IngressHistoryState, InputSource, ReplicatedState,
+    CanisterState, ExecutionTask, IngressHistoryState, InputSource, OutputRequest, ReplicatedState,
     SchedulerState, StateError, SystemState,
-    canister_state::canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
-    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    canister_state::{
+        canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
+        execution_state::{CustomSection, CustomSectionType, WasmMetadata},
+    },
     metadata_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, InstallCodeCallId,
             StopCanisterCall, SubnetCallContext,
         },
-        testing::NetworkTopologyTesting,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     replicated_state::{
         MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting,
         testing::ReplicatedStateTesting,
     },
-    testing::{CanisterQueuesTesting, FakeDropMessageMetrics, SystemStateTesting},
+    testing::{
+        CanisterQueuesTesting, FakeDropMessageMetrics, OutputRequestBuilder, SystemStateTesting,
+    },
 };
 use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
 use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
@@ -174,13 +178,13 @@ impl ReplicatedStateFixture {
 
     fn push_output_request(
         &mut self,
-        request: Request,
+        request: OutputRequest,
         time: Time,
-    ) -> Result<(), (StateError, Arc<Request>)> {
+    ) -> Result<CallbackId, StateError> {
         self.state
             .canister_state_make_mut(&CANISTER_ID)
             .unwrap()
-            .push_output_request(request.into(), time)
+            .push_output_request(request, time)
     }
 
     fn push_output_response(&mut self, response: Response) {
@@ -901,15 +905,13 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
     // - one to a another local canister.
     // - one to a remote canister.
     let remote_canister_id = CanisterId::from_u64(123);
-    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id]
-        .iter()
-        .enumerate()
-    {
-        let mut request = Request {
-            payment: Cycles::new(13),
-            ..best_effort_request_to(*receiver)
-        };
-        request.sender_reply_callback = CallbackId::from(i as u64);
+    for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
+        let request = OutputRequestBuilder::default()
+            .sender(CANISTER_ID)
+            .receiver(receiver)
+            .payment(Cycles::new(13))
+            .deadline(SOME_DEADLINE)
+            .build();
         fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
@@ -1277,8 +1279,9 @@ fn online_split() {
     fixture
         .state
         .metadata
-        .network_topology
-        .set_routing_table(routing_table.clone());
+        .modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table.clone());
+        });
 
     // Stream with a couple of requests. The details don't matter, should be
     // retained unmodified on subnet A' only.

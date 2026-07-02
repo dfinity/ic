@@ -3205,7 +3205,7 @@ impl ProposalPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToAddFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
     /// File with the rules in JSON format
     pub rules_file: PathBuf,
@@ -3256,7 +3256,7 @@ impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToRemoveFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
     /// Comma separated list of indices to remove from the ruleset
     pub positions: String,
@@ -3301,7 +3301,7 @@ impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRule
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToUpdateFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
     /// File with the updated rules in JSON format
     pub rules_file: PathBuf,
@@ -3351,7 +3351,7 @@ impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRule
 /// Sub-command to get all firewall rules for a given scope.
 #[derive(Parser)]
 struct GetFirewallRulesCmd {
-    /// The scope to apply new rules at (can be "global", "replica_nodes", "subnet(id)", or "node(id)")
+    /// The scope to apply new rules at (can be "global", "replica_nodes", "cloud_engines", "api_boundary_nodes", "subnet(id)", or "node(id)")
     pub scope: FirewallRulesScope,
 }
 
@@ -4905,9 +4905,16 @@ async fn main() {
 
             let guestos_versions = registry_client
                 .get_all_replica_version_records(registry_client.get_latest_version())
-                .unwrap();
+                .unwrap()
+                .unwrap_or_default();
 
-            if let Some(guestos_versions) = guestos_versions {
+            if opts.json {
+                let version_ids: Vec<String> = guestos_versions
+                    .into_iter()
+                    .map(|(version, _)| version)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
                 for (version, _) in guestos_versions {
                     println!("{}", version);
                 }
@@ -5861,9 +5868,16 @@ async fn main() {
 
             let hostos_versions = registry_client
                 .get_hostos_versions(registry_client.get_latest_version())
-                .unwrap();
+                .unwrap()
+                .unwrap_or_default();
 
-            if let Some(hostos_versions) = hostos_versions {
+            if opts.json {
+                let version_ids: Vec<String> = hostos_versions
+                    .into_iter()
+                    .map(|version| version.hostos_version_id)
+                    .collect();
+                println!("{}", serde_json::to_string_pretty(&version_ids).unwrap());
+            } else {
                 for version in hostos_versions {
                     println!("{}", version.hostos_version_id);
                 }

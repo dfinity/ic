@@ -620,8 +620,8 @@ bitcoin = { package = "bitcoin-dogecoin", version = "0.32.7-doge.0", features = 
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-canbench-rs = "0.4.0"
-candid = { version = "0.10.22" }
+canbench-rs = "0.6.0"
+candid = { version = "0.10.31" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
@@ -630,11 +630,6 @@ chrono = { version = "0.4.42", default-features = false, features = [
 ] }
 ciborium = "0.2.1"
 clap = { version = "4.5.20", features = ["derive", "string"] }
-# cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
-# see:
-# - https://github.com/cloudflare/cloudflare-rs/issues/222
-# - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "8b011d170d9d61eaad77bb9645371f6219285104", default-features = false }
 comparable = { version = "0.5", features = ["derive"] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
@@ -646,7 +641,7 @@ curve25519-dalek = { version = "4.1.3", features = [
 der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
-dfx-core = { version = "0.3.0" }
+dfx-core = { version = "0.4.0" }
 ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
@@ -680,15 +675,15 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
-    "ring",
+    "aws-lc-rs",
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
-ic-agent = { version = "0.45.0", features = ["pem", "ring"] }
-ic-bn-lib = { version = "0.1.14", features = ["acme-alpn"] }
-ic-bn-lib-common = "0.1.4"
+ic-agent = { version = "0.47.3", features = ["pem"] }
+ic-bn-lib = { version = "0.2.3", features = ["acme-alpn"] }
+ic-bn-lib-common = { version = "0.2.2" }
 ic-btc-interface = "0.4.0"
 ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
@@ -698,16 +693,16 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "3e698972422be07776bf888666285b7b3f7c984e", default-features = false }
 ic-http-certification = "3.0.3"
-ic-identity-hsm = "0.45.0"
-ic-management-canister-types = "0.5.0"
+ic-identity-hsm = { version = "0.47.3" }
+ic-management-canister-types = "0.7.1"
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.45.0" }
-ic-utils = { version = "0.45.0", features = ["raw"] }
-ic-vetkeys = "0.6.0"
+ic-transport-types = { version = "0.47.3" }
+ic-utils = { version = "0.47.3", features = ["raw"] }
+ic-vetkeys = "0.7.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
@@ -721,6 +716,9 @@ idna = "1.0.2"
 indexmap = "2.10.0"
 indoc = "1.0.9"
 inferno = "0.12.0"
+inotify = { version = "0.11.2", default-features = false, features = [
+    "stream",
+] }
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
 jsonrpc = "0.18.0"
@@ -758,9 +756,9 @@ num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"
 object = "0.37.3"
-opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
-opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.32.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["grpc-tonic", "trace"] }
+opentelemetry_sdk = { version = "0.32.1", features = ["trace"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "alloc",
     "arithmetic",
@@ -793,10 +791,10 @@ prost-build = "0.13.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
-    "ring",
+    "aws-lc-rs",
     "log",
     "runtime-tokio",
-    "rustls",
+    "rustls-aws-lc-rs",
 ] }
 quinn-udp = "0.5.5"
 quote = "1.0.37"
@@ -808,13 +806,12 @@ rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 regex-lite = "0.1.8"
 rexpect = "0.6"
-reqwest = { version = "0.12.24", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "blocking",
     "http2",
     "json",
     "multipart",
-    "rustls-tls",
-    "rustls-tls-native-roots",
+    "rustls",
     "socks",
     "stream",
 ] }
@@ -825,7 +822,7 @@ rstest = "0.19.0"
 rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
-    "ring",
+    "aws_lc_rs",
     "std",
     "brotli",
     "tls12",
@@ -873,13 +870,13 @@ tar = "0.4.39"
 tempfile = "3.20"
 thiserror = "2.0.18"
 threadpool = "1.8.1"
-tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
-tikv-jemallocator = "0.6"
+tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
+tikv-jemallocator = "0.7"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.42.0", features = ["full"] }
 tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
-    "ring",
+    "aws-lc-rs",
 ] }
 tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
@@ -901,7 +898,7 @@ tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
 tracing-journald = "0.3"
-tracing-opentelemetry = "0.28.0"
+tracing-opentelemetry = "0.33.0"
 tracing-subscriber = { version = "0.3.19", features = [
     "env-filter",
     "fmt",

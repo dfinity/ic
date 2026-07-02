@@ -126,8 +126,12 @@ mod tests {
     };
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
-    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetSecurity};
-    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+    use ic_config::subnet_config::{
+        CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig,
+    };
+    use ic_cycles_account_manager::{
+        CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+    };
     use ic_embedders::{
         SerializedModuleBytes, WasmtimeEmbedder, wasm_utils,
         wasmtime_embedder::system_api::{
@@ -207,15 +211,17 @@ mod tests {
                 NumInstructions::from(1_000_000_000),
                 SubnetType::Application,
                 subnet_test_id(0),
-                CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None),
+                CyclesAccountManagerConfig::application_subnet(),
             ),
-            Some(0),
             0,
             BTreeMap::new(),
             0,
             ic00_aliases,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
+                DEFAULT_REFERENCE_SUBNET_SIZE,
+            ),
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
@@ -225,7 +231,7 @@ mod tests {
             0,
             DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
             IS_WASM64_EXECUTION,
-            NetworkTopology::default(),
+            std::sync::Arc::new(NetworkTopology::default()),
         )
     }
 

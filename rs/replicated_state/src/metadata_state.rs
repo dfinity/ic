@@ -62,7 +62,7 @@ pub struct SystemMetadata {
     /// system.
     pub ingress_history: IngressHistoryState,
 
-    /// XNet stream state indexed by the _destination_ subnet id.
+    /// XNet stream state indexed by the _destination_ subnet ID.
     pub(super) streams: Arc<StreamMap>,
 
     /// Scheduling priorities of the canisters on this subnet.
@@ -87,7 +87,7 @@ pub struct SystemMetadata {
     /// increasing).
     pub batch_time: Time,
 
-    pub network_topology: NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
 
     pub own_subnet_id: SubnetId,
 
@@ -174,7 +174,7 @@ pub struct SystemMetadata {
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
-    /// by aggregating them and storing a running total over multiple days by node id and
+    /// by aggregating them and storing a running total over multiple days by node ID and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 
@@ -193,6 +193,14 @@ pub struct SystemMetadata {
     /// per replica process (since the flag is hardcoded into the binary).
     #[validate_eq(Ignore)]
     pub logs_migrated: bool,
+
+    /// The subnet list from network topology that was last used by
+    /// `generate_reject_responses_for_deleted_subnets()`. The function
+    /// exits early if the subnet list has not changed since the last call.
+    ///
+    /// Transient: reset to `None` on checkpoint load.
+    #[validate_eq(Ignore)]
+    pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -244,7 +252,7 @@ pub struct NetworkTopology {
     full_topology: Option<FullTopology>,
 
     /// Subnet to which `SetupInitialDKG` management canister calls are routed
-    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
 }
@@ -337,6 +345,21 @@ impl NetworkTopology {
             .map(|subnet_topology| subnet_topology.cost_schedule)
     }
 
+    /// Returns the reference subnet size of the given subnet, derived from its type and SEV status.
+    /// System subnets always use the default reference size regardless of SEV.
+    pub fn get_reference_subnet_size(&self, subnet_id: &SubnetId) -> Option<usize> {
+        use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE};
+        self.subnets.get(subnet_id).map(|subnet_topology| {
+            if subnet_topology.subnet_type != SubnetType::System
+                && subnet_topology.subnet_features.sev_enabled
+            {
+                SEV_REFERENCE_SUBNET_SIZE
+            } else {
+                DEFAULT_REFERENCE_SUBNET_SIZE
+            }
+        })
+    }
+
     /// Returns the subnets map used for the certified state tree.
     ///
     /// On the NNS subnet this returns the full, unfiltered map (including cloud
@@ -360,7 +383,7 @@ impl NetworkTopology {
             .unwrap_or(&self.routing_table)
     }
 
-    /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
+    /// Find the subnet for `principal_id`. The input can either be a canister ID, or a subnet ID.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
         if self.subnets.contains_key(&as_subnet_id) {
@@ -549,6 +572,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         }
     }
 
@@ -571,6 +595,13 @@ impl SystemMetadata {
     /// not populated.
     pub fn own_cost_schedule(&self) -> Option<CanisterCyclesCostSchedule> {
         self.network_topology.get_cost_schedule(&self.own_subnet_id)
+    }
+
+    /// Returns the reference subnet size of this subnet derived from its SEV
+    /// status, `None` if `network_topology` is not populated.
+    pub fn own_reference_subnet_size(&self) -> Option<usize> {
+        self.network_topology
+            .get_reference_subnet_size(&self.own_subnet_id)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
@@ -852,6 +883,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
             logs_migrated: _,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -957,6 +989,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             logs_migrated,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1067,6 +1100,9 @@ impl SystemMetadata {
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
             logs_migrated,
+            // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
+            // runs unconditionally on the first post-split round.
+            subnet_ids_at_last_reject_generation: None,
         })
     }
 
@@ -1577,7 +1613,7 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
-        // Store the associated expiry time for the given message id only for a
+        // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
         if let IngressStatus::Known { state, .. } = &status
@@ -1618,11 +1654,17 @@ impl IngressHistoryState {
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
-    /// message id.
+    /// message ID.
     pub fn statuses(&self) -> impl Iterator<Item = (&MessageId, &IngressStatus)> {
         self.statuses
             .iter()
             .map(|(id, status)| (id, status.as_ref()))
+    }
+
+    /// Returns an iterator over the backing `Arc<IngressStatus>` of each entry,
+    /// sorted lexicographically by message ID.
+    pub fn statuses_arc(&self) -> impl Iterator<Item = (&MessageId, &Arc<IngressStatus>)> {
+        self.statuses.iter()
     }
 
     /// Returns an iterator over pruning times statuses, sorted
@@ -2040,6 +2082,17 @@ impl UnflushedCheckpointOps {
 pub mod testing {
     use super::*;
 
+    /// Exposes `SystemMetadata` internals for use in tests.
+    pub trait SystemMetadataTesting {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
+    }
+
+    impl SystemMetadataTesting for SystemMetadata {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
+            f(Arc::make_mut(&mut self.network_topology));
+        }
+    }
+
     /// Exposes `NetworkTopology` internals for use in tests.
     pub trait NetworkTopologyTesting {
         /// Returns a mutable reference to the subnets map.
@@ -2169,6 +2222,7 @@ pub mod testing {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         };
     }
 }

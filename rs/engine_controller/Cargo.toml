@@ -6,6 +6,9 @@ edition.workspace = true
 name = "ic-engine-controller"
 version.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "engine-controller-canister"
 path = "canister/canister.rs"

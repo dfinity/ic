@@ -6023,13 +6023,53 @@ impl Governance {
         // Get the balance of the neuron's subaccount from ledger canister.
         let account = neuron_subaccount(subaccount);
         tla_log_locals! { account: tla::account_to_tla(account), neuron_id: nid.id };
-        let balance = self.ledger.account_balance(account).await?;
+        let balance = match self.ledger.account_balance(account).await {
+            Ok(balance) => balance,
+
+            Err(err) => {
+                // Before returning Err, clean up the incomplete neuron.
+                match self.remove_neuron(neuron) {
+                    Ok(()) => (),
+                    Err(cleanup_err) => {
+                        // If you dig into remove_neuron, the only way this could happen is if
+                        // the neuron is not there. Theoretically, that can't happen, but if it
+                        // does, it's not so bad, because we have achieved the desired end state:
+                        // no zombie neuron. Moreover, the more interesting failure is the one
+                        // from account_balance. Therefore, we do not return this error. Instead,
+                        // just log.
+                        println!(
+                            "{}ERROR: Failed to clean up neuron {:?} during claim_neuron after \
+                             failing to get balance of Governance subaccount {}: {}",
+                            LOG_PREFIX, nid, subaccount, cleanup_err
+                        );
+                    }
+                }
+
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Failed to get account balance for neuron subaccount: {:?}",
+                        err
+                    ),
+                ));
+            }
+        };
+
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {
-            // To prevent this method from creating non-staked
-            // neurons, we must also remove the neuron that was
-            // previously created.
-            self.remove_neuron(neuron)?;
+            // Before returning Err, clean up the incomplete neuron.
+            match self.remove_neuron(neuron) {
+                Ok(()) => (),
+                Err(cleanup_err) => {
+                    // For similar reasons as above, just log remove_neuron failure.
+                    println!(
+                        "{}ERROR: Failed to clean up neuron {:?} during claim_neuron after \
+                         noticing insufficient funds (in Governance subaccount {}): {}",
+                        LOG_PREFIX, nid, subaccount, cleanup_err
+                    );
+                }
+            }
+
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(

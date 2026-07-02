@@ -57,6 +57,7 @@ static TCP_PORTS_WHITELISTED_ONLY: LazyLock<Vec<u32>> = LazyLock::new(|| {
     get_config()
         .firewall
         .unwrap()
+        .assigned_node_port_lists
         .whitelisted_nodes_tcp_ports_whitelist
         .clone()
         .into_iter()
@@ -71,6 +72,7 @@ static TCP_PORTS_ALL_NODES: LazyLock<Vec<u32>> = LazyLock::new(|| {
     get_config()
         .firewall
         .unwrap()
+        .assigned_node_port_lists
         .all_nodes_tcp_ports_whitelist
         .clone()
 });

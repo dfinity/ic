@@ -174,6 +174,8 @@ def _vfat_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    inputs.extend([ctx.file._mkfs_fat, ctx.file._mtools])
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -183,6 +185,10 @@ def _vfat_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-fat",
+        ctx.file._mkfs_fat.path,
+        "--mtools",
+        ctx.file._mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -230,6 +236,16 @@ vfat_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_mkfs_fat": attr.label(
+            default = "@dosfstools//:mkfs.fat",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_mtools": attr.label(
+            default = "@mtools//:mtools",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
     },
 )
 
@@ -247,6 +263,8 @@ def _fat32_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    inputs.extend([ctx.file._mkfs_fat, ctx.file._mtools, ctx.file._fatlabel])
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -256,6 +274,12 @@ def _fat32_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--fatlabel",
+        ctx.file._fatlabel.path,
+        "--mkfs-fat",
+        ctx.file._mkfs_fat.path,
+        "--mtools",
+        ctx.file._mtools.path,
     ])
 
     for input_target, install_target in ctx.attr.extra_files.items():
@@ -307,6 +331,21 @@ fat32_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        "_fatlabel": attr.label(
+            default = "@dosfstools//:fatlabel",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_mkfs_fat": attr.label(
+            default = "@dosfstools//:mkfs.fat",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_mtools": attr.label(
+            default = "@mtools//:mtools",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
     },
 )
 
@@ -324,6 +363,9 @@ def _ext4_image_impl(ctx):
         args.extend(["-i", src_file.path])
     inputs.extend(ctx.files.src)
 
+    inputs.extend([ctx.file._mke2fs])
+    inputs.extend([ctx.file._e2fsdroid])
+
     args.extend([
         "-s",
         ctx.attr.partition_size,
@@ -335,6 +377,10 @@ def _ext4_image_impl(ctx):
         ctx.executable._dflate.path,
         "--zstd",
         ctx.executable._zstd.path,
+        "--mkfs-ext4",
+        ctx.file._mke2fs.path,
+        "--e2fsdroid",
+        ctx.file._e2fsdroid.path,
     ])
 
     if ctx.attr.file_contexts:
@@ -384,6 +430,16 @@ ext4_image = _icos_build_rule(
             default = "//toolchains/sysimage:build_ext4_image",
             executable = True,
             cfg = "exec",
+        ),
+        "_mke2fs": attr.label(
+            default = "//:mke2fs",
+            cfg = "exec",
+            allow_single_file = True,
+        ),
+        "_e2fsdroid": attr.label(
+            default = "//:e2fsdroid",
+            cfg = "exec",
+            allow_single_file = True,
         ),
         "_diroid": attr.label(
             default = "//rs/ic_os/build_tools/diroid",

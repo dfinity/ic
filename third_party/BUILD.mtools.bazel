@@ -1,0 +1,78 @@
+"""
+mtools, built from source.
+
+Built without iconv (see ac_cv_header_iconv_h below) so mtools uses its
+compiled-in codepage tables (default CP850) rather than glibc's gconv modules:
+IC-OS only uses ASCII file names, and this keeps the binary self-contained.
+"""
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(["**"]),
+)
+
+# NB: the target is intentionally *not* named "mtools": with configure_in_place
+# the build tree and the install dir (named after the target) share a parent, and
+# mtools links its "mtools" binary at the source-tree top level, so a target named
+# "mtools" collides with the install dir ("cannot open output file mtools: Is a
+# directory").
+configure_make(
+    name = "mtools_build",
+    args = ["-j"],
+    configure_in_place = True,
+    # Pin sysconfdir to a fixed, build-location-independent path. mtools compiles
+    # its system config-file location in as SYSCONFDIR "/mtools.conf"; rules_foreign_cc
+    # points configure's --prefix at the per-build $BUILD_TMPDIR, so the default
+    # sysconfdir ($prefix/etc) bakes that absolute sandbox path into the binary's
+    # .rodata. Two builds at different output bases then differ, breaking
+    # reproducibility. /etc is the conventional location (mtools already reads
+    # /etc/default/mtools.conf) and mtools installs nothing there, so this is the
+    # build-independent path without changing behavior: IC-OS's hermetic
+    # `mtools -c mcopy/mmd` invocations don't ship an /etc/mtools.conf, so mtools
+    # falls back to its compiled-in defaults either way. (Cf. e2fsprogs, which
+    # drops the analogous ROOT_SYSCONFDIR path baked into mke2fs.)
+    configure_options = ["--sysconfdir=/etc"],
+    # Pretend iconv.h is absent so configure leaves HAVE_ICONV_H undefined and
+    # mtools compiles in its built-in codepage tables instead of calling iconv.
+    env = {"ac_cv_header_iconv_h": "no"},
+    lib_source = ":all_srcs",
+    out_binaries = [
+        "mtools",
+        "mcopy",
+        "mlabel",
+    ],
+    # We don't ship any libs out of this build.
+    out_shared_libs = [],
+    out_static_libs = [],
+    # mtools installs to bin/ already; just make sure the include output dir
+    # that rules_foreign_cc expects exists (mtools installs no headers).
+    postfix_script = "mkdir -p $$INSTALLDIR/include",
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mtools",
+    srcs = [":mtools_build"],
+    output_group = "mtools",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mcopy",
+    srcs = [":mtools_build"],
+    output_group = "mcopy",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mlabel",
+    srcs = [":mtools_build"],
+    output_group = "mlabel",
+    visibility = ["//visibility:public"],
+)

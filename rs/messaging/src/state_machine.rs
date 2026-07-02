@@ -2,7 +2,9 @@ use crate::message_routing::{
     ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
 };
 use crate::routing::demux::Demux;
-use crate::routing::stream_builder::StreamBuilder;
+use crate::routing::stream_builder::{
+    StreamBuilder, generate_reject_responses_for_deleted_subnets,
+};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
@@ -15,7 +17,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
 use ic_types::{ExecutionRound, NumBytes, SubnetId};
-use std::time::Instant;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -69,15 +71,6 @@ impl StateMachineImpl {
         }
     }
 
-    /// Adds an observation to the `METRIC_PROCESS_BATCH_PHASE_DURATION`
-    /// histogram for the given phase.
-    fn observe_phase_duration(&self, phase: &str, since: &Instant) {
-        self.metrics
-            .process_batch_phase_duration
-            .with_label_values(&[phase])
-            .observe(since.elapsed().as_secs_f64());
-    }
-
     /// Runs a special round during which the state is split (and no messages are
     /// inducted, executed or routed).
     ///
@@ -122,7 +115,7 @@ impl StateMachine for StateMachineImpl {
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
-        let since = Instant::now();
+        let time_out_messages_timer = self.metrics.start_phase_timer(PHASE_TIME_OUT_MESSAGES);
 
         if batch.time > state.metadata.batch_time {
             state.metadata.batch_time = batch.time;
@@ -136,7 +129,7 @@ impl StateMachine for StateMachineImpl {
             )
         }
 
-        state.metadata.network_topology = network_topology;
+        state.metadata.network_topology = Arc::new(network_topology);
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
@@ -190,10 +183,10 @@ impl StateMachine for StateMachineImpl {
         let balance_before_time_out = state.balance_with_messages();
 
         state.time_out_messages(&self.metrics);
-        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
+        time_out_messages_timer.observe_duration();
 
         // Time out expired callbacks.
-        let since = Instant::now();
+        let time_out_callbacks_timer = self.metrics.start_phase_timer(PHASE_TIME_OUT_CALLBACKS);
         let (timed_out_callbacks, errors) = state.time_out_callbacks();
         self.metrics
             .timed_out_callbacks_total
@@ -210,11 +203,10 @@ impl StateMachine for StateMachineImpl {
         }
         #[cfg(debug_assertions)]
         state.assert_balance_with_messages(balance_before_time_out);
-
-        self.observe_phase_duration(PHASE_TIME_OUT_CALLBACKS, &since);
+        time_out_callbacks_timer.observe_duration();
 
         // Preprocess messages and add messages to the induction pool through the Demux.
-        let since = Instant::now();
+        let induction_timer = self.metrics.start_phase_timer(PHASE_INDUCTION);
         let current_round = ExecutionRound::from(batch.batch_number.get());
         let mut state_with_messages =
             self.demux
@@ -232,7 +224,7 @@ impl StateMachine for StateMachineImpl {
             .consensus_queue
             .append(&mut consensus_responses);
 
-        self.observe_phase_duration(PHASE_INDUCTION, &since);
+        induction_timer.observe_duration();
 
         let execution_round_type = if requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
@@ -241,12 +233,12 @@ impl StateMachine for StateMachineImpl {
         };
 
         // Process messages from the induction pool through the Scheduler.
-        let since = Instant::now();
+        let execution_timer = self.metrics.start_phase_timer(PHASE_EXECUTION);
         let round_summary = batch.batch_summary.map(|b| ExecutionRoundSummary {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
             current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
         });
-        let state_after_execution = self.scheduler.execute_round(
+        let mut state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
             chain_key_data,
@@ -263,25 +255,43 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number
             )
         }
-        self.observe_phase_duration(PHASE_EXECUTION, &since);
+        execution_timer.observe_duration();
 
         // Postprocess the state: route messages into streams.
-        let since = Instant::now();
+        let message_routing_timer = self.metrics.start_phase_timer(PHASE_MESSAGE_ROUTING);
+        // Discard streams to subnets no longer present in the network topology.
+        state_after_execution.discard_streams_for_deleted_subnets();
         #[cfg(debug_assertions)]
         let balance_before_routing = state_after_execution.balance_with_messages();
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
-        self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &since);
+
+        // Enqueue synthetic rejects for callbacks to canisters on deleted subnets before
+        // enforcing the best-effort memory limit, so best-effort rejects are subject to shedding.
+        // Must be called after `build_streams()`, see the comment on
+        // `generate_reject_responses_for_deleted_subnets()`.
+        let errors = generate_reject_responses_for_deleted_subnets(&mut state_after_stream_builder);
+        for error in &errors {
+            // Critical error, responses should always be inducted successfully.
+            error!(
+                self.log,
+                "{}: Inducting synthetic reject response for deleted subnet failed: {}",
+                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                error
+            );
+            self.metrics.critical_error_induct_response_failed.inc();
+        }
+        message_routing_timer.observe_duration();
 
         // Shed enough messages to stay below the best-effort message memory limit.
-        let since = Instant::now();
+        let shed_messages_timer = self.metrics.start_phase_timer(PHASE_SHED_MESSAGES);
         state_after_stream_builder.enforce_best_effort_message_limit(
             self.best_effort_message_memory_capacity,
             &self.metrics,
         );
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
-        self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
+        shed_messages_timer.observe_duration();
 
         state_after_stream_builder
     }

@@ -126,6 +126,16 @@ pub struct CanisterSettings {
     ///
     /// Default value: `5_000_000_000_000` (5 trillion cycles).
     pub reserved_cycles_limit: Option<Nat>,
+    /// Indicates the minimum number of cycles required for an incoming call
+    /// from a different canister. Calls from a different canister with fewer
+    /// cycles are rejected with a `CanisterError` at no cycles cost to the callee.
+    /// Self-calls (from the canister itself) and ingress messages are not affected
+    /// (`canister_inspect_message` hook can be used to filter ingress messages, albeit only via non-replicated execution).
+    ///
+    /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
+    ///
+    /// Default value: `0` (i.e., no minimum enforced).
+    pub minimum_incoming_canister_call_cycles: Option<Nat>,
     /// Defines who is allowed to read the canister's logs.
     ///
     /// Default value: [`LogVisibility::Controllers`].
@@ -148,7 +158,7 @@ pub struct CanisterSettings {
     ///
     /// If the remaining wasm memory size of the canister is below the threshold, execution of the "on low wasm memory" hook is scheduled.
     ///
-    /// Must be a number between 0 and 2<sup>64</sup>-1, inclusively.
+    /// Must be a number between 0 and 2<sup>48</sup> (i.e 256TB), inclusively.
     ///
     /// Default value: `0` (i.e., the "on low wasm memory" hook is never scheduled).
     pub wasm_memory_threshold: Option<Nat>,
@@ -182,6 +192,8 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Upper limit on [`CanisterStatusResult::reserved_cycles`] of the canister.
     pub reserved_cycles_limit: Nat,
+    /// Minimum number of cycles required for an incoming call from a different canister.
+    pub minimum_incoming_canister_call_cycles: Nat,
     /// Visibility of canister logs.
     pub log_visibility: LogVisibility,
     /// Upper limit on the memory used for canister logs (bytes).

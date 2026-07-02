@@ -1,6 +1,6 @@
 use crate::{
-    CountBytes, NodeId, crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, node_id_into_protobuf,
-    node_id_try_from_option,
+    CountBytes, NodeId, RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*,
+    node_id_into_protobuf, node_id_try_from_option,
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
@@ -40,6 +40,20 @@ impl<T> CountBytes for BasicSignatureBatch<T> {
             .map(|sig| std::mem::size_of::<NodeId>() + sig.get_ref().count_bytes())
             .sum()
     }
+}
+
+/// A single entry in a batch of basic signatures to be verified together via
+/// `BasicSigVerifier::verify_basic_sig_batch_multi_msg`.
+///
+/// Each entry pairs a `signer`, their `signature`, and the `message` that was
+/// signed with the `registry_version` at which that signer's public key is
+/// resolved. Unlike [`BasicSignatureBatch`], entries may have distinct messages
+/// and registry versions, and the same `signer` may appear more than once.
+pub struct BasicSigBatchEntry<'a, T> {
+    pub signer: NodeId,
+    pub signature: &'a BasicSigOf<T>,
+    pub message: &'a T,
+    pub registry_version: RegistryVersion,
 }
 
 /// ThresholdSignature captures a threshold signature on a value and the

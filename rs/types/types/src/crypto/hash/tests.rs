@@ -70,8 +70,8 @@ mod crypto_hash_stability {
     use crate::CryptoHashOfState;
     use crate::batch::{BatchPayload, ValidationContext};
     use crate::canister_http::{
-        CanisterHttpRequestId, CanisterHttpResponse, CanisterHttpResponseContent,
-        CanisterHttpResponseMetadata,
+        CanisterHttpPaymentReceipt, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseReceipt,
     };
     use crate::consensus::{
         Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpContentProtobufBytes,
@@ -126,6 +126,7 @@ mod crypto_hash_stability {
     use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_protobuf::types::v1 as pb;
+    use ic_types_cycles::Cycles;
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
@@ -1072,13 +1073,12 @@ mod crypto_hash_stability {
             content_hash: test_crypto_hash_of(0x42),
             content_size: 0,
             is_reject: false,
-            registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "ebf5373f06dadd9a3d7d3b59ce457533428ff27d4d588b8434f786d1d8c1a9db",
+            "10e5099acf02057c8dece601575e578f2289d1cca0aa27dfd793ed3a3d8ea4d7",
             "Hash of CanisterHttpResponseMetadata changed"
         );
     }
@@ -1091,11 +1091,16 @@ mod crypto_hash_stability {
             content_hash: test_crypto_hash_of(0x42),
             content_size: 0,
             is_reject: false,
-            registry_version: RegistryVersion::from(1),
             replica_version: ReplicaVersion::default(),
         };
+        let receipt_share = CanisterHttpResponseReceipt {
+            metadata,
+            payment_receipt: CanisterHttpPaymentReceipt {
+                refund: Cycles::new(42),
+            },
+        };
         let data = Signed {
-            content: metadata,
+            content: receipt_share,
             signature: BasicSignature {
                 signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
                 signer: NodeId::from(PrincipalId::new_node_test_id(42)),
@@ -1104,7 +1109,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "7bff0af6053ad0f648acffecf0434e299e9ce1d04b6752934935a13e390de986",
+            "f3f73fb255a31933e6d4b10b99dbb77a92a0404c42fd075dd6394d52a56f6ccf",
             "Hash of CanisterHttpResponseShare changed"
         );
     }

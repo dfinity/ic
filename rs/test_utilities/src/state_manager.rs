@@ -125,7 +125,7 @@ impl FakeStateManager {
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
         let height_witness = compute_state_height_witness(&lazy_tree, &hash_tree);
         let partial_hash =
             CryptoHashOfPartialState::from(CryptoHash(hash_tree.root_hash().0.to_vec()));
@@ -469,6 +469,7 @@ pub enum SerializableRejectReason {
     QueueFull = 5,
     OutOfMemory = 6,
     Unknown = 7,
+    EngineNotAllowed = 8,
 }
 
 impl From<&RejectReason> for SerializableRejectReason {
@@ -481,6 +482,7 @@ impl From<&RejectReason> for SerializableRejectReason {
             RejectReason::QueueFull => Self::QueueFull,
             RejectReason::OutOfMemory => Self::OutOfMemory,
             RejectReason::Unknown => Self::Unknown,
+            RejectReason::EngineNotAllowed => Self::EngineNotAllowed,
         }
     }
 }
@@ -495,6 +497,7 @@ impl From<SerializableRejectReason> for RejectReason {
             SerializableRejectReason::QueueFull => RejectReason::QueueFull,
             SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
             SerializableRejectReason::Unknown => RejectReason::Unknown,
+            SerializableRejectReason::EngineNotAllowed => RejectReason::EngineNotAllowed,
         }
     }
 }

@@ -20,6 +20,8 @@ pub enum CertificationVersion {
     V24 = 24,
     /// Add /subnet/<subnet_id>/type.
     V25 = 25,
+    /// Introdue `EngineNotAllowed` signals
+    V26 = 26,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -51,7 +53,7 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V25;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V26;
 
 /// Minimum supported certification version.
 ///
@@ -63,7 +65,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V25;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V26;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.

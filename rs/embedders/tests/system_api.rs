@@ -1,6 +1,9 @@
 use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_config::{
+    embedders::Config as EmbeddersConfig,
+    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+};
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, MAX_ENV_VAR_NAME_SIZE, SystemApiImpl,
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
@@ -13,25 +16,22 @@ use ic_interfaces::execution_environment::{
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState, testing::CanisterQueuesTesting,
-};
+use ic_replicated_state::testing::{CanisterQueuesTesting, OutputRequestBuilder};
+use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
-use ic_test_utilities_types::{
-    ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
-    messages::RequestBuilder,
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    CanisterTimer, CountBytes, NumInstructions, PrincipalId, SubnetId, Time,
+    CanisterTimer, NumInstructions, PrincipalId, SubnetId, Time,
     canister_log::CanisterLogMetrics,
     messages::{
         CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, RejectContext, RequestOrResponse,
     },
-    methods::{Callback, WasmClosure},
-    time::{self, UNIX_EPOCH},
+    time::UNIX_EPOCH,
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, Cycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
 use std::{
@@ -611,7 +611,7 @@ fn api_availability_test(
         }
         SystemApiCallId::GlobalTimerSet => {
             assert_api_availability(
-                |mut api| api.ic0_global_timer_set(time::UNIX_EPOCH),
+                |mut api| api.ic0_global_timer_set(UNIX_EPOCH),
                 api_type,
                 &system_state,
                 cycles_account_manager,
@@ -1440,10 +1440,11 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
     let initial_cycles = cycles_account_manager
-        .xnet_call_performed_fee(
+        .xnet_call_performed_fee(CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
-        )
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ))
         .real()
         - Cycles::from(10_u128);
     let mut system_state = SystemStateBuilder::new()
@@ -1569,14 +1570,18 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1629,33 +1634,23 @@ fn push_output_request_respects_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_parameters = execution_parameters(api_type.execution_mode());
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let own_canister_id = system_state.canister_id();
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            canister_test_id(0),
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            NO_DEADLINE,
-        ))
-        .unwrap();
     let mut api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -1670,22 +1665,13 @@ fn push_output_request_respects_memory_limits() {
         no_op_logger(),
     );
 
-    let req = RequestBuilder::default()
+    let req = OutputRequestBuilder::default()
         .sender(own_canister_id)
-        .sender_reply_callback(callback_id)
         .build();
 
     // First push succeeds with or without message memory usage accounting, as the
     // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
-    assert_eq!(
-        0,
-        api.push_output_request(
-            req.clone(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
-    );
+    assert_eq!(0, api.push_output_request(req.clone()).unwrap());
 
     // Nothing is consumed for execution memory.
     assert_eq!(api.get_allocated_bytes().get(), 0);
@@ -1702,12 +1688,7 @@ fn push_output_request_respects_memory_limits() {
     // And the second push fails.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(
-            req,
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
+        api.push_output_request(req).unwrap()
     );
     // Without altering memory usage.
     assert_eq!(api.get_allocated_bytes().get(), 0,);
@@ -1750,33 +1731,23 @@ fn push_output_request_oversized_request_memory_limits() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let api_type = ApiTypeBuilder::build_update_api();
     let execution_parameters = execution_parameters(api_type.execution_mode());
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let own_canister_id = system_state.canister_id();
-    let callback_id = sandbox_safe_system_state
-        .register_callback(Callback::new(
-            call_context_test_id(0),
-            canister_test_id(0),
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 0),
-            WasmClosure::new(0, 0),
-            None,
-            NO_DEADLINE,
-        ))
-        .unwrap();
     let mut api = SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
@@ -1792,21 +1763,15 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Oversized payload larger than available memory.
-    let req = RequestBuilder::default()
+    let req = OutputRequestBuilder::default()
         .sender(own_canister_id)
-        .sender_reply_callback(callback_id)
         .method_payload(vec![13; 4 * MAX_RESPONSE_COUNT_BYTES])
         .build();
 
     // Not enough memory to push the request.
     assert_eq!(
         RejectCode::SysTransient as i32,
-        api.push_output_request(
-            req,
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
+        api.push_output_request(req).unwrap()
     );
 
     // Memory usage unchanged.
@@ -1817,7 +1782,7 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // Slightly smaller, still oversized request.
-    let req = RequestBuilder::default()
+    let req = OutputRequestBuilder::default()
         .sender(own_canister_id)
         .method_payload(vec![13; 2 * MAX_RESPONSE_COUNT_BYTES])
         .build();
@@ -1825,15 +1790,7 @@ fn push_output_request_oversized_request_memory_limits() {
     assert!(req_size_bytes > MAX_RESPONSE_COUNT_BYTES);
 
     // Pushing succeeds.
-    assert_eq!(
-        0,
-        api.push_output_request(
-            req,
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
-        )
-        .unwrap()
-    );
+    assert_eq!(0, api.push_output_request(req).unwrap());
 
     // `req_size_bytes` are consumed.
     assert_eq!(0, api.get_allocated_bytes().get());
@@ -1875,7 +1832,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
     assert_eq!(
         api.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(1))
             .unwrap(),
-        time::UNIX_EPOCH
+        UNIX_EPOCH
     );
     assert_eq!(
         api.ic0_global_timer_set(Time::from_nanos_since_unix_epoch(2))
@@ -2193,14 +2150,18 @@ fn get_system_api_for_best_effort_response(
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
 
     SystemApiImpl::new(

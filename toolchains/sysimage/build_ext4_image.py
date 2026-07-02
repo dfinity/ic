@@ -167,6 +167,8 @@ def make_argparser():
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str, required=True)
     parser.add_argument("--diroid", help="Path to our diroid tool", type=str, required=True)
     parser.add_argument("--zstd", help="Path to the zstd tool", type=str, required=True)
+    parser.add_argument("--mkfs-ext4", help="Path to the mkfs.ext4 (mke2fs) tool", type=str, required=True)
+    parser.add_argument("--e2fsdroid", help="Path to the e2fsdroid tool", type=str, required=True)
     return parser
 
 
@@ -223,7 +225,7 @@ def main():
         image_file,
         str(image_size),
     ]
-    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(mke2fs_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
 
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
@@ -246,7 +248,9 @@ def main():
         "fakeroot",
         "-i",
         fakeroot_statefile,
-        "e2fsdroid",
+        # Absolute path so fakeroot (which execs it) resolves it as a path rather
+        # than searching PATH.
+        os.path.abspath(args.e2fsdroid),
         "-e",
         "-a",
         "/",
@@ -257,7 +261,7 @@ def main():
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
-    subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+    subprocess.run(e2fsdroid_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:

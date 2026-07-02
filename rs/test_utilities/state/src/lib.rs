@@ -1,5 +1,6 @@
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
+use ic_certification_version::CertificationVersion;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
     OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
@@ -22,7 +23,7 @@ use ic_replicated_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        testing::NetworkTopologyTesting,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -32,19 +33,17 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::time::UNIX_EPOCH;
 use ic_types::{
     CanisterId, ComputeAllocation, MemoryAllocation, NodeId, NumBytes, PrincipalId, SubnetId, Time,
     batch::RawQueryStats,
-    messages::{CallbackId, Ingress, Request, RequestOrResponse},
-    methods::{Callback, WasmClosure},
+    messages::{Ingress, Request, RequestOrResponse},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles, NominalCyclesTesting,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -149,22 +148,21 @@ impl ReplicatedStateBuilder {
             )
             .unwrap();
 
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        state.metadata.network_topology.subnets_mut().insert(
-            self.subnet_id,
-            SubnetTopology {
-                public_key: vec![],
-                nodes: self.node_ids.into_iter().collect(),
-                subnet_type: self.subnet_type,
-                subnet_features: self.subnet_features,
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-        );
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            network_topology.subnets_mut().insert(
+                self.subnet_id,
+                SubnetTopology {
+                    public_key: vec![],
+                    nodes: self.node_ids.into_iter().collect(),
+                    subnet_type: self.subnet_type,
+                    subnet_features: self.subnet_features,
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                },
+            );
+        });
 
         state.metadata.batch_time = self.batch_time;
         state.metadata.own_subnet_features = self.subnet_features;
@@ -790,17 +788,19 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
-    state.metadata.network_topology.set_routing_table({
-        let mut rt = ic_registry_routing_table::RoutingTable::new();
-        rt.insert(
-            ic_registry_routing_table::CanisterIdRange {
-                start: CanisterId::from(0),
-                end: CanisterId::from(u64::MAX),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
-        rt
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table({
+            let mut rt = ic_registry_routing_table::RoutingTable::new();
+            rt.insert(
+                ic_registry_routing_table::CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(u64::MAX),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+            rt
+        });
     });
     state
 }
@@ -852,40 +852,6 @@ pub fn new_canister_state_with_execution(
     )
 }
 
-/// Helper function to register a callback.
-pub fn register_callback(
-    canister_state: &mut CanisterState,
-    respondent: CanisterId,
-    deadline: CoarseTime,
-) -> CallbackId {
-    let call_context_id = canister_state
-        .system_state
-        .new_call_context(
-            CallOrigin::SystemTask,
-            Cycles::zero(),
-            Time::from_nanos_since_unix_epoch(0),
-            Default::default(),
-            None,
-        )
-        .unwrap();
-
-    canister_state
-        .system_state
-        .register_callback(Callback::new(
-            call_context_id,
-            respondent,
-            Cycles::zero(),
-            CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
-            CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
-            WasmClosure::new(0, 2),
-            WasmClosure::new(0, 2),
-            None,
-            deadline,
-        ))
-        .unwrap()
-}
-
 /// Helper function to insert a canister in the provided `ReplicatedState`.
 pub fn insert_dummy_canister(
     state: &mut ReplicatedState,
@@ -903,6 +869,20 @@ pub fn insert_dummy_canister(
     execution_state.wasm_binary = WasmBinary::new(wasm);
     canister_state.execution_state = Some(execution_state);
     state.put_canister_state(canister_state);
+}
+
+/// Reject reasons encodable at `certification_version`. `EngineNotAllowed` is only encodable
+/// from V26.
+pub fn reject_reasons_encodable_at(
+    certification_version: CertificationVersion,
+) -> Vec<RejectReason> {
+    RejectReason::all()
+        .into_iter()
+        .filter(|reason| {
+            *reason != RejectReason::EngineNotAllowed
+                || certification_version >= CertificationVersion::V26
+        })
+        .collect()
 }
 
 prop_compose! {
@@ -981,13 +961,19 @@ prop_compose! {
     /// Produces a strategy that generates a stream with between
     /// `[min_size, max_size]` messages and between
     /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
+    pub fn arb_stream(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
+        certification_version: CertificationVersion,
+    )(
         stream in arb_stream_with_config(
             0..=10000,
             min_size..=max_size,
             0..=10000,
             min_signal_count..=max_signal_count,
-            RejectReason::all(),
+            reject_reasons_encodable_at(certification_version),
         )
     ) -> Stream {
         stream
@@ -997,8 +983,14 @@ prop_compose! {
 prop_compose! {
     /// Produces a strategy consisting of an arbitrary stream and valid slice begin and message
     /// count values for extracting a slice from the stream.
-    pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
+    pub fn arb_stream_slice(
+        min_size: usize,
+        max_size: usize,
+        min_signal_count: usize,
+        max_signal_count: usize,
+        certification_version: CertificationVersion,
+    )(
+        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count, certification_version),
         from_percent in -20..120_i64,
         percent_above_min_size in 0..120_i64,
     ) ->  (Stream, StreamIndex, usize) {
@@ -1047,9 +1039,10 @@ prop_compose! {
     pub fn arb_invalid_stream_header(
         min_signal_count: usize,
         max_signal_count: usize,
+        with_reject_reasons: Vec<RejectReason>,
     )(
-        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count, RejectReason::all()),
-        reason in proptest::sample::select(RejectReason::all()),
+        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count, with_reject_reasons.clone()),
+        reason in proptest::sample::select(with_reject_reasons),
     ) -> StreamHeader {
         let begin = valid_stream_header.begin();
         let end = valid_stream_header.end();
@@ -1234,8 +1227,9 @@ fn new_replicated_state_with_output_queues(
         .unwrap();
     replicated_state
         .metadata
-        .network_topology
-        .set_routing_table(routing_table);
+        .modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+        });
 
     replicated_state.put_canister_states(CanisterStates::new(canister_states));
     if let Some(subnet_queues) = subnet_queues {

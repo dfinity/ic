@@ -59,6 +59,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            delivered_canister_http_request_contexts: item
+                .delivered_canister_http_request_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::CanisterHttpRequestContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
             bitcoin_get_successors_contexts: item
                 .bitcoin_get_successors_contexts
                 .iter()
@@ -188,6 +198,17 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut delivered_canister_http_request_contexts =
+            BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
+        for entry in item.delivered_canister_http_request_contexts {
+            let context: CanisterHttpRequestContext = try_from_option_field(
+                entry.context,
+                "SystemMetadata::DeliveredCanisterHttpRequestContext",
+            )?;
+            delivered_canister_http_request_contexts
+                .insert(CallbackId::new(entry.callback_id), context);
+        }
+
         let mut reshare_chain_key_contexts = BTreeMap::<CallbackId, ReshareChainKeyContext>::new();
         for entry in item.reshare_chain_key_contexts {
             let pb_context =
@@ -261,6 +282,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             setup_initial_dkg_contexts,
             sign_with_threshold_contexts,
             canister_http_request_contexts,
+            delivered_canister_http_request_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
             canister_management_calls: CanisterManagementCalls {

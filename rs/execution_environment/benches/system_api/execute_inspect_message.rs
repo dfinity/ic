@@ -13,7 +13,10 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
 
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_execution_environment::{ExecutionEnvironment, IngressFilterMetrics};
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::user_test_id;
@@ -126,11 +129,15 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 execution_parameters,
                 subnet_available_memory,
                 hypervisor,
-                &network_topology,
+                network_topology,
                 &no_op_logger(),
                 exec_env.state_changes_error(),
                 &IngressFilterMetrics::new(&MetricsRegistry::new()),
-                CanisterCyclesCostSchedule::Normal,
+                CyclesAccountManagerSubnetConfig::new(
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    CanisterCyclesCostSchedule::Normal,
+                    DEFAULT_REFERENCE_SUBNET_SIZE,
+                ),
             );
             assert_eq!(result, Ok(()), "Error executing inspect message method");
             assert_eq!(

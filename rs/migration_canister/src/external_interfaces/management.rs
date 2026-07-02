@@ -5,11 +5,11 @@ use ic_cdk::{
     api::{canister_self, canister_version},
     call::{Call, CallFailed, Error as CallError, RejectCode},
     management_canister::{
-        CanisterInfoArgs, CanisterInfoResult, canister_info, list_canister_snapshots,
+        CanisterInfoArgs, CanisterInfoResult, ListCanisterSnapshotsArgs, canister_info,
+        list_canister_snapshots,
     },
     println,
 };
-use ic_management_canister_types::ListCanisterSnapshotsArgs;
 use serde::Deserialize;
 
 use crate::{ValidationError, processing::ProcessingResult};
@@ -264,14 +264,18 @@ pub async fn rename_canister(
 
 pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(), ValidationError> {
     match list_canister_snapshots(&ListCanisterSnapshotsArgs { canister_id }).await {
-        Ok(snapshots) => {
-            if snapshots.is_empty() {
-                ProcessingResult::Success(())
-            } else {
-                ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(
-                    Reserved,
-                ))
-            }
+        Ok(snapshots) if snapshots.is_empty() => ProcessingResult::Success(()),
+        Ok(_) => {
+            ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(Reserved))
+        }
+        Err(CallError::CallRejected(e))
+            if e.reject_code() == Ok(RejectCode::DestinationInvalid) =>
+        {
+            println!(
+                "Call `list_canister_snapshots` for {} returned DestinationInvalid, treating as success",
+                canister_id
+            );
+            ProcessingResult::Success(())
         }
         Err(e) => {
             println!(
@@ -298,7 +302,9 @@ pub struct SubnetInfoResponse {
     pub registry_version: u64,
 }
 
-pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64, Infallible> {
+pub async fn get_registry_version(
+    subnet_id: Principal,
+) -> ProcessingResult<Option<u64>, Infallible> {
     let args = SubnetInfoArgs { subnet_id };
     match Call::bounded_wait(subnet_id, "subnet_info")
         .with_arg(&args)
@@ -307,7 +313,7 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
         Ok(response) => match response.candid::<SubnetInfoResponse>() {
             Ok(SubnetInfoResponse {
                 registry_version, ..
-            }) => ProcessingResult::Success(registry_version),
+            }) => ProcessingResult::Success(Some(registry_version)),
             Err(e) => {
                 println!(
                     "Decoding `SubnetInfoResponse` for subnet: {} failed: {:?}",
@@ -316,6 +322,15 @@ pub async fn get_registry_version(subnet_id: Principal) -> ProcessingResult<u64,
                 ProcessingResult::NoProgress
             }
         },
+        Err(CallFailed::CallRejected(e))
+            if e.reject_code() == Ok(RejectCode::DestinationInvalid) =>
+        {
+            println!(
+                "Call `subnet_info` for subnet: {} returned DestinationInvalid, treating as success",
+                subnet_id
+            );
+            ProcessingResult::Success(None)
+        }
         Err(e) => {
             println!(
                 "Call `subnet_info` for subnet: {} failed: {:?}",

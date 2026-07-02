@@ -6,6 +6,11 @@ benches:
       heap_increase: 264
       stable_memory_increase: 256
     scopes:
+      get_blocks:
+        calls: 1
+        instructions: 7797400
+        heap_increase: 0
+        stable_memory_increase: 0
       icrc103_get_allowances:
         calls: 1
         instructions: 5142647
@@ -68,4 +73,4 @@ benches:
         instructions: 8673036
         heap_increase: 258
         stable_memory_increase: 128
-version: 0.4.1
+version: 0.6.0

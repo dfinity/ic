@@ -10,21 +10,26 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterStatus, ReplicatedState, Stream,
-    metadata_state::{StreamMap, testing::NetworkTopologyTesting},
+    CanisterStatus, ReplicatedState, Stream, SubnetTopology,
+    metadata_state::{
+        StreamMap,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    },
     replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
-    testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
+    testing::{OutputRequestBuilder, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter,
     fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
 };
-use ic_test_utilities_state::{CanisterStateBuilder, register_callback};
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::ids::{SUBNET_12, SUBNET_23, SUBNET_27, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
-use ic_types::messages::{CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload};
+use ic_types::messages::{
+    CallbackId, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload,
+};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
 use ic_types::{CanisterId, CountBytes};
@@ -36,6 +41,7 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_12; // g24bn-xymaa-aaaaa-aaaap-yai
 const REMOTE_SUBNET: SubnetId = SUBNET_23; // 5h3gz-qaxaa-aaaaa-aaaap-yai
@@ -2801,7 +2807,7 @@ fn induct_stream_slices_with_refunds() {
 
                 metrics.assert_inducted_xnet_messages_eq(&[
                     (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_SUCCESS, 1),
-                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_DROPPED, 1),
+                    (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
                     (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_RECEIVER_MIGRATED, 1),
                     (
                         LABEL_VALUE_TYPE_REFUND,
@@ -2812,6 +2818,71 @@ fn induct_stream_slices_with_refunds() {
                 assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
                 // No critical errors raised.
                 metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            },
+        );
+    }
+}
+
+/// Tests that a refund arriving in a slice across an engine boundary is dropped,
+/// its cycles are observed as lost, and a critical error is raised. With subnet
+/// types fixed at creation, an honest peer would never produce such a refund —
+/// arrival here implies a malicious or buggy sender.
+#[test]
+fn induct_stream_slices_drops_refund_at_engine_boundary() {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        with_test_setup(
+            btreemap![],
+            btreemap![REMOTE_SUBNET => StreamSliceConfig {
+                messages: vec![Refund(*LOCAL_CANISTER)],
+                ..StreamSliceConfig::default()
+            }],
+            |stream_handler, mut state, slices, metrics| {
+                // Mark REMOTE_SUBNET as a CloudEngine.
+                state.metadata.modify_network_topology(|network_topology| {
+                    network_topology.subnets_mut().insert(
+                        REMOTE_SUBNET,
+                        SubnetTopology {
+                            subnet_type: SubnetType::CloudEngine,
+                            ..Default::default()
+                        },
+                    );
+                });
+
+                // Expected state: a stream with one accept signal, no induction, cycles lost.
+                let refund = *refund_in_slice(slices.get(&REMOTE_SUBNET), 0);
+                let mut expected_state = state.clone();
+                let expected_stream = stream_from_config(StreamConfig {
+                    signals_end: 1,
+                    ..StreamConfig::default()
+                });
+                expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+                expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    refund.amount(),
+                    cost_schedule,
+                ));
+
+                let mut available_guaranteed_response_memory =
+                    stream_handler.available_guaranteed_response_memory(&state);
+                let inducted_state = stream_handler.induct_stream_slices(
+                    state,
+                    slices,
+                    &mut available_guaranteed_response_memory,
+                );
+
+                assert_eq!(expected_state, inducted_state);
+
+                metrics.assert_inducted_xnet_messages_eq(&[(
+                    LABEL_VALUE_TYPE_REFUND,
+                    LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                    1,
+                )]);
+                metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                    engine_message: 1,
+                    ..CriticalErrorCounts::default()
+                });
             },
         );
     }
@@ -3235,6 +3306,459 @@ fn process_stream_slices_with_invalid_messages() {
     );
 }
 
+/// Tests that a guaranteed-response request from a CloudEngine subnet, arriving at a
+/// non-engine subnet, triggers a critical error and is rejected with a reject signal.
+#[test]
+fn induct_stream_slices_engine_src_guaranteed_response_request_critical_error() {
+    with_test_setup(
+        btreemap![],
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![Request(*REMOTE_CANISTER, *LOCAL_CANISTER)],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, mut state, slices, metrics| {
+            // Mark REMOTE_SUBNET as CloudEngine.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // Expect a stream with a reject signal (EngineNotAllowed) for the guaranteed-response request.
+            let mut expected_state = state.clone();
+            let expected_stream = stream_from_config(StreamConfig {
+                signals_end: 1,
+                reject_signals: vec![RejectSignal::new(RejectReason::EngineNotAllowed, 0.into())],
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_REQUEST,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                engine_message: 1,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+/// Tests that a best-effort request with no cycles from a CloudEngine subnet, arriving at a
+/// non-engine subnet, is inducted successfully without triggering a critical error.
+#[test]
+fn induct_stream_slices_engine_src_best_effort_request_inducted() {
+    with_test_setup(
+        btreemap![],
+        btreemap![],
+        |stream_handler, mut state, _, metrics| {
+            // Mark REMOTE_SUBNET as CloudEngine.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // Build a best-effort request (deadline != NO_DEADLINE, payment = 0).
+            let best_effort_request = RequestBuilder::new()
+                .sender(*REMOTE_CANISTER)
+                .receiver(*LOCAL_CANISTER)
+                .sender_reply_callback(CallbackId::new(1))
+                .deadline(CoarseTime::from_secs_since_unix_epoch(123))
+                .payment(Cycles::zero())
+                .build();
+            let slice = stream_slice_from_config(StreamSliceConfig {
+                messages: vec![best_effort_request.into()],
+                ..StreamSliceConfig::default()
+            });
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            stream_handler.induct_stream_slices(
+                state,
+                btreemap![REMOTE_SUBNET => slice],
+                &mut available_guaranteed_response_memory,
+            );
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_REQUEST,
+                LABEL_VALUE_SUCCESS,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
+/// Tests that a best-effort request carrying cycles from a CloudEngine subnet is rejected
+/// at the engine boundary with a reject signal (EngineNotAllowed) and a critical error;
+/// the reject signal refunds the cycles to the sender, so they are not lost. Mirrors the
+/// sender-side test `build_streams_engine_src_rejects_cycles_request` on the receiving
+/// side, which is the security-critical filter against a malicious engine.
+#[test]
+fn induct_stream_slices_engine_src_best_effort_request_with_cycles_rejected() {
+    with_test_setup(
+        btreemap![],
+        btreemap![],
+        |stream_handler, mut state, _, metrics| {
+            // Mark REMOTE_SUBNET as CloudEngine.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // Build a best-effort request carrying cycles
+            // (deadline != NO_DEADLINE, payment > 0).
+            let payment = Cycles::new(1_000);
+            let best_effort_request = RequestBuilder::new()
+                .sender(*REMOTE_CANISTER)
+                .receiver(*LOCAL_CANISTER)
+                .sender_reply_callback(CallbackId::new(1))
+                .deadline(CoarseTime::from_secs_since_unix_epoch(123))
+                .payment(payment)
+                .build();
+            let slice = stream_slice_from_config(StreamSliceConfig {
+                messages: vec![best_effort_request.into()],
+                ..StreamSliceConfig::default()
+            });
+
+            // Expected: an outgoing stream to REMOTE_SUBNET with a reject signal
+            // (EngineNotAllowed) for the request; the reject signal refunds the cycles to
+            // the sender, so they are not observed as lost.
+            let mut expected_state = state.clone();
+            let expected_stream = stream_from_config(StreamConfig {
+                signals_end: 1,
+                reject_signals: vec![RejectSignal::new(RejectReason::EngineNotAllowed, 0.into())],
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                btreemap![REMOTE_SUBNET => slice],
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_REQUEST,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                engine_message: 1,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+/// Tests that a best-effort response with no cycles from a CloudEngine subnet, arriving at a
+/// non-engine subnet, is inducted successfully without triggering a critical error.
+#[test]
+fn induct_stream_slices_engine_src_best_effort_response_inducted() {
+    // Use a BestEffortResponse in the slice config so that the framework registers a callback
+    // for LOCAL_CANISTER and creates the necessary input queue reservation.
+    with_test_setup(
+        btreemap![],
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![BestEffortResponse(
+                *REMOTE_CANISTER,
+                *LOCAL_CANISTER,
+                CoarseTime::from_secs_since_unix_epoch(123),
+            )],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, mut state, _, metrics| {
+            // Mark REMOTE_SUBNET as CloudEngine.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // Build a best-effort response with no cycles using the callback registered by setup.
+            let best_effort_response = ResponseBuilder::new()
+                .respondent(*REMOTE_CANISTER)
+                .originator(*LOCAL_CANISTER)
+                .originator_reply_callback(CallbackId::new(1))
+                .deadline(CoarseTime::from_secs_since_unix_epoch(123))
+                .refund(Cycles::zero())
+                .build();
+            let slice = stream_slice_from_config(StreamSliceConfig {
+                messages: vec![best_effort_response.into()],
+                ..StreamSliceConfig::default()
+            });
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            stream_handler.induct_stream_slices(
+                state,
+                btreemap![REMOTE_SUBNET => slice],
+                &mut available_guaranteed_response_memory,
+            );
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_SUCCESS,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+        },
+    );
+}
+
+/// Regression test for response forgery via an engine boundary.
+///
+/// A malicious engine subnet sends a slice containing a response whose `respondent`
+/// is hosted on a different (honest) subnet, matching an outstanding callback on the
+/// victim canister. Without sender-subnet validation as a closed gate, the forged
+/// response would be inducted, satisfying the callback with attacker-controlled data
+/// before the genuine response from the real respondent could arrive.
+///
+/// Expected: sender-subnet validation must fail closed even at the engine boundary;
+/// the forged response is dropped, cycles are accounted for as lost, and the
+/// `sender_subnet_mismatch` critical error is raised.
+#[test]
+fn induct_stream_slices_engine_boundary_drops_forged_response() {
+    with_test_setup(
+        btreemap![],
+        // Malicious engine sends a response forging `OTHER_LOCAL_CANISTER` as the
+        // respondent — that canister is hosted on LOCAL_SUBNET, not REMOTE_SUBNET.
+        // The originator is LOCAL_CANISTER (victim); the framework registers a
+        // matching callback so the response would be inducted if validation were
+        // bypassed.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![Response(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER)],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, mut state, slices, metrics| {
+            // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // Expected state: response dropped (no induction), accept signal pushed,
+            // cycles attached to the forged response observed as lost.
+            let forged = response_in_slice(slices.get(&REMOTE_SUBNET), 0).clone();
+            let mut expected_state = state.clone();
+            let expected_stream = stream_from_config(StreamConfig {
+                signals_end: 1,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                forged.refund,
+                CanisterCyclesCostSchedule::Normal,
+            ));
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_SENDER_SUBNET_MISMATCH,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                sender_subnet_mismatch: 1,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
+/// Tests that a guaranteed-response response which should not exist at the engine
+/// boundary — here one carrying cycles, from a CloudEngine subnet — has its cycles
+/// stripped (and lost) but is still inducted, so a waiting caller is not stranded
+/// forever by our bug. The `illegal_engine_message` critical error is raised. The
+/// sender subnet matches and a matching callback exists, so the (now cycle-free)
+/// response is inducted rather than reaching the sender-subnet-mismatch path.
+#[test]
+fn induct_stream_slices_engine_boundary_strips_and_inducts_guaranteed_response() {
+    with_test_setup(
+        btreemap![],
+        // A guaranteed-response response (with cycles) whose respondent is genuinely
+        // hosted on REMOTE_SUBNET, so sender-subnet validation matches.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![Response(*REMOTE_CANISTER, *LOCAL_CANISTER)],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, mut state, slices, metrics| {
+            // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // The framework attaches cycles to the response, so the stripping is meaningful.
+            assert!(response_in_slice(slices.get(&REMOTE_SUBNET), 0).refund > Cycles::zero());
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                slices,
+                &mut available_guaranteed_response_memory,
+            );
+
+            // The response was inducted (not dropped), raising the `engine_message`
+            // critical error.
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_SUCCESS,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                engine_message: 1,
+                ..CriticalErrorCounts::default()
+            });
+
+            // The inducted response no longer carries any cycles: they were stripped at the
+            // boundary so none crossed it (not even as an anonymous refund).
+            let inducted = inducted_state
+                .canister_state(&LOCAL_CANISTER)
+                .unwrap()
+                .clone()
+                .pop_input()
+                .expect("guaranteed response should have been inducted");
+            match inducted {
+                CanisterMessage::Response { response, .. } => {
+                    assert_eq!(Cycles::zero(), response.refund);
+                }
+                other => panic!("expected an inducted response, got {other}"),
+            }
+        },
+    );
+}
+
+/// Tests that a best-effort response carrying cycles which should not exist at the
+/// engine boundary, from a CloudEngine subnet, is dropped (not inducted): its cycles
+/// are stripped and lost, an accept signal is pushed, and the `illegal_engine_message`
+/// critical error is raised. Unlike a guaranteed response, a best-effort response is
+/// not delivered — the caller will time out on its own.
+#[test]
+fn induct_stream_slices_engine_boundary_drops_best_effort_response_with_cycles() {
+    let deadline = CoarseTime::from_secs_since_unix_epoch(123);
+    with_test_setup(
+        btreemap![],
+        // A best-effort response so that the framework registers a matching callback for
+        // `LOCAL_CANISTER`.
+        btreemap![REMOTE_SUBNET => StreamSliceConfig {
+            messages: vec![BestEffortResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, deadline)],
+            ..StreamSliceConfig::default()
+        }],
+        |stream_handler, mut state, _, metrics| {
+            // Mark REMOTE_SUBNET as a CloudEngine to put us at the engine boundary.
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    REMOTE_SUBNET,
+                    SubnetTopology {
+                        subnet_type: SubnetType::CloudEngine,
+                        ..Default::default()
+                    },
+                );
+            });
+
+            // A best-effort response carrying cycles, matching the callback registered by setup.
+            let payment = Cycles::new(1_000);
+            let response = ResponseBuilder::new()
+                .respondent(*REMOTE_CANISTER)
+                .originator(*LOCAL_CANISTER)
+                .originator_reply_callback(CallbackId::new(1))
+                .deadline(deadline)
+                .refund(payment)
+                .build();
+            let slice = stream_slice_from_config(StreamSliceConfig {
+                messages: vec![response.into()],
+                ..StreamSliceConfig::default()
+            });
+
+            // Expected: response dropped (no induction), accept signal pushed, cycles lost.
+            let mut expected_state = state.clone();
+            let expected_stream = stream_from_config(StreamConfig {
+                signals_end: 1,
+                ..StreamConfig::default()
+            });
+            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+            expected_state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                payment,
+                CanisterCyclesCostSchedule::Normal,
+            ));
+
+            let mut available_guaranteed_response_memory =
+                stream_handler.available_guaranteed_response_memory(&state);
+            let inducted_state = stream_handler.induct_stream_slices(
+                state,
+                btreemap![REMOTE_SUBNET => slice],
+                &mut available_guaranteed_response_memory,
+            );
+
+            assert_eq!(expected_state, inducted_state);
+
+            metrics.assert_inducted_xnet_messages_eq(&[(
+                LABEL_VALUE_TYPE_RESPONSE,
+                LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                1,
+            )]);
+            metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                engine_message: 1,
+                ..CriticalErrorCounts::default()
+            });
+        },
+    );
+}
+
 /// Generates a test setup. For details see `with_test_setup_and_config()`.
 fn with_test_setup(
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
@@ -3315,17 +3839,14 @@ fn with_test_setup_and_config(
             routing_table.lookup_entry(*REMOTE_CANISTER)
         );
         assert!(routing_table.lookup_entry(*UNKNOWN_CANISTER).is_none());
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
-            state
-                .metadata
-                .network_topology
-                .subnets_mut()
-                .insert(subnet, Default::default());
-        }
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            for subnet in [LOCAL_SUBNET, REMOTE_SUBNET] {
+                network_topology
+                    .subnets_mut()
+                    .insert(subnet, Default::default());
+            }
+        });
 
         // Generate testing canister using `LOCAL_CANISTER` as the canister ID.
         let mut canister_state = CanisterStateBuilder::new()
@@ -3371,20 +3892,14 @@ fn with_test_setup_and_config(
                     // Register a callback and make an input queue reservation if `msg_config`
                     // corresponds to `LOCAL_CANISTER`; else use a dummy callback id.
                     if originator == *LOCAL_CANISTER {
-                        // Register a `Callback` and get a `CallbackId`.
-                        let callback_id =
-                            register_callback(&mut canister_state, respondent, deadline);
-
                         // Make an input queue reservation.
-                        canister_state
+                        let callback_id = canister_state
                             .push_output_request(
-                                RequestBuilder::new()
+                                OutputRequestBuilder::new()
                                     .sender(originator)
                                     .receiver(respondent)
-                                    .sender_reply_callback(callback_id)
                                     .deadline(deadline)
-                                    .build()
-                                    .into(),
+                                    .build(),
                                 UNIX_EPOCH,
                             )
                             .unwrap();
@@ -3841,7 +4356,11 @@ impl MetricsFixture {
                         &CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH.to_string()
                     )],
                     counts.receiver_subnet_mismatch
-                )
+                ),
+                (
+                    &[("error", &CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE.to_string())],
+                    counts.engine_message
+                ),
             ])),
             nonzero_values(fetch_int_counter_vec(&self.registry, "critical_errors"))
         );
@@ -3854,6 +4373,7 @@ struct CriticalErrorCounts {
     pub bad_reject_signal_for_response: u64,
     pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
+    pub engine_message: u64,
 }
 
 /// Populates the given `state`'s canister migrations with a single entry,
@@ -3874,7 +4394,9 @@ fn prepare_canister_migration(
     canister_migrations
         .insert_ranges(canister_id_ranges, from_subnet, to_subnet)
         .unwrap();
-    state.metadata.network_topology.canister_migrations = Arc::new(canister_migrations);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.canister_migrations = Arc::new(canister_migrations);
+    });
 
     state
 }
@@ -3901,10 +4423,9 @@ fn complete_canister_migration(
     routing_table
         .assign_ranges(canister_id_ranges, destination)
         .unwrap();
-    state
-        .metadata
-        .network_topology
-        .set_routing_table(routing_table);
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
+    });
 
     state
 }
