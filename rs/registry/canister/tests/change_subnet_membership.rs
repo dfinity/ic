@@ -466,8 +466,7 @@ async fn setup_cloud_engine_registry() -> (PocketIc, Principal, NodeId, NodeId) 
 
     // Read a current member of the CloudEngine subnet to use as the removal
     // target.
-    use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordPb;
-    let subnet_record = decode_registry_value::<SubnetRecordPb>(
+    let subnet_record = decode_registry_value::<SubnetRecord>(
         &pocket_ic,
         make_subnet_record_key(cloud_engine_subnet_id),
     )
@@ -497,7 +496,7 @@ async fn test_engine_controller_can_change_membership_of_cloud_engine_subnet() {
 
     // The engine controller performs a 1-for-1 swap on the CloudEngine subnet.
     // This is expected to succeed.
-    let response = pocket_ic
+    let response: Vec<u8> = pocket_ic
         .update_call(
             REGISTRY_CANISTER_ID.get().0,
             ENGINE_CONTROLLER_CANISTER_ID.get().0,
@@ -505,31 +504,22 @@ async fn test_engine_controller_can_change_membership_of_cloud_engine_subnet() {
             Encode!(&payload).unwrap(),
         )
         .await
-        .unwrap_or_else(|err| {
-            panic!(
-                "change_subnet_membership call by the engine controller on a CloudEngine \
-                 subnet was unexpectedly rejected: {err:?}"
-            )
-        });
-
-    // change_subnet_membership returns nothing on success; if decoding as `()`
-    // works, the call completed successfully.
-    Decode!(&response).unwrap();
+        .unwrap();
+    Decode!(&response, ()).unwrap();
 
     // Verify the membership actually changed.
-    use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordPb;
-    let subnet_record = decode_registry_value::<SubnetRecordPb>(
+    let subnet_record = decode_registry_value::<SubnetRecord>(
         &pocket_ic,
         make_subnet_record_key(ic_base_types::SubnetId::from(PrincipalId::from(
             cloud_engine_subnet_id,
         ))),
     )
     .await;
-    let members: Vec<NodeId> = subnet_record
+    let members = subnet_record
         .membership
         .iter()
         .map(|bytes| NodeId::from(PrincipalId::try_from(bytes.as_slice()).unwrap()))
-        .collect();
+        .collect::<Vec<NodeId>>();
     assert!(
         members.contains(&node_to_add),
         "swapped-in node {node_to_add} should now be a subnet member, got {members:?}"
@@ -555,19 +545,28 @@ async fn test_engine_controller_cannot_change_membership_of_non_cloud_engine_sub
     let non_cloud_engine_subnet =
         Principal::try_from(subnet_list.subnets.first().unwrap().as_slice()).unwrap();
 
-    // The exact contents of the payload do not matter: the CloudEngine check
-    // in `do_change_subnet_membership` fires before any mutation would be
-    // applied. Use an empty add/remove so the payload is otherwise valid.
     let payload = ChangeSubnetMembershipPayload {
         subnet_id: PrincipalId::from(non_cloud_engine_subnet),
         node_ids_add: vec![],
         node_ids_remove: vec![],
     };
 
-    // The engine controller tries to change membership of a non-CloudEngine
-    // subnet: the caller check passes, but `do_change_subnet_membership`
-    // panics on the CloudEngine assertion, which surfaces as a call
-    // rejection.
+    // First, establish that this payload is itself valid by having governance
+    // (which is exempt from the CloudEngine restriction) successfully apply
+    // it as a no-op change against the non-CloudEngine subnet.
+    let response: Vec<u8> = pocket_ic
+        .update_call(
+            REGISTRY_CANISTER_ID.get().0,
+            GOVERNANCE_CANISTER_ID.get().0,
+            "change_subnet_membership",
+            Encode!(&payload).unwrap(),
+        )
+        .await
+        .unwrap();
+    Decode!(&response, ()).unwrap();
+
+    // Now the engine controller submits the exact same payload; since the
+    // target subnet is not a CloudEngine, the call must be rejected.
     let response = pocket_ic
         .update_call(
             REGISTRY_CANISTER_ID.get().0,
@@ -577,31 +576,10 @@ async fn test_engine_controller_cannot_change_membership_of_non_cloud_engine_sub
         )
         .await;
 
+    let err = response.unwrap_err();
     assert!(
-        response.as_ref().is_err_and(|err| err
-            .reject_message
-            .contains("may only change membership of CloudEngine subnets")),
-        "expected the engine controller's change_subnet_membership call on a \
-         non-CloudEngine subnet to be rejected with a CloudEngine-specific message, \
-         got {response:?}"
+        err.reject_message
+            .contains("may only change membership of CloudEngine subnets"),
+        "expected a CloudEngine-specific rejection message, got {err:?}"
     );
-
-    // For a comparison baseline, governance (which is exempt from the
-    // CloudEngine restriction) should have its call accepted by the caller
-    // check; the empty payload is a no-op mutation, which succeeds.
-    let response = pocket_ic
-        .update_call(
-            REGISTRY_CANISTER_ID.get().0,
-            GOVERNANCE_CANISTER_ID.get().0,
-            "change_subnet_membership",
-            Encode!(&payload).unwrap(),
-        )
-        .await
-        .unwrap_or_else(|err| {
-            panic!(
-                "change_subnet_membership call by governance on a non-CloudEngine \
-                 subnet was unexpectedly rejected: {err:?}"
-            )
-        });
-    Decode!(&response).unwrap();
 }
