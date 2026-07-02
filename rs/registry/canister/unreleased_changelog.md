@@ -19,6 +19,10 @@ on the process that this file is part of, see
   (e.g. on-demand cloud provisioning). All other node providers remain subject
   to the standard limits, and the per-IP `add_node` rate limit continues to
   apply to everyone.
+* `change_subnet_membership` may now be called by the engine controller canister
+  in addition to the governance canister. When invoked by the engine controller,
+  the target subnet must be of type `CloudEngine`; governance retains
+  unrestricted access to any subnet.
 
 ## Deprecated
 
