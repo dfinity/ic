@@ -627,7 +627,7 @@ impl StateMachine for FakeStateMachine {
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
-        state.metadata.network_topology = network_topology;
+        state.metadata.network_topology = Arc::new(network_topology);
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
@@ -1025,7 +1025,10 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // defined above). Additionally check the `registry_execution_settings` are also passed
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
-        assert_ne!(&network_topology, &latest_state.metadata.network_topology);
+        assert_ne!(
+            &network_topology,
+            latest_state.metadata.network_topology.as_ref()
+        );
         assert_ne!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1050,7 +1053,10 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
-        assert_eq!(&network_topology, &latest_state.metadata.network_topology);
+        assert_eq!(
+            &network_topology,
+            latest_state.metadata.network_topology.as_ref()
+        );
         assert_eq!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
