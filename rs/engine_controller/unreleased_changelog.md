@@ -11,7 +11,7 @@ on the process that this file is part of, see
 
 * New `change_subnet_membership` update method that proxies to the registry's
   `change_subnet_membership` endpoint. The registry restricts this to
-  `CloudEngine` subnets when the caller is the engine controller.
+  `CloudEngine` subnets when the caller is the engine controller canister.
 
 ## Changed
 
