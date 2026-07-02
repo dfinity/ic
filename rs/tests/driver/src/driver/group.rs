@@ -1452,6 +1452,17 @@ impl SystemTestGroup {
             }
             let backend = SystemTestBackend::from_env();
             backend.write_attribute(&root_env);
+            // Under the Local backend, make sure this (root) driver process can
+            // administer its network namespace, unsharing a fresh one when it
+            // cannot — e.g. on RBE, where the action runs as root but inside a
+            // netns owned by an ancestor user namespace, so RTNETLINK operations
+            // are denied. This must happen before the tokio runtime and any task
+            // subprocess is spawned so the whole process tree shares the netns.
+            if backend == SystemTestBackend::Local {
+                crate::driver::local_backend::LocalBackend::ensure_administrable_netns(
+                    group_ctx.log(),
+                )?;
+            }
             crate::driver::process::enable_child_subreaper(group_ctx.log());
             crate::driver::process::spawn_descendant_reaper(group_ctx.log());
             if with_farm {
