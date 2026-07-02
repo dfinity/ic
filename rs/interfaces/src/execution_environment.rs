@@ -9,7 +9,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion, ReplicaVersion,
-    Time,
+    SubnetId, Time,
     batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -582,6 +582,12 @@ pub type IngressFilterService =
 pub enum QueryExecutionError {
     #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
+    #[error("Invalid delegation: {0}")]
+    InvalidDelegation(String),
+    #[error("Public key not found in topology for subnet {0}")]
+    PublicKeyNotFoundInTopology(SubnetId),
+    #[error("Delegation is outdated compared to the current certified state")]
+    OutdatedDelegation,
 }
 
 /// The response type to a `call()` request in [`QueryExecutionService`].

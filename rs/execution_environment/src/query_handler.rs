@@ -18,6 +18,7 @@ use crate::{
 use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
+use ic_crypto_tree_hash::lookup_path;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -31,7 +32,6 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
@@ -39,6 +39,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
 };
+use ic_types::{PrincipalId, QueryStatsEpoch, SubnetId};
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
@@ -542,12 +543,40 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                         None => (None, None),
                     };
 
-                let result = match get_latest_certified_state_and_data_certificate(
+                let result = get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
                     query.receiver,
-                ) {
-                    Some((state, cert)) => {
+                )
+                .map_or_else(
+                    || Err(QueryExecutionError::CertifiedStateUnavailable),
+                    |(state, cert)| {
+                        // Make sure the public key in the NNS delegation matches the one in the certified state.
+                        // Otherwise the client would not be able to verify the query response against the delegation.
+                        if let Some(delegation) = &certificate_delegation {
+                            let (subnet_id, public_key_from_delegation) = delegation
+                                .get_subnet_id_and_public_key()
+                                .map_err(|err| QueryExecutionError::InvalidDelegation(err))?;
+
+                            if subnet_id != state.get_ref().metadata.own_subnet_id {
+                                return Err(QueryExecutionError::OutdatedDelegation);
+                            }
+                            // let own_subnet_id = state.get_ref().metadata.own_subnet_id;
+                            let public_key_from_certified_state = state
+                                .get_ref()
+                                .metadata
+                                .network_topology
+                                .subnets()
+                                .get(&subnet_id)
+                                .map(|subnet| subnet.public_key.clone())
+                                .ok_or_else(|| {
+                                    QueryExecutionError::PublicKeyNotFoundInTopology(subnet_id)
+                                })?;
+                            if public_key_from_delegation != public_key_from_certified_state {
+                                return Err(QueryExecutionError::OutdatedDelegation);
+                            }
+                        }
+
                         let time = state.get_ref().metadata.batch_time;
 
                         let certified_height_used_for_execution = state.height();
@@ -574,9 +603,8 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                         );
 
                         Ok((response, time))
-                    }
-                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
-                };
+                    },
+                );
 
                 let _ = tx.send(Ok(result));
             }

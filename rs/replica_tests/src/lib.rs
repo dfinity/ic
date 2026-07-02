@@ -612,8 +612,8 @@ impl LocalTestRuntime {
         };
         let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
+            Err(err) => {
+                panic!("Query failed with error: {:?}", err);
             }
         };
         if let Ok(WasmResult::Reply(result)) = result.clone() {

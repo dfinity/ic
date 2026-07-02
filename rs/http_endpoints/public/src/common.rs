@@ -11,8 +11,9 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, info, warn};
+use ic_nns_delegation_manager::does_delegation_match_certified_public_key;
 use ic_registry_client_helpers::crypto::{
     CryptoRegistry, root_of_trust::RegistryRootOfTrustProvider,
 };
@@ -21,7 +22,7 @@ use ic_types::{
     RegistryVersion, SubnetId, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
     malicious_flags::MaliciousFlags,
-    messages::{HttpRequest, HttpRequestContent},
+    messages::{CertificateDelegation, HttpRequest, HttpRequestContent},
 };
 use ic_utils::str::StrEllipsize;
 use ic_validator::{
@@ -274,6 +275,18 @@ pub(crate) fn certified_state_unavailable_error() -> HttpError {
     HttpError { status, message }
 }
 
+pub(crate) fn outdated_delegation_error() -> HttpError {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let message = "This replica has an outdated NNS delegation. Please try again.".to_string();
+    HttpError { status, message }
+}
+
+pub(crate) fn invalid_delegation_error() -> HttpError {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let message = "This replica has an invalid NNS delegation. Please try again.".to_string();
+    HttpError { status, message }
+}
+
 pub(crate) async fn get_latest_certified_state(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Option<Arc<ReplicatedState>> {
@@ -316,6 +329,17 @@ where
         Arc::new(DisabledHttpRequestVerifier) as Arc<_>
     } else {
         Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
+    }
+}
+
+pub(crate) fn verify_delegation_matches_certified_public_key(
+    delegation: &CertificateDelegation,
+    certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+) -> Result<(), HttpError> {
+    match does_delegation_match_certified_public_key(delegation, certified_state_reader) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(outdated_delegation_error()),
+        Err(err) => Err(invalid_delegation_error()),
     }
 }
 

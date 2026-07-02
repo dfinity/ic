@@ -15,7 +15,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
@@ -31,8 +31,8 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequestEnvelope,
+        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
+        HttpReadStateResponse, HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
 };
@@ -143,34 +143,21 @@ impl DelegationManager {
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
     ) -> Option<bool> {
-        let old_delegation = old_delegation?;
-        let public_key_path = &[b"subnet", self.subnet_id.get_ref().as_ref(), b"public_key"];
-
-        let deleg = old_delegation.build_or_original(CanisterRangesFilter::None, &self.log);
-        let parsed = serde_cbor::from_slice::<Certificate>(&deleg.certificate).ok()?;
-        let labeled_tree = LabeledTree::try_from(parsed.tree).ok()?;
-        let Some(LabeledTree::Leaf(public_key_from_deleg)) =
-            lookup_path(&labeled_tree, public_key_path)
-        else {
-            return None;
+        let Some(old_delegation) = old_delegation else {
+            return Ok(false);
         };
 
-        let (_, state_tree, _) = self.state_reader.read_certified_state(
-            &sparse_labeled_tree_from_paths(&[Path::from_iter(
-                public_key_path.iter().map(Label::from),
-            )])
-            .ok()?,
-        )?;
-        let LookupStatus::Found(MixedHashTree::Leaf(public_key_from_state)) =
-            state_tree.lookup(public_key_path)
-        else {
-            return None;
-        };
-
-        // TODO: can this byte-by-byte comparison break if NNS replicas (public_key_from_deleg) and
-        // subnet replicas (public_key_from_state) run different GuestOS versions, i.e. serialized
-        // differently?
-        Some(public_key_from_deleg != public_key_from_state)
+        does_delegation_match_certified_public_key(
+            &old_delegation.build_or_original(CanisterRangesFilter::None, &self.log),
+            self.state_reader.get_certified_state_snapshot()?.as_ref(),
+        )
+        .inspect_err(|err| {
+            warn!(
+                self.log,
+                "Failed to check if the delegation matches the certified state: {err}"
+            );
+        })
+        .ok()
     }
 
     async fn fetch(&self) -> Option<NNSDelegationBuilder> {
@@ -194,30 +181,32 @@ impl DelegationManager {
         delegation
     }
 
-    async fn proactive_fetch(
-        &self,
-        old_delegation: Option<&NNSDelegationBuilder>,
-    ) -> Option<NNSDelegationBuilder> {
-        if self.has_public_key_changed(old_delegation).unwrap_or(false) {
-            // If the public key in the state is different than the previous delegation, then do not
-            // fetch a new delegation: `reactive_fetch` will take care of that.
+    async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
+        let new_delegation = self.fetch().await;
+        if self
+            .has_public_key_changed(new_delegation.as_ref())
+            .unwrap_or(false)
+        {
+            // If the new delegation has a new public key but our state has not reached it yet,
+            // hold it back. Once the state will have caught up, `reactive_fetch` will fetch the
+            // new delegation.
             return None;
         }
 
-        self.fetch().await
+        Some(new_delegation)
     }
 
     async fn reactive_fetch(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
-    ) -> Option<NNSDelegationBuilder> {
+    ) -> Option<Option<NNSDelegationBuilder>> {
         if !self.has_public_key_changed(old_delegation).unwrap_or(false) {
             // If the public key in the state is the same as the previous delegation, then do not
             // fetch a new delegation: `proactive_fetch` will take care of that.
             return None;
         }
 
-        self.fetch().await
+        Some(self.fetch().await)
     }
 
     async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
@@ -231,15 +220,19 @@ impl DelegationManager {
         let mut last_delegation = None;
 
         loop {
-            // fetch the delegation if enough time has passed
-            last_delegation = select! {
-                _ = proactive_interval.tick() => self.proactive_fetch(last_delegation.as_ref()).await,
+            // Fetch the delegation if enough time has passed
+            let new_delegation = select! {
+                _ = proactive_interval.tick() => self.proactive_fetch().await,
                 _ = reactive_interval.tick(), if initialized => self.reactive_fetch(last_delegation.as_ref()).await,
-            }.or(last_delegation);
+            };
+            let Some(new_delegation) = new_delegation else {
+                // No new delegation was fetched. Retry on the next tick.
+                continue;
+            };
 
             sender.send_if_modified(|old_delegation: &mut Option<NNSDelegationBuilder>| {
-                let modified = if &last_delegation != old_delegation {
-                    old_delegation.clone_from(&last_delegation);
+                let modified = if &new_delegation != old_delegation {
+                    old_delegation.clone_from(&new_delegation);
                     true
                 } else {
                     false
@@ -249,6 +242,7 @@ impl DelegationManager {
             });
 
             initialized = true;
+            last_delegation = new_delegation;
         }
     }
 }
@@ -688,6 +682,41 @@ fn get_root_threshold_public_key(
     }
 }
 
+/// Checks that the subnet's public key recorded in the certified state served by the replica
+/// matches the public key embedded in the given NNS delegation.
+///
+/// This guards against serving a response whose certificate the client is guaranteed to reject:
+/// e.g. right after a subnet split the subnet starts certifying with a fresh threshold key while
+/// the cached NNS delegation may still carry the previous key for up to a few minutes. In that
+/// window the two keys disagree, so we return an error instead of a response that cannot be
+/// verified.
+/// Similarly, right before a subnet split, the delegation might already carry the new key while the
+/// certified state still carries the old key.
+pub fn does_delegation_match_certified_public_key(
+    delegation: &CertificateDelegation,
+    certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+) -> Result<bool, String> {
+    let (subnet_id, public_key_from_delegation) = delegation.get_subnet_id_and_public_key()?;
+    if subnet_id != certified_state_reader.get_state().metadata.own_subnet_id {
+        return Ok(false);
+    }
+    let public_key_from_certified_state = certified_state_reader
+        .get_state()
+        .metadata
+        .network_topology
+        .subnets()
+        .get(&subnet_id)
+        .map(|subnet| subnet.public_key.clone())
+        .ok_or_else(|| {
+            format!("The public key of subnet {subnet_id} is missing from the certified state")
+        })?;
+
+    // TODO: can this byte-by-byte comparison break if NNS replicas (public_key_from_deleg) and
+    // subnet replicas (public_key_from_state) run different GuestOS versions, i.e. serialized
+    // differently?
+    Ok(public_key_from_delegation == public_key_from_certified_state)
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::RwLock;
@@ -701,7 +730,9 @@ mod tests {
         CertificateBuilder, CertificateData, encoded_time, generate_root_of_trust,
     };
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-    use ic_crypto_tree_hash::{Label, LabeledTree, MixedHashTree, flatmap, lookup_path};
+    use ic_crypto_tree_hash::{
+        Label, LabeledTree, MatchPatternPath, MixedHashTree, flatmap, lookup_path,
+    };
     use ic_crypto_utils_threshold_sig_der::public_key_to_der;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::no_op_logger;
@@ -711,12 +742,15 @@ mod tests {
     use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_replicated_state::SubnetTopology;
+    use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
     use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record,
         add_subnet_list_record,
     };
-    use ic_test_utilities_types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+    use ic_types::Height;
     use ic_types::consensus::certification::Certification;
     use ic_types::messages::{Certificate, CertificateDelegation};
     use ic_types::{
@@ -737,6 +771,7 @@ mod tests {
     use tokio::time::timeout;
 
     use crate::CanisterRangesFilter;
+    use crate::nns_delegation_reader::into_cbor;
 
     use super::*;
 
@@ -1574,12 +1609,7 @@ mod tests {
             Some(true)
         );
         // Since the public key changed, `proactive_fetch` should not fetch a new delegation...
-        assert!(
-            manager
-                .proactive_fetch(Some(&old_delegation))
-                .await
-                .is_none()
-        );
+        assert!(manager.proactive_fetch().await.is_none());
         // ... while `reactive_fetch` should.
         assert!(
             manager
@@ -1627,12 +1657,7 @@ mod tests {
             Some(false)
         );
         // Since the public key is unchanged, `proactive_fetch` should fetch a new delegation...
-        assert!(
-            manager
-                .proactive_fetch(Some(&old_delegation))
-                .await
-                .is_some()
-        );
+        assert!(manager.proactive_fetch().await.is_some());
         // ... while `reactive_fetch` should not.
         assert!(
             manager
@@ -1746,6 +1771,127 @@ mod tests {
         assert_ne!(
             initial_delegation.certificate,
             refreshed_delegation.certificate
+        );
+    }
+
+    /// A fake certified state which exposes a `ReplicatedState` but does not implement any of the
+    /// certified state methods.
+    struct FakeCertifiedStateSnapshot {
+        state: ReplicatedState,
+    }
+
+    impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+        type State = ReplicatedState;
+
+        fn get_state(&self) -> &Self::State {
+            &self.state
+        }
+
+        fn get_height(&self) -> Height {
+            unimplemented!("Not expected to be called")
+        }
+
+        fn read_certified_state_with_exclusion(
+            &self,
+            _paths: &LabeledTree<()>,
+            _exclusion: Option<&MatchPatternPath>,
+        ) -> Option<(MixedHashTree, Certification)> {
+            unimplemented!("Not expected to be called")
+        }
+    }
+
+    impl FakeCertifiedStateSnapshot {
+        fn new(subnet_id: SubnetId) -> Self {
+            Self {
+                state: ReplicatedState::new(subnet_id, SubnetType::Application),
+            }
+        }
+
+        fn with_public_key(mut self, public_key: &[u8]) -> Self {
+            self.state.metadata.network_topology.subnets_mut().insert(
+                self.state.metadata.own_subnet_id,
+                SubnetTopology {
+                    public_key: public_key.to_vec(),
+                    ..Default::default()
+                },
+            );
+
+            self
+        }
+    }
+
+    /// Builds a `MixedHashTree` containing `/subnet/<subnet_id>/public_key -> public_key`.
+    fn public_key_tree(subnet_id: SubnetId, public_key: &[u8]) -> MixedHashTree {
+        MixedHashTree::Labeled(
+            Label::from("subnet"),
+            Box::new(MixedHashTree::Labeled(
+                Label::from(subnet_id.get().to_vec()),
+                Box::new(MixedHashTree::Labeled(
+                    Label::from("public_key"),
+                    Box::new(MixedHashTree::Leaf(public_key.to_vec())),
+                )),
+            )),
+        )
+    }
+
+    /// Builds a delegation whose certificate embeds `tree`.
+    fn delegation_with_tree(subnet_id: SubnetId, tree: MixedHashTree) -> CertificateDelegation {
+        let certificate = Certificate {
+            tree,
+            signature: Blob(vec![]),
+            delegation: None,
+        };
+        CertificateDelegation {
+            subnet_id: Blob(subnet_id.get().to_vec()),
+            certificate: Blob(into_cbor(&certificate).unwrap()),
+        }
+    }
+
+    #[test]
+    fn verify_delegation_matches_certified_public_key_succeeds_on_match() {
+        let subnet_id = subnet_test_id(1);
+        let public_key = vec![1, 2, 3, 4, 5];
+        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &public_key));
+        let certified_state =
+            FakeCertifiedStateSnapshot::new(subnet_id).with_public_key(&public_key);
+
+        assert!(does_delegation_match_certified_public_key(&delegation, &certified_state).is_ok());
+    }
+
+    #[test]
+    fn verify_delegation_matches_certified_public_key_fails_on_mismatch() {
+        let subnet_id = subnet_test_id(1);
+        let delegation =
+            delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3, 4, 5]));
+        let certified_state =
+            FakeCertifiedStateSnapshot::new(subnet_id).with_public_key(&[5, 4, 3, 2, 1]);
+
+        assert_matches!(
+            does_delegation_match_certified_public_key(&delegation, &certified_state),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_state() {
+        let subnet_id = subnet_test_id(1);
+        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3]));
+        let certified_state = FakeCertifiedStateSnapshot::new(subnet_id);
+
+        assert_matches!(does_delegation_match_certified_public_key(&delegation, &certified_state),
+            Err(err) if err.contains("missing from the certified state")
+        );
+    }
+
+    #[test]
+    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_delegation() {
+        let subnet_id = subnet_test_id(1);
+        let delegation = delegation_with_tree(subnet_id, MixedHashTree::Empty);
+        let certified_state =
+            FakeCertifiedStateSnapshot::new(subnet_id).with_public_key(&[1, 2, 3]);
+
+        assert_matches!(does_delegation_match_certified_public_key(&delegation, &certified_state),
+            Err(err) if err.contains("missing from the delegation")
         );
     }
 }

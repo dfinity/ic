@@ -2,7 +2,10 @@
 
 use crate::{
     HttpError, ReplicaHealthStatus,
-    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
+    common::{
+        Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error,
+        verify_delegation_matches_certified_public_key,
+    },
     metrics::HttpHandlerMetrics,
 };
 use axum::{
@@ -392,6 +395,15 @@ fn get_certificate_and_create_response(
     };
 
     let signature = certification.signed.signature.signature.get().0;
+
+    // Make sure the public key in the NNS delegation matches the one in the certified state we are
+    // about to serve. Otherwise the client would not be able to verify the certificate.
+    if let Some(delegation) = &delegation_from_nns
+        && let Err(HttpError { status, message }) =
+            verify_delegation_matches_certified_public_key(delegation, certified_state_reader)
+    {
+        return (status, message).into_response();
+    }
 
     Cbor(HttpReadStateResponse {
         certificate: Blob(into_cbor(&Certificate {

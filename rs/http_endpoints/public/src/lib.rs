@@ -339,6 +339,7 @@ pub fn start_server(
             registry_client.clone(),
             ingress_verifier.clone(),
             nns_delegation_reader.clone(),
+            state_reader.clone(),
             query_execution_service.clone(),
             subnet_id,
             version,

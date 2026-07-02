@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     HttpError,
-    common::{Cbor, WithTimeout, into_cbor},
+    common::{Cbor, WithTimeout, into_cbor, verify_delegation_matches_certified_public_key},
     metrics::{
         CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
         SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
@@ -36,7 +36,9 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, PrincipalId, SubnetId,
     consensus::certification::Certification,
-    messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
+    messages::{
+        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
+    },
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
@@ -237,8 +239,13 @@ async fn call_sync(
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
     // to the ingress pool.
-    if let Some((tree, certification)) =
-        tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
+    if let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
+        (nns_delegation_reader, delegation_filter),
+        state_reader.clone(),
+        message_id.clone(),
+    )
+    .await
+    .map_err(|err| SyncCallResponse::HttpError(err))?
         && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
         let signature = certification.signed.signature.signature.get().0;
@@ -251,7 +258,7 @@ async fn call_sync(
         return SyncCallResponse::Certificate(Certificate {
             tree,
             signature: Blob(signature),
-            delegation: nns_delegation_reader.get_delegation(delegation_filter),
+            delegation,
         });
     };
 
@@ -326,8 +333,12 @@ async fn call_sync(
         }
     }
 
-    let Some((tree, certification)) =
-        tree_and_certificate_for_message(state_reader, message_id.clone()).await
+    let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
+        (nns_delegation_reader, delegation_filter),
+        state_reader,
+        message_id.clone(),
+    )
+    .await
     else {
         return SyncCallResponse::Accepted(
             "Certified state is not available. Please try /read_state.",
@@ -366,7 +377,7 @@ async fn call_sync(
     SyncCallResponse::Certificate(Certificate {
         tree,
         signature: Blob(signature),
-        delegation: nns_delegation_reader.get_delegation(delegation_filter),
+        delegation,
     })
 }
 
@@ -391,17 +402,22 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
 }
 
 async fn tree_and_certificate_for_message(
+    (nns_delegation_reader, delegation_filter): (&NNSDelegationReader, CanisterRangesFilter),
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,
-) -> Option<(MixedHashTree, Certification)> {
+) -> Result<Option<(MixedHashTree, Certification, Option<CertificateDelegation>)>, HttpError> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
         state_reader.get_certified_state_snapshot()
     })
     .await
     {
-        Ok(Some(certified_state_reader)) => Some(certified_state_reader),
-        Ok(None) | Err(_) => None,
-    }?;
+        Ok(Some(certified_state_reader)) => certified_state_reader,
+        Ok(None) | Err(_) => return Ok(None),
+    };
+    let delegation = nns_delegation_reader.get_delegation(delegation_filter);
+    if let Some(delegation) = delegation.as_ref() {
+        verify_delegation_matches_certified_public_key(delegation, certified_state_reader.as_ref())?
+    }
 
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));
@@ -414,5 +430,8 @@ async fn tree_and_certificate_for_message(
         sparse_labeled_tree_from_paths(&[time_path, request_status_path])
             .expect("Path is within length bound.");
 
-    certified_state_reader.read_certified_state(&tree)
+    let Some((tree, certification)) = certified_state_reader.read_certified_state(&tree) else {
+        return Ok(None);
+    };
+    Ok(Some((tree, certification, delegation)))
 }
