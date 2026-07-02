@@ -30,8 +30,8 @@ pub(crate) trait StateMachine: Send {
         &self,
         state: ReplicatedState,
         batch: Batch,
-        network_topology: NetworkTopology,
-        own_subnet_info: OwnSubnetInfo,
+        network_topology: Arc<NetworkTopology>,
+        own_subnet_info: Arc<OwnSubnetInfo>,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState;
 }
@@ -101,8 +101,8 @@ impl StateMachine for StateMachineImpl {
         &self,
         mut state: ReplicatedState,
         batch: Batch,
-        network_topology: NetworkTopology,
-        own_subnet_info: OwnSubnetInfo,
+        network_topology: Arc<NetworkTopology>,
+        own_subnet_info: Arc<OwnSubnetInfo>,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
         let time_out_messages_timer = self.metrics.start_phase_timer(PHASE_TIME_OUT_MESSAGES);
@@ -119,8 +119,8 @@ impl StateMachine for StateMachineImpl {
             )
         }
 
-        state.metadata.network_topology = Arc::new(network_topology);
-        state.metadata.own_subnet_info = Arc::new(own_subnet_info);
+        state.metadata.network_topology = network_topology;
+        state.metadata.own_subnet_info = own_subnet_info;
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);
