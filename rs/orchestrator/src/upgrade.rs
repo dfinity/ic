@@ -299,6 +299,7 @@ impl Upgrade {
         *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(subnet_id);
 
         let old_cup_height = maybe_local_cup.as_ref().map(HasHeight::height);
+        let old_subnet_id = subnet_id;
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
@@ -424,7 +425,11 @@ impl Upgrade {
         // If we arrive here, we are on the newest replica version.
         // Now we check if a subnet recovery or a subnet split is in progress.
         // If it is, we restart to pass the new DKG material to consensus.
-        self.stop_replica_if_new_recovery_or_post_splitting_cup(&latest_cup, old_cup_height);
+        self.stop_replica_if_new_recovery_or_post_splitting_cup(
+            &latest_cup,
+            old_cup_height,
+            old_subnet_id,
+        );
 
         // This will start a new replica process if none is running.
         self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
@@ -653,6 +658,7 @@ impl Upgrade {
         &self,
         cup: &CatchUpPackage,
         old_cup_height: Option<Height>,
+        old_subnet_id: SubnetId,
     ) {
         let Some(old_cup_height) = old_cup_height else {
             return;
@@ -690,6 +696,12 @@ impl Upgrade {
                     cup.is_signed(),
                     "A post-split CUP should have always been created by the subnet"
                 );
+
+                if new_subnet_id == old_subnet_id {
+                    // This is a post-split CUP for the same subnet, so we do not need to restart
+                    // the replica.
+                    return;
+                }
 
                 &format!("post-split (=> {})", new_subnet_id)
             }
