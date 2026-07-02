@@ -68,7 +68,7 @@ pub fn load_pem_from_file(
     ))
 }
 
-/// If the IndentityConfiguration suggests that the content of the pem file is encrypted,
+/// If the IdentityConfiguration suggests that the content of the pem file is encrypted,
 /// then the user is prompted for the password to the pem file.
 /// The decrypted pem file content is then returned.
 ///

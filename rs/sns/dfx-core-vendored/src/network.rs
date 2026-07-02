@@ -45,9 +45,6 @@ pub enum NetworkResolutionError {
 
     #[error("Failed to parse port value in {0}")]
     ParsePortValueFailed(PathBuf, #[source] std::num::ParseIntError),
-
-    #[error("Failed to parse provider url '{0}'")]
-    ParseProviderUrlFailed(String, #[source] url::ParseError),
 }
 
 /// Determines whether the provided connection is the official IC.
@@ -82,7 +79,10 @@ pub fn resolve_network(network_name: &str) -> Result<ResolvedNetwork, NetworkRes
     }
 
     // Fall back to interpreting the identifier as an IC HTTP endpoint URL.
-    if let Ok(()) = parse_provider_url(network_name) {
+    // Like dfx-core's `create_url_based_network_descriptor`, any parseable URL is
+    // accepted as-is (a non-HTTP scheme fails later at agent construction, as it
+    // does in dfx), and an unparseable identifier falls through to `NetworkNotFound`.
+    if Url::parse(network_name).is_ok() {
         let providers = vec![network_name.to_string()];
         let is_ic = is_ic(network_name, &providers);
         return Ok(ResolvedNetwork { providers, is_ic });
@@ -91,12 +91,6 @@ pub fn resolve_network(network_name: &str) -> Result<ResolvedNetwork, NetworkRes
     Err(NetworkResolutionError::NetworkNotFound(
         network_name.to_string(),
     ))
-}
-
-fn parse_provider_url(url: &str) -> Result<(), NetworkResolutionError> {
-    Url::parse(url)
-        .map(|_| ())
-        .map_err(|e| NetworkResolutionError::ParseProviderUrlFailed(url.to_string(), e))
 }
 
 /// Resolves the `local` network, mirroring dfx's default bind determination.
