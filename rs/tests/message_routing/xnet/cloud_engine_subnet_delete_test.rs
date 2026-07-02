@@ -25,8 +25,10 @@ Runbook::
    from the deleted C's stream), and wait for all 10 calls from US to complete.
 7. Assert at least one call from US was rejected with DestinationInvalid
    (call did not reach the stream: no route after deletion) and at least one
-   with SysUnknown (call reached the stream but C is gone, so the bounded-wait
-   callback times out).
+   with CanisterReject (call reached the stream, so its callback was still
+   open when C was deleted; the destination subnet's disappearance triggers an
+   immediate synthetic reject for it, rather than waiting for the bounded-wait
+   callback to time out).
 
 Success::
 All assertions pass.
@@ -355,13 +357,13 @@ async fn test_async(env: TestEnv) {
     slog::info!(logger, "Step 6e done: all 10 US->UC calls completed");
 
     // Step 7: Assert at least one call from US was rejected with DestinationInvalid
-    // and at least one with SysUnknown.
+    // and at least one with CanisterReject.
     slog::info!(
         logger,
         "Step 7: Asserting rejection codes for 10 US->UC calls"
     );
     let mut dest_invalid_count = 0_usize;
-    let mut sys_unknown_count = 0_usize;
+    let mut canister_reject_count = 0_usize;
     for result in us_uc_results {
         let (bytes, _) = result.expect("US->UC call should have returned a reply with reject code");
         assert_eq!(
@@ -374,23 +376,23 @@ async fn test_async(env: TestEnv) {
         slog::info!(logger, "Step 7: US->UC reject code {}", code);
         match code {
             3 => dest_invalid_count += 1,
-            6 => sys_unknown_count += 1,
+            4 => canister_reject_count += 1,
             _ => panic!("Unexpected reject code {code} from US->UC call"),
         }
     }
     slog::info!(
         logger,
-        "Step 7 done: DestinationInvalid={}, SysUnknown={}",
+        "Step 7 done: DestinationInvalid={}, CanisterReject={}",
         dest_invalid_count,
-        sys_unknown_count,
+        canister_reject_count,
     );
     assert!(
         dest_invalid_count >= 1,
         "Expected at least one DestinationInvalid rejection, got {dest_invalid_count}"
     );
     assert!(
-        sys_unknown_count >= 1,
-        "Expected at least one SysUnknown rejection, got {sys_unknown_count}"
+        canister_reject_count >= 1,
+        "Expected at least one CanisterReject rejection, got {canister_reject_count}"
     );
     slog::info!(logger, "Test passed: all assertions satisfied");
 }
