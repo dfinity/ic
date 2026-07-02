@@ -281,48 +281,45 @@ fn should_panic_on_opening_corrupt_pubkey_store() {
     public_key_store(&temp_dir);
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
 #[should_panic(expected = "Failed to read public key store data: Permission denied")]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_read_without_read_permissions() {
-    // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-    // permission denial this test expects, run as `nobody` when root
-    // (e.g. under Bazel remote execution).
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        let temp_dir = mk_temp_dir_with_permissions(0o700);
-        copy_file_to_dir(pubkey_store_in_test_resources().as_path(), temp_dir.path());
-        fs::set_permissions(
-            temp_dir.path().join(PUBLIC_KEYS_FILE),
-            fs::Permissions::from_mode(0o000),
-        )
-        .expect("failed to set permissions");
+    let temp_dir = mk_temp_dir_with_permissions(0o700);
+    copy_file_to_dir(pubkey_store_in_test_resources().as_path(), temp_dir.path());
+    fs::set_permissions(
+        temp_dir.path().join(PUBLIC_KEYS_FILE),
+        fs::Permissions::from_mode(0o000),
+    )
+    .expect("failed to set permissions");
 
-        public_key_store(&temp_dir);
-    });
+    public_key_store(&temp_dir);
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_without_write_permissions() {
-    // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-    // permission denial this test expects, run as `nobody` when root
-    // (e.g. under Bazel remote execution).
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        let temp_dir = mk_temp_dir_with_permissions(0o700);
-        copy_file_to_dir(pubkey_store_in_test_resources().as_path(), temp_dir.path());
-        let mut pubkey_store =
-            ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEYS_FILE, no_op_logger());
-        fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o400))
-            .expect("failed to set read-only permissions");
+    let temp_dir = mk_temp_dir_with_permissions(0o700);
+    copy_file_to_dir(pubkey_store_in_test_resources().as_path(), temp_dir.path());
+    let mut pubkey_store =
+        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEYS_FILE, no_op_logger());
+    fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o400))
+        .expect("failed to set read-only permissions");
 
-        let result =
-            pubkey_store.add_idkg_dealing_encryption_pubkey(public_key_with_key_value(123));
+    let result = pubkey_store.add_idkg_dealing_encryption_pubkey(public_key_with_key_value(123));
 
-        assert_matches!(result, Err(PublicKeyAddError::Io(io_error)) if io_error.kind() == std::io::ErrorKind::PermissionDenied);
+    assert_matches!(result, Err(PublicKeyAddError::Io(io_error)) if io_error.kind() == std::io::ErrorKind::PermissionDenied);
 
-        fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o700)).expect(
-            "failed to change permissions of temp_dir so that writing is possible \
+    fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o700)).expect(
+        "failed to change permissions of temp_dir so that writing is possible \
                again, so that the directory can automatically be cleaned up",
-        );
-    });
+    );
 }
 
 #[test]

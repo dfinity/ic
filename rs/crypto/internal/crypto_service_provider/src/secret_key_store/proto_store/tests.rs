@@ -386,109 +386,106 @@ fn should_be_idempotent_when_opening_secret_key_store() {
     }
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_to_read_only_secret_key_store_directory() {
-    // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-    // permission denial this test expects, run as `nobody` when root
-    // (e.g. under Bazel remote execution).
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        let rng = &mut reproducible_rng();
-        let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
-            &SecretKeyStoreVersion::V2,
-            CryptoMetrics::none(),
-            None,
-        );
-        let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
-        let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
-        ));
+    let rng = &mut reproducible_rng();
+    let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
+        &SecretKeyStoreVersion::V2,
+        CryptoMetrics::none(),
+        None,
+    );
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
+    ));
 
-        // make the crypto root directory non-writeable, causing the subsequent call to insert a
-        // new key into the key store to fail
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
-            .expect("Could not set the permissions of the temp dir.");
+    // make the crypto root directory non-writeable, causing the subsequent call to insert a
+    // new key into the key store to fail
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
+        .expect("Could not set the permissions of the temp dir.");
 
-        assert_matches!(
-            secret_key_store.insert(key_id, key, None),
-            Err(SecretKeyStoreInsertionError::TransientError(msg))
-            if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
-        );
+    assert_matches!(
+        secret_key_store.insert(key_id, key, None),
+        Err(SecretKeyStoreInsertionError::TransientError(msg))
+        if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
+    );
 
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
-            "failed to change permissions of temp_dir so that writing is possible \
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+        "failed to change permissions of temp_dir so that writing is possible \
                 again, so that the directory can automatically be cleaned up",
-        );
-    });
+    );
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_to_secret_key_store_directory_without_execute_permissions() {
-    // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-    // permission denial this test expects, run as `nobody` when root
-    // (e.g. under Bazel remote execution).
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
-            &SecretKeyStoreVersion::V3,
-            CryptoMetrics::none(),
-            None,
-        );
-        let rng = &mut reproducible_rng();
-        let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
-        let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
-        ));
+    let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
+        &SecretKeyStoreVersion::V3,
+        CryptoMetrics::none(),
+        None,
+    );
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
+    ));
 
-        // make the crypto root directory non-executable, causing the subsequent call to insert a
-        // new key into the key store to fail
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o600))
-            .expect("Could not set the permissions of the temp dir.");
+    // make the crypto root directory non-executable, causing the subsequent call to insert a
+    // new key into the key store to fail
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o600))
+        .expect("Could not set the permissions of the temp dir.");
 
-        assert_matches!(
-            secret_key_store.insert(key_id, key, None),
-            Err(SecretKeyStoreInsertionError::TransientError(msg))
-            if msg.to_lowercase().contains("permission denied")
-        );
+    assert_matches!(
+        secret_key_store.insert(key_id, key, None),
+        Err(SecretKeyStoreInsertionError::TransientError(msg))
+        if msg.to_lowercase().contains("permission denied")
+    );
 
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
-            "failed to change permissions of temp_dir so that writing is possible \
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+        "failed to change permissions of temp_dir so that writing is possible \
                 again, so that the directory can automatically be cleaned up",
-        );
-    });
+    );
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions() {
-    // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-    // permission denial this test expects, run as `nobody` when root
-    // (e.g. under Bazel remote execution).
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
-            &SecretKeyStoreVersion::V3,
-            CryptoMetrics::none(),
-            None,
-        );
-        let rng = &mut reproducible_rng();
-        let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
-        let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
-        ));
+    let (temp_dir, mut secret_key_store) = open_existing_secret_key_store_in_temp_dir(
+        &SecretKeyStoreVersion::V3,
+        CryptoMetrics::none(),
+        None,
+    );
+    let rng = &mut reproducible_rng();
+    let key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
+    ));
 
-        // make the crypto root directory non-writeable, causing the subsequent call to insert a
-        // new key into the key store to fail
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o500))
-            .expect("Could not set the permissions of the temp dir.");
+    // make the crypto root directory non-writeable, causing the subsequent call to insert a
+    // new key into the key store to fail
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o500))
+        .expect("Could not set the permissions of the temp dir.");
 
-        assert_matches!(
-            secret_key_store.insert(key_id, key, None),
-            Err(SecretKeyStoreInsertionError::TransientError(msg))
-            if msg.to_lowercase().contains("permission denied")
-        );
+    assert_matches!(
+        secret_key_store.insert(key_id, key, None),
+        Err(SecretKeyStoreInsertionError::TransientError(msg))
+        if msg.to_lowercase().contains("permission denied")
+    );
 
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
-            "failed to change permissions of temp_dir so that writing is possible \
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+        "failed to change permissions of temp_dir so that writing is possible \
                 again, so that the directory can automatically be cleaned up",
-        );
-    });
+    );
 }
 
 #[test]
@@ -1313,36 +1310,35 @@ mod zeroize_old_secret_key_store {
     }
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, run as `nobody` when root
+// (e.g. under Bazel remote execution).
 #[test]
 #[should_panic(expected = "Error reading SKS data: Permission denied")]
+#[ic_test_utilities_privileges::as_nobody_when_root]
 fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
-    // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
-    // permission denial this test expects, run as `nobody` when root
-    // (e.g. under Bazel remote execution).
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
-        copy_file_to_dir(
-            path_to_existing_secret_key_store(&SecretKeyStoreVersion::V2).as_path(),
-            temp_dir.path(),
-        );
+    let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
+    copy_file_to_dir(
+        path_to_existing_secret_key_store(&SecretKeyStoreVersion::V2).as_path(),
+        temp_dir.path(),
+    );
 
-        // remove read permissions from the secret key store file, causing the subsequent call to
-        // open the key store to panic (since it tries to read the key store)
-        fs::set_permissions(
-            temp_dir.path().join(existing_secret_key_store_file_name(
-                &SecretKeyStoreVersion::V2,
-            )),
-            Permissions::from_mode(0o000),
-        )
-        .expect("Could not set the permissions of the secret key store file.");
+    // remove read permissions from the secret key store file, causing the subsequent call to
+    // open the key store to panic (since it tries to read the key store)
+    fs::set_permissions(
+        temp_dir.path().join(existing_secret_key_store_file_name(
+            &SecretKeyStoreVersion::V2,
+        )),
+        Permissions::from_mode(0o000),
+    )
+    .expect("Could not set the permissions of the secret key store file.");
 
-        let _secret_key_store = ProtoSecretKeyStore::open(
-            temp_dir.path(),
-            &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V2),
-            None,
-            Arc::new(CryptoMetrics::none()),
-        );
-    });
+    let _secret_key_store = ProtoSecretKeyStore::open(
+        temp_dir.path(),
+        &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V2),
+        None,
+        Arc::new(CryptoMetrics::none()),
+    );
 }
 
 mod insert_or_replace {

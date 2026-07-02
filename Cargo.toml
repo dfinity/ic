@@ -453,6 +453,7 @@ members = [
     "rs/test_utilities/logger",
     "rs/test_utilities/metrics",
     "rs/test_utilities/privileges",
+    "rs/test_utilities/privileges/macros",
     "rs/test_utilities/registry",
     "rs/test_utilities/serialization",
     "rs/test_utilities/state",

@@ -10,6 +10,11 @@
 //!
 //! [`run_as_nobody_if_root`] runs a closure as the unprivileged `nobody` user
 //! when the current process is root, and unchanged (in-process) otherwise.
+//! The [`as_nobody_when_root`] attribute is sugar wrapping a whole test body
+//! in [`run_as_nobody_if_root`], avoiding the closure and its indentation.
+
+/// Attribute form of [`run_as_nobody_if_root`]; see its documentation.
+pub use ic_test_utilities_privileges_macros::as_nobody_when_root;
 
 #[cfg(target_os = "linux")]
 mod imp {

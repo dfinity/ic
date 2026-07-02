@@ -56,3 +56,32 @@ fn should_spawn_many_concurrently() {
         handle.join().expect("worker thread panicked");
     }
 }
+
+mod attribute_form {
+    use super::*;
+
+    #[test]
+    #[ic_test_utilities_privileges::as_nobody_when_root]
+    fn should_return_success() {}
+
+    #[test]
+    #[should_panic(expected = "boom: 42")]
+    #[ic_test_utilities_privileges::as_nobody_when_root]
+    fn should_propagate_panic_message() {
+        panic!("boom: {}", 42);
+    }
+
+    #[test]
+    #[ic_test_utilities_privileges::as_nobody_when_root]
+    fn should_deny_write_to_read_only_file() {
+        let dir = tempfile::tempdir().expect("failed to create a temp dir");
+        let path = dir.path().join("read-only");
+        std::fs::write(&path, b"before").expect("failed to create the file");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400))
+            .expect("failed to make the file read-only");
+
+        let err = std::fs::write(&path, b"after").expect_err("write should be denied");
+
+        assert_eq!(err.kind(), ErrorKind::PermissionDenied);
+    }
+}
