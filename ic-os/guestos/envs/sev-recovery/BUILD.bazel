@@ -3,7 +3,7 @@ load("//ic-os/guestos:defs.bzl", "image_deps")
 
 # Builds an SEV recovery image when an elected proposal is available.
 # The build requires the env variables ALTERNATIVE_GUESTOS_BASE_VERSION and ALTERNATIVE_GUESTOS_PROPOSAL_ID
-# The base version is the commit id running on the node that we we are recovering. The proposal id is the accepted
+# The base version is the commit id running on the node that we are recovering. The proposal id is the accepted
 # NNS proposal of type BlessAlternativeGuestOsVersion. It's important that the proposal corresponds to the base
 # version, i.e the launch measurements match. This is checked when building the image.
 #

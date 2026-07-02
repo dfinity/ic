@@ -273,19 +273,15 @@ def icos_build(
 
         if image_deps.get("requires_root_signing", False):
             # Sign the root partition and substitute ROOT_HASH in boot args
-            signed_partition_root_hash = partition_root_hash
-            if build_alternative_guestos_image:
-                signed_partition_root_hash = partition_root_hash + ".local"
-
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
                 srcs = [partition_root_unsigned_tzst],
-                outs = [partition_root_signed_tzst, signed_partition_root_hash],
+                outs = [partition_root_signed_tzst, partition_root_hash],
                 cmd = "$(location //toolchains/sysimage:proc_wrapper) " +
                       "$(location //toolchains/sysimage:verity_sign) " +
                       "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
-                      "-r $(location " + signed_partition_root_hash + ") " +
+                      "-r $(location " + partition_root_hash + ") " +
                       "--dflate $(location //rs/ic_os/build_tools/dflate) " +
                       "--zstd $(location @zstd//:zstd_cli)",
                 executable = False,
