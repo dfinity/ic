@@ -129,7 +129,7 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
             const MEM_LIMIT: u64 = 4 * 1024 * 1024 * 1024;
             let canister_id = mgr
                 .create_canister()
-                .with_optional_wasm_memory_limit(Some(MEM_LIMIT))
+                .with_wasm_memory_limit(MEM_LIMIT)
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait()
