@@ -1267,7 +1267,7 @@ crate.spec(
         "rustls-aws-lc-rs",
     ],
     package = "quinn",
-    version = "^0.11.5",
+    version = "^0.11.11",
 )
 crate.spec(
     package = "quinn-udp",
@@ -1282,7 +1282,7 @@ crate.spec(
         "small_rng",
     ],
     package = "rand",
-    version = "^0.8.5",
+    version = "^0.8.6",
 )
 crate.spec(
     package = "rand_chacha",
