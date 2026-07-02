@@ -22,7 +22,7 @@ impl Registry {
         let subnet_id = SubnetId::from(payload.subnet_id);
         let mut subnet_record = self.get_subnet_or_panic(subnet_id);
 
-        // When invoked by the engine controller, restrict the operation to
+        // When invoked by the engine controller canister, restrict the operation to
         // `CloudEngine` subnets. Governance retains full ability to change
         // membership of any subnet.
         if caller == ENGINE_CONTROLLER_CANISTER_ID.get() {
