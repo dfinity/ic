@@ -4,6 +4,7 @@
 # unresolved (e.g. libssh2-sys failing to find zlib.h from libz-sys's DEP_Z_INCLUDE).
 # Upstream issue: the 'env files are only consumed by the direct owner' assumption
 # in redact_paths() does not hold for outputs_to_dep_env().
+diff --git a/cargo/private/cargo_build_script_runner/lib.rs b/cargo/private/cargo_build_script_runner/lib.rs
 --- a/cargo/private/cargo_build_script_runner/lib.rs
 +++ b/cargo/private/cargo_build_script_runner/lib.rs
 @@ -181,7 +181,7 @@

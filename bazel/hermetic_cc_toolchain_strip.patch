@@ -77,7 +77,7 @@ index 5584f44..42f84d5 100644
 +    const strip_bin = for ([_][]const u8{ "/usr/bin/strip", "/bin/strip" }) |p| {
 +        std.fs.accessAbsolute(p, .{}) catch continue;
 +        break p;
-+    } else "strip";
++    } else return fatal("strip binary not found (checked /usr/bin/strip and /bin/strip)\n", .{});
 +    const strip_cmd = blk: {
 +        var list = ArrayListUnmanaged([]const u8){};
 +        list.appendSlice(arena, &[_][]const u8{ strip_bin, "-S" }) catch |err| {
