@@ -1,6 +1,6 @@
 use crate::crypt::{
     LuksHeaderLocation, SevMetadata, activate_crypt_device, add_sev_metadata, check_encryption_key,
-    destroy_keyslots_except, format_crypt_device, has_attached_luks_header,
+    destroy_keyslots_except, format_crypt_device, has_attached_luks_header, open_luks2_device,
     wipe_attached_luks_header,
 };
 use crate::metrics::export_attached_luks2_header_status;
@@ -59,17 +59,29 @@ impl SevDiskEncryption {
         });
 
         if self.store_luks_header_path.exists() && attached_header_present {
-            info!(
-                "Detached Store LUKS header available and attached header still present \
-                on {}. Wiping attached header.",
-                device_path.display()
-            );
-            if let Err(e) = wipe_attached_luks_header(device_path) {
+            if let Err(e) = open_luks2_device(
+                device_path,
+                LuksHeaderLocation::Detached(&self.store_luks_header_path),
+            ) {
                 warn!(
-                    "Failed to wipe attached LUKS2 header on {}: {e:#}. \
-                    Continuing with detached header.",
+                    "Refusing to wipe attached LUKS2 header on {}: detached header {} \
+                    cannot be read by libcryptsetup: {e:#}",
+                    device_path.display(),
+                    self.store_luks_header_path.display()
+                );
+            } else {
+                info!(
+                    "Detached Store LUKS header available and attached header still present \
+                    on {}. Wiping attached header.",
                     device_path.display()
                 );
+                if let Err(e) = wipe_attached_luks_header(device_path) {
+                    warn!(
+                        "Failed to wipe attached LUKS2 header on {}: {e:#}. \
+                        Continuing with detached header.",
+                        device_path.display()
+                    );
+                }
             }
         }
 

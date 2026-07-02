@@ -1131,6 +1131,44 @@ fn test_open_store_succeeds_with_detached_header_after_attached_header_is_corrup
     assert!(Path::new("/dev/mapper/store-crypt").exists());
 }
 
+/// Test that the attached LUKS header is NOT wiped when the detached header cannot be read by
+/// libcryptsetup.
+#[test]
+fn test_open_store_keeps_attached_header_when_detached_header_is_corrupt() {
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+
+    let mut fixture = TestFixture::new(true);
+
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY)
+        .expect("Failed to write previous key for testing");
+
+    // Simulate a legacy device that has both an attached and a detached header.
+    format_crypt_device(
+        &fixture.device.path().unwrap(),
+        LuksHeaderLocation::Attached,
+        PREVIOUS_KEY,
+    )
+    .expect("Failed to format device with attached header");
+
+    assert!(fixture.has_attached_luks2_header());
+
+    // Corrupt the detached header so libcryptsetup can no longer read it.
+    fs::write(&fixture.store_luks_header_path, b"not a valid LUKS header")
+        .expect("Failed to corrupt detached header");
+
+    // Opening the store must fail because the detached header is unreadable.
+    fixture
+        .open(Partition::Store)
+        .expect_err("opening Store should fail when the detached header is corrupt");
+
+    // Crucially, the attached header must still be present: the wipe guard must have refused
+    // to wipe it because the detached header could not be verified.
+    assert!(
+        fixture.has_attached_luks2_header(),
+        "attached LUKS header must not be wiped when the detached header is unreadable"
+    );
+}
+
 /// Test that opening the store partition wipes a legacy attached LUKS header when a detached
 /// header is available. This simulates upgrading from an older GuestOS that wrote both an
 /// attached and a detached header.

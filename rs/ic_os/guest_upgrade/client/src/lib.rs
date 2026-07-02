@@ -219,7 +219,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .await
             .with_context(|| {
                 format!(
-                    "Failed to write store LUKS header to {}",
+                    "Failed to write Store LUKS header to {}",
                     self.store_luks_header_path.display()
                 )
             })?;
