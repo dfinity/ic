@@ -449,8 +449,11 @@ async fn setup_cloud_engine_registry() -> (PocketIc, Principal, NodeId, NodeId) 
     };
     // Use a starting mutation id well outside the range consumed by the
     // CloudEngine setup so IPs / test ids do not collide.
-    let (extra_node_mutate, extra_node_ids_and_pks) =
-        prepare_registry_with_nodes_from_template(1, INITIAL_MUTATION_ID + 100, extra_node_template);
+    let (extra_node_mutate, extra_node_ids_and_pks) = prepare_registry_with_nodes_from_template(
+        1,
+        INITIAL_MUTATION_ID + 100,
+        extra_node_template,
+    );
     let extra_node_id = *extra_node_ids_and_pks
         .keys()
         .next()

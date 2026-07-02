@@ -365,9 +365,7 @@ async fn deploy_guestos_to_all_subnet_nodes(
 /// registry enforces that, when invoked by the engine controller, the target
 /// subnet must be of type `CloudEngine`.
 #[update]
-async fn change_subnet_membership(
-    payload: ChangeSubnetMembershipPayload,
-) -> Result<(), String> {
+async fn change_subnet_membership(payload: ChangeSubnetMembershipPayload) -> Result<(), String> {
     ensure_authorized()?;
 
     Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "change_subnet_membership")
