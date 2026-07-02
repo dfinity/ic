@@ -38,27 +38,25 @@ fn test_ensure_file_exists_and_is_writeable_succeeds_when_creating_file() {
 #[test]
 #[ic_test_utilities_privileges::as_nobody_when_root]
 fn test_ensure_file_exists_and_is_writeable_fails_if_non_writeable() {
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        // Setup
-        let temp_file = NamedTempFile::new().expect("Failed to create tmp file");
-        let temp_file_path = temp_file.path();
-        // Set the permissions of the temp file to read-only which should trigger a
-        // failure.
-        let permissions = fs::Permissions::from_mode(READ_ONLY_PERMISSION);
-        fs::set_permissions(temp_file_path, permissions).expect("Failed to set permissions");
+    // Setup
+    let temp_file = NamedTempFile::new().expect("Failed to create tmp file");
+    let temp_file_path = temp_file.path();
+    // Set the permissions of the temp file to read-only which should trigger a
+    // failure.
+    let permissions = fs::Permissions::from_mode(READ_ONLY_PERMISSION);
+    fs::set_permissions(temp_file_path, permissions).expect("Failed to set permissions");
 
-        // Exercise/verify
-        assert!(matches!(
-            ensure_file_exists_and_is_writeable(temp_file_path),
-            Err(SaveToErrors::FileOpenFailed(ref path, _)) if path == &temp_file_path.to_path_buf(),
+    // Exercise/verify
+    assert!(matches!(
+        ensure_file_exists_and_is_writeable(temp_file_path),
+        Err(SaveToErrors::FileOpenFailed(ref path, _)) if path == &temp_file_path.to_path_buf(),
 
-        ));
+    ));
 
-        // Teardown
-        // Reset permissions so the file can be deleted
-        let permissions = fs::Permissions::from_mode(READ_WRITE_PERMISSION);
-        fs::set_permissions(temp_file_path, permissions).expect("Failed to reset permissions");
-    });
+    // Teardown
+    // Reset permissions so the file can be deleted
+    let permissions = fs::Permissions::from_mode(READ_WRITE_PERMISSION);
+    fs::set_permissions(temp_file_path, permissions).expect("Failed to reset permissions");
 }
 
 #[test]
@@ -85,24 +83,22 @@ fn test_save_proposal_id_to_file_succeeds() {
 #[test]
 #[ic_test_utilities_privileges::as_nobody_when_root]
 fn test_save_proposal_id_to_file_fails_if_write_fails() {
-    ic_test_utilities_privileges::run_as_nobody_if_root(|| {
-        // Setup
-        let temp_file = NamedTempFile::new().expect("Failed to create tmp file");
-        let temp_file_path = temp_file.path();
-        // Set the permissions of the temp file to read-only which should trigger a
-        // failure.
-        let permissions = fs::Permissions::from_mode(READ_ONLY_PERMISSION);
-        fs::set_permissions(temp_file_path, permissions).expect("Failed to set permissions");
+    // Setup
+    let temp_file = NamedTempFile::new().expect("Failed to create tmp file");
+    let temp_file_path = temp_file.path();
+    // Set the permissions of the temp file to read-only which should trigger a
+    // failure.
+    let permissions = fs::Permissions::from_mode(READ_ONLY_PERMISSION);
+    fs::set_permissions(temp_file_path, permissions).expect("Failed to set permissions");
 
-        // Exercise/verify
-        assert!(matches!(
-            save_proposal_id_to_file(temp_file_path, &ProposalId { id: 1 }),
-            Err(SaveToErrors::FileWriteFailed(ref path, _)) if path == &temp_file_path.to_path_buf(),
-        ));
+    // Exercise/verify
+    assert!(matches!(
+        save_proposal_id_to_file(temp_file_path, &ProposalId { id: 1 }),
+        Err(SaveToErrors::FileWriteFailed(ref path, _)) if path == &temp_file_path.to_path_buf(),
+    ));
 
-        // Teardown
-        // Reset permissions so the file can be deleted
-        let permissions = fs::Permissions::from_mode(READ_WRITE_PERMISSION);
-        fs::set_permissions(temp_file_path, permissions).expect("Failed to reset permissions");
-    });
+    // Teardown
+    // Reset permissions so the file can be deleted
+    let permissions = fs::Permissions::from_mode(READ_WRITE_PERMISSION);
+    fs::set_permissions(temp_file_path, permissions).expect("Failed to reset permissions");
 }
