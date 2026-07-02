@@ -32,8 +32,10 @@
 //!      for all 10 calls from `US` to complete.
 //!   7. Assert at least one call from `US` was rejected with `DestinationInvalid`
 //!      (call did not reach the stream: no route after deletion) and at least one
-//!      with `SysUnknown` (call reached the stream but `C` is gone, so the
-//!      bounded-wait callback times out).
+//!      with `CanisterReject` (call reached the stream, so its callback was still
+//!      open when `C` was deleted; `generate_reject_responses_for_deleted_subnets`
+//!      then synthesizes an immediate reject for it, rather than waiting for the
+//!      bounded-wait callback to time out).
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
@@ -67,7 +69,7 @@ const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
 
 /// Reject codes (see `ic_error_types::RejectCode`).
 const DESTINATION_INVALID: u32 = 3;
-const SYS_UNKNOWN: u32 = 6;
+const CANISTER_REJECT: u32 = 4;
 
 /// Shared pool of `StateMachine`s used to mock the XNet layer. Removing a subnet
 /// from this pool makes it unreachable for the other subnets (i.e. "deleted").
@@ -339,8 +341,9 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
 
     // Step 6c: Drive S until all 10 calls from US complete. The calls still in
     // US's output queue are rejected with DestinationInvalid (no route to C),
-    // while the calls already in the S -> C stream eventually time out with
-    // SysUnknown (C is gone, so no response ever arrives).
+    // while the calls already in the S -> C stream (whose callback is still
+    // open) get an immediate synthetic CanisterReject once C disappears from
+    // the network topology (see `generate_reject_responses_for_deleted_subnets`).
     let mut results: Vec<Option<WasmResult>> = vec![None; NUM_CALLS];
     let mut done = false;
     for _ in 0..200 {
@@ -359,7 +362,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
 
     // Step 7: Assert that all calls were rejected and that both reject codes occur.
     let mut destination_invalid_count = 0_usize;
-    let mut sys_unknown_count = 0_usize;
+    let mut canister_reject_count = 0_usize;
     for result in results {
         match result.unwrap() {
             WasmResult::Reply(bytes) => {
@@ -372,7 +375,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
                 let code = u32::from_le_bytes(bytes.try_into().unwrap());
                 match code {
                     DESTINATION_INVALID => destination_invalid_count += 1,
-                    SYS_UNKNOWN => sys_unknown_count += 1,
+                    CANISTER_REJECT => canister_reject_count += 1,
                     other => panic!("unexpected reject code {other} from US -> UC call"),
                 }
             }
@@ -384,7 +387,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
         "expected at least one DestinationInvalid rejection, got {destination_invalid_count}"
     );
     assert!(
-        sys_unknown_count >= 1,
-        "expected at least one SysUnknown rejection, got {sys_unknown_count}"
+        canister_reject_count >= 1,
+        "expected at least one CanisterReject rejection, got {canister_reject_count}"
     );
 }
