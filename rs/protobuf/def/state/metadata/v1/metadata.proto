@@ -4,6 +4,7 @@ package state.metadata.v1;
 import "bitcoin/v1/bitcoin.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
+import "registry/provisional_whitelist/v1/provisional_whitelist.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
@@ -57,6 +58,7 @@ message NetworkTopology {
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
   FullTopology full_topology = 9;
   types.v1.SubnetId default_initial_dkg_subnet_id = 10;
+  repeated ApiBoundaryNodeEntry api_boundary_nodes = 11;
 }
 
 message FullTopology {
@@ -346,6 +348,37 @@ message ApiBoundaryNodeEntry {
   optional bytes pubkey = 5;
 }
 
+message ChainKeySettings {
+  uint32 max_queue_size = 1;
+  optional uint32 pre_signatures_to_create_in_advance = 2;
+}
+
+message ChainKeySettingsEntry {
+  types.v1.MasterPublicKeyId key_id = 1;
+  ChainKeySettings settings = 2;
+}
+
+// Configuration of execution that comes from the registry. Mirrors
+// `ic_interfaces::execution_environment::RegistryExecutionSettings`.
+message RegistryExecutionSettings {
+  uint64 max_number_of_canisters = 1;
+  registry.provisional_whitelist.v1.ProvisionalWhitelist provisional_whitelist = 2;
+  repeated ChainKeySettingsEntry chain_key_settings = 3;
+  uint64 subnet_size = 4;
+  repeated types.v1.NodeId node_ids = 5;
+  uint64 registry_version = 6;
+}
+
+// Registry-derived data specific to this replica's own subnet. Mirrors
+// `ic_replicated_state::metadata_state::OwnSubnetTopology`.
+message OwnSubnetTopology {
+  types.v1.SubnetId own_subnet_id = 1;
+  registry.subnet.v1.SubnetFeatures features = 2;
+  registry.subnet.v1.ResourceLimits resource_limits = 3;
+  RegistryExecutionSettings registry_execution_settings = 4;
+  repeated NodePublicKeyEntry node_public_keys = 5;
+}
+
 message ThresholdSignatureAgreementsEntry {
   types.v1.MasterPublicKeyId key_id = 1;
   uint64 count = 2;
@@ -368,8 +401,8 @@ message BlockmakerMetricsTimeSeries {
 }
 
 message SystemMetadata {
-  reserved 1, 4, 12, 14, 22;
-  reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate", "time_of_last_allocation_charge_nanos";
+  reserved 1, 4, 12, 13, 14, 19, 21, 22, 24;
+  reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate", "time_of_last_allocation_charge_nanos", "own_subnet_features", "node_public_keys", "api_boundary_nodes", "own_resource_limits";
 
   google.protobuf.BytesValue prev_state_hash = 2;
   uint64 batch_time_nanos = 3;
@@ -399,21 +432,16 @@ message SystemMetadata {
 
   uint64 heap_delta_estimate = 11;
 
-  registry.subnet.v1.SubnetFeatures own_subnet_features = 13;
-
   SubnetMetrics subnet_metrics = 15;
 
   repeated BitcoinGetSuccessorsFollowUpResponses bitcoin_get_successors_follow_up_responses = 18;
 
-  repeated NodePublicKeyEntry node_public_keys = 19;
-
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
-  repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
-
-  registry.subnet.v1.ResourceLimits own_resource_limits = 24;
-
   repeated CanisterPriority subnet_schedule = 25;
+
+  // Registry-derived data specific to this replica's own subnet.
+  OwnSubnetTopology own_subnet_topology = 26;
 }
 
 message CanisterPriority {

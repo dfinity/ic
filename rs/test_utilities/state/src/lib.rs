@@ -165,7 +165,11 @@ impl ReplicatedStateBuilder {
         });
 
         state.metadata.batch_time = self.batch_time;
-        state.metadata.own_subnet_features = self.subnet_features;
+        state
+            .metadata
+            .modify_own_subnet_topology(|own_subnet_topology| {
+                own_subnet_topology.features = self.subnet_features;
+            });
 
         state.epoch_query_stats = self.query_stats;
 

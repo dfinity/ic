@@ -69,6 +69,19 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             default_initial_dkg_subnet_id: item
                 .default_initial_dkg_subnet_id
                 .map(subnet_id_into_protobuf),
+            api_boundary_nodes: item
+                .api_boundary_nodes
+                .iter()
+                .map(
+                    |(node_id, api_boundary_node_entry)| pb_metadata::ApiBoundaryNodeEntry {
+                        node_id: Some(node_id_into_protobuf(*node_id)),
+                        domain: api_boundary_node_entry.domain.clone(),
+                        ipv4_address: api_boundary_node_entry.ipv4_address.clone(),
+                        ipv6_address: api_boundary_node_entry.ipv6_address.clone(),
+                        pubkey: api_boundary_node_entry.pubkey.clone(),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -155,6 +168,21 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 }
             },
             default_initial_dkg_subnet_id,
+            api_boundary_nodes: {
+                let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
+                for entry in item.api_boundary_nodes {
+                    api_boundary_nodes.insert(
+                        node_id_try_from_option(entry.node_id)?,
+                        ApiBoundaryNodeEntry {
+                            domain: entry.domain,
+                            ipv4_address: entry.ipv4_address,
+                            ipv6_address: entry.ipv6_address,
+                            pubkey: entry.pubkey,
+                        },
+                    );
+                }
+                api_boundary_nodes
+            },
         })
     }
 }
@@ -368,8 +396,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             state_sync_version: item.state_sync_version as u32,
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
-            own_subnet_features: Some(item.own_subnet_features.into()),
-            own_resource_limits: Some(item.own_resource_limits.into()),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -382,27 +408,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     },
                 )
                 .collect(),
-            node_public_keys: item
-                .node_public_keys
-                .iter()
-                .map(|(node_id, public_key)| pb_metadata::NodePublicKeyEntry {
-                    node_id: Some(node_id_into_protobuf(*node_id)),
-                    public_key: public_key.clone(),
-                })
-                .collect(),
-            api_boundary_nodes: item
-                .api_boundary_nodes
-                .iter()
-                .map(
-                    |(node_id, api_boundary_node_entry)| pb_metadata::ApiBoundaryNodeEntry {
-                        node_id: Some(node_id_into_protobuf(*node_id)),
-                        domain: api_boundary_node_entry.domain.clone(),
-                        ipv4_address: api_boundary_node_entry.ipv4_address.clone(),
-                        ipv6_address: api_boundary_node_entry.ipv6_address.clone(),
-                        pubkey: api_boundary_node_entry.pubkey.clone(),
-                    },
-                )
-                .collect(),
+            own_subnet_topology: Some((&*item.own_subnet_topology).into()),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
             subnet_schedule: item
                 .subnet_schedule
@@ -496,24 +502,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
 
         let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
 
-        let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
-        for entry in item.node_public_keys {
-            node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
-        }
-
-        let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
-        for entry in item.api_boundary_nodes {
-            api_boundary_nodes.insert(
-                node_id_try_from_option(entry.node_id)?,
-                ApiBoundaryNodeEntry {
-                    domain: entry.domain,
-                    ipv4_address: entry.ipv4_address,
-                    ipv6_address: entry.ipv6_address,
-                    pubkey: entry.pubkey,
-                },
-            );
-        }
-
         Ok(Self {
             own_subnet_id: subnet_id_try_from_option(
                 item.own_subnet_id,
@@ -523,10 +511,17 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // actual value when we serialize SystemMetadata. We rely on `load_checkpoint()` to
             // properly set this value.
             own_subnet_type: SubnetType::default(),
-            own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
-            own_resource_limits: item.own_resource_limits.unwrap_or_default().into(),
-            node_public_keys,
-            api_boundary_nodes,
+            // `None` must be allowed here because checkpoints predating this
+            // field don't have it. Defaulting is safe: the default carries a
+            // sentinel `own_subnet_id` that never matches a real subnet, forcing
+            // a registry refresh — before the state is next certified — on the
+            // round immediately following the checkpoint load.
+            own_subnet_topology: Arc::new(
+                item.own_subnet_topology
+                    .map(OwnSubnetTopology::try_from)
+                    .transpose()?
+                    .unwrap_or_default(),
+            ),
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -830,5 +825,47 @@ impl
         }
 
         Ok(time_series)
+    }
+}
+
+impl From<&OwnSubnetTopology> for pb_metadata::OwnSubnetTopology {
+    fn from(item: &OwnSubnetTopology) -> Self {
+        Self {
+            own_subnet_id: Some(subnet_id_into_protobuf(item.own_subnet_id)),
+            features: Some(pb_subnet::SubnetFeatures::from(item.features)),
+            resource_limits: Some(item.resource_limits.into()),
+            registry_execution_settings: Some((&item.registry_execution_settings).into()),
+            node_public_keys: item
+                .node_public_keys
+                .iter()
+                .map(|(node_id, public_key)| pb_metadata::NodePublicKeyEntry {
+                    node_id: Some(node_id_into_protobuf(*node_id)),
+                    public_key: public_key.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::OwnSubnetTopology> for OwnSubnetTopology {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_metadata::OwnSubnetTopology) -> Result<Self, Self::Error> {
+        let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
+        for entry in item.node_public_keys {
+            node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
+        }
+        Ok(Self {
+            own_subnet_id: subnet_id_try_from_option(
+                item.own_subnet_id,
+                "OwnSubnetTopology::own_subnet_id",
+            )?,
+            features: item.features.unwrap_or_default().into(),
+            resource_limits: item.resource_limits.unwrap_or_default().into(),
+            registry_execution_settings: try_from_option_field(
+                item.registry_execution_settings,
+                "OwnSubnetTopology::registry_execution_settings",
+            )?,
+            node_public_keys,
+        })
     }
 }

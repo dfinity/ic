@@ -283,25 +283,31 @@ mod tests {
                 |_| {},
             );
 
-            state.metadata.node_public_keys = btreemap! {
-                node_test_id(1) => vec![1; 44],
-                node_test_id(2) => vec![2; 44],
-            };
+            state
+                .metadata
+                .modify_own_subnet_topology(|own_subnet_topology| {
+                    own_subnet_topology.node_public_keys = btreemap! {
+                        node_test_id(1) => vec![1; 44],
+                        node_test_id(2) => vec![2; 44],
+                    };
+                });
 
-            state.metadata.api_boundary_nodes = btreemap! {
-                node_test_id(11) => ApiBoundaryNodeEntry {
-                    domain: "api-bn11-example.com".to_string(),
-                    ipv4_address: Some("127.0.0.1".to_string()),
-                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-                    pubkey: None,
-                },
-                node_test_id(12) => ApiBoundaryNodeEntry {
-                    domain: "api-bn12-example.com".to_string(),
-                    ipv4_address: None,
-                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
-                    pubkey: None,
-                },
-            };
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.api_boundary_nodes = btreemap! {
+                    node_test_id(11) => ApiBoundaryNodeEntry {
+                        domain: "api-bn11-example.com".to_string(),
+                        ipv4_address: Some("127.0.0.1".to_string()),
+                        ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                        pubkey: None,
+                    },
+                    node_test_id(12) => ApiBoundaryNodeEntry {
+                        domain: "api-bn12-example.com".to_string(),
+                        ipv4_address: None,
+                        ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                        pubkey: None,
+                    },
+                };
+            });
 
             fn id_range(from: u64, to: u64) -> CanisterIdRange {
                 CanisterIdRange {

@@ -2296,7 +2296,11 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
         .with_nns_subnet_id(own_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.state_mut()
+        .metadata
+        .modify_own_subnet_topology(|own_subnet_topology| {
+            own_subnet_topology.features.http_requests = true
+        });
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -2330,7 +2334,11 @@ fn http_request_bound_holds() {
         // set number of max in-flight calls to 10
         .with_max_canister_http_requests_in_flight(10)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.state_mut()
+        .metadata
+        .modify_own_subnet_topology(|own_subnet_topology| {
+            own_subnet_topology.features.http_requests = true
+        });
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -2395,7 +2403,11 @@ fn management_canister_xnet_called_from_non_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.state_mut()
+        .metadata
+        .modify_own_subnet_topology(|own_subnet_topology| {
+            own_subnet_topology.features.http_requests = true
+        });
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -3345,7 +3357,11 @@ fn execute_canister_http_request_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = false;
+    test.state_mut()
+        .metadata
+        .modify_own_subnet_topology(|own_subnet_topology| {
+            own_subnet_topology.features.http_requests = false
+        });
 
     // Create payload of the request.
     let url = "https://".to_string();

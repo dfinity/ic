@@ -1,21 +1,14 @@
-use crate::message_routing::{
-    ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
-};
+use crate::message_routing::{CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics};
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::{
-    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
-};
+use ic_interfaces::execution_environment::{ExecutionRoundSummary, ExecutionRoundType, Scheduler};
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
-use ic_registry_resource_limits::ResourceLimits;
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_replicated_state::ReplicatedState;
 use ic_types::batch::{Batch, BatchContent};
 use ic_types::{ExecutionRound, NumBytes, SubnetId};
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -28,17 +21,7 @@ const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
 const PHASE_SHED_MESSAGES: &str = "shed_messages";
 
 pub(crate) trait StateMachine: Send {
-    fn execute_round(
-        &self,
-        state: ReplicatedState,
-        network_topology: Arc<NetworkTopology>,
-        batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
-        registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
-    ) -> ReplicatedState;
+    fn execute_round(&self, state: ReplicatedState, batch: Batch) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
@@ -102,17 +85,7 @@ impl StateMachineImpl {
 }
 
 impl StateMachine for StateMachineImpl {
-    fn execute_round(
-        &self,
-        mut state: ReplicatedState,
-        network_topology: Arc<NetworkTopology>,
-        batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
-        registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
-    ) -> ReplicatedState {
+    fn execute_round(&self, mut state: ReplicatedState, batch: Batch) -> ReplicatedState {
         let time_out_messages_timer = self.metrics.start_phase_timer(PHASE_TIME_OUT_MESSAGES);
 
         if batch.time > state.metadata.batch_time {
@@ -127,11 +100,6 @@ impl StateMachine for StateMachineImpl {
             )
         }
 
-        state.metadata.network_topology = network_topology;
-        state.metadata.own_subnet_features = subnet_features;
-        state.metadata.own_resource_limits = resource_limits;
-        state.metadata.node_public_keys = node_public_keys;
-        state.metadata.api_boundary_nodes = api_boundary_nodes;
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);
@@ -236,6 +204,11 @@ impl StateMachine for StateMachineImpl {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
             current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
         });
+        let registry_settings = state_with_messages
+            .metadata
+            .own_subnet_topology
+            .registry_execution_settings
+            .clone();
         let mut state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
@@ -244,7 +217,7 @@ impl StateMachine for StateMachineImpl {
             current_round,
             round_summary,
             execution_round_type,
-            registry_settings,
+            &registry_settings,
         );
         if !state_after_execution.consensus_queue.is_empty() {
             fatal!(

@@ -76,6 +76,8 @@ pub struct NetworkTopology {
     #[prost(message, optional, tag = "10")]
     pub default_initial_dkg_subnet_id:
         ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(message, repeated, tag = "11")]
+    pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FullTopology {
@@ -512,6 +514,55 @@ pub struct ApiBoundaryNodeEntry {
     #[prost(bytes = "vec", optional, tag = "5")]
     pub pubkey: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct ChainKeySettings {
+    #[prost(uint32, tag = "1")]
+    pub max_queue_size: u32,
+    #[prost(uint32, optional, tag = "2")]
+    pub pre_signatures_to_create_in_advance: ::core::option::Option<u32>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeySettingsEntry {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub settings: ::core::option::Option<ChainKeySettings>,
+}
+/// Configuration of execution that comes from the registry. Mirrors
+/// `ic_interfaces::execution_environment::RegistryExecutionSettings`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RegistryExecutionSettings {
+    #[prost(uint64, tag = "1")]
+    pub max_number_of_canisters: u64,
+    #[prost(message, optional, tag = "2")]
+    pub provisional_whitelist: ::core::option::Option<
+        super::super::super::registry::provisional_whitelist::v1::ProvisionalWhitelist,
+    >,
+    #[prost(message, repeated, tag = "3")]
+    pub chain_key_settings: ::prost::alloc::vec::Vec<ChainKeySettingsEntry>,
+    #[prost(uint64, tag = "4")]
+    pub subnet_size: u64,
+    #[prost(message, repeated, tag = "5")]
+    pub node_ids: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    #[prost(uint64, tag = "6")]
+    pub registry_version: u64,
+}
+/// Registry-derived data specific to this replica's own subnet. Mirrors
+/// `ic_replicated_state::metadata_state::OwnSubnetTopology`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OwnSubnetTopology {
+    #[prost(message, optional, tag = "1")]
+    pub own_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(message, optional, tag = "2")]
+    pub features: ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
+    #[prost(message, optional, tag = "3")]
+    pub resource_limits:
+        ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
+    #[prost(message, optional, tag = "4")]
+    pub registry_execution_settings: ::core::option::Option<RegistryExecutionSettings>,
+    #[prost(message, repeated, tag = "5")]
+    pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ThresholdSignatureAgreementsEntry {
     #[prost(message, optional, tag = "1")]
@@ -581,25 +632,18 @@ pub struct SystemMetadata {
     pub certification_version: u32,
     #[prost(uint64, tag = "11")]
     pub heap_delta_estimate: u64,
-    #[prost(message, optional, tag = "13")]
-    pub own_subnet_features:
-        ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
     #[prost(message, optional, tag = "15")]
     pub subnet_metrics: ::core::option::Option<SubnetMetrics>,
     #[prost(message, repeated, tag = "18")]
     pub bitcoin_get_successors_follow_up_responses:
         ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
-    #[prost(message, repeated, tag = "19")]
-    pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
     #[prost(message, optional, tag = "20")]
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
-    #[prost(message, repeated, tag = "21")]
-    pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
-    #[prost(message, optional, tag = "24")]
-    pub own_resource_limits:
-        ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
     #[prost(message, repeated, tag = "25")]
     pub subnet_schedule: ::prost::alloc::vec::Vec<CanisterPriority>,
+    /// Registry-derived data specific to this replica's own subnet.
+    #[prost(message, optional, tag = "26")]
+    pub own_subnet_topology: ::core::option::Option<OwnSubnetTopology>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterPriority {

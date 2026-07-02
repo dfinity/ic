@@ -4,15 +4,16 @@ use crate::routing::demux::MockDemux;
 use crate::routing::stream_builder::{MockStreamBuilder, StreamBuilderImpl};
 use crate::state_machine::StateMachineImpl;
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
-use ic_interfaces::execution_environment::Scheduler;
+use ic_interfaces::execution_environment::{RegistryExecutionSettings, Scheduler};
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    InputQueueType, ReplicatedState, SubnetTopology,
-    metadata_state::testing::NetworkTopologyTesting, testing::OutputRequestBuilder,
+    InputQueueType, NetworkTopology, ReplicatedState, SubnetTopology,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    testing::OutputRequestBuilder,
     testing::ReplicatedStateTesting,
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
@@ -70,8 +71,16 @@ struct StateMachineTestFixture {
 /// Scheduler, and StreamBuilder. The Mocks will ensure that a panic
 /// occurs if they are called in the wrong order.
 fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
-    // Initial state provided by the state manager.
-    let initial_state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
+    // Initial state provided by the state manager. `execute_round` sources the
+    // `RegistryExecutionSettings` it passes to the (mocked) scheduler from
+    // `state.metadata.own_subnet_topology`; set it here to match the
+    // `test_registry_settings()` the mock below expects.
+    let mut initial_state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
+    initial_state
+        .metadata
+        .modify_own_subnet_topology(|own_subnet_topology| {
+            own_subnet_topology.registry_execution_settings = test_registry_settings();
+        });
     let metrics_registry = MetricsRegistry::new();
     let metrics = MessageRoutingMetrics::new(&metrics_registry);
 
@@ -163,7 +172,7 @@ fn signed_ingress() -> SignedIngress {
 }
 
 #[test]
-fn state_machine_populates_network_topology() {
+fn state_machine_execute_round_does_not_touch_network_topology() {
     let provided_batch = BatchBuilder::new().batch_number(Height::new(1)).build();
     let fixture = test_fixture(&provided_batch);
 
@@ -183,16 +192,14 @@ fn state_machine_populates_network_topology() {
             &fixture.network_topology
         );
 
-        let state = state_machine.execute_round(
-            fixture.initial_state,
-            Arc::new(fixture.network_topology.clone()),
-            provided_batch,
-            Default::default(),
-            Default::default(),
-            &test_registry_settings(),
-            Default::default(),
-            Default::default(),
-        );
+        // Populating `state.metadata.network_topology` is
+        // `BatchProcessorImpl::refresh_registry_derived_data`'s job, done by the
+        // caller before `execute_round`. Simulate that here, then check that
+        // `execute_round` leaves it untouched.
+        let mut initial_state = fixture.initial_state;
+        initial_state.metadata.network_topology = Arc::new(fixture.network_topology.clone());
+
+        let state = state_machine.execute_round(initial_state, provided_batch);
 
         assert_eq!(
             state.metadata.network_topology.as_ref(),
@@ -217,16 +224,9 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.metrics,
         ));
 
-        state_machine.execute_round(
-            fixture.initial_state,
-            Arc::new(fixture.network_topology.clone()),
-            provided_batch,
-            Default::default(),
-            Default::default(),
-            &test_registry_settings(),
-            Default::default(),
-            Default::default(),
-        )
+        let mut initial_state = fixture.initial_state;
+        initial_state.metadata.network_topology = Arc::new(fixture.network_topology.clone());
+        state_machine.execute_round(initial_state, provided_batch)
     })
 }
 
@@ -430,16 +430,8 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             message_routing_metrics,
         ));
 
-        let mut state = state_machine.execute_round(
-            initial_state,
-            Arc::new(network_topology),
-            provided_batch,
-            Default::default(),
-            Default::default(),
-            &test_registry_settings(),
-            Default::default(),
-            Default::default(),
-        );
+        initial_state.metadata.network_topology = Arc::new(network_topology);
+        let mut state = state_machine.execute_round(initial_state, provided_batch);
 
         // Stream to the deleted subnet is gone.
         assert!(state.get_stream(&SUBNET_2).is_none());
@@ -580,16 +572,9 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
             fixture.metrics,
         ));
 
-        state_machine.execute_round(
-            fixture.initial_state,
-            Arc::new(fixture.network_topology.clone()),
-            split_batch,
-            Default::default(),
-            Default::default(),
-            &test_registry_settings(),
-            Default::default(),
-            Default::default(),
-        )
+        let mut initial_state = fixture.initial_state;
+        initial_state.metadata.network_topology = Arc::new(fixture.network_topology.clone());
+        state_machine.execute_round(initial_state, split_batch)
     });
 
     assert_eq!(
@@ -698,16 +683,9 @@ fn test_batch_time_impl(
         );
         assert_eq!(state_batch_time, fixture.initial_state.metadata.batch_time,);
 
-        let state = state_machine.execute_round(
-            fixture.initial_state,
-            Arc::new(fixture.network_topology.clone()),
-            provided_batch,
-            Default::default(),
-            Default::default(),
-            &test_registry_settings(),
-            Default::default(),
-            Default::default(),
-        );
+        let mut initial_state = fixture.initial_state;
+        initial_state.metadata.network_topology = Arc::new(fixture.network_topology.clone());
+        let state = state_machine.execute_round(initial_state, provided_batch);
 
         assert_eq!(
             Some(expected_regression_count),

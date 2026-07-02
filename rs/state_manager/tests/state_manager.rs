@@ -5537,7 +5537,11 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         network_topology.set_subnets(subnets);
 
         state.metadata.network_topology = Arc::new(network_topology);
-        state.metadata.node_public_keys = node_public_keys;
+        state
+            .metadata
+            .modify_own_subnet_topology(|own_subnet_topology| {
+                own_subnet_topology.node_public_keys = node_public_keys;
+            });
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 
@@ -5589,20 +5593,22 @@ fn certified_read_can_certify_api_boundary_nodes_since_v16() {
     state_manager_test(|_metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
 
-        state.metadata.api_boundary_nodes = btreemap! {
-            node_test_id(11) => ApiBoundaryNodeEntry {
-                domain: "api-bn11-example.com".to_string(),
-                ipv4_address: Some("127.0.0.1".to_string()),
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-                pubkey: None,
-            },
-            node_test_id(12) => ApiBoundaryNodeEntry {
-                domain: "api-bn12-example.com".to_string(),
-                ipv4_address: None,
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
-                pubkey: None,
-            },
-        };
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.api_boundary_nodes = btreemap! {
+                node_test_id(11) => ApiBoundaryNodeEntry {
+                    domain: "api-bn11-example.com".to_string(),
+                    ipv4_address: Some("127.0.0.1".to_string()),
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                    pubkey: None,
+                },
+                node_test_id(12) => ApiBoundaryNodeEntry {
+                    domain: "api-bn12-example.com".to_string(),
+                    ipv4_address: None,
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                    pubkey: None,
+                },
+            };
+        });
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 

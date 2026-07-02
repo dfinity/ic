@@ -24,6 +24,7 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
+use ic_replicated_state::metadata_state::testing::SystemMetadataTesting;
 use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -604,34 +605,18 @@ impl RegistryFixture {
 /// Fake state machine implementation used to instantiate a batch processor.
 /// This enables direct testing of `BatchProcessorImpl::try_to_read_registry()`
 /// and `BatchProcessorImpl::process_batch()`.
-/// The implementation of the trait `StateMachine` below maps the `network_topology`
-/// and the `subnet_record` into the state (just like the real one does); this allows
-/// checking that these quantities are passed on to the state machine correctly.
 ///
-/// Additionally the state machine itself holds an `Arc` for the execution registry
-/// settings, which allows to check those are passed correctly as well.
+/// Captures the `RegistryExecutionSettings` it finds in `state.metadata`, so
+/// tests can check that `BatchProcessorImpl::refresh_registry_derived_data()`
+/// (called before `execute_round()`) populated it correctly.
+///
 /// `Arc<Mutex<_>>` is because `execute_round(&self, ..)` does not take a mutable
 /// reference and because `BatchProcessorImpl` insists on the fake state machine in a
 /// `Box` (rather than an `Arc` which we need to check the contents from the outside).
 struct FakeStateMachine(Arc<Mutex<RegistryExecutionSettings>>);
 
 impl StateMachine for FakeStateMachine {
-    fn execute_round(
-        &self,
-        mut state: ReplicatedState,
-        network_topology: Arc<NetworkTopology>,
-        _batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
-        registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
-    ) -> ReplicatedState {
-        state.metadata.network_topology = network_topology;
-        state.metadata.own_subnet_features = subnet_features;
-        state.metadata.own_resource_limits = resource_limits;
-        state.metadata.node_public_keys = node_public_keys;
-        state.metadata.api_boundary_nodes = api_boundary_nodes;
+    fn execute_round(&self, mut state: ReplicatedState, _batch: Batch) -> ReplicatedState {
         state.put_canister_state(
             CanisterStateBuilder::new()
                 .with_canister_id(canister_test_id(1))
@@ -644,7 +629,11 @@ impl StateMachine for FakeStateMachine {
                 .with_wasm(vec![5; 10 * 1024]) // 10 KiB wasm
                 .build(),
         );
-        *self.0.lock().unwrap() = registry_settings.clone();
+        *self.0.lock().unwrap() = state
+            .metadata
+            .own_subnet_topology
+            .registry_execution_settings
+            .clone();
         state
     }
 }
@@ -679,7 +668,6 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         metrics: metrics.clone(),
         log,
         malicious_flags: MaliciousFlags::default(),
-        cached_registry_read: RefCell::default(),
     };
     (batch_processor, metrics, state_manager, registry_settings)
 }
@@ -689,7 +677,7 @@ fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
     own_subnet_id: SubnetId,
-) -> Result<ReadRegistryResult, ReadRegistryError> {
+) -> Result<(NetworkTopology, OwnSubnetTopology), ReadRegistryError> {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
     batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
 }
@@ -878,16 +866,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, metrics, state_manager, registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (
-            network_topology,
-            own_subnet_features,
-            own_resource_limits,
-            registry_execution_settings,
-            node_public_keys,
-            api_boundary_nodes,
-        ) = batch_processor
+        let (network_topology, own_subnet_topology) = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap();
+        let own_subnet_features = own_subnet_topology.features;
+        let own_resource_limits = own_subnet_topology.resource_limits;
+        let registry_execution_settings = own_subnet_topology.registry_execution_settings.clone();
+        let node_public_keys = own_subnet_topology.node_public_keys.clone();
+        let api_boundary_nodes = network_topology.api_boundary_nodes.clone();
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
         // critical error counter is untouched.
@@ -1016,12 +1002,12 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
         assert_ne!(
-            network_topology.as_ref(),
+            &network_topology,
             latest_state.metadata.network_topology.as_ref()
         );
         assert_ne!(
             own_subnet_features,
-            latest_state.metadata.own_subnet_features
+            latest_state.metadata.own_subnet_topology.features
         );
         assert_ne!(
             *registry_settings.lock().unwrap(),
@@ -1044,25 +1030,30 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(
-            network_topology.as_ref(),
+            &network_topology,
             latest_state.metadata.network_topology.as_ref()
         );
         assert_eq!(
             own_subnet_features,
-            latest_state.metadata.own_subnet_features
+            latest_state.metadata.own_subnet_topology.features
         );
         assert_eq!(
             own_resource_limits,
-            latest_state.metadata.own_resource_limits
+            latest_state.metadata.own_subnet_topology.resource_limits
         );
         assert_eq!(
-            latest_state.metadata.own_resource_limits.maximum_state_size,
+            latest_state
+                .metadata
+                .own_subnet_topology
+                .resource_limits
+                .maximum_state_size,
             Some(own_maximum_state_size)
         );
         assert_eq!(
             latest_state
                 .metadata
-                .own_resource_limits
+                .own_subnet_topology
+                .resource_limits
                 .maximum_state_delta,
             Some(own_maximum_state_delta)
         );
@@ -1073,13 +1064,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
     });
 }
 
-/// Tests that `BatchProcessorImpl::read_registry()` caches its result keyed by
-/// `(registry version, own subnet ID)`: a second read with the same key is served
-/// from the cache, while a read with either a different version or a different
-/// own subnet ID (e.g. across an online subnet split) ignores the cached entry
-/// and re-reads.
+/// Tests that `BatchProcessorImpl::refresh_registry_derived_data()` reuses
+/// `state.metadata.network_topology` / `state.metadata.own_subnet_topology` as-is
+/// when they already reflect the current `(registry version, own subnet ID)`, and
+/// refreshes them from the registry otherwise — in particular when only the own
+/// subnet ID differs, which is the scenario that arises for one round immediately
+/// following an online subnet split.
 #[test]
-fn read_registry_caches_by_registry_version_and_subnet_id() {
+fn refresh_registry_derived_data_reuses_or_refreshes_based_on_version_and_subnet_id() {
     with_test_replica_logger(|log| {
         use Integrity::*;
 
@@ -1112,58 +1104,70 @@ fn read_registry_caches_by_registry_version_and_subnet_id() {
         let (batch_processor, _, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
 
-        // The first read populates the cache for `(version, own_subnet_id)`.
-        let real = batch_processor.read_registry(version, own_subnet_id);
-        assert_eq!(real.0.nns_subnet_id, nns_subnet_id);
-        {
-            let cached = batch_processor.cached_registry_read.borrow();
-            let (cached_version, cached_subnet_id, _) = cached.as_ref().unwrap();
-            assert_eq!(*cached_version, version);
-            assert_eq!(*cached_subnet_id, own_subnet_id);
-        }
+        let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
 
-        // Build a distinguishable sentinel result to poison the cache with.
+        // The first refresh populates `state.metadata` from the real registry.
+        batch_processor.refresh_registry_derived_data(&mut state, version);
+        assert_eq!(state.metadata.network_topology.nns_subnet_id, nns_subnet_id);
+        assert_eq!(
+            state.metadata.own_subnet_topology.own_subnet_id,
+            own_subnet_id
+        );
+        assert_eq!(
+            state
+                .metadata
+                .own_subnet_topology
+                .registry_execution_settings
+                .registry_version,
+            version
+        );
+
+        // Poison `network_topology` with a distinguishable sentinel value, while
+        // leaving `own_subnet_topology`'s (version, subnet ID) matching the
+        // current round: the poisoned value must be reused as-is (fast path).
         let sentinel_nns = subnet_test_id(999);
-        let mut sentinel = real.clone();
-        Arc::make_mut(&mut sentinel.0).nns_subnet_id = sentinel_nns;
-
-        // A cached entry under the *same* (version, subnet ID) is served from the
-        // cache (fast path): the read returns the sentinel, not the registry
-        // contents.
-        *batch_processor.cached_registry_read.borrow_mut() =
-            Some((version, own_subnet_id, sentinel.clone()));
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.nns_subnet_id = sentinel_nns;
+        });
+        batch_processor.refresh_registry_derived_data(&mut state, version);
         assert_eq!(
-            batch_processor
-                .read_registry(version, own_subnet_id)
-                .0
-                .nns_subnet_id,
-            sentinel_nns,
+            state.metadata.network_topology.nns_subnet_id, sentinel_nns,
+            "matching (version, subnet ID) should reuse the poisoned value, not refresh"
         );
 
-        // A cached entry under a *different version* (same subnet ID) is ignored;
-        // the registry is re-read and the real topology is returned.
-        *batch_processor.cached_registry_read.borrow_mut() =
-            Some((version.increment(), own_subnet_id, sentinel.clone()));
+        // A registry version mismatch (even with a matching subnet ID) must force
+        // a refresh, replacing the poisoned value with the real one.
+        state
+            .metadata
+            .modify_own_subnet_topology(|own_subnet_topology| {
+                own_subnet_topology
+                    .registry_execution_settings
+                    .registry_version = version.increment();
+            });
+        batch_processor.refresh_registry_derived_data(&mut state, version);
         assert_eq!(
-            batch_processor
-                .read_registry(version, own_subnet_id)
-                .0
-                .nns_subnet_id,
-            nns_subnet_id,
+            state.metadata.network_topology.nns_subnet_id, nns_subnet_id,
+            "a registry version mismatch must force a refresh"
         );
 
-        // A cached entry under the *same version* but a *different subnet ID* is
-        // also ignored — this is the scenario that arises across an online subnet
-        // split.
-        let other_subnet_id = subnet_test_id(14);
-        *batch_processor.cached_registry_read.borrow_mut() =
-            Some((version, other_subnet_id, sentinel));
+        // Poison again, then simulate a stale `own_subnet_topology.own_subnet_id`
+        // — the scenario that arises across an online subnet split, where
+        // `own_subnet_topology` still reflects the pre-split identity for one
+        // round after `state.metadata.own_subnet_id` has already been updated.
+        // This must also force a refresh, even though the registry version is
+        // unchanged.
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.nns_subnet_id = sentinel_nns;
+        });
+        state
+            .metadata
+            .modify_own_subnet_topology(|own_subnet_topology| {
+                own_subnet_topology.own_subnet_id = subnet_test_id(14);
+            });
+        batch_processor.refresh_registry_derived_data(&mut state, version);
         assert_eq!(
-            batch_processor
-                .read_registry(version, own_subnet_id)
-                .0
-                .nns_subnet_id,
-            nns_subnet_id,
+            state.metadata.network_topology.nns_subnet_id, nns_subnet_id,
+            "an own-subnet-ID mismatch (e.g. across an online split) must force a refresh"
         );
     });
 }
@@ -1213,9 +1217,9 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, _, registry_execution_settings, _, _) = result.unwrap();
+        let (_, own_subnet_topology) = result.unwrap();
         assert_eq!(
-            registry_execution_settings.subnet_size,
+            own_subnet_topology.registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
         );
 
@@ -1538,7 +1542,8 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, _, node_public_keys, _) = res.unwrap();
+        let (_, own_subnet_topology) = res.unwrap();
+        let node_public_keys = own_subnet_topology.node_public_keys;
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
@@ -1677,7 +1682,8 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
 
         // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
         // Hence, only one nodes are retrieved.
-        let (_, _, _, _, _, api_boundary_nodes) = res.unwrap();
+        let (network_topology, _) = res.unwrap();
+        let api_boundary_nodes = network_topology.api_boundary_nodes;
         assert_eq!(api_boundary_nodes.len(), 1);
         assert!(api_boundary_nodes.contains_key(&node_test_id(11)));
 
@@ -2216,8 +2222,9 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
 
         // Spawn a thread trying to read from the registry at the next version; this will fail
         // until we update the registry.
+        let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
         let handle = std::thread::spawn(move || {
-            batch_processor.read_registry(next_registry_version, own_subnet_id)
+            batch_processor.refresh_registry_derived_data(&mut state, next_registry_version);
         });
         // Wait 150ms, then update the registry and join the thread above.
         std::thread::sleep(Duration::from_millis(150));

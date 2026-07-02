@@ -12,10 +12,12 @@ use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
     IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
 };
+use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRanges, CanisterMigrations, RoutingTable,
@@ -24,7 +26,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -53,6 +55,51 @@ use std::{
 
 /// `BTreeMap` of streams by destination `SubnetId`.
 pub type StreamMap = BTreeMap<SubnetId, Stream>;
+
+/// Registry-derived data specific to this replica's own subnet: features,
+/// resource limits, execution settings and node public keys.
+///
+/// Refreshed from the registry only when the registry version (or, across an
+/// online subnet split, the own subnet ID) changes; reused as-is (a cheap `Arc`
+/// clone, via [`SystemMetadata::own_subnet_topology`]) from one round to the
+/// next otherwise. `Message Routing` decides whether to refresh or reuse by
+/// comparing `own_subnet_id` and `registry_execution_settings.registry_version`
+/// below against the round's target subnet ID and registry version — both
+/// fields are recorded here (rather than relying on the "live"
+/// `SystemMetadata::own_subnet_id`) specifically because an online subnet split
+/// can change `SystemMetadata::own_subnet_id` mid-round, after this struct has
+/// already been (correctly) populated for the *pre-split* identity.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct OwnSubnetTopology {
+    /// The subnet ID this data was populated for.
+    pub own_subnet_id: SubnetId,
+    pub features: SubnetFeatures,
+    pub resource_limits: ResourceLimits,
+    pub registry_execution_settings: RegistryExecutionSettings,
+    /// DER-encoded public keys of the subnet's nodes.
+    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
+}
+
+impl Default for OwnSubnetTopology {
+    fn default() -> Self {
+        Self {
+            // Never a real subnet ID, so a freshly defaulted `OwnSubnetTopology`
+            // always triggers a registry refresh on the next comparison.
+            own_subnet_id: SubnetId::new(PrincipalId::new_anonymous()),
+            features: SubnetFeatures::default(),
+            resource_limits: ResourceLimits::default(),
+            registry_execution_settings: RegistryExecutionSettings {
+                max_number_of_canisters: 0,
+                provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
+                chain_key_settings: BTreeMap::new(),
+                subnet_size: 0,
+                node_ids: BTreeSet::new(),
+                registry_version: RegistryVersion::default(),
+            },
+            node_public_keys: BTreeMap::new(),
+        }
+    }
+}
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
@@ -93,14 +140,11 @@ pub struct SystemMetadata {
 
     pub own_subnet_type: SubnetType,
 
-    pub own_subnet_features: SubnetFeatures,
-
-    pub own_resource_limits: ResourceLimits,
-
-    /// DER-encoded public keys of the subnet's nodes.
-    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
-
-    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+    /// Registry-derived data specific to this replica's own subnet: subnet
+    /// features, resource limits, execution settings and node public keys.
+    /// See [`OwnSubnetTopology`] for details, including why it tracks its own
+    /// `own_subnet_id` rather than relying on the field above.
+    pub own_subnet_topology: Arc<OwnSubnetTopology>,
 
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
@@ -247,6 +291,9 @@ pub struct NetworkTopology {
     /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
+
+    /// API boundary nodes, keyed by node ID.
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -276,6 +323,7 @@ impl Default for NetworkTopology {
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
             default_initial_dkg_subnet_id: None,
+            api_boundary_nodes: Default::default(),
         }
     }
 }
@@ -292,6 +340,7 @@ impl NetworkTopology {
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
         default_initial_dkg_subnet_id: Option<SubnetId>,
+        api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     ) -> Self {
         Self {
             subnets,
@@ -303,6 +352,7 @@ impl NetworkTopology {
             bitcoin_mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         }
     }
 
@@ -544,10 +594,7 @@ impl SystemMetadata {
             batch_time: UNIX_EPOCH,
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_topology: Default::default(),
             split_from: None,
             subnet_split_from: None,
 
@@ -821,7 +868,7 @@ impl SystemMetadata {
     /// Notes:
     ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
     ///    the registry subnet record of the subnet that this node is part of.
-    ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set
+    ///  * `batch_time`, `network_topology` and `own_subnet_topology` will be set
     ///    by Message Routing before the start of the next round.
     ///  * `state_sync_version` and `certification_version` will be set by
     ///    `commit_and_certify()` at the end of the round; and not used before.
@@ -854,12 +901,7 @@ impl SystemMetadata {
             // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            own_subnet_features: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            own_resource_limits: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            node_public_keys: _,
-            api_boundary_nodes: _,
+            own_subnet_topology: _,
             ref mut split_from,
             subnet_split_from,
             subnet_call_context_manager: _,
@@ -934,7 +976,7 @@ impl SystemMetadata {
     ///  * `prev_state_hash` will be set by `take_tip()`.
     ///  * `own_subnet_type` will be set during `load_checkpoint()`, based on
     ///    the registry subnet record.
-    ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set
+    ///  * `batch_time`, `network_topology` and `own_subnet_topology` will be set
     ///    by Message Routing before the start of the next round.
     ///  * `state_sync_version` and `certification_version` will be set by
     ///    `commit_and_certify()` at the end of the round; and not used before.
@@ -963,10 +1005,7 @@ impl SystemMetadata {
             network_topology,
             own_subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_topology,
             split_from,
             mut subnet_split_from,
             mut subnet_call_context_manager,
@@ -1063,16 +1102,17 @@ impl SystemMetadata {
             last_generated_canister_id,
             prev_state_hash,
             batch_time,
-            // Already populated from the registry.
+            // Already populated from the registry — for the *pre-split* subnet
+            // identity. `own_subnet_topology.own_subnet_id` (below) still
+            // reflects that pre-split identity too; the mismatch against the
+            // post-split `own_subnet_id` (also below) is what correctly forces
+            // Message Routing to refresh both on the very next round, before
+            // that round's state is certified.
             network_topology,
             // New subnet ID.
             own_subnet_id: subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
-            // Already populated from the registry.
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_topology,
             split_from,
             subnet_split_from,
             subnet_call_context_manager,
@@ -2071,11 +2111,15 @@ pub mod testing {
     /// Exposes `SystemMetadata` internals for use in tests.
     pub trait SystemMetadataTesting {
         fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
+        fn modify_own_subnet_topology(&mut self, f: impl FnOnce(&mut OwnSubnetTopology));
     }
 
     impl SystemMetadataTesting for SystemMetadata {
         fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
             f(Arc::make_mut(&mut self.network_topology));
+        }
+        fn modify_own_subnet_topology(&mut self, f: impl FnOnce(&mut OwnSubnetTopology)) {
+            f(Arc::make_mut(&mut self.own_subnet_topology));
         }
     }
 
@@ -2192,10 +2236,10 @@ pub mod testing {
             network_topology: Default::default(),
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            // Not relevant: refreshed from the registry whenever the registry
+            // version or own subnet ID changes — including on the round
+            // immediately following a split.
+            own_subnet_topology: Default::default(),
             split_from: None,
             subnet_split_from: None,
             prev_state_hash: Default::default(),

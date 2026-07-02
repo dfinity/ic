@@ -5,6 +5,10 @@ pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, T
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_protobuf::{
+    proxy::{ProxyDecodeError, try_from_option_field},
+    state::system_metadata::v1 as pb_metadata,
+};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -15,6 +19,7 @@ use ic_types::{
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
     },
+    node_id_into_protobuf, node_id_try_from_protobuf,
 };
 use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
@@ -1509,6 +1514,76 @@ pub struct RegistryExecutionSettings {
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
     pub pre_signatures_to_create_in_advance: Option<u32>,
+}
+
+impl From<&ChainKeySettings> for pb_metadata::ChainKeySettings {
+    fn from(item: &ChainKeySettings) -> Self {
+        Self {
+            max_queue_size: item.max_queue_size,
+            pre_signatures_to_create_in_advance: item.pre_signatures_to_create_in_advance,
+        }
+    }
+}
+
+impl From<pb_metadata::ChainKeySettings> for ChainKeySettings {
+    fn from(item: pb_metadata::ChainKeySettings) -> Self {
+        Self {
+            max_queue_size: item.max_queue_size,
+            pre_signatures_to_create_in_advance: item.pre_signatures_to_create_in_advance,
+        }
+    }
+}
+
+impl From<&RegistryExecutionSettings> for pb_metadata::RegistryExecutionSettings {
+    fn from(item: &RegistryExecutionSettings) -> Self {
+        Self {
+            max_number_of_canisters: item.max_number_of_canisters,
+            provisional_whitelist: Some(item.provisional_whitelist.clone().into()),
+            chain_key_settings: item
+                .chain_key_settings
+                .iter()
+                .map(|(key_id, settings)| pb_metadata::ChainKeySettingsEntry {
+                    key_id: Some(key_id.into()),
+                    settings: Some(settings.into()),
+                })
+                .collect(),
+            subnet_size: item.subnet_size as u64,
+            node_ids: item
+                .node_ids
+                .iter()
+                .map(|node_id| node_id_into_protobuf(*node_id))
+                .collect(),
+            registry_version: item.registry_version.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::RegistryExecutionSettings> for RegistryExecutionSettings {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_metadata::RegistryExecutionSettings) -> Result<Self, Self::Error> {
+        let mut chain_key_settings = BTreeMap::new();
+        for entry in item.chain_key_settings {
+            chain_key_settings.insert(
+                try_from_option_field(entry.key_id, "ChainKeySettingsEntry::key_id")?,
+                try_from_option_field(entry.settings, "ChainKeySettingsEntry::settings")?,
+            );
+        }
+        let mut node_ids = BTreeSet::new();
+        for node_id in item.node_ids {
+            node_ids.insert(node_id_try_from_protobuf(node_id)?);
+        }
+        Ok(Self {
+            max_number_of_canisters: item.max_number_of_canisters,
+            provisional_whitelist: try_from_option_field(
+                item.provisional_whitelist,
+                "RegistryExecutionSettings::provisional_whitelist",
+            )?,
+            chain_key_settings,
+            subnet_size: item.subnet_size as usize,
+            node_ids,
+            registry_version: RegistryVersion::from(item.registry_version),
+        })
+    }
 }
 
 pub trait Scheduler: Send {

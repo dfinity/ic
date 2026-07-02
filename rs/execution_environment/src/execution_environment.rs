@@ -1268,60 +1268,62 @@ impl ExecutionEnvironment {
                 },
             },
 
-            Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
-                true => match &msg {
-                    CanisterCall::Request(request) => {
-                        match CanisterHttpRequestArgs::decode(payload) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(args) => {
-                                match CanisterHttpRequestContext::generate_from_args(
-                                    state.time(),
-                                    request.as_ref(),
-                                    args,
-                                    &registry_settings.node_ids,
-                                    registry_settings.registry_version,
-                                    rng,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(canister_http_request_context) => match self
-                                        .try_add_http_context_to_replicated_state(
-                                            canister_http_request_context,
-                                            &mut state,
-                                            request.as_ref(),
-                                            since,
-                                        ) {
+            Ok(Ic00Method::HttpRequest) => {
+                match state.metadata.own_subnet_topology.features.http_requests {
+                    true => match &msg {
+                        CanisterCall::Request(request) => {
+                            match CanisterHttpRequestArgs::decode(payload) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(args) => {
+                                    match CanisterHttpRequestContext::generate_from_args(
+                                        state.time(),
+                                        request.as_ref(),
+                                        args,
+                                        &registry_settings.node_ids,
+                                        registry_settings.registry_version,
+                                        rng,
+                                    ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
+                                            response: Err(err.into()),
                                             refund: msg.take_cycles(),
                                         },
-                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
-                                    },
+                                        Ok(canister_http_request_context) => match self
+                                            .try_add_http_context_to_replicated_state(
+                                                canister_http_request_context,
+                                                &mut state,
+                                                request.as_ref(),
+                                                since,
+                                            ) {
+                                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: msg.take_cycles(),
+                                            },
+                                            Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                        },
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::HttpRequest)
-                    }
-                },
-                false => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    ));
-                    ExecuteSubnetMessageResult::Finished {
-                        response: err,
-                        refund: msg.take_cycles(),
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::HttpRequest)
+                        }
+                    },
+                    false => {
+                        let err = Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        ));
+                        ExecuteSubnetMessageResult::Finished {
+                            response: err,
+                            refund: msg.take_cycles(),
+                        }
                     }
                 }
-            },
+            }
 
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
                 CanisterCall::Request(request) => self

@@ -985,7 +985,7 @@ impl ReplicatedState {
     }
 
     pub fn resource_limits(&self) -> ResourceLimits {
-        self.metadata.own_resource_limits
+        self.metadata.own_subnet_topology.resource_limits
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or

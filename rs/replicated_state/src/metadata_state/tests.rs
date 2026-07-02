@@ -347,26 +347,23 @@ fn system_metadata_roundtrip_encoding() {
         routing_table,
         canister_migrations,
         nns_subnet_id: other_subnet_id,
+        api_boundary_nodes: btreemap! {
+            node_test_id(1) => ApiBoundaryNodeEntry {
+                domain: "api-example.com".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            },
+        },
         ..Default::default()
     };
     system_metadata.network_topology = Arc::new(network_topology);
+    system_metadata.modify_own_subnet_topology(|own_subnet_topology| {
+        own_subnet_topology.node_public_keys = btreemap! {
+            node_test_id(1) => vec![1, 2, 3, 4],
+        };
+    });
 
-    use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
-    let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
-        .unwrap()
-        .serialize_rfc8410_der();
-
-    system_metadata.node_public_keys = btreemap! {
-        node_test_id(1) => pk_der,
-    };
-    system_metadata.api_boundary_nodes = btreemap! {
-        node_test_id(1) => ApiBoundaryNodeEntry {
-            domain: "api-example.com".to_string(),
-            ipv4_address: Some("127.0.0.1".to_string()),
-            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-            pubkey: None,
-        },
-    };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
 
@@ -421,6 +418,29 @@ fn system_metadata_roundtrip_encoding() {
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
     validate_roundtrip_encoding(&system_metadata);
+}
+
+/// Checkpoints written before `own_subnet_topology` was introduced don't have
+/// the field; decoding them must succeed, falling back to the default — whose
+/// sentinel `own_subnet_id` guarantees a registry refresh on the round
+/// immediately following the checkpoint load.
+#[test]
+fn system_metadata_decoding_without_own_subnet_topology() {
+    use ic_protobuf::state::system_metadata::v1 as pb;
+
+    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+    let mut proto = pb::SystemMetadata::from(&system_metadata);
+    proto.own_subnet_topology = None;
+
+    let decoded: SystemMetadata = (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
+    assert_eq!(OwnSubnetTopology::default(), *decoded.own_subnet_topology,);
+    // The default's sentinel subnet ID never matches a real subnet's.
+    assert_ne!(
+        decoded.own_subnet_id,
+        decoded.own_subnet_topology.own_subnet_id
+    );
 }
 
 #[test]
@@ -485,6 +505,15 @@ fn network_topology_roundtrip_encoding() {
     let bitcoin_testnet_canister_id = Some(canister_test_id(100));
     let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
 
+    let api_boundary_nodes = btreemap! {
+        node_test_id(1) => ApiBoundaryNodeEntry {
+            domain: "api-example.com".to_string(),
+            ipv4_address: Some("127.0.0.1".to_string()),
+            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+            pubkey: None,
+        },
+    };
+
     // NetworkTopology without full_topology (non-NNS subnet).
     let network_topology = NetworkTopology::new(
         btreemap! { app_subnet_id => app_subnet_topo.clone() },
@@ -496,6 +525,7 @@ fn network_topology_roundtrip_encoding() {
         bitcoin_mainnet_canister_id,
         None,
         Some(app_subnet_id),
+        api_boundary_nodes.clone(),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology);
@@ -519,6 +549,7 @@ fn network_topology_roundtrip_encoding() {
             routing_table: full_routing_table,
         }),
         Some(app_subnet_id),
+        api_boundary_nodes,
     );
 
     let proto = pb::NetworkTopology::from(&network_topology_with_full);

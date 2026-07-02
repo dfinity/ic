@@ -2982,12 +2982,16 @@ impl ExecutionTestBuilder {
             );
         }
 
-        if self.subnet_features.is_empty() {
-            state.metadata.own_subnet_features = SubnetFeatures::default();
+        let subnet_features = if self.subnet_features.is_empty() {
+            SubnetFeatures::default()
         } else {
-            state.metadata.own_subnet_features =
-                SubnetFeatures::from_str(&self.subnet_features).unwrap();
-        }
+            SubnetFeatures::from_str(&self.subnet_features).unwrap()
+        };
+        state
+            .metadata
+            .modify_own_subnet_topology(|own_subnet_topology| {
+                own_subnet_topology.features = subnet_features;
+            });
 
         let metrics_registry = MetricsRegistry::new();
 

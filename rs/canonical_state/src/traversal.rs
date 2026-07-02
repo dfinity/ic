@@ -820,9 +820,13 @@ mod tests {
                 .unwrap(),
             );
         });
-        state.metadata.node_public_keys = btreemap! {
-            node_test_id(2) => vec![9, 10, 11, 12],
-        };
+        state
+            .metadata
+            .modify_own_subnet_topology(|own_subnet_topology| {
+                own_subnet_topology.node_public_keys = btreemap! {
+                    node_test_id(2) => vec![9, 10, 11, 12],
+                };
+            });
 
         let height = 0;
 
@@ -1282,20 +1286,22 @@ mod tests {
     #[test]
     fn test_traverse_api_boundary_nodes() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        state.metadata.api_boundary_nodes = btreemap! {
-            node_test_id(11) => ApiBoundaryNodeEntry {
-                domain: "api-bn11-example.com".to_string(),
-                ipv4_address: Some("127.0.0.1".to_string()),
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-                pubkey: None,
-            },
-            node_test_id(12) => ApiBoundaryNodeEntry {
-                domain: "api-bn12-example.com".to_string(),
-                ipv4_address: None,
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
-                pubkey: None,
-            },
-        };
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.api_boundary_nodes = btreemap! {
+                node_test_id(11) => ApiBoundaryNodeEntry {
+                    domain: "api-bn11-example.com".to_string(),
+                    ipv4_address: Some("127.0.0.1".to_string()),
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                    pubkey: None,
+                },
+                node_test_id(12) => ApiBoundaryNodeEntry {
+                    domain: "api-bn12-example.com".to_string(),
+                    ipv4_address: None,
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                    pubkey: None,
+                },
+            };
+        });
 
         let height = 0;
 
