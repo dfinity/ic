@@ -1199,6 +1199,9 @@ mod tests {
 
         #[test]
         fn should_return_error_if_permission_is_denied() {
+            // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get
+            // the permission denial this test expects, run as `nobody` when
+            // root (e.g. under Bazel remote execution).
             ic_test_utilities_privileges::run_as_nobody_if_root(|| {
                 let temp_dir =
                     tempfile::TempDir::new().expect("failed to create a temporary directory");
@@ -1268,6 +1271,9 @@ mod tests {
 
         #[test]
         fn should_return_error_if_permission_is_denied() {
+            // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get
+            // the permission denial this test expects, run as `nobody` when
+            // root (e.g. under Bazel remote execution).
             ic_test_utilities_privileges::run_as_nobody_if_root(|| {
                 let temp_dir =
                     tempfile::TempDir::new().expect("failed to create a temporary directory");
