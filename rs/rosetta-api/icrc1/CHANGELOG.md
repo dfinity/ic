@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## [1.2.10] - 2026-07-01
+## [1.2.10] - 2026-07-02
 ### Added
 - Add ICRC-122/152 support ([#9586](https://github.com/dfinity/ic/pull/9586))
 
