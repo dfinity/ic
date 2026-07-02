@@ -9,10 +9,7 @@ use hyper_util::rt::TokioIo;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_crypto_tree_hash::{
-    Label, LabeledTree, LookupStatus, MixedHashTree, Path, lookup_path,
-    sparse_labeled_tree_from_paths,
-};
+use ic_crypto_tree_hash::{LabeledTree, Path, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
@@ -144,7 +141,7 @@ impl DelegationManager {
         old_delegation: Option<&NNSDelegationBuilder>,
     ) -> Option<bool> {
         let Some(old_delegation) = old_delegation else {
-            return Ok(false);
+            return Some(false);
         };
 
         does_delegation_match_certified_public_key(
@@ -158,6 +155,7 @@ impl DelegationManager {
             );
         })
         .ok()
+        .map(|matches| !matches)
     }
 
     async fn fetch(&self) -> Option<NNSDelegationBuilder> {
@@ -223,7 +221,7 @@ impl DelegationManager {
             // Fetch the delegation if enough time has passed
             let new_delegation = select! {
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
-                _ = reactive_interval.tick(), if initialized => self.reactive_fetch(last_delegation.as_ref()).await,
+                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_ref()).await,
             };
             let Some(new_delegation) = new_delegation else {
                 // No new delegation was fetched. Retry on the next tick.
@@ -711,14 +709,12 @@ pub fn does_delegation_match_certified_public_key(
             format!("The public key of subnet {subnet_id} is missing from the certified state")
         })?;
 
-    // TODO: can this byte-by-byte comparison break if NNS replicas (public_key_from_deleg) and
-    // subnet replicas (public_key_from_state) run different GuestOS versions, i.e. serialized
-    // differently?
     Ok(public_key_from_delegation == public_key_from_certified_state)
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::sync::RwLock;
 
     use assert_matches::assert_matches;
@@ -730,9 +726,7 @@ mod tests {
         CertificateBuilder, CertificateData, encoded_time, generate_root_of_trust,
     };
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-    use ic_crypto_tree_hash::{
-        Label, LabeledTree, MatchPatternPath, MixedHashTree, flatmap, lookup_path,
-    };
+    use ic_crypto_tree_hash::{Label, LabeledTree, MixedHashTree, flatmap, lookup_path};
     use ic_crypto_utils_threshold_sig_der::public_key_to_der;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::no_op_logger;
@@ -744,14 +738,13 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_replicated_state::SubnetTopology;
     use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
-    use ic_test_utilities_consensus::fake::Fake;
+    use ic_test_utilities_consensus::FakeCertifiedStateSnapshot;
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record,
         add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
     use ic_types::Height;
-    use ic_types::consensus::certification::Certification;
     use ic_types::messages::{Certificate, CertificateDelegation};
     use ic_types::{
         NodeId,
@@ -839,7 +832,13 @@ mod tests {
         // None means we will generate a random, valid certificate.
         override_nns_delegation: Arc<RwLock<Option<CertificateDelegation>>>,
         delay: Option<Delay>,
-    ) -> (Arc<FakeRegistryClient>, Arc<MockTlsConfig>) {
+        subnet_id: SubnetId,
+    ) -> (
+        Arc<FakeRegistryClient>,
+        Arc<MockTlsConfig>,
+        Arc<dyn StateReader<State = ReplicatedState>>,
+        Arc<RwLock<ReplicatedState>>,
+    ) {
         let registry_version = 1;
 
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -992,6 +991,26 @@ mod tests {
 
         registry_client.update_to_latest_version();
 
+        let subnet_topologies = [
+            (NNS_SUBNET_ID, nns_public_key),
+            (SYSTEM_SUBNET_ID, system_subnet_public_key),
+            (APP_SUBNET_ID, app_subnet_public_key),
+            (VERIFIED_APP_SUBNET_ID, verified_app_subnet_public_key),
+            (CLOUD_ENGINE_SUBNET_ID, cloud_engine_public_key),
+        ]
+        .iter()
+        .map(|(subnet_id, public_key)| {
+            (
+                *subnet_id,
+                SubnetTopology {
+                    public_key: public_key_to_der(&public_key.into_bytes()).unwrap(),
+                    ..Default::default()
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+        let (state_reader, mutable_state) = fake_state_with_subnets(subnet_id, subnet_topologies);
+
         let create_certificate = move |time| {
             let (_certificate, _root_pk, cbor) =
                 CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
@@ -1110,16 +1129,22 @@ mod tests {
             .expect_client_config()
             .returning(move |_, _| Ok(accept_any_config.clone()));
 
-        (registry_client, Arc::new(tls_config))
+        (
+            registry_client,
+            Arc::new(tls_config),
+            state_reader,
+            mutable_state,
+        )
     }
 
     #[tokio::test]
     async fn manager_load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
+            NNS_SUBNET_ID,
         );
 
         let (_, mut reader) = start_nns_delegation_manager(
@@ -1130,7 +1155,7 @@ mod tests {
             NNS_SUBNET_ID,
             SubnetType::System,
             NNS_SUBNET_ID,
-            fake_state_reader(/*certified_state_tree=*/ None),
+            state_reader,
             registry_client,
             tls_config,
             CancellationToken::new(),
@@ -1144,17 +1169,18 @@ mod tests {
     #[tokio::test]
     async fn manager_load_root_delegation_on_app_subnet_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
-            rt_handle.clone(),
-            Arc::new(RwLock::new(None)),
-            /*delay=*/ None,
-        );
-
         for (subnet_id, subnet_type) in [
             (SYSTEM_SUBNET_ID, SubnetType::System),
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
+            let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                subnet_id,
+            );
+
             let (_, mut reader) = start_nns_delegation_manager(
                 &MetricsRegistry::new(),
                 Config::default(),
@@ -1163,7 +1189,7 @@ mod tests {
                 subnet_id,
                 subnet_type,
                 NNS_SUBNET_ID,
-                fake_state_reader(/*certified_state_tree=*/ None),
+                state_reader,
                 registry_client.clone(),
                 tls_config.clone(),
                 CancellationToken::new(),
@@ -1189,10 +1215,11 @@ mod tests {
     #[tokio::test]
     async fn manager_should_not_refresh_if_not_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
+            APP_SUBNET_ID,
         );
 
         let (_, mut reader) = start_nns_delegation_manager(
@@ -1203,7 +1230,7 @@ mod tests {
             APP_SUBNET_ID,
             SubnetType::Application,
             NNS_SUBNET_ID,
-            fake_state_reader(/*certified_state_tree=*/ None),
+            state_reader,
             registry_client,
             tls_config,
             CancellationToken::new(),
@@ -1226,10 +1253,11 @@ mod tests {
     #[tokio::test]
     async fn manager_should_refresh_if_enough_time_passed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
+            APP_SUBNET_ID,
         );
 
         let (_, mut reader) = start_nns_delegation_manager(
@@ -1240,7 +1268,7 @@ mod tests {
             APP_SUBNET_ID,
             SubnetType::Application,
             NNS_SUBNET_ID,
-            fake_state_reader(/*certified_state_tree=*/ None),
+            state_reader,
             registry_client,
             tls_config,
             CancellationToken::new(),
@@ -1265,10 +1293,11 @@ mod tests {
     async fn manager_should_not_return_an_invalid_delegation_test() {
         let override_nns_delegation = Arc::new(RwLock::new(None));
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             override_nns_delegation.clone(),
             /*delay=*/ None,
+            APP_SUBNET_ID,
         );
 
         let (_, mut reader) = start_nns_delegation_manager(
@@ -1279,7 +1308,7 @@ mod tests {
             APP_SUBNET_ID,
             SubnetType::Application,
             NNS_SUBNET_ID,
-            fake_state_reader(/*certified_state_tree=*/ None),
+            state_reader,
             registry_client,
             tls_config,
             CancellationToken::new(),
@@ -1314,10 +1343,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
+            NNS_SUBNET_ID,
         );
 
         let delegation = load_root_delegation(
@@ -1339,17 +1369,18 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_app_subnet_should_return_some_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
-            rt_handle.clone(),
-            Arc::new(RwLock::new(None)),
-            /*delay=*/ None,
-        );
-
         for (subnet_id, subnet_type) in [
             (SYSTEM_SUBNET_ID, SubnetType::System),
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
+            let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                subnet_id,
+            );
+
             let builder = load_root_delegation(
                 &Config::default(),
                 &no_op_logger(),
@@ -1383,10 +1414,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_on_cloud_engine_should_contact_api_bn_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
+            CLOUD_ENGINE_SUBNET_ID,
         );
 
         let response = try_fetch_delegation_from_nns(
@@ -1411,10 +1443,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_times_out_on_connect_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             Some(Delay::AcceptingConnection),
+            APP_SUBNET_ID,
         );
 
         let response = try_fetch_delegation_from_nns(
@@ -1436,10 +1469,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_times_out_on_send_request_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             Some(Delay::SendingResponse),
+            APP_SUBNET_ID,
         );
 
         let response = try_fetch_delegation_from_nns(
@@ -1461,10 +1495,11 @@ mod tests {
     #[tokio::test]
     async fn load_root_delegation_times_out_on_receive_body_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             Some(Delay::SendingBody),
+            APP_SUBNET_ID,
         );
 
         let response = try_fetch_delegation_from_nns(
@@ -1483,62 +1518,45 @@ mod tests {
         assert_matches!(response, Err(err) if err.to_string().contains("Timed out while receiving"));
     }
 
-    /// Builds a [`StateReader`] whose certified state exposes `certified_state_tree`, or which
-    /// reports no certified state at all when `certified_state_tree` is `None`.
-    fn fake_state_reader(
-        certified_state_tree: Option<MixedHashTree>,
-    ) -> Arc<dyn StateReader<State = ReplicatedState>> {
+    fn fake_state_with_subnets(
+        subnet_id: SubnetId,
+        subnets: BTreeMap<SubnetId, SubnetTopology>,
+    ) -> (
+        Arc<dyn StateReader<State = ReplicatedState>>,
+        Arc<RwLock<ReplicatedState>>,
+    ) {
         let mut state_manager = MockStateManager::new();
+        let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
+        state.metadata.network_topology.set_subnets(subnets);
+        let mutable_handle = Arc::new(RwLock::new(state));
+        let handle_clone = Arc::clone(&mutable_handle);
         state_manager
-            .expect_read_certified_state()
-            .returning(move |_paths| {
-                certified_state_tree.clone().map(|tree| {
-                    (
-                        Arc::new(ReplicatedState::new(APP_SUBNET_ID, SubnetType::Application)),
-                        tree,
-                        Certification::fake(),
-                    )
-                })
+            .expect_get_certified_state_snapshot()
+            .returning(move || {
+                let state = handle_clone.read().unwrap();
+                Some(Box::new(FakeCertifiedStateSnapshot {
+                    height: Height::from(0),
+                    state: Arc::new(state.clone()),
+                }))
             });
-
-        Arc::new(state_manager)
+        (Arc::new(state_manager), mutable_handle)
     }
 
-    /// Builds a certified state [`MixedHashTree`] exposing the leaf
-    /// `/subnet/<subnet_id>/public_key -> public_key`.
-    fn certified_state_tree_with_public_key(
+    fn fake_state_with_public_key(
         subnet_id: SubnetId,
         public_key: Vec<u8>,
-    ) -> MixedHashTree {
-        MixedHashTree::Labeled(
-            Label::from("subnet"),
-            Box::new(MixedHashTree::Labeled(
-                Label::from(subnet_id.get_ref().as_ref()),
-                Box::new(MixedHashTree::Labeled(
-                    Label::from("public_key"),
-                    Box::new(MixedHashTree::Leaf(public_key)),
-                )),
-            )),
+    ) -> Arc<dyn StateReader<State = ReplicatedState>> {
+        fake_state_with_subnets(
+            subnet_id,
+            BTreeMap::from_iter([(
+                subnet_id,
+                SubnetTopology {
+                    public_key,
+                    ..Default::default()
+                },
+            )]),
         )
-    }
-
-    /// Extracts the `/subnet/<subnet_id>/public_key` leaf from a delegation.
-    fn public_key_from_delegation(
-        delegation: &NNSDelegationBuilder,
-        subnet_id: SubnetId,
-    ) -> Vec<u8> {
-        let certificate = delegation
-            .build_or_original(CanisterRangesFilter::None, &no_op_logger())
-            .certificate;
-        let parsed: Certificate = serde_cbor::from_slice(&certificate).unwrap();
-        let labeled_tree = LabeledTree::try_from(parsed.tree).unwrap();
-        match lookup_path(
-            &labeled_tree,
-            &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"],
-        ) {
-            Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
-            other => panic!("Expected a public key leaf, got: {other:?}"),
-        }
+        .0
     }
 
     /// Fetches a valid delegation from the (mocked) NNS to be used as a "previous" delegation.
@@ -1575,21 +1593,31 @@ mod tests {
     #[tokio::test]
     async fn proactive_fetch_skips_and_reactive_fetch_runs_when_public_key_changed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
-            rt_handle.clone(),
-            Arc::new(RwLock::new(None)),
-            /*delay=*/ None,
-        );
+        let (registry_client, tls_config, state_reader, mutable_state) =
+            set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                APP_SUBNET_ID,
+            );
 
         let old_delegation =
             fetch_initial_delegation(&rt_handle, registry_client.as_ref(), tls_config.as_ref())
                 .await;
-
-        // The state reports a public key which differs from the one in `old_delegation`.
-        let state_reader = fake_state_reader(Some(certified_state_tree_with_public_key(
-            APP_SUBNET_ID,
-            /*public_key=*/ vec![0xDE, 0xAD, 0xBE, 0xEF],
-        )));
+        {
+            let mut state = mutable_state.write().unwrap();
+            let subnet_id = state.metadata.own_subnet_id;
+            state
+                .metadata
+                .network_topology
+                .set_subnets(BTreeMap::from_iter([(
+                    subnet_id,
+                    SubnetTopology {
+                        public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
+                        ..Default::default()
+                    },
+                )]));
+        }
 
         let manager = DelegationManager {
             config: Config::default(),
@@ -1622,23 +1650,16 @@ mod tests {
     #[tokio::test]
     async fn proactive_fetch_runs_and_reactive_fetch_skips_when_public_key_unchanged_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
+            APP_SUBNET_ID,
         );
 
         let old_delegation =
             fetch_initial_delegation(&rt_handle, registry_client.as_ref(), tls_config.as_ref())
                 .await;
-
-        // The state reports the same public key as the one in `old_delegation`.
-        let public_key = public_key_from_delegation(&old_delegation, APP_SUBNET_ID);
-        let state_reader = fake_state_reader(Some(certified_state_tree_with_public_key(
-            APP_SUBNET_ID,
-            public_key,
-        )));
-
         let manager = DelegationManager {
             config: Config::default(),
             log: no_op_logger(),
@@ -1670,24 +1691,12 @@ mod tests {
     #[tokio::test]
     async fn manager_run_does_not_reactively_refresh_when_public_key_unchanged_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
+        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
             Arc::new(RwLock::new(None)),
             /*delay=*/ None,
-        );
-
-        // Learn the subnet's public key and make the state report the *same* key. As a result
-        // `reactive_fetch` will always return `None`, so every refresh produced by `run` must
-        // come from `proactive_fetch`.
-        let public_key = public_key_from_delegation(
-            &fetch_initial_delegation(&rt_handle, registry_client.as_ref(), tls_config.as_ref())
-                .await,
             APP_SUBNET_ID,
         );
-        let state_reader = fake_state_reader(Some(certified_state_tree_with_public_key(
-            APP_SUBNET_ID,
-            public_key,
-        )));
 
         let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -1724,20 +1733,13 @@ mod tests {
     #[tokio::test]
     async fn manager_run_reactively_refreshes_when_public_key_changed_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
-            rt_handle.clone(),
-            Arc::new(RwLock::new(None)),
-            /*delay=*/ None,
-        );
-
-        // The state always reports a public key which differs from the one returned by the
-        // (mocked) NNS. The very first delegation is fetched proactively (there is no previous
-        // delegation to compare against yet), but from then on `proactive_fetch` always returns
-        // `None`, so every subsequent refresh must come from `reactive_fetch`.
-        let state_reader = fake_state_reader(Some(certified_state_tree_with_public_key(
-            APP_SUBNET_ID,
-            /*public_key=*/ vec![0xDE, 0xAD, 0xBE, 0xEF],
-        )));
+        let (registry_client, tls_config, state_reader, mutable_state) =
+            set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                APP_SUBNET_ID,
+            );
 
         let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -1753,14 +1755,31 @@ mod tests {
             CancellationToken::new(),
         );
 
-        let initial_delegation = timeout(
+        // The initial delegation should be fetched immediately.
+        timeout(
             DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
             wait_for_delegation_change(&mut reader),
         )
         .await
-        .expect("Should fetch an initial delegation proactively");
+        .expect("Should proactively fetch an initial delegation");
 
-        // The next refresh can only be produced by `reactive_fetch`.
+        // Change the public key in the state, which should trigger a reactive refresh.
+        {
+            let mut state = mutable_state.write().unwrap();
+            let subnet_id = state.metadata.own_subnet_id;
+            state
+                .metadata
+                .network_topology
+                .set_subnets(BTreeMap::from_iter([(
+                    subnet_id,
+                    SubnetTopology {
+                        public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
+                        ..Default::default()
+                    },
+                )]));
+        }
+
+        // The next refresh should be produced by `reactive_fetch`.
         let refreshed_delegation = timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
             wait_for_delegation_change(&mut reader),
@@ -1768,56 +1787,17 @@ mod tests {
         .await
         .expect("`reactive_fetch` should refresh the delegation when the public key changed");
 
+        let newest_delegation = timeout(
+            DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
+            wait_for_delegation_change(&mut reader),
+        )
+        .await
+        .expect("Should proactively fetch a new delegation");
+
         assert_ne!(
-            initial_delegation.certificate,
+            newest_delegation.certificate,
             refreshed_delegation.certificate
         );
-    }
-
-    /// A fake certified state which exposes a `ReplicatedState` but does not implement any of the
-    /// certified state methods.
-    struct FakeCertifiedStateSnapshot {
-        state: ReplicatedState,
-    }
-
-    impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
-        type State = ReplicatedState;
-
-        fn get_state(&self) -> &Self::State {
-            &self.state
-        }
-
-        fn get_height(&self) -> Height {
-            unimplemented!("Not expected to be called")
-        }
-
-        fn read_certified_state_with_exclusion(
-            &self,
-            _paths: &LabeledTree<()>,
-            _exclusion: Option<&MatchPatternPath>,
-        ) -> Option<(MixedHashTree, Certification)> {
-            unimplemented!("Not expected to be called")
-        }
-    }
-
-    impl FakeCertifiedStateSnapshot {
-        fn new(subnet_id: SubnetId) -> Self {
-            Self {
-                state: ReplicatedState::new(subnet_id, SubnetType::Application),
-            }
-        }
-
-        fn with_public_key(mut self, public_key: &[u8]) -> Self {
-            self.state.metadata.network_topology.subnets_mut().insert(
-                self.state.metadata.own_subnet_id,
-                SubnetTopology {
-                    public_key: public_key.to_vec(),
-                    ..Default::default()
-                },
-            );
-
-            self
-        }
     }
 
     /// Builds a `MixedHashTree` containing `/subnet/<subnet_id>/public_key -> public_key`.
@@ -1852,10 +1832,14 @@ mod tests {
         let subnet_id = subnet_test_id(1);
         let public_key = vec![1, 2, 3, 4, 5];
         let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &public_key));
-        let certified_state =
-            FakeCertifiedStateSnapshot::new(subnet_id).with_public_key(&public_key);
+        let certified_state = fake_state_with_public_key(subnet_id, public_key)
+            .get_certified_state_snapshot()
+            .unwrap();
 
-        assert!(does_delegation_match_certified_public_key(&delegation, &certified_state).is_ok());
+        assert!(
+            does_delegation_match_certified_public_key(&delegation, certified_state.as_ref())
+                .is_ok()
+        );
     }
 
     #[test]
@@ -1863,11 +1847,12 @@ mod tests {
         let subnet_id = subnet_test_id(1);
         let delegation =
             delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3, 4, 5]));
-        let certified_state =
-            FakeCertifiedStateSnapshot::new(subnet_id).with_public_key(&[5, 4, 3, 2, 1]);
+        let certified_state = fake_state_with_public_key(subnet_id, vec![5, 4, 3, 2, 1])
+            .get_certified_state_snapshot()
+            .unwrap();
 
         assert_matches!(
-            does_delegation_match_certified_public_key(&delegation, &certified_state),
+            does_delegation_match_certified_public_key(&delegation, certified_state.as_ref()),
             Ok(false)
         );
     }
@@ -1876,7 +1861,10 @@ mod tests {
     fn verify_delegation_matches_certified_public_key_fails_when_missing_from_state() {
         let subnet_id = subnet_test_id(1);
         let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3]));
-        let certified_state = FakeCertifiedStateSnapshot::new(subnet_id);
+        let certified_state = FakeCertifiedStateSnapshot {
+            height: Height::from(0),
+            state: Arc::new(ReplicatedState::new(subnet_id, SubnetType::Application)),
+        };
 
         assert_matches!(does_delegation_match_certified_public_key(&delegation, &certified_state),
             Err(err) if err.contains("missing from the certified state")
@@ -1887,10 +1875,11 @@ mod tests {
     fn verify_delegation_matches_certified_public_key_fails_when_missing_from_delegation() {
         let subnet_id = subnet_test_id(1);
         let delegation = delegation_with_tree(subnet_id, MixedHashTree::Empty);
-        let certified_state =
-            FakeCertifiedStateSnapshot::new(subnet_id).with_public_key(&[1, 2, 3]);
+        let certified_state = fake_state_with_public_key(subnet_id, vec![1, 2, 3])
+            .get_certified_state_snapshot()
+            .unwrap();
 
-        assert_matches!(does_delegation_match_certified_public_key(&delegation, &certified_state),
+        assert_matches!(does_delegation_match_certified_public_key(&delegation, certified_state.as_ref()),
             Err(err) if err.contains("missing from the delegation")
         );
     }
