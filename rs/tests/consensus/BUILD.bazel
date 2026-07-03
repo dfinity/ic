@@ -289,6 +289,8 @@ system_test_nns(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:rand",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
