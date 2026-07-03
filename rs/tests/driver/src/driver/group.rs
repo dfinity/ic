@@ -1024,9 +1024,9 @@ impl SystemTestGroup {
             false,
         )) as Box<dyn Task>;
 
-        // The Local backend has no TTL; libvirt resources live for the lifetime of the
-        // libvirtd subprocess owned by the LocalBackend instance, so the keepalive task
-        // (which refreshes the Farm group TTL) is not needed there.
+        // The Local backend has no TTL: its VMs and network live for the lifetime of
+        // the test process, so the keepalive task (which refreshes the Farm group TTL)
+        // is not needed there.
         let use_local_backend = SystemTestBackend::from_env() == SystemTestBackend::Local;
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
         let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !use_local_backend
@@ -1556,8 +1556,8 @@ impl SystemTestGroup {
                 // Final safety net: SIGKILL and reap every descendant that
                 // outlived teardown. Because this process is a child-subreaper
                 // (see `enable_child_subreaper` above), any orphaned daemon
-                // (libvirtd/dnsmasq/QEMU) has been reparented here and would
-                // otherwise hang the bazel test process-wrapper.
+                // (QEMU/dnsmasq) has been reparented here and would otherwise
+                // hang the bazel test process-wrapper.
                 crate::driver::process::kill_all_descendants(group_ctx.log());
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))
@@ -1605,7 +1605,7 @@ impl SystemTestGroup {
                     .expect("failed to delete the farm group");
             }
             SystemTestBackend::Local => {
-                info!(env.logger(), "Deleting local libvirt group.");
+                info!(env.logger(), "Deleting local group.");
                 match crate::driver::local_backend::LocalBackend::from_test_env(&env) {
                     Ok(backend) => {
                         if let Err(e) = backend.delete_group(&group_name) {

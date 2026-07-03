@@ -665,7 +665,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
-hickory-resolver = "0.25.2"
+hickory-resolver = "0.26.1"
 hkdf = "^0.12"
 http = "1.3.1"
 http-body = "1.0.1"

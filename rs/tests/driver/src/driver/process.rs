@@ -179,24 +179,23 @@ pub fn enable_child_subreaper(logger: &Logger) {
 ///
 /// # Why this is needed
 ///
-/// Local-backend daemons (`libvirtd`'s QEMU processes and `dnsmasq`)
+/// Local-backend daemons (the per-VM `qemu-system` processes and `dnsmasq`)
 /// daemonize by double-forking. With [`enable_child_subreaper`] in effect, the
 /// orphaned grandchild is reparented to *this* process rather than to the
-/// daemon that launched it. That has two consequences if nobody reaps the
+/// process that launched it. That has two consequences if nobody reaps the
 /// resulting zombies promptly:
 ///
 ///   1. Zombie (`<defunct>`) processes accumulate under us for the lifetime of
 ///      the test run.
-///   2. When the local backend later asks libvirt to destroy a domain, libvirt
-///      `SIGKILL`s the QEMU process and then polls `kill(pid, 0)` waiting for it
-///      to disappear. Because QEMU is now *our* child (not libvirt's), only we
-///      can reap it; until we do, libvirt keeps seeing the zombie as alive and
-///      eventually fails with `Device or resource busy`, stalling teardown for
-///      ~2 minutes.
+///   2. When the local backend tears a VM down it `SIGTERM`s the QEMU process
+///      and then polls `/proc/<pid>` waiting for it to disappear (see
+///      `LocalBackend::stop_qemu`). A zombie still has a `/proc/<pid>` entry, so
+///      until it is reaped that poll spins out its whole grace period and then
+///      needlessly escalates to `SIGKILL`, slowing teardown.
 ///
 /// Reaping these zombies promptly fixes both problems: the process table stays
-/// clean, and libvirt's `kill(pid, 0)` sees `ESRCH` immediately so domain
-/// destruction returns without stalling.
+/// clean, and `/proc/<pid>` disappears as soon as QEMU exits so teardown returns
+/// without stalling.
 ///
 /// # Why it does not interfere with the Tokio runtime
 ///
@@ -267,8 +266,8 @@ fn reap_foreign_zombie_children(my_pid: i32, my_comm: &str) {
 ///
 /// Relies on the current process being a child subreaper (see
 /// [`enable_child_subreaper`]) so that orphaned, double-forked daemons
-/// (e.g. `libvirtd`, `dnsmasq`, QEMU) have been reparented here and are thus
-/// reachable by walking the process tree.
+/// (e.g. the per-VM `qemu-system` processes and `dnsmasq`) have been reparented
+/// here and are thus reachable by walking the process tree.
 ///
 /// The function repeatedly:
 ///   1. builds a `pid -> ppid` map by scanning `/proc/<pid>/stat`,
