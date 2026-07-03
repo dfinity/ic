@@ -1463,8 +1463,6 @@ impl SystemTestGroup {
                     group_ctx.log(),
                 )?;
             }
-            crate::driver::process::enable_child_subreaper(group_ctx.log());
-            crate::driver::process::spawn_descendant_reaper(group_ctx.log());
             if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
@@ -1564,12 +1562,6 @@ impl SystemTestGroup {
                 if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
-                // Final safety net: SIGKILL and reap every descendant that
-                // outlived teardown. Because this process is a child-subreaper
-                // (see `enable_child_subreaper` above), any orphaned daemon
-                // (QEMU/dnsmasq) has been reparented here and would otherwise
-                // hang the bazel test process-wrapper.
-                crate::driver::process::kill_all_descendants(group_ctx.log());
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
