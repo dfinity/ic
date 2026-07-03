@@ -141,17 +141,19 @@ The design is delivered in two phases:
   everything to the minter's main address*. Sweep transactions are type-`0x04`
   transactions sent from the funded main address; many deposit addresses are swept in
   one transaction. No deposit address ever needs an ETH balance for gas.
-* **Sweeps are permissionless-safe.** The delegate's sweep functions are callable by
-  anyone because the destination is hardcoded (`R6`); a third party triggering a sweep
-  only donates gas. This removes access-control state from the delegate and lets one
-  transaction sweep many deposit addresses through a batch entry point on the deployed
-  `CkSweeper` instance itself — the delegate doubles as the batcher, so no additional
-  contract is needed (the canonical, already-deployed
-  [Multicall3](https://www.multicall3.com/) would work as well).
-* **Mint on finalized deposit, sweep asynchronously.** The user is credited as soon as
-  the deposit is finalized and detected; sweeping is pure treasury consolidation,
-  batched to amortize gas, and never blocks or reverts a mint (`R5`). This decouples
-  UX latency from gas-optimization policy.
+* **Sweeps are permissionless-safe** (variant A). The delegate's sweep functions are
+  callable by anyone because the destination is hardcoded (`R6`); a third party
+  triggering a sweep only donates gas. This removes access-control state from the
+  delegate and lets one transaction sweep many deposit addresses through a batch entry
+  point on the deployed `CkSweeper` instance itself — the delegate doubles as the
+  batcher, so no additional contract is needed (the canonical, already-deployed
+  [Multicall3](https://www.multicall3.com/) would work as well). Variant B trades this
+  property away, see the open decision below.
+* **Mint on finalized deposit, sweep asynchronously** (variant A). The user is
+  credited as soon as the deposit is finalized and detected; sweeping is pure treasury
+  consolidation, batched to amortize gas, and never blocks or reverts a mint (`R5`).
+  This decouples UX latency from gas-optimization policy. Variant B instead credits on
+  the sweep's own finalized event, see the open decision below.
 * **Claim-based detection instead of continuous scraping.** Deposits are detected when
   a `notify_deposit` endpoint is called for a specific account (by the user, or
   transparently by a frontend/timer polling recently active addresses). A targeted
@@ -168,6 +170,60 @@ The design is delivered in two phases:
   time (`minted = amount - deposit_fee`), like ckBTC's check fee. Flat and
   proposal-configurable rather than oracle-priced, for simplicity and predictability
   (`R7`).
+
+### Open decision: what the sweep does — variant A (direct) vs variant B (through the helper contract)
+
+Both variants share everything above (address derivation, EIP-7702 delegation,
+batching, fees); they differ in the delegate's action and, consequently, in *where
+crediting happens*. The decision between them is **not yet taken**.
+
+**Variant A — direct sweep (`CkSweeper`).** The delegate transfers the funds straight
+to the minter's main address. Crediting requires a *new* detection-and-mint path in
+the minter (`notify_deposit` → finalized `Transfer` log → mint), with its own event
+types, deduplication and audit trail. Sweeps are permissionless-safe and mint timing
+is independent of sweep scheduling. Measured in the demo (mock USDT): 66'854 gas for
+a first single-address sweep including its authorization, ≈ 26k marginal gas per
+additional address in a batch.
+
+**Variant B — sweep through the existing helper contract (`CkSweeperViaHelper`).**
+The delegate approves and calls `depositErc20` on the already-deployed helper
+(`DepositHelperWithSubaccount.sol`): the helper moves the funds to the minter *and
+emits the canonical `ReceivedEthOrErc20` event* — with the deposit EOA as `owner` and
+a caller-supplied IC principal/subaccount — at the single contract address the minter
+already scrapes. **The minter's crediting pipeline (scrape → parse → dedup → mint) is
+reused unchanged.** Consequences:
+
+* *Massively smaller minter change.* No second crediting path: deposit detection is
+  demoted from a correctness-critical component to a mere sweep-scheduling hint (it
+  can be sloppy, delayed, or even frontend-driven without any double-mint or
+  lost-credit risk). Correctness lives entirely in the existing, battle-tested
+  pipeline.
+* *Sweeping must be restricted to the minter.* The principal is a sweep argument, so a
+  permissionless sweep would let anyone credit a deposit to their own principal. The
+  delegate stays stateless via two immutables: `MINTER`, and `SELF` (the deployed
+  instance's own address, captured at construction), accepting
+  `msg.sender ∈ {MINTER, SELF}` so the batch entry point still works. Belt-and-braces,
+  the minter additionally validates scraped events whose `owner` is a registered
+  deposit address against its own address↔account map and quarantines mismatches.
+* *Minting follows the sweep, but latency need not suffer.* The minter can schedule
+  the sweep as soon as it observes the deposit at the `latest` block, **without
+  waiting for the deposit to be finalized**: crediting only ever follows the
+  *finalized* helper event emitted by the sweep itself, so a reorg that drops the
+  deposit merely wastes the sweep's gas (the delegate sweeps a zero balance — a
+  no-op) and costs some cycles; a reorged sweep transaction is handled by the
+  existing nonce-tracking and resubmission machinery. End-to-end latency is then
+  comparable to today's helper flow (deposit inclusion + sweep + finalization).
+* *Screening point shifts.* The scraped event's `from`/`owner` is the deposit EOA,
+  not the CEX hot wallet, so blocklist screening of the actual sender (`R3`) must
+  happen when scheduling the sweep, based on the observed `Transfer` log.
+* *Extra gas per sweep* for `approve` + `transferFrom` + event. Measured in the demo:
+  82'207 gas single (+15'353 vs variant A), 164'746 for a batch re-delegating three
+  EOAs and sweeping two of them through the helper.
+* *Native ETH works symmetrically* via the helper's `depositEth` (Phase 2).
+
+Both variants are exercised end-to-end in the runnable demo, including the
+adversarial case for variant B (a non-minter caller attempting to sweep with their
+own principal is rejected).
 
 ## Implementation
 
@@ -231,7 +287,10 @@ The design is delivered in two phases:
 
 A single immutable Solidity contract, deployed once per network, with **no storage**
 (EIP-7702 delegates share the EOA's storage; using none avoids collision hazards
-entirely) and the minter's main address hardcoded as an `immutable`:
+entirely) and the minter's main address hardcoded as an `immutable`. Shown below for
+variant A; variant B's delegate (`CkSweeperViaHelper` in the demo) has the same shape
+but calls the helper's `depositErc20` with caller-supplied principal/subaccount and
+restricts callers to the minter (see the open decision above):
 
 ```solidity
 contract CkSweeper {
@@ -343,6 +402,10 @@ A runnable end-to-end demonstration of the sweep mechanism (unfunded deposit EOA
 plain USDT-style transfers, single and batched type-`0x04` sweep transactions with gas
 paid by the minter, gas assertions) against a local dev node (any post-Pectra
 version) is available in [`deposit_from_cex_demo/`](deposit_from_cex_demo/README.md).
+It exercises both sweep variants — including variant B against the *real*
+`DepositHelperWithSubaccount.sol` bytecode, asserting the emitted
+`ReceivedEthOrErc20` events carry the right principals, re-delegation of already
+delegated deposit EOAs, and the rejected non-minter sweep attempt.
 
 Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 

@@ -11,6 +11,24 @@ transaction** whose gas is paid entirely by the minter — first for one deposit
 address, then **batched** (one transaction sweeping three deposit EOAs, their
 authorizations riding in the same transaction's authorization list).
 
+It then exercises **both sweep variants** of the design doc's open decision:
+
+* **Variant A** (`CkSweeper`): the delegate transfers straight to the minter;
+  sweeps are permissionless-safe.
+* **Variant B** (`CkSweeperViaHelper`): the deposit EOAs are re-delegated and
+  the sweep calls `depositErc20` on the **real helper contract** (`CkDeposit`,
+  compiled from `../../minter/DepositHelperWithSubaccount.sol`), so each sweep
+  emits the canonical `ReceivedEthOrErc20` event — asserted to carry the right
+  IC principal — that the minter's existing deposit pipeline already scrapes
+  and mints from. Because the principal is a sweep argument, sweeping is
+  restricted to the minter: the demo ends with an **attacker attempting to
+  sweep with their own principal and being rejected**, followed by the correct
+  minter sweep (a plain EIP-1559 transaction — delegation persists).
+
+Every sweep prints the minter's nonce, the raw signed transaction and the
+receipt, and the gas used by each sweep is asserted against hard-coded
+constants (the run is fully deterministic).
+
 ## Run
 
 Start anvil (its default hardfork is the latest supported one, which includes
@@ -37,13 +55,20 @@ cargo run
 
 ## Contracts
 
-`contracts/` holds the Solidity sources (`CkSweeper.sol`, the EIP-7702 delegate
-and batcher; `MockUSDT.sol`, a USDT-style ERC-20 whose `transfer` returns no
-value). The deployment bytecode embedded in the binary lives in `artifacts/`;
-regenerate it after changing the contracts with:
+`contracts/` holds the Solidity sources (`CkSweeper.sol` and
+`CkSweeperViaHelper.sol`, the EIP-7702 delegates and batchers for the two sweep
+variants; `MockUSDT.sol`, a USDT-style ERC-20 whose `transfer`/`approve`/
+`transferFrom` return no value). The deployment bytecode embedded in the binary
+lives in `artifacts/`, including `CkDeposit.bin.hex` compiled from the real
+helper contract `../../minter/DepositHelperWithSubaccount.sol`. Regenerate
+after changing the contracts with:
 
 ```shell
+cp ../../minter/DepositHelperWithSubaccount.sol contracts/
 forge build
-grep -o '"object":"0x[0-9a-f]*"' out/CkSweeper.sol/CkSweeper.json | head -1 | sed 's/"object":"//;s/"//' > artifacts/CkSweeper.bin.hex
-grep -o '"object":"0x[0-9a-f]*"' out/MockUSDT.sol/MockUSDT.json | head -1 | sed 's/"object":"//;s/"//' > artifacts/MockUSDT.bin.hex
+for c in CkSweeper CkSweeperViaHelper MockUSDT; do
+    grep -o '"object":"0x[0-9a-f]*"' out/$c.sol/$c.json | head -1 | sed 's/"object":"//;s/"//' > artifacts/$c.bin.hex
+done
+grep -o '"object":"0x[0-9a-f]*"' out/DepositHelperWithSubaccount.sol/CkDeposit.json | head -1 | sed 's/"object":"//;s/"//' > artifacts/CkDeposit.bin.hex
+rm contracts/DepositHelperWithSubaccount.sol
 ```
