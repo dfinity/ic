@@ -270,7 +270,7 @@ impl LocalBackend {
     /// and the task subprocesses are spawned: `unshare` moves only the calling
     /// thread, while threads and processes created *afterwards* inherit its
     /// namespace. Calling this early therefore puts the entire process tree —
-    /// task subprocesses, libvirtd, QEMU, `dnsmasq` — into the same netns.
+    /// task subprocesses, QEMU, `dnsmasq` — into the same netns.
     pub fn ensure_administrable_netns(logger: &Logger) -> Result<()> {
         // Unprivileged: the linux-sandbox netns is administrable via the
         // capability launcher, and without CAP_SYS_ADMIN over the current
@@ -1380,13 +1380,12 @@ fn sanitize_name(s: &str) -> String {
 
 /// Whether the driver process is running as root (effective uid 0).
 ///
-/// The `bazel-test-rbe` RBE cluster runs `_local` test actions as root. A
-/// monolithic `libvirtd` selects *system* vs. *session* mode purely by
-/// `geteuid() == 0`, so as root it would ignore `$XDG_RUNTIME_DIR` and place a
-/// privileged socket under `/run`, breaking this module's session-mode design.
-/// When this returns true the backend drops libvirtd/QEMU/`dnsmasq` to `nobody`
-/// to stay in session mode; the normal (unprivileged `ubuntu`) dev-container
-/// case returns false and behaves exactly as before.
+/// The `bazel-test-rbe` RBE cluster may run `_local` test actions as root.
+///
+/// When this returns true, the local backend adjusts its networking strategy:
+/// it bypasses the file-capability `capsh` launcher in [`net_admin`] and may
+/// `unshare(CLONE_NEWNET)` in [`ensure_administrable_netns`] so RTNETLINK
+/// operations are permitted.
 fn running_as_root() -> bool {
     nix::unistd::geteuid().as_raw() == 0
 }
