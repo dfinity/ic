@@ -73,9 +73,10 @@ static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 /// launched it, controlled afterwards via its pid-file (destroy) and QMP socket
 /// (reboot) — both under `working_dir`, so any process (setup task or a forked
 /// task subprocess) can control a VM regardless of which one started it. QEMU is
-/// reparented to the child-subreaper parent when its launcher exits, stopped
-/// explicitly in [`delete_group`](Self::delete_group), and SIGKILLed by
-/// `kill_all_descendants` as a final safety net at the end of the run.
+/// reparented to the sandbox's init process when its launcher exits and is
+/// stopped explicitly in [`delete_group`](Self::delete_group); anything that
+/// outlives the driver is killed when the test's sandbox (PID namespace) is
+/// torn down.
 pub struct LocalBackend {
     /// Working dir; see [`from_test_env`](Self::from_test_env).
     active_local_backend: ActiveLocalBackend,
@@ -666,8 +667,9 @@ impl LocalBackend {
     /// Sends SIGTERM (QEMU powers the guest off and exits), waits briefly for a
     /// graceful exit, then escalates to SIGKILL. Signalling via the pid-file
     /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
-    /// daemonized and reparented to the child-subreaper parent, which never held
-    /// a handle. `kill_all_descendants` remains the final safety net.
+    /// daemonized and reparented to the sandbox's init process, so no process
+    /// holds a handle on it. The sandbox (PID namespace) teardown remains the
+    /// final safety net.
     fn stop_qemu(&self, pid_path: &Path) {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return;
@@ -679,19 +681,18 @@ impl LocalBackend {
         info!(self.logger, "Stopping QEMU (pid {pid}) via SIGTERM");
         let _ = Command::new("kill").arg(pid.to_string()).status();
 
-        // Wait briefly for it to exit so teardown is deterministic (and
-        // `kill_all_descendants` finds nothing left to do). QEMU is our
-        // reparented descendant, so the descendant-reaper removes `/proc/<pid>`
-        // once it exits; poll for that. If it overruns the grace period,
-        // escalate to SIGKILL.
+        // Wait briefly for it to exit so teardown is deterministic. QEMU was
+        // reparented to the sandbox's init process, which reaps it once it
+        // exits so `/proc/<pid>` disappears; poll for that. If it overruns the
+        // grace period, escalate to SIGKILL.
         let deadline = Instant::now() + Duration::from_secs(5);
         while Path::new(&format!("/proc/{pid}")).exists() {
             if Instant::now() >= deadline {
                 // Guard against PID reuse before force-killing: the pid-file may
                 // be old, so confirm the process still looks like QEMU (exec
                 // basename truncated to `qemu-system-x86` in `comm`, hence a
-                // prefix match). Failing closed just defers to
-                // `kill_all_descendants`.
+                // prefix match). Failing closed just defers to the sandbox
+                // (PID namespace) teardown.
                 let still_qemu = std::fs::read_to_string(format!("/proc/{pid}/comm"))
                     .map(|c| c.trim_end().starts_with("qemu-"))
                     .unwrap_or(false);
@@ -1256,8 +1257,8 @@ impl LocalBackend {
     /// Poll until the process recorded in `pid_path` disappears, up to `timeout`.
     /// Returns `true` if it exited in time (or there was nothing to wait for).
     /// Used by [`reboot_vm`](Self::reboot_vm) to await a graceful guest shutdown;
-    /// the descendant reaper (see [`crate::driver::process`]) clears the exited
-    /// QEMU's zombie promptly, so `/proc/<pid>` disappears soon after exit.
+    /// the init process QEMU was reparented to reaps it promptly, so
+    /// `/proc/<pid>` disappears soon after exit.
     fn await_qemu_exit(&self, pid_path: &Path, timeout: Duration) -> bool {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return true;
