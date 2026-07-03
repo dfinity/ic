@@ -1,5 +1,5 @@
 {
-  "checksum": "aa5832a80507fb7df63cee6e942ca948f7b2e2401d14a0e9493390b6c1771054",
+  "checksum": "38103317d567f55d66cf98e7e5911c5a309d016b6999f8d374bc6b2b8f101d49",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22734,7 +22734,7 @@
               "target": "hex_literal"
             },
             {
-              "id": "hickory-resolver 0.25.2",
+              "id": "hickory-resolver 0.26.1",
               "target": "hickory_resolver"
             },
             {
@@ -24093,7 +24093,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -25787,66 +25787,6 @@
         },
         "edition": "2018",
         "version": "0.5.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "enum-as-inner 0.6.0": {
-      "name": "enum-as-inner",
-      "version": "0.6.0",
-      "package_url": "https://github.com/bluejekyll/enum-as-inner",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/enum-as-inner/0.6.0/download",
-          "sha256": "5ffccbb6966c05b32ef8fbac435df276c4ae4d3dc55a8cd0eb9745e6c12f546a"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "enum_as_inner",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "enum_as_inner",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "heck 0.4.1",
-              "target": "heck"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.6.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -33702,127 +33642,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hickory-proto 0.25.2": {
-      "name": "hickory-proto",
-      "version": "0.25.2",
-      "package_url": "https://github.com/hickory-dns/hickory-dns",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hickory-proto/0.25.2/download",
-          "sha256": "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hickory_proto",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hickory_proto",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "futures-io",
-            "std",
-            "tokio"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "data-encoding 2.11.0",
-              "target": "data_encoding"
-            },
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-io 0.3.31",
-              "target": "futures_io"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "idna 1.0.3",
-              "target": "idna"
-            },
-            {
-              "id": "ipnet 2.10.1",
-              "target": "ipnet"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "rand 0.9.4",
-              "target": "rand"
-            },
-            {
-              "id": "thiserror 2.0.18",
-              "target": "thiserror"
-            },
-            {
-              "id": "tinyvec 1.6.0",
-              "target": "tinyvec"
-            },
-            {
-              "id": "tokio 1.50.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tracing 0.1.44",
-              "target": "tracing"
-            },
-            {
-              "id": "url 2.5.4",
-              "target": "url"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            },
-            {
-              "id": "enum-as-inner 0.6.0",
-              "target": "enum_as_inner"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.25.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "hickory-proto 0.26.1": {
       "name": "hickory-proto",
       "version": "0.26.1",
@@ -33940,106 +33759,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hickory-resolver 0.25.2": {
-      "name": "hickory-resolver",
-      "version": "0.25.2",
-      "package_url": "https://github.com/hickory-dns/hickory-dns",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hickory-resolver/0.25.2/download",
-          "sha256": "dc62a9a99b0bfb44d2ab95a7208ac952d31060efc16241c87eaf36406fecf87a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hickory_resolver",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hickory_resolver",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "system-config",
-            "tokio"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "hickory-proto 0.25.2",
-              "target": "hickory_proto"
-            },
-            {
-              "id": "moka 0.12.15",
-              "target": "moka"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "parking_lot 0.12.5",
-              "target": "parking_lot"
-            },
-            {
-              "id": "rand 0.9.4",
-              "target": "rand"
-            },
-            {
-              "id": "resolv-conf 0.7.0",
-              "target": "resolv_conf"
-            },
-            {
-              "id": "smallvec 1.15.1",
-              "target": "smallvec"
-            },
-            {
-              "id": "thiserror 2.0.18",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.50.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tracing 0.1.44",
-              "target": "tracing"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.25.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "hickory-resolver 0.26.1": {
       "name": "hickory-resolver",
       "version": "0.26.1",
@@ -34074,30 +33793,15 @@
             "__dnssec",
             "__https",
             "__tls",
+            "default",
             "dnssec-aws-lc-rs",
             "https-aws-lc-rs",
+            "system-config",
             "tls-aws-lc-rs",
             "tokio",
             "webpki-roots"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "default",
-              "system-config"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "default",
-              "system-config"
-            ],
-            "x86_64-apple-darwin": [
-              "default",
-              "system-config"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "default",
-              "system-config"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -34138,6 +33842,10 @@
               "target": "rand"
             },
             {
+              "id": "resolv-conf 0.7.0",
+              "target": "resolv_conf"
+            },
+            {
               "id": "rustls 0.23.27",
               "target": "rustls"
             },
@@ -34169,34 +33877,14 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "resolv-conf 0.7.0",
-                "target": "resolv_conf"
-              },
-              {
                 "id": "system-configuration 0.7.0",
                 "target": "system_configuration"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "resolv-conf 0.7.0",
-                "target": "resolv_conf"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "resolv-conf 0.7.0",
-                "target": "resolv_conf"
-              },
-              {
                 "id": "system-configuration 0.7.0",
                 "target": "system_configuration"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "resolv-conf 0.7.0",
-                "target": "resolv_conf"
               }
             ]
           }
@@ -71942,7 +71630,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ],
@@ -72898,7 +72586,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -73013,7 +72701,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ]
@@ -83353,7 +83041,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.61.2",
+                "id": "windows-sys 0.59.0",
                 "target": "windows_sys"
               }
             ],
@@ -103439,7 +103127,7 @@
     "hashlink 0.8.3",
     "hex 0.4.3",
     "hex-literal 0.4.1",
-    "hickory-resolver 0.25.2",
+    "hickory-resolver 0.26.1",
     "hkdf 0.12.4",
     "hmac 0.12.1",
     "hpke 0.12.0",
