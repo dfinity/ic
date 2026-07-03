@@ -21,6 +21,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
+use ic_agent::AgentError;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::get_cup_from_node;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -299,14 +300,28 @@ async fn query_counter_canisters_until_stopped(
                         .expect("The counter canister is not hosted by any subnet");
 
                     let agent = create_agent(node.get_public_url().as_str()).await?;
-                    futures::future::try_join(
+                    match futures::future::try_join(
                         agent.query(&canister_id.get().0, "read".to_string()).call(),
                         agent
                             .update(&canister_id.get().0, "read".to_string())
                             .call(),
                     )
                     .await
-                    .context("Failed to make a query/update call to a counter canister")
+                    {
+                        Ok(_) => Ok(()),
+                        err @ Err(AgentError::CertificateNotAuthorized())
+                        | err @ Err(AgentError::CertificateVerificationFailed())
+                        | err @ Err(AgentError::CertificateOutdated(_)) => {
+                            // These errors could happen with an invalid/stale delegation. Replicas
+                            // should detect this and refresh their delegations before attempting to
+                            // reply, so if they don't, panic.
+                            panic!("The following error is not expected during the subnet split: {err:?}")
+                        }
+                        Err(err) => {
+                            // Transient errors are expected during the subnet split, so we retry.
+                            Err(err.into())
+                        }
+                    }
                 }
             )
             .await
