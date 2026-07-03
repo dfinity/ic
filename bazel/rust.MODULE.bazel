@@ -1777,11 +1777,11 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.12.3",
+    version = "^0.13.1",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.12.3",
+    version = "^0.13.1",
 )
 crate.spec(
     features = ["full"],
