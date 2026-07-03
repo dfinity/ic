@@ -13,17 +13,18 @@ authorizations riding in the same transaction's authorization list).
 
 ## Run
 
-Start a Prague-enabled anvil:
+Start anvil (its default hardfork is the latest supported one, which includes
+EIP-7702 in any foundry release ≥ v1.0 / Pectra):
 
 ```shell
-anvil --hardfork prague
+anvil
 ```
 
 or, without foundry installed:
 
 ```shell
-docker run --rm -p 8545:8545 ghcr.io/foundry-rs/foundry:latest \
-    "anvil --host 0.0.0.0 --hardfork prague"
+docker run --rm -p 8545:8545 ghcr.io/foundry-rs/foundry:v1.7.1 \
+    "anvil --host 0.0.0.0"
 ```
 
 then:

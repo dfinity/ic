@@ -340,8 +340,8 @@ Two ETH-specific problems and their resolutions:
 
 A runnable end-to-end demonstration of the sweep mechanism (unfunded deposit EOAs,
 plain USDT-style transfers, single and batched type-`0x04` sweep transactions with gas
-paid by the minter, gas assertions) against a local Prague-enabled node is available
-in [`deposit_from_cex_demo/`](deposit_from_cex_demo/README.md).
+paid by the minter, gas assertions) against a local dev node (any post-Pectra
+version) is available in [`deposit_from_cex_demo/`](deposit_from_cex_demo/README.md).
 
 Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 

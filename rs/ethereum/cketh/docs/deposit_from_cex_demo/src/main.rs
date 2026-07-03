@@ -15,11 +15,12 @@
 //!      via CkSweeper.sweepErc20Batch, their authorizations riding in the same
 //!      transaction's authorization list.
 //!
-//! Requires a Prague-enabled dev node, e.g.
-//!   anvil --hardfork prague
+//! Requires a dev node supporting EIP-7702 (Ethereum mainnet since the Pectra
+//! upgrade, May 2025), e.g.
+//!   anvil
 //! or, without foundry installed:
-//!   docker run --rm -p 8545:8545 ghcr.io/foundry-rs/foundry:latest \
-//!       "anvil --host 0.0.0.0 --hardfork prague"
+//!   docker run --rm -p 8545:8545 ghcr.io/foundry-rs/foundry:v1.7.1 \
+//!       "anvil --host 0.0.0.0"
 
 use alloy::{
     eips::eip7702::{Authorization, SignedAuthorization},
