@@ -258,6 +258,15 @@ own principal is rejected).
   threshold consensus (`src/eth_rpc_client/`); every new call (`eth_getLogs` per
   deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
   use the same reduction strategies.
+* Each EVM-RPC call today is one HTTPS outcall *per provider* and each outcall burns
+  cycles, so observing the balances of many registered addresses (`R13` gate) must
+  not cost one call per address. This depends on **JSON-RPC batch request support in
+  the EVM-RPC canister** (`eth_batch`,
+  [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
+  in progress): one batch of `eth_getBalance` / `eth_call` requests per outcall.
+  Until it lands, a [Multicall3](https://www.multicall3.com/) `aggregate3` `eth_call`
+  can read many `balanceOf` (and, via `getEthBalance`, native ETH) values in a single
+  request — at the cost of depending on an extra on-chain contract.
 * The minter is event-sourced (`src/state/audit.rs`, `src/state/event.rs`): all new
   state must be reconstructible from persisted events (`R8`).
 * Deposits are only credited at *finalized* blocks, as today.
@@ -302,6 +311,14 @@ own principal is rejected).
 * A frontend (e.g. OISY) polls `notify_deposit` after showing the address, so the flow
   is automatic from the user's perspective; a background timer may additionally
   re-check addresses with recent activity, bounded to a fixed batch per tick.
+* Scanning many registered addresses at once (the `R13` gate, and cheap periodic
+  re-checks) reads balances in bulk rather than per address: a single JSON-RPC batch
+  of `balanceOf` `eth_call`s / `eth_getBalance`s per HTTPS outcall once the EVM-RPC
+  canister supports `eth_batch`
+  ([dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561)),
+  or one Multicall3 `aggregate3` `eth_call` for a whole batch meanwhile. A cheap
+  balance scan decides *whether* to act; the log-based steps above remain the source
+  of truth for crediting (variant A) or the helper event does (variant B).
 
 ### Sweeper delegate contract
 
