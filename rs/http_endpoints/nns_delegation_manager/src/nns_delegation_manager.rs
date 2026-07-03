@@ -472,7 +472,7 @@ async fn connect(
                 dns_resolver.options_mut().attempts = 1;
             }
             let ip_addr = dns_resolver
-                .build()
+                .build()?
                 .lookup_ip(domain.as_str())
                 .await?
                 .iter()
@@ -979,7 +979,7 @@ mod tests {
                 Ok(HandshakeSignatureValid::assertion())
             }
             fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-                rustls::crypto::ring::default_provider()
+                rustls::crypto::aws_lc_rs::default_provider()
                     .signature_verification_algorithms
                     .supported_schemes()
             }
@@ -1276,7 +1276,7 @@ mod tests {
         // Since the API BN is configured with a domain that does not resolve, we expect the
         // connection to fail with a name resolution error, which indicates that we indeed tried to
         // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if format!("{err:?}").contains("ResolveError"));
+        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
     }
 
     #[tokio::test]

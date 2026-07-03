@@ -275,7 +275,7 @@ def system_test(
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
-    # Runtime deps that are only needed when running on the local (libvirt-based) backend.
+    # Runtime deps that are only needed when running on the local (QEMU-based) backend.
     _local_only_deps = {
         image_name + "_PATH": image_path
         for image_name, image_path in icos_images.items()
@@ -292,8 +292,7 @@ def system_test(
 
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
-    _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
-    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)

@@ -712,7 +712,7 @@ fn remove_nodes_from_subnet_(payload: RemoveNodesFromSubnetPayload) {
 
 #[unsafe(export_name = "canister_update change_subnet_membership")]
 fn change_subnet_membership() {
-    check_caller_is_governance_and_log("change_subnet_membership");
+    check_caller_is_governance_or_engine_controller_and_log("change_subnet_membership");
     over(candid_one, |payload: ChangeSubnetMembershipPayload| {
         change_subnet_membership_(payload)
     });

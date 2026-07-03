@@ -148,7 +148,7 @@ impl<'a> QueryContext<'a> {
         cycles_account_manager: Arc<CyclesAccountManager>,
         instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
-        let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
+        let network_topology = Arc::clone(&state.get_ref().metadata.network_topology);
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_query_call_graph_instructions),
             subnet_available_memory,

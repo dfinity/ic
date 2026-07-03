@@ -11,8 +11,16 @@ filegroup(
 )
 
 make(
-    name = "dnsmasq",
+    name = "dnsmasq_build",
     lib_source = ":all",
     out_bin_dir = "sbin",
     out_binaries = ["dnsmasq"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "dnsmasq",
+    srcs = [":dnsmasq_build"],
+    output_group = "dnsmasq",
+    visibility = ["//visibility:public"],
 )

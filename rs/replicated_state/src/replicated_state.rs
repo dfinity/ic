@@ -894,6 +894,9 @@ impl ReplicatedState {
                 .subnets()
                 .contains_key(subnet_id)
         });
+        // Cycles in dropped stream messages (refunds in responses, payments in requests)
+        // are intentionally not observed as lost: the deleted subnet may have partially
+        // executed the message and consumed some or all of those cycles.
         self.put_streams(streams);
     }
 
