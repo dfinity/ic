@@ -1210,13 +1210,7 @@ impl WasmtimeInstance {
         let access = self.page_accesses()?;
         self.set_instance_stats(&access);
 
-        // Charge for dirty wasm heap pages.
-        // let x = self.instruction_counter().saturating_sub_unsigned(
-        //     self.dirty_page_overhead
-        //         .get()
-        //         .saturating_mul(access.wasm_dirty_pages.len() as u64),
-        // );
-        // self.set_instruction_counter(x);
+        // No need to charge for dirty wasm heap pages anymore: The DMT charges directly.
 
         match result {
             Ok(_) => Ok(InstanceRunResult {

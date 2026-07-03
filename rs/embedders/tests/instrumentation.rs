@@ -1,6 +1,6 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, SchedulerConfig};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::wasm_utils;
 use ic_embedders::{
     WasmtimeEmbedder,
@@ -811,22 +811,20 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let _cd = SchedulerConfig::application_subnet()
+    let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
     let overhead = deterministic_tracker_overhead(1, 0);
-    let dirty_page_overhead = DEFAULT_DIRTY_PAGE_OVERHEAD.get();
 
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
     assert_eq!(
         instructions_used,
-        1 + 5 * cc + cg + 2 * cs + cl + overhead * dirty_page_overhead
+        1 + 5 * cc + cg + 2 * cs + cl + overhead * cd
     );
-
     // Now run the same with insufficient instructions
     // We should still succeed (to avoid potentially failing pre-upgrades
     // of canisters that did not adjust their code to new metering)

@@ -1876,7 +1876,7 @@ fn impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(
     // page overhead (2x16 OS pages * 5_000) plus the ~10_000 byte copy cost. The
     // slice limit must exceed that so the (un-splittable) operation fits in one
     // slice, while staying below the total `$work` cost (~230_000) so execution
-    // still spans multiple rounds and can be aborted mid-flight.
+    // still spans multiple rounds and can be aborted.
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(200_000),
@@ -2641,18 +2641,6 @@ fn dts_abort_paused_execution_on_state_switch() {
 
 #[test]
 fn dts_abort_after_dropping_memory_on_state_switch() {
-    // A single `memory.fill` over the whole 1000-page heap (16_000 OS pages) now
-    // costs ~225M instructions: the first write to each Wasm page is charged the
-    // full deterministic-memory-tracker page overhead (2 * 16_000 OS pages *
-    // 5_000) plus the ~65M byte copy cost. A `memory.fill` can't be split across
-    // slices, so the slice limit must exceed that single-fill cost. Subsequent
-    // fills only pay the ~65M byte cost (the pages are already accessed/dirty).
-    //
-    // The round limit is `slice + slice / 2` (see `dts_subnet_config`), so with a
-    // 250M slice a round executes ~375M instructions. `long_update` does 8 fills
-    // (~225M + 7 * 65M ≈ 684M) which is well above a single round, guaranteeing it
-    // stays paused (`ContinueLong`) after the first tick so it can be aborted,
-    // while still fitting within the 1B per-message limit.
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(250_000_000),

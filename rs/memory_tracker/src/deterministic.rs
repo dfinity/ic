@@ -352,13 +352,7 @@ impl DeterministicMemoryTracker {
             accessed_pages.push(PageIndex::new(os_page_idx));
         }
 
-        // Charge instructions per OS page accessed.
-        // println!(
-        //     "DMT charging for {} pages accessed @ {} = {}",
-        //     num_os_pages,
-        //     self.page_overhead,
-        //     num_os_pages * self.page_overhead
-        // );
+        // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
     }
 
@@ -369,12 +363,8 @@ impl DeterministicMemoryTracker {
 
         let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
         let num_os_pages = os_page_range.end.get() - os_page_range.start.get();
-        // println!(
-        //     "DMT charging for {} pages dirtied @ {} = {}",
-        //     num_os_pages,
-        //     self.page_overhead,
-        //     num_os_pages * self.page_overhead
-        // );
+
+        // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
     }
 
