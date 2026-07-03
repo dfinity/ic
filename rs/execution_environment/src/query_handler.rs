@@ -16,7 +16,7 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
-use ic_canonical_state::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
+use ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
@@ -553,9 +553,12 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                     |(state, cert)| {
                         // Make sure NNS delegation is valid with respect to the certified state.
                         // Otherwise the client would not be able to verify the query response against the delegation.
-                        if let Some(delegation) = &certificate_delegation {
+                        if let Some(delegation) = &certificate_delegation
+                            && let Some(metadata) = &certificate_delegation_metadata
+                        {
                             match is_delegation_valid_with_respect_to_state(
                                 delegation,
+                                metadata.format,
                                 state.get_ref(),
                             ) {
                                 Ok(true) => {}
@@ -563,7 +566,9 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                                     return Err(QueryExecutionError::OutdatedDelegation);
                                 }
                                 Err(err) => {
-                                    return Err(QueryExecutionError::InvalidDelegation(err));
+                                    return Err(QueryExecutionError::InvalidDelegation(
+                                        err.to_string(),
+                                    ));
                                 }
                             }
                         }

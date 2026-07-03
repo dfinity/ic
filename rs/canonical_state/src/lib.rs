@@ -128,6 +128,7 @@
 //! `CURRENT_CERTIFICATION_VERSION+1` it will panic, in order to avoid undefined
 //! behavior.
 
+pub mod delegation;
 pub mod encoding;
 pub mod lazy_tree_conversion;
 pub mod size_limit_visitor;

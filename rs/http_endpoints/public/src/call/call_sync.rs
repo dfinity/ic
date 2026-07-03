@@ -425,9 +425,13 @@ async fn tree_cert_deleg_for_message(
         Ok(Some(certified_state_reader)) => certified_state_reader,
         Ok(None) | Err(_) => return Ok(None),
     };
-    let delegation = nns_delegation_reader.get_delegation(delegation_filter);
-    if let Some(delegation) = delegation.as_ref() {
-        verify_delegation_matches_certified_state(delegation, certified_state_reader.as_ref())?
+    let delegation_metadata = nns_delegation_reader.get_delegation_with_metadata(delegation_filter);
+    if let Some((delegation, metadata)) = delegation_metadata.as_ref() {
+        verify_delegation_matches_certified_state(
+            delegation,
+            metadata,
+            certified_state_reader.as_ref(),
+        )?
     }
 
     // We always add time path to comply with the IC spec.
@@ -444,5 +448,9 @@ async fn tree_cert_deleg_for_message(
     let Some((tree, certification)) = certified_state_reader.read_certified_state(&tree) else {
         return Ok(None);
     };
-    Ok(Some((tree, certification, delegation)))
+    Ok(Some((
+        tree,
+        certification,
+        delegation_metadata.map(|(delegation, _metadata)| delegation),
+    )))
 }

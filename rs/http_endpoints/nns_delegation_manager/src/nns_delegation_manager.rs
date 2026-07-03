@@ -6,7 +6,7 @@ use hickory_resolver::{Resolver, config::LookupIpStrategy};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
-use ic_canonical_state::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
+use ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
@@ -29,8 +29,8 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequestEnvelope,
+        Blob, Certificate, CertificateDelegationFormat, HttpReadState, HttpReadStateContent,
+        HttpReadStateResponse, HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
 };
@@ -146,7 +146,8 @@ impl DelegationManager {
         };
 
         is_delegation_valid_with_respect_to_state(
-            &old_delegation.build_or_original(CanisterRangesFilter::None, &self.log),
+            &old_delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
+            CertificateDelegationFormat::Flat,
             self.state_reader.get_latest_certified_state()?.get_ref(),
         )
         .inspect_err(|err| {
@@ -733,7 +734,6 @@ mod tests {
     use tokio::time::timeout;
 
     use crate::CanisterRangesFilter;
-    use crate::nns_delegation_reader::into_cbor;
 
     use super::*;
 

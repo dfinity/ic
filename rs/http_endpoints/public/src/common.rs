@@ -7,7 +7,7 @@ use http::{
 };
 use http_body_util::BodyExt;
 use hyper::{Response, StatusCode, header};
-use ic_canonical_state::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
+use ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_error_types::UserError;
@@ -22,7 +22,9 @@ use ic_types::{
     RegistryVersion, SubnetId, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, HttpRequest, HttpRequestContent},
+    messages::{
+        CertificateDelegation, CertificateDelegationMetadata, HttpRequest, HttpRequestContent,
+    },
 };
 use ic_utils::str::StrEllipsize;
 use ic_validator::{
@@ -334,10 +336,14 @@ where
 
 pub(crate) fn verify_delegation_matches_certified_state(
     delegation: &CertificateDelegation,
+    metadata: &CertificateDelegationMetadata,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
 ) -> Result<(), HttpError> {
-    match is_delegation_valid_with_respect_to_state(delegation, certified_state_reader.get_state())
-    {
+    match is_delegation_valid_with_respect_to_state(
+        delegation,
+        metadata.format,
+        certified_state_reader.get_state(),
+    ) {
         Ok(true) => Ok(()),
         Ok(false) => Err(outdated_delegation_error()),
         Err(_err) => Err(invalid_delegation_error()),

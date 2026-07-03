@@ -14,9 +14,7 @@ use ic_canonical_state_tree_hash::{
         Lazy, LazyFork, LazyTree, blob, fork, materialize::materialize_partial, num, string,
     },
 };
-use ic_crypto_tree_hash::{
-    Label, LabeledTree, Witness, lookup_path, sparse_labeled_tree_from_paths,
-};
+use ic_crypto_tree_hash::{Label, Witness, sparse_labeled_tree_from_paths};
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
@@ -33,7 +31,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, Height, NodeId, PrincipalId, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{Certificate, CertificateDelegation, EXPECTED_MESSAGE_ID_LENGTH, MessageId},
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
 use std::convert::{AsRef, TryFrom, TryInto};
@@ -491,55 +489,6 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 },
             ),
     )
-}
-
-/// Checks that the subnet's public key recorded in the certified state served by the replica
-/// matches the public key embedded in the given NNS delegation.
-///
-/// This guards against serving a response whose certificate the client is guaranteed to reject:
-/// e.g. right after a subnet split the subnet starts certifying with a fresh threshold key while
-/// the cached NNS delegation may still carry the previous key for up to a few minutes. In that
-/// window the two keys disagree, so we return an error instead of a response that cannot be
-/// verified.
-/// Similarly, right before a subnet split, the delegation might already carry the new key while the
-/// certified state still carries the old key.
-pub fn is_delegation_valid_with_respect_to_state(
-    delegation: &CertificateDelegation,
-    state: &ReplicatedState,
-) -> Result<bool, String> {
-    let subnet_id = SubnetId::from(
-        PrincipalId::try_from(delegation.subnet_id.0.as_slice())
-            .map_err(|err| format!("Failed to parse subnet id from the delegation: {err}"))?,
-    );
-    let public_key_path = &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"];
-
-    let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate)
-        .map_err(|err| format!("Failed to parse the delegation certificate: {err}"))?;
-    let delegation_tree = LabeledTree::try_from(certificate.tree)
-        .map_err(|err| format!("Invalid hash tree in the delegation certificate: {err:?}"))?;
-    let Some(LabeledTree::Leaf(public_key_from_delegation)) =
-        lookup_path(&delegation_tree, public_key_path)
-    else {
-        return Err(format!(
-            "The public key of subnet {subnet_id} is missing from the delegation certificate"
-        ));
-    };
-
-    if subnet_id != state.metadata.own_subnet_id {
-        return Ok(false);
-    }
-
-    let public_key_from_certified_state = state
-        .metadata
-        .network_topology
-        .subnets()
-        .get(&subnet_id)
-        .map(|subnet| subnet.public_key.clone())
-        .ok_or_else(|| {
-            format!("The public key of subnet {subnet_id} is missing from the certified state")
-        })?;
-
-    Ok(public_key_from_delegation == &public_key_from_certified_state)
 }
 
 /// A filter for the streams map, to filter out the loopback stream.
@@ -1088,114 +1037,4 @@ pub fn compute_state_height_witness(lazy_tree: &LazyTree, hash_tree: &HashTree) 
     hash_tree
         .witness::<Witness>(&partial_tree)
         .expect("Failed to compute witness for state height")
-}
-
-#[cfg(test)]
-mod tests {
-    use ic_crypto_tree_hash::{Label, MixedHashTree};
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        ReplicatedState, SubnetTopology, metadata_state::testing::NetworkTopologyTesting,
-    };
-    use ic_test_utilities_types::ids::SUBNET_1;
-    use ic_types::{
-        SubnetId,
-        messages::{Blob, Certificate, CertificateDelegation},
-    };
-    use serde::Serialize;
-
-    use crate::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
-
-    /// Builds a `MixedHashTree` containing `/subnet/<subnet_id>/public_key -> public_key`.
-    fn public_key_tree(subnet_id: SubnetId, public_key: &[u8]) -> MixedHashTree {
-        MixedHashTree::Labeled(
-            Label::from("subnet"),
-            Box::new(MixedHashTree::Labeled(
-                Label::from(subnet_id.get().to_vec()),
-                Box::new(MixedHashTree::Labeled(
-                    Label::from("public_key"),
-                    Box::new(MixedHashTree::Leaf(public_key.to_vec())),
-                )),
-            )),
-        )
-    }
-
-    fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
-        let mut serializer = serde_cbor::Serializer::new(Vec::new());
-        serializer
-            .self_describe()
-            .map_err(|err| format!("Could not write magic tag: {err}"))?;
-        certificate
-            .serialize(&mut serializer)
-            .map_err(|err| format!("Failed to serialize the object: {err}"))?;
-        Ok(serializer.into_inner())
-    }
-
-    /// Builds a delegation whose certificate embeds `tree`.
-    fn delegation_with_tree(subnet_id: SubnetId, tree: MixedHashTree) -> CertificateDelegation {
-        let certificate = Certificate {
-            tree,
-            signature: Blob(vec![]),
-            delegation: None,
-        };
-        CertificateDelegation {
-            subnet_id: Blob(subnet_id.get().to_vec()),
-            certificate: Blob(into_cbor(&certificate).unwrap()),
-        }
-    }
-
-    fn fake_replicated_state(subnet_id: SubnetId, public_key: Vec<u8>) -> ReplicatedState {
-        let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
-        state.metadata.network_topology.subnets_mut().insert(
-            subnet_id,
-            SubnetTopology {
-                public_key,
-                ..SubnetTopology::default()
-            },
-        );
-        state
-    }
-
-    #[test]
-    fn is_delegation_valid_with_respect_to_state_succeeds_on_matching_public_key() {
-        let subnet_id = SUBNET_1;
-        let public_key = vec![1, 2, 3, 4, 5];
-        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &public_key));
-        let certified_state = fake_replicated_state(subnet_id, public_key);
-
-        assert!(is_delegation_valid_with_respect_to_state(&delegation, &certified_state).is_ok());
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_fails_on_mismatch() {
-        let subnet_id = SUBNET_1;
-        let delegation =
-            delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3, 4, 5]));
-        let certified_state = fake_replicated_state(subnet_id, vec![5, 4, 3, 2, 1]);
-
-        assert_matches!(
-            is_delegation_valid_with_respect_to_state(&delegation, &certified_state),
-            Ok(false)
-        );
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_state() {
-        let subnet_id = SUBNET_1;
-        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3]));
-        assert_matches!(is_delegation_valid_with_respect_to_state(&delegation, &ReplicatedState::new(subnet_id, SubnetType::Application)),
-            Err(err) if err.contains("missing from the certified state")
-        );
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_delegation() {
-        let subnet_id = SUBNET_1;
-        let delegation = delegation_with_tree(subnet_id, MixedHashTree::Empty);
-        let certified_state = fake_replicated_state(subnet_id, vec![1, 2, 3]);
-
-        assert_matches!(is_delegation_valid_with_respect_to_state(&delegation, &certified_state),
-            Err(err) if err.contains("missing from the delegation")
-        );
-    }
 }
