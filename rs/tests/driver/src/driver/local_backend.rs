@@ -1,53 +1,57 @@
-//! Local (libvirt + QEMU) system-test backend.
+//! Local (QEMU) system-test backend.
 //!
 //! Counterpart to [`crate::driver::farm::Farm`] for tests run on a developer or
 //! CI host instead of the Farm cluster. Selected via `SYSTEM_TEST_INFRA=local`.
 //!
-//! Spawns a per-test libvirtd daemon on a unix socket, then drives it through
-//! the `virt` crate to create networks (for groups), domains (for VMs) and to
-//! extract disk images.
+//! Boots each VM as a per-VM daemonized `qemu-system-x86_64` process, controlled
+//! afterwards through its pid-file (destroy) and a per-VM QMP unix socket
+//! (reboot). Networking (per-group Linux bridge + per-VM TAPs, `dnsmasq`
+//! RA/DHCPv4) and disk images (qcow2 overlays over a shared base) are managed
+//! directly by this backend.
 //!
 //! Many Farm features have no local equivalent (managed playnet DNS, TLS
 //! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
 //! and return dummy values or `bail!`.
 //!
-//! See `rs/tests/driver/templates/guestos_vm_template.xml` for the domain XML
-//! template used to launch VMs.
+//! In the QEMU command line built by [`LocalBackend::start_vm`], each virtio/PCIe
+//! device sits behind its own `pcie-root-port` so the guest's predictable
+//! interface names stay deterministic (primary NIC -> `enp1s0`, IPv4 NIC ->
+//! `enp2s0`).
 
 use crate::driver::farm::{VMCreateResponse, VmSpec};
 use crate::driver::resource::DiskImage;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::get_dependency_path_from_env;
 use anyhow::{Context, Result, anyhow, bail};
-use askama::Template;
 use deterministic_ips::MacAddr6Ext;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
 use std::net::Ipv6Addr;
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::CommandExt;
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use virt::connect::Connect;
-use virt::domain::Domain;
 
-/// Persistent record (in the root TestEnv) of the libvirtd socket and working
-/// dir, so forked task subprocesses can connect to the daemon spawned by the
-/// setup task instead of spawning their own.
+/// UEFI firmware (OVMF) split-image paths, provided by the container's `ovmf`
+/// package. The code image is read-only and shared; each VM gets a writable copy
+/// of the variable store (its per-VM UEFI NVRAM).
+const OVMF_CODE: &str = "/usr/share/OVMF/OVMF_CODE_4M.fd";
+const OVMF_VARS_TEMPLATE: &str = "/usr/share/OVMF/OVMF_VARS_4M.fd";
+
+/// Persistent record (in the root TestEnv) of the backend's working dir, so
+/// forked task subprocesses resolve the same paths (VM disks, per-VM metadata,
+/// pid-files and QMP sockets) the setup task created.
 #[derive(Serialize, Deserialize, Clone)]
 struct ActiveLocalBackend {
-    /// Path of the libvirtd unix socket the spawning process bound. Forked
-    /// subprocesses open a connect-only handle to it (see
-    /// [`LocalBackend::connect_only`]).
-    socket_path: PathBuf,
-    /// Working dir where VM disks and per-VM metadata (`meta.json`) live.
-    /// Resolves to the same `<group_dir>/local_backend` path in every process,
-    /// so a `connect_only` handle reads back the metadata the setup process
-    /// persisted.
+    /// Working dir where VM disks and per-VM metadata (`meta.json`), pid-files
+    /// and QMP sockets live. Resolves to the same `<group_dir>/local_backend`
+    /// path in every process, so a subprocess reads back the metadata the setup
+    /// process persisted and can control VMs the setup process started.
     working_dir: PathBuf,
 }
 
@@ -57,26 +61,24 @@ impl TestEnvAttribute for ActiveLocalBackend {
     }
 }
 
-/// Process-wide cache of the single `LocalBackend`. One libvirtd (hence one
-/// socket) per `bazel test` invocation, so a single slot suffices: every
-/// `from_test_env` call in a process resolves to the same backend.
+/// Process-wide cache of the single `LocalBackend`. One backend per `bazel test`
+/// invocation, so a single slot suffices: every `from_test_env` call in a
+/// process resolves to the same backend.
 static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 
-/// Per-test handle wrapping a `virt::Connect` to the per-invocation libvirtd.
+/// Per-test handle to the local backend.
 ///
-/// The daemon is not owned via a `Child` handle: it is spawned in
-/// [`spawn`](Self::spawn) (the setup process) and must outlive that process so
-/// forked task subprocesses can [`connect_only`](Self::connect_only) to its
-/// socket. It is reparented to the child-subreaper parent when the setup
-/// process exits, stopped explicitly in [`delete_group`](Self::delete_group)
-/// via [`stop_libvirtd`](Self::stop_libvirtd), and SIGKILLed by
+/// There is no daemon: each VM is a self-contained daemonized `qemu-system`
+/// process (see [`start_vm`](Self::start_vm)) that outlives the process which
+/// launched it, controlled afterwards via its pid-file (destroy) and QMP socket
+/// (reboot) — both under `working_dir`, so any process (setup task or a forked
+/// task subprocess) can control a VM regardless of which one started it. QEMU is
+/// reparented to the child-subreaper parent when its launcher exits, stopped
+/// explicitly in [`delete_group`](Self::delete_group), and SIGKILLed by
 /// `kill_all_descendants` as a final safety net at the end of the run.
 pub struct LocalBackend {
-    /// Socket path and working dir.
-    /// [`from_test_env`](Self::from_test_env).
+    /// Working dir; see [`from_test_env`](Self::from_test_env).
     active_local_backend: ActiveLocalBackend,
-    /// libvirt connection.
-    connect: Connect,
     logger: Logger,
     /// Per-VM allocated IPv6, keyed by `vm_name`.
     vm_ipv6: Mutex<HashMap<String, Ipv6Addr>>,
@@ -109,14 +111,13 @@ struct PersistedVm {
 }
 
 impl LocalBackend {
-    /// Return the LocalBackend for the libvirtd associated with `env`.
+    /// Return the LocalBackend associated with `env`.
     ///
     /// - If `env` already has an `ActiveLocalBackend` attribute (setup has run
-    ///   and persisted the socket path), open a connect-only handle to it. This
-    ///   is what forked task subprocesses get.
-    /// - Otherwise spawn a new libvirtd, persist the socket path as a
-    ///   `TestEnvAttribute`, and return the spawning handle. This is what the
-    ///   setup task gets on first call.
+    ///   and persisted the working dir), build a handle from it. This is what
+    ///   forked task subprocesses get.
+    /// - Otherwise resolve the working dir, persist it as a `TestEnvAttribute`,
+    ///   and return the handle. This is what the setup task gets on first call.
     ///
     /// The returned `Arc` is cached in a process-wide slot, so repeated calls in
     /// the same process share state.
@@ -127,19 +128,19 @@ impl LocalBackend {
         }
 
         if let Ok(existing) = ActiveLocalBackend::try_read_attribute(env) {
-            // Setup has run: open a connect-only handle to the running daemon.
-            let backend = Arc::new(LocalBackend::connect_only(existing, env.logger())?);
+            // Setup has run: build a handle from the persisted working dir.
+            let backend = Arc::new(LocalBackend::new(existing, env.logger()));
             *reg = Some(backend.clone());
             return Ok(backend);
         }
 
-        // The working dir holds the live libvirtd socket/pid/log and the
+        // The working dir holds per-VM pid-files/QMP sockets and the
         // (potentially multi-gibibyte) VM disk images, so it must live OUTSIDE
         // the env directory: each `TestEnv` is recursively `cp -R`'d when setup
-        // artifacts are forked into the per-test directories. Copying the live
-        // socket hangs `cp` (blocks in `D` state) and copying the disks would
-        // duplicate gigabytes per test. We therefore place it as a sibling of
-        // the env directory (directly under the group dir), which is never
+        // artifacts are forked into the per-test directories. Copying a live
+        // unix socket hangs `cp` (blocks in `D` state) and copying the disks
+        // would duplicate gigabytes per test. We therefore place it as a sibling
+        // of the env directory (directly under the group dir), which is never
         // copied.
         let env_path = env.get_path("");
         let group_dir = env_path
@@ -151,8 +152,8 @@ impl LocalBackend {
                 group_dir.display()
             )
         })?;
-        // Canonicalize so the socket path persisted for forked subprocesses is
-        // absolute.
+        // Canonicalize so the working dir persisted for forked subprocesses is
+        // absolute (qcow2 overlays record their backing file by absolute path).
         let group_dir = group_dir
             .canonicalize()
             .with_context(|| format!("canonicalizing group dir {}", group_dir.display()))?;
@@ -163,8 +164,11 @@ impl LocalBackend {
                 working_dir.display()
             )
         })?;
-        let backend = Arc::new(LocalBackend::spawn(working_dir.clone(), env.logger())?);
-        // Persist the socket path so forked subprocesses can find it.
+        let backend = Arc::new(LocalBackend::new(
+            ActiveLocalBackend { working_dir },
+            env.logger(),
+        ));
+        // Persist the working dir so forked subprocesses resolve the same paths.
         backend.active_local_backend.write_attribute(env);
         *reg = Some(backend.clone());
         Ok(backend)
@@ -319,209 +323,22 @@ impl LocalBackend {
         )
     }
 
-    /// Short, host-global directory for this backend's libvirtd unix socket.
-    ///
-    /// See [`spawn`] for why the socket cannot live under `working_dir`. Keyed by
-    /// a hash of `working_dir` so it is stable across re-runs of the same group
-    /// yet distinct between concurrent groups.
-    fn socket_dir(working_dir: &Path) -> PathBuf {
-        use ic_crypto_sha2::Sha256;
-        let hash = Sha256::hash(working_dir.to_string_lossy().as_bytes());
-        PathBuf::from(format!("/tmp/ictest-libvirt-{}", hex::encode(&hash[0..5])))
-    }
-
-    /// Spawn a fresh libvirtd subprocess in `working_dir/libvirt` and open a
-    /// connection to it.
-    fn spawn(working_dir: PathBuf, logger: Logger) -> Result<Self> {
-        let libvirt_dir = working_dir.join("libvirt");
-        std::fs::create_dir_all(&libvirt_dir).with_context(|| {
-            format!("creating libvirt working dir at {}", libvirt_dir.display())
-        })?;
-
-        let conf_path = libvirt_dir.join("libvirtd.conf");
-        let pid_path = Self::libvirtd_pid_path(&working_dir);
-        let log_path = libvirt_dir.join("libvirtd.log");
-
-        // libvirtd runs as the current (non-root) user in *session* mode
-        // (`qemu:///session`), which ignores `unix_sock_dir` and always places
-        // its socket at `$XDG_RUNTIME_DIR/libvirt/libvirt-sock`. The default
-        // `$XDG_RUNTIME_DIR` (`/run/user/<uid>`) may be absent in the container,
-        // and we want a deterministic, short path anyway: the kernel caps unix
-        // socket paths (`sun_path`) at ~108 bytes, and the working dir resolves
-        // to a deep Bazel cache path already past that limit. So we point
-        // `$XDG_RUNTIME_DIR` at a short `/tmp` dir keyed by a hash of the working
-        // dir (distinct per concurrent group, stable across re-runs). The
-        // pid/log/conf files stay in `libvirt_dir`.
-        let xdg_runtime_dir = Self::socket_dir(&working_dir);
-        std::fs::create_dir_all(&xdg_runtime_dir).with_context(|| {
-            format!(
-                "creating libvirt XDG_RUNTIME_DIR {}",
-                xdg_runtime_dir.display()
-            )
-        })?;
-        let socket_path = xdg_runtime_dir.join("libvirt").join("libvirt-sock");
-        // Although not necessary in the bazel sandbox a `bazel run` might have left a socket behind at this fixed path; remove it
-        // so libvirtd can bind cleanly.
-        let _ = std::fs::remove_file(&socket_path);
-
-        // Minimal libvirtd config: log to a file.
-        std::fs::write(
-            &conf_path,
-            format!("log_outputs = \"1:file:{log}\"\n", log = log_path.display(),),
-        )?;
-
-        // Session-mode libvirtd initializes per-user state drivers on startup,
-        // creating config/cache/data dirs derived from `$HOME`. If they cannot be
-        // created the daemon aborts in `daemonRunStateInit` *before* binding its
-        // socket, and the caller below times out. Under the Bazel `linux-sandbox`
-        // the real `$HOME` is read-only, so we point `$HOME` at a writable
-        // directory we control.
-        //
-        // The state dir lives under `xdg_runtime_dir` (the short `/tmp` path),
-        // NOT `libvirt_dir`: libvirtd's QEMU driver opens a QMP monitor socket
-        // under `$XDG_CONFIG_HOME`, and rooting `$HOME` at the deep Bazel working
-        // dir would push that path past the ~108-byte `sun_path` limit.
-        let state_home = xdg_runtime_dir.join("home");
-
-        // Pin the QEMU driver's core-dump limit. libvirt *unconditionally* sets
-        // QEMU's `RLIMIT_CORE` to `max_core` (default "unlimited"). Under the
-        // Bazel `linux-sandbox` QEMU runs in an unprivileged user namespace
-        // lacking `CAP_SYS_RESOURCE`, so *raising* the hard limit to unlimited is
-        // rejected with `EPERM` and the domain never starts. Setting
-        // `max_core = 0` makes libvirt *lower* the limit instead (always
-        // permitted); core dumps of the test QEMU are not needed.
-        let qemu_conf_dir = state_home.join(".config").join("libvirt");
-        std::fs::create_dir_all(&qemu_conf_dir).with_context(|| {
-            format!(
-                "creating libvirt qemu config dir {}",
-                qemu_conf_dir.display()
-            )
-        })?;
-        // Also route QEMU's stdout/stderr and file-backed chardevs (the VM's
-        // serial console) straight to plain files instead of through `virtlogd`.
-        // The QEMU driver defaults `stdio_handler` to `"logd"` (spawns
-        // `virtlogd`, whose only value is size-limited log rolling we don't need
-        // for bounded test runs). `stdio_handler = "file"` makes QEMU write the
-        // console log straight to `console.log` with no `virtlogd`; the domain
-        // XML's `append='on'` is honoured natively, so console output survives
-        // domain restarts (guest reboots and `vm().kill()` + `vm().start()`).
-        std::fs::write(
-            qemu_conf_dir.join("qemu.conf"),
-            "max_core = 0\nstdio_handler = \"file\"\n",
-        )
-        .with_context(|| format!("writing {}", qemu_conf_dir.join("qemu.conf").display()))?;
-
-        // If the driver itself runs as root (e.g. the `bazel-test-rbe` RBE
-        // cluster), libvirtd would start in *system* mode — it selects system
-        // vs. session purely by `geteuid() == 0` — breaking every session-mode
-        // assumption in this module. We spawn it as `nobody` below to keep it in
-        // session mode; hand `nobody` ownership of everything it (and the QEMU
-        // processes its session driver spawns as the same user) must read or
-        // write: the `$XDG_RUNTIME_DIR` tree (unix socket + per-VM runtime state
-        // + QMP monitor sockets) and the libvirt dir (conf + pid + log). These
-        // are no-ops when not root.
-        own_tree_by_nobody_if_root(&xdg_runtime_dir)?;
-        own_tree_by_nobody_if_root(&libvirt_dir)?;
-        // Ownership alone is not enough: `nobody` must also be able to *traverse*
-        // into these paths. Bazel / the RBE executor may stage the execroot under
-        // a `0700`-owned directory (e.g. beneath the build user's private `$HOME`)
-        // that `nobody` cannot enter, so grant search (`o+x`) along the ancestor
-        // chain of `working_dir` — the libvirtd config and, later, the per-VM disks
-        // QEMU opens live under it. `$XDG_RUNTIME_DIR` is under `/tmp` (already
-        // world-traversable) so needs no such grant.
-        grant_traverse_to_nobody_if_root(&working_dir)?;
-        // Likewise relax `/dev/kvm` and `/dev/net/tun` so the `nobody` QEMU can
-        // open them (mirrors `ci/container/init.sh`, which does not run on the
-        // RBE workers). Done once here in the setup process; the nodes are global.
-        relax_vm_device_nodes_if_root(&logger);
-
-        // The backend runs unprivileged: libvirtd uses a per-user session QEMU
-        // driver — as the invoking user, or `nobody` when the driver is root.
-        // No `sudo`, no system-wide bridge, no `virtlogd`. The few operations
-        // needing elevated networking caps (bridge and TAPs) go through the
-        // narrow [`net_admin`] launcher.
-        info!(logger, "Spawning libvirtd (session mode)"; "conf" => %conf_path.display(), "socket" => %socket_path.display());
-
-        let libvirtd_path = get_dependency_path_from_env("ENV_DEPS__LIBVIRTD_PATH");
-        // `nobody` `exec`s this binary directly (unlike QEMU/dnsmasq, which live
-        // in world-accessible system paths or are `exec`d by root), so every
-        // component of its runfiles path — as given and after symlink resolution
-        // — must be traversable by `nobody` too.
-        grant_traverse_to_nobody_if_root(&libvirtd_path)?;
-        // We deliberately do not keep the `Child` handle. libvirtd must outlive
-        // this (setup) process so forked task subprocesses can `connect_only` to
-        // its socket; dropping the handle is harmless because
-        // `std::process::Child`'s drop neither kills nor reaps. The daemon keeps
-        // running and is reparented to the child-subreaper parent when this
-        // process exits; it is stopped in `delete_group` via its pid-file and
-        // SIGKILLed by `kill_all_descendants` as a final safety net.
-        let mut cmd = Command::new(&libvirtd_path);
-        cmd.arg("--config")
-            .arg(&conf_path)
-            .arg("--pid-file")
-            .arg(&pid_path)
-            .env("HOME", &state_home)
-            .env("XDG_RUNTIME_DIR", &xdg_runtime_dir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        // When the driver runs as root, drop libvirtd to `nobody` so it stays in
-        // session mode (see the ownership handover above). The standard library
-        // applies `gid` before `uid`; we set only the primary gid, leaving
-        // root's supplementary groups in place, which is harmless in the test
-        // sandbox. Not root -> spawn as the current (already unprivileged) user.
-        if running_as_root() {
-            cmd.uid(NOBODY_UID).gid(NOBODY_GID);
-        }
-        cmd.spawn().context("spawning libvirtd")?;
-
-        // Wait for the socket to appear.
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while !socket_path.exists() {
-            if Instant::now() > deadline {
-                bail!(
-                    "libvirtd socket {} did not appear within 30s",
-                    socket_path.display()
-                );
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-
-        let connect = open_connect(&socket_path, &logger)?;
-
-        Ok(LocalBackend {
-            active_local_backend: ActiveLocalBackend {
-                socket_path,
-                working_dir,
-            },
-            connect,
-            logger,
-            vm_ipv6: Mutex::new(HashMap::new()),
-        })
-    }
-
-    /// Open a connection-only handle to an already-running libvirtd. Used by
-    /// forked task subprocesses.
-    fn connect_only(active_local_backend: ActiveLocalBackend, logger: Logger) -> Result<Self> {
-        let connect = open_connect(&active_local_backend.socket_path, &logger)?;
-        Ok(LocalBackend {
+    /// Build a handle over `active_local_backend.working_dir`. There is no daemon
+    /// to start or connect to: VMs are launched directly in
+    /// [`start_vm`](Self::start_vm) and controlled via files under the working
+    /// dir. Used for both the setup task and forked task subprocesses.
+    fn new(active_local_backend: ActiveLocalBackend, logger: Logger) -> Self {
+        LocalBackend {
             active_local_backend,
-            connect,
             logger,
             vm_ipv6: Mutex::new(HashMap::new()),
-        })
+        }
     }
 
-    /// Returns the libvirt domain name for `(group_name, vm_name)`.
+    /// Returns the VM identifier (used as the QEMU `-name` and to derive per-VM
+    /// paths) for `(group_name, vm_name)`.
     fn domain_name(group_name: &str, vm_name: &str) -> String {
-        sanitize_libvirt_name(&format!("ictest-{group_name}-{vm_name}"))
-    }
-
-    /// Returns the common prefix shared by every domain name in `group_name`.
-    /// Since [`sanitize_libvirt_name`] maps each character independently,
-    /// `domain_name(group, vm)` always starts with this prefix.
-    fn domain_name_prefix(group_name: &str) -> String {
-        sanitize_libvirt_name(&format!("ictest-{group_name}-"))
+        sanitize_name(&format!("ictest-{group_name}-{vm_name}"))
     }
 
     /// Returns the per-group IPv6 prefix (a deterministic /64 in the
@@ -667,10 +484,9 @@ impl LocalBackend {
 
     /// Create the per-group Linux bridge that hosts the group's `/64`.
     ///
-    /// Instead of a libvirt-managed (system-mode) network — which needs
-    /// `libvirtd` as root — we manage the network ourselves via the narrow
-    /// [`net_admin`] launcher: a bridge holds the group's `/64` and per-VM TAPs
-    /// are attached to it in [`start_vm`].
+    /// We manage the network ourselves via the narrow [`net_admin`] launcher
+    /// (rather than a privileged system-wide bridge): a bridge holds the group's
+    /// `/64` and per-VM TAPs are attached to it in [`start_vm`].
     ///
     /// IC GuestOS nodes statically configure their global IPv6: the test driver
     /// hands each node a fixed address plus the `<prefix>::1` gateway (which
@@ -766,9 +582,6 @@ impl LocalBackend {
         std::fs::create_dir_all(&dnsmasq_dir).with_context(|| {
             format!("creating dnsmasq working dir at {}", dnsmasq_dir.display())
         })?;
-        // `dnsmasq` drops to `--user` (`nobody` when root) after writing its
-        // pid-file, so it must be able to write its lease/log files here.
-        own_by_nobody_if_root(&dnsmasq_dir)?;
         let pid_path = self.dnsmasq_pid_path(bridge);
         let lease_path = dnsmasq_dir.join(format!("{bridge}.leases"));
         let log_path = dnsmasq_dir.join(format!("{bridge}.log"));
@@ -828,75 +641,78 @@ impl LocalBackend {
         let _ = std::fs::remove_file(&pid_path);
     }
 
-    /// Path of the libvirtd pid-file (written via `--pid-file` in [`spawn`]).
-    /// Derived from `working_dir` so a connect-only handle — which never held
-    /// the spawning `Child` — can still locate the daemon for teardown.
-    fn libvirtd_pid_path(working_dir: &Path) -> PathBuf {
-        working_dir.join("libvirt").join("libvirtd.pid")
+    /// Path of a VM's QEMU pid-file (written via `-pidfile` in [`start_vm`]).
+    fn qemu_pid_path(vm_dir: &Path) -> PathBuf {
+        vm_dir.join("qemu.pid")
     }
 
-    /// Stop the backend's libvirtd, if running.
+    /// Path of a VM's QMP control socket (bound by QEMU in [`start_vm`]), used by
+    /// [`reboot_vm`](Self::reboot_vm).
     ///
-    /// libvirtd is per-backend rather than per-group, but a backend hosts a
-    /// single group per `bazel test` invocation, so tearing the group down also
-    /// ends the daemon. It is signalled via its pid-file (like
-    /// [`stop_ra_daemon`](Self::stop_ra_daemon)) because the connect-only handle
-    /// that runs teardown never owned the spawning `Child`. Sends SIGTERM, waits
-    /// briefly for a graceful exit, then escalates to SIGKILL. Best-effort and
-    /// idempotent; `kill_all_descendants` remains the final safety net.
-    fn stop_libvirtd(&self) {
-        let pid_path = Self::libvirtd_pid_path(&self.active_local_backend.working_dir);
-        if let Ok(contents) = std::fs::read_to_string(&pid_path)
-            && let Ok(pid) = contents.trim().parse::<i32>()
-        {
-            info!(self.logger, "Stopping libvirtd (pid {pid}) via SIGTERM");
-            // SIGTERM lets libvirtd shut down gracefully, removing its socket
-            // and pid-file.
-            let _ = Command::new("kill").arg(pid.to_string()).status();
-
-            // Wait briefly for it to exit so teardown is deterministic (and
-            // `kill_all_descendants` finds nothing left to do). libvirtd is our
-            // reparented child, so the descendant-reaper removes `/proc/<pid>`
-            // once it exits; poll for that. If it overruns the grace period,
-            // escalate to SIGKILL.
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while Path::new(&format!("/proc/{pid}")).exists() {
-                if Instant::now() >= deadline {
-                    // Guard against PID reuse before force-killing: the pid-file
-                    // was written minutes ago, so confirm the process still
-                    // looks like libvirtd (exec basename `libvirtd.bin`, hence a
-                    // prefix match). Failing closed just defers to
-                    // `kill_all_descendants`.
-                    let still_libvirtd = std::fs::read_to_string(format!("/proc/{pid}/comm"))
-                        .map(|c| c.trim_end().starts_with("libvirtd"))
-                        .unwrap_or(false);
-                    if still_libvirtd {
-                        warn!(
-                            self.logger,
-                            "libvirtd (pid {pid}) survived the SIGTERM grace period; \
-                             sending SIGKILL"
-                        );
-                        let _ = Command::new("kill")
-                            .arg("-KILL")
-                            .arg(pid.to_string())
-                            .status();
-                    }
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
-        } else {
-            warn!(
-                self.logger,
-                "No readable libvirtd pid-file at {}; relying on \
-                 kill_all_descendants to stop the daemon",
-                pid_path.display()
-            );
-        }
-        let _ = std::fs::remove_file(&pid_path);
+    /// Placed in a short `/tmp` path keyed by a hash of `vm_dir`, NOT under
+    /// `vm_dir`: the working dir resolves to a deep Bazel path that would push a
+    /// unix socket past the kernel's ~108-byte `sun_path` limit. The hash is
+    /// stable across processes and re-runs (so a forked subprocess derives the
+    /// same path) yet distinct per VM and per concurrent group.
+    fn qmp_socket_path(vm_dir: &Path) -> PathBuf {
+        use ic_crypto_sha2::Sha256;
+        let hash = Sha256::hash(vm_dir.to_string_lossy().as_bytes());
+        PathBuf::from(format!("/tmp/ictest-qmp-{}.sock", hex::encode(&hash[0..8])))
     }
 
-    /// Tear down all domains in `group_name`, remove the bridge and any TAPs
+    /// Stop the QEMU process recorded in `pid_path`, if running. Best-effort and
+    /// idempotent.
+    ///
+    /// Sends SIGTERM (QEMU powers the guest off and exits), waits briefly for a
+    /// graceful exit, then escalates to SIGKILL. Signalling via the pid-file
+    /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
+    /// daemonized and reparented to the child-subreaper parent, which never held
+    /// a handle. `kill_all_descendants` remains the final safety net.
+    fn stop_qemu(&self, pid_path: &Path) {
+        let Ok(contents) = std::fs::read_to_string(pid_path) else {
+            return;
+        };
+        let Ok(pid) = contents.trim().parse::<i32>() else {
+            let _ = std::fs::remove_file(pid_path);
+            return;
+        };
+        info!(self.logger, "Stopping QEMU (pid {pid}) via SIGTERM");
+        let _ = Command::new("kill").arg(pid.to_string()).status();
+
+        // Wait briefly for it to exit so teardown is deterministic (and
+        // `kill_all_descendants` finds nothing left to do). QEMU is our
+        // reparented descendant, so the descendant-reaper removes `/proc/<pid>`
+        // once it exits; poll for that. If it overruns the grace period,
+        // escalate to SIGKILL.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Path::new(&format!("/proc/{pid}")).exists() {
+            if Instant::now() >= deadline {
+                // Guard against PID reuse before force-killing: the pid-file may
+                // be old, so confirm the process still looks like QEMU (exec
+                // basename truncated to `qemu-system-x86` in `comm`, hence a
+                // prefix match). Failing closed just defers to
+                // `kill_all_descendants`.
+                let still_qemu = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+                    .map(|c| c.trim_end().starts_with("qemu-"))
+                    .unwrap_or(false);
+                if still_qemu {
+                    warn!(
+                        self.logger,
+                        "QEMU (pid {pid}) survived the SIGTERM grace period; sending SIGKILL"
+                    );
+                    let _ = Command::new("kill")
+                        .arg("-KILL")
+                        .arg(pid.to_string())
+                        .status();
+                }
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let _ = std::fs::remove_file(pid_path);
+    }
+
+    /// Tear down all VMs in `group_name`, remove the bridge and any TAPs
     /// attached to it, and remove the per-group addresses (management,
     /// journald-streaming and file-server) from `lo`.
     pub fn delete_group(&self, group_name: &str) -> Result<()> {
@@ -912,16 +728,17 @@ impl LocalBackend {
         // Stop the RA daemon before removing the bridge it listens on.
         self.stop_ra_daemon(&bridge);
 
-        // Best effort: shut down all domains whose names start with the group
-        // prefix. Destroying a domain closes its QEMU process, which releases
-        // the TAP device it had open.
-        let prefix = Self::domain_name_prefix(group_name);
-        if let Ok(domains) = self.connect.list_all_domains(0) {
-            for d in domains {
-                if let Ok(name) = d.get_name()
-                    && name.starts_with(&prefix)
-                {
-                    let _ = d.destroy();
+        // Best effort: stop every VM QEMU process started for this group. Each
+        // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
+        // closes QEMU, which releases the TAP device it had open. A backend
+        // hosts a single group per `bazel test` invocation, so every VM dir
+        // belongs to this group.
+        let vms_dir = self.active_local_backend.working_dir.join("vms");
+        if let Ok(entries) = std::fs::read_dir(&vms_dir) {
+            for entry in entries.flatten() {
+                let pid_path = Self::qemu_pid_path(&entry.path());
+                if pid_path.exists() {
+                    self.stop_qemu(&pid_path);
                 }
             }
         }
@@ -941,15 +758,11 @@ impl LocalBackend {
         );
         let _ = Self::run_net_admin(&delete_script, "delete group bridge");
 
-        // Finally stop the per-invocation libvirtd, after all libvirt
-        // operations above (domain destruction needs the live connection).
-        self.stop_libvirtd();
-
         Ok(())
     }
 
-    /// Allocate metadata for a VM (deterministic MAC + IPv6). The actual
-    /// libvirt domain is only created in [`start_vm`].
+    /// Allocate metadata for a VM (deterministic MAC + IPv6). The actual QEMU
+    /// process is only launched in [`start_vm`].
     pub fn create_vm(
         &self,
         group_name: &str,
@@ -1001,14 +814,11 @@ impl LocalBackend {
 
     /// Attach extra disk images to `vm_name`. Each image is extracted (if it's
     /// `*.tar.zst` or `*.img.zst`) into the VM's working dir, chmod'd 0600, and
-    /// remembered so it can be added to the libvirt domain XML at start time.
+    /// remembered so it can be attached to the VM as a virtio disk at start time.
     pub fn attach_disk_images(&self, vm_name: &str, images: &[PathBuf]) -> Result<()> {
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)
             .with_context(|| format!("creating VM dir {}", vm_dir.display()))?;
-        // When root, hand the VM dir (and each disk below) to `nobody` so the
-        // `nobody` QEMU can read/write them; see `own_by_nobody_if_root`.
-        own_by_nobody_if_root(&vm_dir)?;
 
         let mut paths = Vec::with_capacity(images.len());
         for (i, src) in images.iter().enumerate() {
@@ -1017,7 +827,6 @@ impl LocalBackend {
             extract_image(src, &dst, &self.logger)?;
             pad_to_request_alignment(&dst)?;
             std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o600))?;
-            own_by_nobody_if_root(&dst)?;
             paths.push(dst);
         }
         // Record the extra disks in the metadata persisted by `create_vm` so
@@ -1101,7 +910,7 @@ impl LocalBackend {
         Ok(base)
     }
 
-    /// Build the libvirt domain XML for `vm_name` and start it.
+    /// Build the QEMU command line for `vm_name` and launch it (daemonized).
     pub fn start_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
         // Recover the per-VM state persisted by `create_vm` /
         // `attach_disk_images`. Reading from disk (not an in-memory cache) lets
@@ -1117,9 +926,6 @@ impl LocalBackend {
 
         let vm_dir = self.vm_dir(vm_name);
         std::fs::create_dir_all(&vm_dir)?;
-        // When root, hand the VM dir to `nobody` so the `nobody` QEMU can create
-        // its `console.log` and (below) open its disk overlay.
-        own_by_nobody_if_root(&vm_dir)?;
         let primary_disk = vm_dir.join("primary.qcow2");
         // Only materialize the primary disk on first boot. On a later `start_vm`
         // (e.g. a test that did `vm().kill()` then `vm().start()`) the qcow2
@@ -1183,7 +989,6 @@ impl LocalBackend {
                 );
             }
             std::fs::set_permissions(&primary_disk, std::fs::Permissions::from_mode(0o600))?;
-            own_by_nobody_if_root(&primary_disk)?;
         }
 
         let mac = vm_mac(group_name, vm_name);
@@ -1193,10 +998,10 @@ impl LocalBackend {
 
         // Create the per-VM TAP, attach it to the group bridge, and bring it up
         // via the [`net_admin`] launcher. `user <current>` tags the TAP as ours,
-        // letting an unprivileged QEMU (session-mode libvirtd) open it; the
-        // domain XML references it with `managed='no'` so libvirt uses the
-        // existing device instead of creating one (which needs root). Recreating
-        // it fresh (delete first) keeps this idempotent across a re-used domain.
+        // letting the unprivileged QEMU (which runs as the same user) open it via
+        // `-netdev tap,ifname=...,script=no,downscript=no` without needing root
+        // to create a device. Recreating it fresh (delete first) keeps this
+        // idempotent across a re-used VM (e.g. `vm().kill()` + `vm().start()`).
         let tap = Self::tap_name(group_name, vm_name);
         let bridge = Self::bridge_name(group_name);
         let user = current_username();
@@ -1223,67 +1028,258 @@ impl LocalBackend {
             Self::run_net_admin(&tap_ipv4_script, "create VM ipv4 tap")?;
         }
 
-        let mut disks = Vec::new();
-        disks.push(DiskEntry {
-            file: primary_disk.display().to_string(),
-            driver_type: "qcow2".to_string(),
-            target: "vda".to_string(),
-            bus: "virtio".to_string(),
-        });
+        // Give the VM a writable copy of the OVMF variable store on first boot
+        // (like the primary disk above): OVMF needs a writable varstore as its
+        // second pflash. Persisting it across restarts mirrors a real VM's NVRAM.
+        let ovmf_vars = vm_dir.join("OVMF_VARS.fd");
+        if !ovmf_vars.exists() {
+            std::fs::copy(OVMF_VARS_TEMPLATE, &ovmf_vars).with_context(|| {
+                format!(
+                    "copying OVMF vars template {} -> {}",
+                    OVMF_VARS_TEMPLATE,
+                    ovmf_vars.display()
+                )
+            })?;
+            std::fs::set_permissions(&ovmf_vars, std::fs::Permissions::from_mode(0o600))?;
+        }
+
+        let pid_path = Self::qemu_pid_path(&vm_dir);
+        let qmp_path = Self::qmp_socket_path(&vm_dir);
+        // Clear a stale pid-file/socket from a previous VM incarnation so a
+        // failed start is not mistaken for a live VM and QMP can bind cleanly.
+        let _ = std::fs::remove_file(&pid_path);
+        let _ = std::fs::remove_file(&qmp_path);
+
+        // Assemble the QEMU command line. `arg!` appends space-separated tokens;
+        // every virtio/PCIe device is placed behind its own `pcie-root-port` on
+        // `pcie.0` (allocated by `root_port!`, one slot each in ascending order).
+        // The guest assigns PCI bus numbers to the root ports in slot order, so
+        // putting the NIC(s) on the FIRST root port(s) makes the guest name them
+        // deterministically -- `enp1s0` (primary) and `enp2s0` (IPv4) -- no
+        // matter how many disks are attached.
+        let mut args: Vec<String> = Vec::new();
+        macro_rules! arg {
+            ($($a:expr),+ $(,)?) => {{ $(args.push($a.to_string());)+ }};
+        }
+        // Allocate PCIe root-port slots 0x1, 0x2, ... on `pcie.0` in call order.
+        // Increment-then-read so every write is read in the same expansion (no
+        // dead final assignment).
+        let mut next_slot: u32 = 0;
+        macro_rules! root_port {
+            () => {{
+                next_slot += 1;
+                let slot = next_slot;
+                let id = format!("rp{slot}");
+                arg!(
+                    "-device",
+                    format!("pcie-root-port,id={id},bus=pcie.0,chassis={slot},addr=0x{slot:x}")
+                );
+                id
+            }};
+        }
+
+        arg!("-name", format!("guest={domain_name}"));
+        arg!("-machine", "q35,accel=kvm");
+        arg!("-cpu", "host");
+        arg!("-m", format!("size={}k", spec.memory_ki_b));
+        arg!("-smp", spec.v_cpus.to_string());
+        arg!("-uuid", uuid);
+        arg!("-rtc", "base=utc");
+        arg!("-nodefaults");
+        arg!("-no-user-config");
+        arg!("-display", "none");
+        // Split OVMF firmware: read-only code + writable per-VM varstore.
+        arg!(
+            "-drive",
+            format!("if=pflash,format=raw,unit=0,readonly=on,file={OVMF_CODE}")
+        );
+        arg!(
+            "-drive",
+            format!("if=pflash,format=raw,unit=1,file={}", ovmf_vars.display())
+        );
+
+        // Primary NIC on the first root port -> guest `enp1s0`.
+        let rp = root_port!();
+        arg!(
+            "-netdev",
+            format!("tap,id=net0,ifname={tap},script=no,downscript=no")
+        );
+        arg!(
+            "-device",
+            format!("virtio-net-pci,netdev=net0,mac={mac},bus={rp},addr=0x0")
+        );
+        // Optional IPv4 NIC on the second root port -> guest `enp2s0`.
+        if has_ipv4 {
+            let rp = root_port!();
+            arg!(
+                "-netdev",
+                format!("tap,id=net1,ifname={tap_ipv4},script=no,downscript=no")
+            );
+            arg!(
+                "-device",
+                format!("virtio-net-pci,netdev=net1,mac={mac_ipv4},bus={rp},addr=0x0")
+            );
+        }
+
+        // Primary boot disk (qcow2 overlay), then any extra (raw) disks. Disks go
+        // on later root ports so they never take the NICs' bus numbers.
+        let rp = root_port!();
+        arg!(
+            "-drive",
+            format!(
+                "if=none,id=disk0,file={},format=qcow2,cache=none,discard=unmap",
+                primary_disk.display()
+            )
+        );
+        arg!(
+            "-device",
+            format!("virtio-blk-pci,drive=disk0,bus={rp},addr=0x0,bootindex=1")
+        );
         for (i, p) in extra.iter().enumerate() {
-            let letter = (b'b' + i as u8) as char;
-            disks.push(DiskEntry {
-                file: p.display().to_string(),
-                driver_type: "raw".to_string(),
-                target: format!("vd{letter}"),
-                bus: "virtio".to_string(),
-            });
+            let rp = root_port!();
+            arg!(
+                "-drive",
+                format!(
+                    "if=none,id=disk{n},file={file},format=raw,cache=none,discard=unmap",
+                    n = i + 1,
+                    file = p.display()
+                )
+            );
+            arg!(
+                "-device",
+                format!("virtio-blk-pci,drive=disk{n},bus={rp},addr=0x0", n = i + 1)
+            );
         }
 
-        let tpl = GuestVmTemplate {
-            domain_name: domain_name.clone(),
-            domain_uuid: uuid,
-            vm_memory_kib: spec.memory_ki_b,
-            nr_of_vcpus: spec.v_cpus,
-            mac_address: mac.to_string(),
-            disks,
-            console_log_path: console_log.display().to_string(),
-            tap_name: tap,
-            has_ipv4,
-            mac_address_ipv4: mac_ipv4.to_string(),
-            tap_name_ipv4: tap_ipv4,
-        };
-        let xml = tpl.render().context("rendering guest VM XML")?;
+        // virtio-balloon and virtio-rng, each on its own root port.
+        let rp = root_port!();
+        arg!("-device", format!("virtio-balloon-pci,bus={rp},addr=0x0"));
+        let rp = root_port!();
+        arg!("-object", "rng-random,id=rng0,filename=/dev/urandom");
+        arg!(
+            "-device",
+            format!("virtio-rng-pci,rng=rng0,bus={rp},addr=0x0")
+        );
 
-        Domain::create_xml(&self.connect, &xml, 0)
-            .with_context(|| format!("creating libvirt domain {domain_name}"))?;
+        // Serial console -> `console.log` with `append=on`, so the log survives
+        // VM restarts (guest reboots and `vm().kill()` + `vm().start()`) and
+        // `log_consoles_task` can simply tail it.
+        arg!(
+            "-chardev",
+            format!("file,id=serial0,path={},append=on", console_log.display())
+        );
+        arg!("-device", "isa-serial,chardev=serial0");
+
+        // QMP control socket (used by `reboot_vm`), pid-file, and daemonize so
+        // the VM outlives the launching process (a forked task subprocess may
+        // start it, yet it must keep running afterwards). No
+        // `-no-reboot`/`-no-shutdown`, so a guest reboot resets the VM and a
+        // guest poweroff exits QEMU.
+        arg!(
+            "-qmp",
+            format!("unix:{},server=on,wait=off", qmp_path.display())
+        );
+        arg!("-pidfile", pid_path.display().to_string());
+        arg!("-daemonize");
+
+        info!(
+            self.logger,
+            "Launching QEMU for {domain_name}";
+            "pidfile" => %pid_path.display(), "console" => %console_log.display()
+        );
+        // With `-daemonize` the foreground process exits once the guest is up (or
+        // nonzero, having printed the error to stderr, if startup failed), while
+        // the VM runs on as a reparented process.
+        let output = Command::new("qemu-system-x86_64")
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .with_context(|| format!("launching qemu-system-x86_64 for {domain_name}"))?;
+        if !output.status.success() {
+            bail!(
+                "qemu-system-x86_64 failed to start VM {domain_name} (status {}): {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
         Ok(())
     }
 
-    /// Destroy the libvirt domain for `vm_name`.
-    pub fn destroy_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
-        let domain_name = Self::domain_name(group_name, vm_name);
-        if let Ok(d) = Domain::lookup_by_name(&self.connect, &domain_name) {
-            let _ = d.destroy();
-        }
+    /// Destroy the QEMU process backing `vm_name`, if running.
+    pub fn destroy_vm(&self, _group_name: &str, vm_name: &str) -> Result<()> {
+        let vm_dir = self.vm_dir(vm_name);
+        self.stop_qemu(&Self::qemu_pid_path(&vm_dir));
         Ok(())
     }
 
-    /// Reboot the libvirt domain for `vm_name`.
+    /// Reboot the VM `vm_name` with *soft* (graceful) semantics: ask the guest to
+    /// power down via an ACPI power-button press (QMP `system_powerdown`), wait
+    /// for QEMU to exit as the guest completes its orderly shutdown, then boot a
+    /// fresh QEMU from the (persisted) disk. The qcow2 overlay and OVMF varstore
+    /// are reused by [`start_vm`], so the node's state survives the reboot.
+    ///
+    /// A *hard* reset is intentionally not offered here; a test that wants one can
+    /// `vm().kill()` then `vm().start()` (which is what such tests already do).
+    ///
+    /// If the guest does not power down within the grace period (e.g. it ignores
+    /// the ACPI event), force-stop it so the reboot still makes progress.
     pub fn reboot_vm(&self, group_name: &str, vm_name: &str) -> Result<()> {
-        let domain_name = Self::domain_name(group_name, vm_name);
-        let d = Domain::lookup_by_name(&self.connect, &domain_name)
-            .with_context(|| format!("looking up domain {domain_name}"))?;
-        d.reboot(0)
-            .with_context(|| format!("rebooting {domain_name}"))?;
-        Ok(())
+        let vm_dir = self.vm_dir(vm_name);
+        let pid_path = Self::qemu_pid_path(&vm_dir);
+        let qmp_path = Self::qmp_socket_path(&vm_dir);
+
+        // Ask the guest to shut down gracefully (ACPI power button).
+        qmp_command(&qmp_path, "system_powerdown", &self.logger).with_context(|| {
+            format!(
+                "sending ACPI powerdown to VM {vm_name} via QMP {}",
+                qmp_path.display()
+            )
+        })?;
+
+        // Wait for the guest to finish shutting down: QEMU exits on guest
+        // poweroff (we run it without `-no-shutdown`). If it overruns the grace
+        // period, force-stop it so the reboot still proceeds.
+        if !self.await_qemu_exit(&pid_path, Duration::from_secs(60)) {
+            warn!(
+                self.logger,
+                "VM {vm_name} did not power down gracefully within 60s; force-stopping"
+            );
+            self.stop_qemu(&pid_path);
+        }
+
+        // Boot a fresh QEMU from the persisted disk.
+        self.start_vm(group_name, vm_name)
+    }
+
+    /// Poll until the process recorded in `pid_path` disappears, up to `timeout`.
+    /// Returns `true` if it exited in time (or there was nothing to wait for).
+    /// Used by [`reboot_vm`](Self::reboot_vm) to await a graceful guest shutdown;
+    /// the descendant reaper (see [`crate::driver::process`]) clears the exited
+    /// QEMU's zombie promptly, so `/proc/<pid>` disappears soon after exit.
+    fn await_qemu_exit(&self, pid_path: &Path, timeout: Duration) -> bool {
+        let Ok(contents) = std::fs::read_to_string(pid_path) else {
+            return true;
+        };
+        let Ok(pid) = contents.trim().parse::<i32>() else {
+            return true;
+        };
+        let deadline = Instant::now() + timeout;
+        while Path::new(&format!("/proc/{pid}")).exists() {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        true
     }
 
     fn vm_dir(&self, vm_name: &str) -> PathBuf {
         self.active_local_backend
             .working_dir
             .join("vms")
-            .join(sanitize_libvirt_name(vm_name))
+            .join(sanitize_name(vm_name))
     }
 
     /// Path of the per-VM metadata file ([`PersistedVm`]) under the VM's dir.
@@ -1368,9 +1364,9 @@ fn vm_uuid(group_name: &str, vm_name: &str) -> String {
     )
 }
 
-/// Sanitize a name so it is a valid libvirt resource name (alphanumeric,
-/// `-` and `_`).
-fn sanitize_libvirt_name(s: &str) -> String {
+/// Sanitize a name for use in filesystem paths and the QEMU `-name`
+/// (alphanumeric, `-` and `_`; every other character maps to `-`).
+fn sanitize_name(s: &str) -> String {
     s.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
@@ -1381,24 +1377,6 @@ fn sanitize_libvirt_name(s: &str) -> String {
         })
         .collect()
 }
-
-/// Open a libvirt connection over a unix socket on `socket_path`.
-fn open_connect(socket_path: &Path, logger: &Logger) -> Result<Connect> {
-    // `///session`: the daemon runs as the current (non-root) user, so it
-    // exposes the per-user (session) QEMU driver rather than the system one.
-    let uri = format!("qemu+unix:///session?socket={}", socket_path.display());
-    let connect = Connect::open(Some(&uri))
-        .with_context(|| format!("opening libvirt connection to {uri}"))?;
-    info!(logger, "Connected to libvirtd"; "uri" => &uri);
-    Ok(connect)
-}
-
-/// The conventional uid/gid of the unprivileged `nobody`/`nogroup` user. Using
-/// the numeric ids directly (matching `ic_test_utilities::privileges`) avoids a
-/// `/etc/passwd` lookup. The backend drops libvirtd (and the QEMU/`dnsmasq`
-/// processes that follow it) to these ids when the driver runs as root.
-const NOBODY_UID: u32 = 65534;
-const NOBODY_GID: u32 = 65534;
 
 /// Whether the driver process is running as root (effective uid 0).
 ///
@@ -1413,139 +1391,56 @@ fn running_as_root() -> bool {
     nix::unistd::geteuid().as_raw() == 0
 }
 
-/// Give `nobody` ownership of `path` when the driver runs as root (a no-op
-/// otherwise), so the `nobody`-dropped libvirtd/QEMU/`dnsmasq` can access files
-/// the root driver created. Only ownership changes, not the mode: a `0600`
-/// overlay stays `0600` but becomes `nobody`-writable. The root parent keeps
-/// `CAP_DAC_OVERRIDE`, so it retains full access to everything it hands over.
-fn own_by_nobody_if_root(path: &Path) -> Result<()> {
-    if running_as_root() {
-        std::os::unix::fs::chown(path, Some(NOBODY_UID), Some(NOBODY_GID))
-            .with_context(|| format!("chowning {} to nobody", path.display()))?;
-    }
-    Ok(())
-}
-
-/// Like [`own_by_nobody_if_root`] but recurses into `path` when it is a
-/// directory, used for trees the `nobody`-dropped libvirtd fully owns at runtime
-/// (its `$XDG_RUNTIME_DIR` and libvirt state dir). A no-op when not root.
-fn own_tree_by_nobody_if_root(path: &Path) -> Result<()> {
-    if !running_as_root() {
-        return Ok(());
-    }
-    own_tree_by_nobody(path)
-}
-
-fn own_tree_by_nobody(path: &Path) -> Result<()> {
-    let meta = std::fs::symlink_metadata(path)
-        .with_context(|| format!("stat {} for chown", path.display()))?;
-    std::os::unix::fs::chown(path, Some(NOBODY_UID), Some(NOBODY_GID))
-        .with_context(|| format!("chowning {} to nobody", path.display()))?;
-    // Our trees contain no symlinks, so following `is_dir` is fine.
-    if meta.is_dir() {
-        for entry in std::fs::read_dir(path)
-            .with_context(|| format!("reading dir {} for chown", path.display()))?
-        {
-            let entry =
-                entry.with_context(|| format!("reading dir entry under {}", path.display()))?;
-            own_tree_by_nobody(&entry.path())?;
-        }
-    }
-    Ok(())
-}
-
-/// When running as root, grant `nobody` permission to *traverse* to `path` by
-/// adding the directory search bit (`o+x`, never `o+r`) to every ancestor
-/// directory — both of `path` as given and of its symlink-resolved form — up to
-/// the filesystem root.
-///
-/// The `nobody`-dropped libvirtd must `exec` its (runfiles) binary and reach the
-/// per-test working dir, but Bazel / the RBE executor may stage those under a
-/// directory the build user owns `0700` (e.g. an execroot beneath a private
-/// `$HOME`), which `nobody` cannot enter — the `exec`/open then fails with
-/// `EACCES`. Adding only the search bit grants traversal without exposing
-/// directory listings, and relies on the root parent's `CAP_DAC_OVERRIDE` to
-/// chmod regardless of owner. A no-op when not root.
-fn grant_traverse_to_nobody_if_root(path: &Path) -> Result<()> {
-    if !running_as_root() {
-        return Ok(());
-    }
-    // The symlink-resolved, absolute form: `exec`/open checks search permission
-    // on every component of the *resolved* path.
-    if let Ok(canonical) = path.canonicalize() {
-        grant_ancestor_search(&canonical);
-    }
-    // Also the path as given (made absolute): when it is itself a symlink (Bazel
-    // runfiles usually are), its own directory chain is checked too.
-    let as_given = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
-    };
-    grant_ancestor_search(&as_given);
-    Ok(())
-}
-
-/// Add the "other" search bit (`o+x`) to `path` (if a directory) and every
-/// ancestor directory up to the root. Only `o+x` is added because `nobody` is
-/// never the owner or in the group of these root/build-user-owned directories,
-/// so it traverses them as *other*; the `nobody`-owned leaves it must write are
-/// handled separately by [`own_by_nobody_if_root`]. Best-effort per component; a
-/// component that cannot be stat'd or chmod'd is skipped (the eventual
-/// `exec`/open would surface a real failure).
-fn grant_ancestor_search(path: &Path) {
-    let mut current = Some(path);
-    while let Some(dir) = current {
-        if let Ok(meta) = std::fs::symlink_metadata(dir)
-            && meta.is_dir()
-        {
-            let mode = meta.permissions().mode();
-            let with_search = mode | 0o001;
-            if with_search != mode {
-                let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(with_search));
-            }
-        }
-        current = dir.parent();
-    }
-}
-
-/// Relax `/dev/kvm` and `/dev/net/tun` to `0666` when the driver runs as root,
-/// so the `nobody`-dropped QEMU can open them: the domain XML requests
-/// `<domain type='kvm'>` (needs `/dev/kvm`) and attaches to a `managed='no'`
-/// TAP, for which QEMU opens `/dev/net/tun`. These nodes are normally
-/// `root`-owned `0660`/`0600`. This mirrors what `ci/container/init.sh` does for
-/// the unprivileged dev-container user; that entrypoint does not run on the RBE
-/// workers, so we do it here. Best-effort: absent nodes are skipped and a
-/// failure only warns (the eventual VM start would surface it).
-fn relax_vm_device_nodes_if_root(logger: &Logger) {
-    if !running_as_root() {
-        return;
-    }
-    for dev in ["/dev/kvm", "/dev/net/tun"] {
-        let path = Path::new(dev);
-        if path.exists()
-            && let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o666))
-        {
-            warn!(logger, "Could not relax {dev} permissions to 0666: {e}");
-        }
-    }
-}
-
-/// The user name that owns the per-VM TAP devices (so the QEMU that libvirtd
-/// spawns may open them) and that `dnsmasq` drops to.
-///
-/// When the driver runs as root, libvirtd — and therefore QEMU and `dnsmasq` —
-/// is dropped to `nobody` (see [`running_as_root`]), so the TAPs must be owned
-/// by, and `dnsmasq` must target, `nobody` as well. Otherwise it is the invoking
-/// user (the unprivileged dev-container case) from `USER`, finally falling back
-/// to `ubuntu` (the container's default user).
+/// The current user's login name, used to tag TAP device ownership so an
+/// unprivileged QEMU may open them. Falls back to the `USER` environment
+/// variable and finally to `ubuntu` (the container's default user).
 fn current_username() -> String {
-    if running_as_root() {
-        return "nobody".to_string();
-    }
     std::env::var("USER").unwrap_or_else(|_| "ubuntu".to_string())
+}
+
+/// Send a single no-argument QMP command to a VM's monitor socket and wait for
+/// its reply.
+///
+/// The backend only needs one such command (`system_powerdown`, for
+/// [`reboot_vm`](LocalBackend::reboot_vm)). QEMU ships no scriptable one-shot QMP
+/// client in the base package (`qmp-shell` is an interactive Python tool and
+/// isn't installed), so we speak the protocol directly: it is line-delimited
+/// JSON needing only a capabilities handshake, after which we send the command
+/// and read its reply, skipping any interleaved asynchronous events. Read/write
+/// timeouts keep a wedged VM from blocking teardown.
+fn qmp_command(socket_path: &Path, execute: &str, logger: &Logger) -> Result<()> {
+    let stream = UnixStream::connect(socket_path)
+        .with_context(|| format!("connecting to QMP socket {}", socket_path.display()))?;
+    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+    let mut writer = stream.try_clone()?;
+    let mut reader = BufReader::new(stream);
+
+    // Consume the greeting banner ({"QMP": {...}}), then enter command mode.
+    read_qmp_reply(&mut reader)?;
+    writeln!(writer, r#"{{"execute":"qmp_capabilities"}}"#)?;
+    read_qmp_reply(&mut reader)?;
+    // Issue the requested command and await its reply.
+    writeln!(writer, r#"{{"execute":"{execute}"}}"#)?;
+    read_qmp_reply(&mut reader)?;
+    info!(logger, "QMP command '{execute}' acknowledged"; "socket" => %socket_path.display());
+    Ok(())
+}
+
+/// Read newline-delimited QMP messages until one is the greeting or a command
+/// reply (`return`/`error`), skipping asynchronous events.
+fn read_qmp_reply(reader: &mut impl BufRead) -> Result<()> {
+    for _ in 0..100 {
+        let mut line = String::new();
+        if reader.read_line(&mut line)? == 0 {
+            bail!("QMP connection closed before a reply arrived");
+        }
+        if line.contains("\"return\"") || line.contains("\"error\"") || line.contains("\"QMP\"") {
+            return Ok(());
+        }
+        // Otherwise an asynchronous event; keep reading.
+    }
+    bail!("no QMP reply after 100 messages")
 }
 
 /// Extract an image:
@@ -1682,31 +1577,4 @@ fn pad_to_request_alignment(path: &Path) -> Result<()> {
             })?;
     }
     Ok(())
-}
-
-#[derive(Clone)]
-struct DiskEntry {
-    file: String,
-    driver_type: String,
-    target: String,
-    bus: String,
-}
-
-#[derive(Template)]
-#[template(path = "guestos_vm_template.xml", escape = "xml")]
-struct GuestVmTemplate {
-    domain_name: String,
-    domain_uuid: String,
-    vm_memory_kib: u64,
-    nr_of_vcpus: u64,
-    mac_address: String,
-    disks: Vec<DiskEntry>,
-    console_log_path: String,
-    tap_name: String,
-    /// When `true`, the domain gets a second virtio NIC (the guest's `enp2s0`)
-    /// attached to `tap_name_ipv4` with `mac_address_ipv4`, used to obtain an
-    /// IPv4 address via DHCP. When `false`, the other two fields are unused.
-    has_ipv4: bool,
-    mac_address_ipv4: String,
-    tap_name_ipv4: String,
 }

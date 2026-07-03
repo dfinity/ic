@@ -45,11 +45,9 @@ rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
-# Local system-test backend (libvirt/QEMU; see rs/tests/driver/src/driver/local_backend.rs).
-# Provides per-test libvirtd subprocess + KVM-accelerated QEMU for the libvirt
-# network's DHCP.
-libvirt-daemon
-libvirt-daemon-driver-qemu
+# Local system-test backend (see rs/tests/driver/src/driver/local_backend.rs),
+# which launches KVM-accelerated QEMU VMs. `ovmf` provides the guests' UEFI
+# firmware.
 qemu-system-x86
 qemu-utils
 ovmf
