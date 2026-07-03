@@ -15217,7 +15217,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
- "virt",
  "walkdir",
  "wat",
  "zstd",
