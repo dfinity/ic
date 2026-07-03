@@ -3,9 +3,7 @@ use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config_tool::hostos::guestos_config::{
-    generate_guestos_config, generate_guestos_config_w_slot,
-};
+use config_tool::hostos::guestos_config::generate_guestos_config_w_slot;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, calculate_deterministic_mac_w_slot};
@@ -62,25 +60,17 @@ pub struct Topology {
 
 pub fn assemble_config_media(
     hostos_config: &HostOSConfig,
-    guest_vm_slot: Option<usize>,
+    guest_vm_slot: Option<u8>,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
-    let guestos_config = if let Some(slot) = guest_vm_slot {
-        generate_guestos_config_w_slot(
-            hostos_config,
-            slot,
-            guest_vm_type.to_config_type(),
-            sev_certificate_chain_pem,
-        )
-    } else {
-        generate_guestos_config(
-            hostos_config,
-            guest_vm_type.to_config_type(),
-            sev_certificate_chain_pem,
-        )
-    }
+    let guestos_config = generate_guestos_config_w_slot(
+        hostos_config,
+        guest_vm_slot,
+        guest_vm_type.to_config_type(),
+        sev_certificate_chain_pem,
+    )
     .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
@@ -124,7 +114,7 @@ pub fn generate_vm_config(
     direct_boot: Option<DirectBootConfig>,
     disk_device: &Path,
     serial_log_path: &Path,
-    guest_vm_slot: Option<usize>,
+    guest_vm_slot: Option<u8>,
     guest_vm_type: GuestVMType,
     available_hugepages_gib: u64,
     metrics: &GuestVmMetrics,
@@ -138,7 +128,6 @@ pub fn generate_vm_config(
             &config.icos_settings.mgmt_mac,
             config.icos_settings.deployment_environment,
             slot,
-            node_type,
         )
     } else {
         calculate_deterministic_mac(
@@ -240,7 +229,7 @@ fn split_resources_for_type_4(
     (memory, vcpus, topology)
 }
 
-pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: Option<usize>) -> String {
+pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: Option<u8>) -> String {
     let slot_suffix = slot.map(|v| v.to_string()).unwrap_or_default();
     match guest_vm_type {
         GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot_suffix}"),
@@ -248,7 +237,7 @@ pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: Option<usize>) -> String
     }
 }
 
-pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: Option<usize>) -> String {
+pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: Option<u8>) -> String {
     let slot = slot.unwrap_or(0x66);
     match guest_vm_type {
         GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba307{slot:02x}"),
@@ -256,7 +245,7 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: Option<usize>) -> String
     }
 }
 
-pub fn serial_log_path(guest_vm_type: GuestVMType, slot: Option<usize>) -> PathBuf {
+pub fn serial_log_path(guest_vm_type: GuestVMType, slot: Option<u8>) -> PathBuf {
     let slot_suffix = slot.map(|v| v.to_string()).unwrap_or_default();
     match guest_vm_type {
         GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot_suffix}")),

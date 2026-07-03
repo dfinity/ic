@@ -4,7 +4,9 @@ use config_types::{
     GuestVMType, HostOSConfig, Ipv6Config, RecoveryConfig, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac_w_slot};
+use deterministic_ips::{
+    MacAddr6Ext, calculate_deterministic_mac, calculate_deterministic_mac_w_slot,
+};
 use std::net::Ipv6Addr;
 use std::path::Path;
 use utils::to_cidr;
@@ -19,7 +21,12 @@ pub fn generate_guestos_config(
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
-    generate_guestos_config_w_slot(hostos_config, 0, guest_vm_type, sev_certificate_chain_pem)
+    generate_guestos_config_w_slot(
+        hostos_config,
+        None,
+        guest_vm_type,
+        sev_certificate_chain_pem,
+    )
 }
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
@@ -27,7 +34,7 @@ pub fn generate_guestos_config(
 /// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config_w_slot(
     hostos_config: &HostOSConfig,
-    guest_vm_slot: usize,
+    guest_vm_slot: Option<u8>,
     guest_vm_type: GuestVMType,
     sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
@@ -66,7 +73,7 @@ pub fn generate_guestos_config_w_slot(
         deterministic_ipv6_config,
     )?;
     let peer_ipv6_address = node_ipv6_address(
-        0,
+        None,
         upgrade_peer_node_type,
         hostos_config,
         deterministic_ipv6_config,
@@ -107,17 +114,24 @@ pub fn generate_guestos_config_w_slot(
 }
 
 fn node_ipv6_address(
-    slot: usize,
+    slot: Option<u8>,
     node_type: NodeType,
     hostos_config: &HostOSConfig,
     deterministic_config: &DeterministicIpv6Config,
 ) -> Result<Ipv6Addr> {
-    let mac = calculate_deterministic_mac_w_slot(
-        &hostos_config.icos_settings.mgmt_mac,
-        hostos_config.icos_settings.deployment_environment,
-        slot,
-        node_type,
-    );
+    let mac = if let Some(slot) = slot {
+        calculate_deterministic_mac_w_slot(
+            &hostos_config.icos_settings.mgmt_mac,
+            hostos_config.icos_settings.deployment_environment,
+            slot,
+        )
+    } else {
+        calculate_deterministic_mac(
+            &hostos_config.icos_settings.mgmt_mac,
+            hostos_config.icos_settings.deployment_environment,
+            node_type,
+        )
+    };
 
     mac.calculate_slaac(&deterministic_config.prefix)
 }

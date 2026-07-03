@@ -94,7 +94,7 @@ enum Command {
     /// Run the GuestOS virtual machine
     Run {
         #[arg(long = "slot")]
-        slot: Option<usize>,
+        slot: Option<u8>,
 
         #[arg(long = "type", default_value = "default", value_enum)]
         vm_type: GuestVMType,
@@ -128,7 +128,7 @@ pub async fn main() -> Result<()> {
     }
 }
 
-async fn run(slot: Option<usize>, vm_type: GuestVMType) -> Result<()> {
+async fn run(slot: Option<u8>, vm_type: GuestVMType) -> Result<()> {
     let startup_message = match vm_type {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
@@ -417,7 +417,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
-    guest_vm_slot: Option<usize>,
+    guest_vm_slot: Option<u8>,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
@@ -436,7 +436,7 @@ impl GuestVmService {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn new(guest_vm_slot: Option<usize>, guest_vm_type: GuestVMType) -> Result<Self> {
+    pub fn new(guest_vm_slot: Option<u8>, guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
         let libvirt_connection = LibvirtConnectionWithReconnect::new(Arc::new(|| {
@@ -506,7 +506,7 @@ impl GuestVmService {
 
     #[cfg(target_os = "linux")]
     pub async fn create_and_run(
-        slot: Option<usize>,
+        slot: Option<u8>,
         guest_vm_type: GuestVMType,
         termination_token: CancellationToken,
     ) -> Result<()> {

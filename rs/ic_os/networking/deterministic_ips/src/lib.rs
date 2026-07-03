@@ -65,47 +65,41 @@ pub fn calculate_deterministic_mac(
     deployment_environment: DeploymentEnvironment,
     node_type: NodeType,
 ) -> MacAddr6 {
-    calculate_deterministic_mac_w_slot(mgmt_mac, deployment_environment, 0, node_type)
+    let index = node_type.to_index();
+
+    // NOTE: In order to be backwards compatible with existing scripts, this
+    // **MUST** have a newline.
+    let seed = format!(
+        "{}{}\n",
+        mgmt_mac.to_string().to_lowercase(),
+        deployment_environment
+    );
+
+    let hash = Sha256::hash(seed.as_bytes());
+
+    // 0x6a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
+    [0x6a, index, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
 pub fn calculate_deterministic_mac_w_slot(
     mgmt_mac: &MacAddr6,
     deployment_environment: DeploymentEnvironment,
-    slot: usize,
-    node_type: NodeType,
+    slot: u8,
 ) -> MacAddr6 {
-    if slot < 16 {
-        let index = node_type.to_index() | (slot as u8) << 4; // Mix in the slot index
+    // NOTE: In order to be backwards compatible with existing scripts, this
+    // **MUST** have a newline.
+    let seed = format!(
+        "{}{}\n",
+        mgmt_mac.to_string().to_lowercase(),
+        deployment_environment
+    );
 
-        // NOTE: In order to be backwards compatible with existing scripts, this
-        // **MUST** have a newline.
-        let seed = format!(
-            "{}{}\n",
-            mgmt_mac.to_string().to_lowercase(),
-            deployment_environment
-        );
+    let hash = Sha256::hash(seed.as_bytes());
 
-        let hash = Sha256::hash(seed.as_bytes());
-
-        // 0x6a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
-        [0x6a, index, hash[0], hash[1], hash[2], hash[3]].into()
-    } else {
-        let index = node_type.to_index();
-
-        // NOTE: In order to be backwards compatible with existing scripts, this
-        // **MUST** have a newline.
-        let seed = format!(
-            "{}{}\n",
-            mgmt_mac.to_string().to_lowercase(),
-            deployment_environment
-        );
-
-        let hash = Sha256::hash(seed.as_bytes());
-
-        // NOTE: We extend to 7a to shrink the hash, so we can fit more slot info into the address.
-        // 0x7a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
-        [0x7a, index, slot as u8, hash[0], hash[1], hash[2]].into()
-    }
+    // NOTE: We extend to 7a and use the space of the index to store the
+    // slot.
+    // 0x7a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
+    [0x7a, slot as u8, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
 #[cfg(test)]
