@@ -146,7 +146,7 @@ def _artifact_bundle_impl(ctx):
         # execroot (see `ln -s` below). Such symlinks only resolve on the machine that
         # produced them, so the action must neither run remotely nor be served from the
         # remote cache: either would materialize dangling symlinks under
-        # build-without-the-bytes. Setting this here applies to every artifact_bundle
+        # Build-without-the-Bytes (BwoB). Setting this here applies to every artifact_bundle
         # target, so callers don't need `tags = ["no-remote"]` on each one.
         execution_requirements = {"no-remote": ""},
         command = """
