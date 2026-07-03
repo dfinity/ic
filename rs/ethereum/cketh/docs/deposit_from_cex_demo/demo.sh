@@ -40,8 +40,8 @@ CEX_PK="0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 MINTER=$(cast wallet address --private-key "$MINTER_PK")
 CEX=$(cast wallet address --private-key "$CEX_PK")
 
-step()      { printf '\n\033[1m== %s\033[0m\n' "$*"; }
-show()      { printf '   %-42s %s\n' "$1" "$2"; }
+step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+show() { printf '   %-42s %s\n' "$1" "$2"; }
 assert_eq() {
     if [ "$1" != "$2" ]; then
         echo "ASSERTION FAILED: expected '$2', got '$1' ($3)" >&2
@@ -50,7 +50,7 @@ assert_eq() {
     echo "   OK: $3"
 }
 
-eth_balance()  { cast balance "$1" --rpc-url "$RPC"; }
+eth_balance() { cast balance "$1" --rpc-url "$RPC"; }
 usdt_balance() { cast call "$USDT" "balanceOf(address)(uint256)" "$1" --rpc-url "$RPC" | awk '{print $1}'; }
 
 step "0) Setup: anvil (Prague), minter EOA, CEX hot wallet, contracts"
