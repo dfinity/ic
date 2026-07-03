@@ -36,7 +36,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::driver::test_env_api::{HasRegistryVersion, get_dependency_path};
 use ic_system_test_driver::nns::vote_and_execute_proposal;
-use ic_system_test_driver::retry_with_msg_async;
+use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
     driver::{
@@ -48,6 +48,7 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
+use ic_system_test_driver::{retry_with_msg_async, retry_with_msg_async_quiet};
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
 use slog::info;
@@ -55,6 +56,9 @@ use xnet_test::{Metrics, StartArgs};
 
 const DKG_INTERVAL: u64 = 99;
 const INITIAL_SOURCE_SUBNET_NODES: usize = 8;
+
+const ACCEPTABLE_SOURCE_DOWNTIME: Duration = Duration::from_secs(15);
+const ACCEPTABLE_DEST_DOWNTIME: Duration = Duration::from_secs(35);
 
 /// Number of counter canisters to install on the source subnet, before splitting it.
 const COUNTER_CANISTERS_COUNT: usize = 13;
@@ -182,15 +186,6 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         .map(|node| node.node_id)
         .collect();
 
-    // All counter canisters, regardless of whether they stay on the source subnet or get
-    // migrated to the destination subnet.
-    let counter_canister_ids: Vec<CanisterId> = test_params
-        .source_subnet_counting_canister_ids
-        .iter()
-        .chain(&test_params.destination_subnet_counting_canister_ids)
-        .copied()
-        .collect();
-
     // Flag used to stop the concurrent query probe (see below).
     let stop_query_probe = AtomicBool::new(false);
 
@@ -238,7 +233,12 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
     // chatting canisters' metrics), asserting that every single one of them succeeds.
     tokio::join!(
         split_and_check,
-        query_counter_canisters_until_stopped(&env, &counter_canister_ids, &stop_query_probe),
+        query_counter_canisters_until_stopped(
+            &env,
+            &test_params.source_subnet_counting_canister_ids,
+            &test_params.destination_subnet_counting_canister_ids,
+            &stop_query_probe
+        ),
     );
 
     check_chatting_canisters(&env, test_params).await;
@@ -254,17 +254,30 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
 /// for the entire duration of the subnet split.
 async fn query_counter_canisters_until_stopped(
     env: &TestEnv,
-    counter_canister_ids: &[CanisterId],
+    source_counter_canister_ids: &[CanisterId],
+    dest_counter_canister_ids: &[CanisterId],
     stop: &AtomicBool,
 ) {
+    let counter_canister_ids: Vec<_> = source_counter_canister_ids
+        .iter()
+        .chain(dest_counter_canister_ids)
+        .copied()
+        .collect();
+    let timeout = |canister_id| {
+        if source_counter_canister_ids.contains(canister_id) {
+            ACCEPTABLE_SOURCE_DOWNTIME
+        } else if dest_counter_canister_ids.contains(canister_id) {
+            ACCEPTABLE_DEST_DOWNTIME
+        } else {
+            unreachable!()
+        }
+    };
     futures::future::join_all(counter_canister_ids.iter().map(|canister_id| async move {
         while !stop.load(Ordering::Relaxed) {
-            retry_with_msg_async!(
-                format!("Querying counter canister {canister_id} during the subnet split"),
+            retry_with_msg_async_quiet!(
+                format!("Calling counter canister {canister_id} during the subnet split"),
                 &env.logger(),
-                // Nodes should update their delegations within 15 seconds, so panic if the calls
-                // fails for longer than that.
-                Duration::from_secs(15),
+                timeout(canister_id),
                 Duration::from_secs(1),
                 || async {
                     // Re-resolve the host on every attempt: the migrated canisters move from
@@ -278,16 +291,22 @@ async fn query_counter_canisters_until_stopped(
                                 .iter()
                                 .any(|range| range.contains(canister_id))
                         })
-                        .and_then(|subnet| subnet.nodes().next())
+                        .and_then(|subnet| {
+                            subnet
+                                .nodes()
+                                .nth(rand::random::<usize>() % subnet.nodes().count())
+                        })
                         .expect("The counter canister is not hosted by any subnet");
 
-                    node.build_canister_agent()
-                        .await
-                        .get()
-                        .query(&canister_id.get().0, "read".to_string())
-                        .call()
-                        .await
-                        .context("Failed to make the query call")
+                    let agent = create_agent(node.get_public_url().as_str()).await?;
+                    futures::future::try_join(
+                        agent.query(&canister_id.get().0, "read".to_string()).call(),
+                        agent
+                            .update(&canister_id.get().0, "read".to_string())
+                            .call(),
+                    )
+                    .await
+                    .context("Failed to make a query/update call to a counter canister")
                 }
             )
             .await
