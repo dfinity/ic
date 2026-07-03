@@ -21,6 +21,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
+use ic_agent::AgentError;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::{get_cup_from_node, rw_message::install_nns_and_check_progress};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -42,8 +43,8 @@ use ic_system_test_driver::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot, HasRegistryVersion, get_dependency_path
         },
     },
-    util::runtime_from_url,
     nns::vote_and_execute_proposal,
+    util::{create_agent, runtime_from_url},
     retry_with_msg_async, retry_with_msg_async_quiet,
     systest,
 };
@@ -54,6 +55,9 @@ use xnet_test::{Metrics, StartArgs};
 
 const DKG_INTERVAL: u64 = 99;
 const INITIAL_SOURCE_SUBNET_NODES: usize = 8;
+
+const ACCEPTABLE_SOURCE_DOWNTIME: Duration = Duration::from_secs(15);
+const ACCEPTABLE_DEST_DOWNTIME: Duration = Duration::from_secs(35);
 
 /// Number of counter canisters to install on the source subnet, before splitting it.
 const COUNTER_CANISTERS_COUNT: usize = 13;
@@ -178,17 +182,8 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         .map(|node| node.node_id)
         .collect();
 
-    // All counter canisters, regardless of whether they stay on the source subnet or get
-    // migrated to the destination subnet.
-    let counter_canister_ids: Vec<CanisterId> = test_params
-        .source_subnet_counting_canister_ids
-        .iter()
-        .chain(&test_params.destination_subnet_counting_canister_ids)
-        .copied()
-        .collect();
-
-    // Flag used to stop the concurrent query probe (see below).
-    let stop_query_probe = AtomicBool::new(false);
+    // Flag used to stop the concurrent calls probe (see below).
+    let stop_calls_probe = AtomicBool::new(false);
 
     let split_and_check = async {
         info!(env.logger(), "Proposing to split the source subnet.");
@@ -224,43 +219,60 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
         .await;
         check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
 
-        // The split is done and all checks passed; stop the query probe just before the
+        // The split is done and all checks passed; stop the calls probe just before the
         // chatting canisters' metrics are measured and the canisters are stopped.
-        stop_query_probe.store(true, Ordering::Relaxed);
+        stop_calls_probe.store(true, Ordering::Relaxed);
     };
 
-    // Continuously make query calls to all the counter canisters for the entire duration of
-    // the split (starting before the split is proposed, stopping just before measuring the
-    // chatting canisters' metrics), asserting that every single one of them succeeds.
+    // Continuously make calls to all the counter canisters for the entire duration of the split
+    // (starting before the split is proposed, stopping just before measuring the chatting
+    // canisters' metrics), asserting that every single one of them succeeds.
     tokio::join!(
         split_and_check,
-        query_counter_canisters_until_stopped(&env, &counter_canister_ids, &stop_query_probe),
+        call_counter_canisters_until_stopped(
+            &env,
+            &test_params.source_subnet_counting_canister_ids,
+            &test_params.destination_subnet_counting_canister_ids,
+            &stop_calls_probe
+        ),
     );
 
     check_chatting_canisters(&env, test_params).await;
 }
 
-/// Continuously makes query calls to every counter canister — routing each call to whichever
-/// subnet currently hosts the canister — until `stop` is set, asserting that every single
-/// query call succeeds. Transient failures (e.g. while the destination subnet is still
-/// catching up right after the split, or while a node refreshes its cached NNS delegation)
-/// are retried.
+/// Continuously makes calls to every counter canister — routing each call to whichever subnet
+/// currently hosts the canister — until `stop` is set, asserting that every single call succeeds.
+/// Transient failures (e.g. while the destination subnet is still catching up right after the
+/// split, or while a node refreshes its cached NNS delegation) are retried.
 ///
 /// Run concurrently with the split, this verifies that the counter canisters remain available
 /// for the entire duration of the subnet split.
-async fn query_counter_canisters_until_stopped(
+async fn call_counter_canisters_until_stopped(
     env: &TestEnv,
-    counter_canister_ids: &[CanisterId],
+    source_counter_canister_ids: &[CanisterId],
+    dest_counter_canister_ids: &[CanisterId],
     stop: &AtomicBool,
 ) {
+    let counter_canister_ids: Vec<_> = source_counter_canister_ids
+        .iter()
+        .chain(dest_counter_canister_ids)
+        .copied()
+        .collect();
+    let timeout = |canister_id| {
+        if source_counter_canister_ids.contains(canister_id) {
+            ACCEPTABLE_SOURCE_DOWNTIME
+        } else if dest_counter_canister_ids.contains(canister_id) {
+            ACCEPTABLE_DEST_DOWNTIME
+        } else {
+            unreachable!()
+        }
+    };
     futures::future::join_all(counter_canister_ids.iter().map(|canister_id| async move {
         while !stop.load(Ordering::Relaxed) {
-            retry_with_msg_async!(
-                format!("Querying counter canister {canister_id} during the subnet split"),
+            retry_with_msg_async_quiet!(
+                format!("Calling counter canister {canister_id} during the subnet split"),
                 &env.logger(),
-                // Nodes should update their delegations within 15 seconds, so panic if the calls
-                // fails for longer than that.
-                Duration::from_secs(15),
+                timeout(canister_id),
                 Duration::from_secs(1),
                 || async {
                     // Re-resolve the host on every attempt: the migrated canisters move from
@@ -274,20 +286,42 @@ async fn query_counter_canisters_until_stopped(
                                 .iter()
                                 .any(|range| range.contains(canister_id))
                         })
-                        .and_then(|subnet| subnet.nodes().next())
+                        .and_then(|subnet| {
+                            subnet
+                                .nodes()
+                                .nth(rand::random::<usize>() % subnet.nodes().count())
+                        })
                         .expect("The counter canister is not hosted by any subnet");
 
-                    node.build_canister_agent()
-                        .await
-                        .get()
-                        .query(&canister_id.get().0, "read".to_string())
-                        .call()
-                        .await
-                        .context("Failed to make the query call")
+                    let agent = create_agent(node.get_public_url().as_str()).await?;
+                    match futures::future::try_join(
+                        agent.query(&canister_id.get().0, "read".to_string()).call(),
+                        agent
+                            .update(&canister_id.get().0, "read".to_string())
+                            .call(),
+                    )
+                    .await
+                    {
+                        Ok(_) => Ok(()),
+                        Err(err @ AgentError::CertificateNotAuthorized())
+                        | Err(err @ AgentError::CertificateVerificationFailed())
+                        | Err(err @ AgentError::CertificateOutdated(_)) => {
+                            // These errors could happen with an invalid/stale delegation.
+                            // Replicas could be able to detect this and refresh their delegations
+                            // before attempting to reply (and we could panic here to ensure we do
+                            // not observe those errors), but this is not yet implemented. So we
+                            // retry instead.
+                            Err(err.into())
+                        }
+                        Err(err) => {
+                            // Transient errors are expected during the subnet split, so we retry.
+                            Err(err.into())
+                        }
+                    }
                 }
             )
             .await
-            .expect("A query call to a counter canister failed during the subnet split");
+            .expect("A call to a counter canister failed during the subnet split");
 
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
