@@ -2832,6 +2832,20 @@ fn canister_status_via_query_call_by_subnet_admin_succeeds() {
     assert_eq!(canister_status_count(&env), 1);
 }
 
+fn list_canisters_count(env: &StateMachine) -> u64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "ic00_list_canisters"),
+        ("outcome", "finished"),
+        ("status", "success"),
+        ("speed", "fast"),
+    ]))
+    .map_or(0, |stats| stats.count)
+}
+
 // `list_canisters` consumes round instructions according to its cost model (a
 // base cost plus a per-canister cost). This test checks that the round
 // instruction limit is respected: when many `list_canisters` calls are pending
@@ -2891,7 +2905,8 @@ fn list_canisters_respects_round_instruction_limit() {
 
     // `send_ingress` executes a single round in which the update runs and
     // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
-    let baseline = env.subnet_message_instructions();
+    let instructions_baseline = env.subnet_message_instructions();
+    let calls_baseline = list_canisters_count(&env);
     let msg_id = env.send_ingress(
         PrincipalId::new_anonymous(),
         admin_canister,
@@ -2900,13 +2915,10 @@ fn list_canisters_respects_round_instruction_limit() {
     );
 
     // Execute rounds one at a time, tracking after each round how many
-    // `list_canisters` calls have been executed so far. Each executed call
-    // consumes exactly `cost_per_call` round instructions in the subnet-message
-    // phase (the number of canisters on the subnet does not change), so the
-    // cumulative charge divided by `cost_per_call` yields the number of executed
-    // calls.
-    let executed_so_far =
-        || ((env.subnet_message_instructions() - baseline) / cost_per_call as f64).round() as u64;
+    // `list_canisters` calls have been executed so far, using the
+    // `execution_subnet_message_duration_seconds` metric to count them
+    // explicitly (rather than inferring the count from consumed instructions).
+    let executed_so_far = || list_canisters_count(&env) - calls_baseline;
     let mut executed_per_round = vec![];
     for _ in 0..100 {
         env.tick();
@@ -2932,11 +2944,12 @@ fn list_canisters_respects_round_instruction_limit() {
         "expected list_canisters calls to be spread across rounds, got progression {:?}",
         executed_per_round,
     );
-    // Eventually all of them were executed, each charged exactly per the cost
-    // model, confirming the round instruction accounting.
+    // Eventually all of them were executed.
     assert_eq!(*executed_per_round.last().unwrap(), NUM_CALLS);
+    // Each executed call was charged exactly per the cost model, confirming the
+    // round instruction accounting.
     assert_eq!(
-        env.subnet_message_instructions() - baseline,
+        env.subnet_message_instructions() - instructions_baseline,
         (NUM_CALLS * cost_per_call) as f64
     );
 }
