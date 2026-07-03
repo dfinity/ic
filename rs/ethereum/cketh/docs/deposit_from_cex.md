@@ -274,6 +274,96 @@ own principal is rejected).
 
 ## Implementation
 
+### End-to-end flows
+
+Deposit of USDT from a CEX under **variant A** (direct sweep; crediting via a new
+detection path, mint on finalized deposit, sweep asynchronously):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (principal p)
+    participant CEX
+    participant Minter
+    participant Eth as Ethereum (via EVM-RPC)
+    participant CkUsdtLedger as ckUSDT ledger
+    participant CkEthLedger as ckETH ledger
+
+    User->>Minter: get_deposit_address(p)
+    Note right of Minter: derive addr(p) locally, register it.<br/>No tECDSA signature, no Ethereum tx (R13)
+    Minter-->>User: addr(p)
+    User->>CEX: withdraw USDT to addr(p)
+    CEX->>Eth: USDT.transfer(addr(p), 250)
+    loop frontend polls until credited
+        User->>Minter: notify_deposit(p)
+        Minter->>Eth: eth_getLogs(USDT Transfer to addr(p), up to finalized)
+    end
+    Note over Minter: amount >= min (R4), sender not blocked (R3),<br/>dedup by (tx hash, log index) (R2)
+    Minter->>CkUsdtLedger: mint 250 - fee to p
+    Minter->>CkUsdtLedger: mint fee to minter fee account
+    Note over Minter: user is credited; sweeping is asynchronous<br/>treasury consolidation (R5)
+    Minter->>CkEthLedger: burn max_tx_fee - prepaid_sweep_gas<br/>from the ckETH fee account (R14)
+    Note over Minter: sign EIP-7702 authorization for addr(p)<br/>(tECDSA; only before the first sweep)
+    Minter->>Eth: type-0x04 tx: sweepErc20 on addr(p)<br/>USDT: addr(p) -> minter address
+    Eth-->>Minter: receipt: prepaid_sweep_gas -= effective fee
+```
+
+Deposit of USDT from a CEX under **variant B** (sweep through the existing helper
+contract; crediting via the unchanged existing pipeline):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (principal p)
+    participant CEX
+    participant Minter
+    participant Eth as Ethereum (via EVM-RPC)
+    participant CkUsdtLedger as ckUSDT ledger
+    participant CkEthLedger as ckETH ledger
+
+    User->>Minter: get_deposit_address(p)
+    Minter-->>User: addr(p)
+    User->>CEX: withdraw USDT to addr(p)
+    CEX->>Eth: USDT.transfer(addr(p), 250)
+    Minter->>Eth: balance scan of registered addresses (latest block)
+    Note over Minter: scheduling hint only, no finality needed:<br/>a reorged deposit just wastes the sweep's gas
+    Minter->>CkEthLedger: burn max_tx_fee - prepaid_sweep_gas (R14)
+    Minter->>Eth: type-0x04 tx: sweepErc20(tokens, p, s) on addr(p)<br/>= approve + helper.depositErc20:<br/>USDT: addr(p) -> minter address, and the helper emits<br/>ReceivedEthOrErc20(USDT, addr(p), 250, p, s)
+    Eth-->>Minter: receipt: prepaid_sweep_gas -= effective fee
+    Note over Minter,Eth: from here the EXISTING deposit pipeline runs unchanged
+    Minter->>Eth: eth_getLogs(helper contract, up to finalized)
+    Note over Minter: cross-check owner addr(p) vs p against own map,<br/>dedup by (tx hash, log index)
+    Minter->>CkUsdtLedger: mint 250 - fee to p, fee to minter fee account
+```
+
+Deposit of ETH from a CEX (**Phase 2**, dedicated never-delegated ETH deposit
+address; the deposit pays its own sweep gas, no `R14` burn involved):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (principal p)
+    participant CEX
+    participant Minter
+    participant Eth as Ethereum (via EVM-RPC)
+    participant CkEthLedger as ckETH ledger
+
+    User->>Minter: get_deposit_address(p) for ETH
+    Minter-->>User: eth_addr(p) (schema 2: never delegated, never any code)
+    User->>CEX: withdraw ETH to eth_addr(p)
+    CEX->>Eth: plain transfer, even with a fixed 21000 gas limit (R12)
+    User->>Minter: notify_deposit(p) (frontend polls)
+    Minter->>Eth: eth_getBalance(eth_addr(p), finalized)
+    alt variant A
+        Minter->>CkEthLedger: mint balance delta - fee to p (R11),<br/>fee to minter fee account
+        Minter->>Eth: EIP-1559 tx FROM eth_addr(p), signed via tECDSA:<br/>transfer balance - gas to the minter address<br/>(max fee capped by the charged deposit fee)
+    else variant B
+        Minter->>Eth: EIP-1559 tx FROM eth_addr(p), signed via tECDSA:<br/>helper.depositEth{value: balance - gas}(p, s)
+        Minter->>Eth: eth_getLogs(helper contract, up to finalized)
+        Minter->>CkEthLedger: mint to p (existing pipeline, unchanged)
+    end
+```
+
 ### Constraints
 
 * The minter's transaction layer supports only EIP-1559 (type `0x02`) transactions
@@ -475,6 +565,12 @@ Two ETH-specific problems and their resolutions:
      21'000 gas, the cheapest possible sweep; the ETH minimum deposit covers it.
      One tECDSA signature and a per-address nonce (only the minter ever sends from
      it) per sweep; fee-refund dust left at the address rolls into the next sweep.
+   * No `R14` burn is involved: the gas never comes out of the minter's
+     main-address backing. However, since (under variant A) the account is credited
+     `balance - fee` *before* the sweep executes, the sweep's
+     `gas_limit × max_fee_per_gas` must be capped by the charged deposit fee — if
+     gas prices exceed that cap, the sweep waits — so that the gas spent can never
+     exceed what was withheld from minting.
    * Under variant B, the sweep is instead a call to the helper's
      `depositEth{value: balance - fee}(principal, subaccount)` signed the same way:
      slightly more gas, but the sweep emits the canonical event and the existing
