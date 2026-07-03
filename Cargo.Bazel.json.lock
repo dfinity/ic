@@ -1,5 +1,5 @@
 {
-  "checksum": "d36b6f62a49fb36997ade69ef1aad99494c289a40f2934b9f271d3fb3e4829e8",
+  "checksum": "57c5df6ee94cd85feda6f197784ca9390bfd74bfd0f4a8a7988829e2bb6eaa02",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -23408,7 +23408,7 @@
               "target": "scrypt"
             },
             {
-              "id": "secp256k1 0.22.2",
+              "id": "secp256k1 0.29.0",
               "target": "secp256k1"
             },
             {
@@ -24093,7 +24093,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -71629,7 +71629,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -72585,7 +72585,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -72700,7 +72700,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -74289,8 +74289,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "global-context",
             "rand",
             "rand-std",
             "recovery",
@@ -74357,6 +74355,8 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
+            "global-context",
             "hashes",
             "rand",
             "recovery",
@@ -74543,10 +74543,12 @@
         },
         "edition": "2021",
         "rustc_flags": {
-          "common": [
-            "--cfg=rust_secp_no_symbol_renaming"
-          ],
-          "selects": {}
+          "common": [],
+          "selects": {
+            "wasm32-unknown-unknown": [
+              "--cfg=rust_secp_no_symbol_renaming"
+            ]
+          }
         },
         "version": "0.10.0"
       },
@@ -83040,7 +83042,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -103299,7 +103301,7 @@
     "scopeguard 1.2.0",
     "scraper 0.17.1",
     "scrypt 0.11.0",
-    "secp256k1 0.22.2",
+    "secp256k1 0.29.0",
     "securefmt 0.1.5",
     "semver 1.0.27",
     "serde 1.0.228",
