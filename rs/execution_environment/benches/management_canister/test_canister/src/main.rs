@@ -14,6 +14,7 @@ use ic_cdk::api::management_canister::main::{
     UpdateSettingsArgument, create_canister as ic_cdk_create_canister,
     install_code as ic_cdk_install_code, update_settings as ic_cdk_update_settings,
 };
+use ic_cdk::call::Call;
 use ic_cdk::update;
 use serde::{Deserialize, Serialize};
 
@@ -218,6 +219,31 @@ async fn http_request(args: HttpRequestArgs) {
     results.into_iter().for_each(|r| {
         r.unwrap(); // Reject if there is an error.
     });
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct CanisterIdRange {
+    pub start: Principal,
+    pub end: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct ListCanistersResult {
+    pub canisters: Vec<CanisterIdRange>,
+}
+
+/// Calls the management canister's `list_canisters` method (which takes no
+/// arguments) and returns the number of canister ID ranges reported for the
+/// subnet. This canister must be a subnet admin for the call to succeed.
+#[update]
+async fn list_canisters() -> u64 {
+    let result: ListCanistersResult =
+        Call::unbounded_wait(Principal::management_canister(), "list_canisters")
+            .await
+            .expect("list_canisters call failed")
+            .candid()
+            .expect("failed to decode list_canisters response");
+    result.canisters.len() as u64
 }
 
 fn main() {}

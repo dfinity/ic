@@ -43,4 +43,5 @@ service : {
     "ecdsa_public_key" : (ecdsa_args) -> ();
     "sign_with_ecdsa" : (ecdsa_args) -> ();
     "http_request" : (http_request_args) -> ();
+    "list_canisters" : () -> (nat64);
 };
