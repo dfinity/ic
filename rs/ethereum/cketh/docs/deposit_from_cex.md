@@ -27,7 +27,8 @@ Consequently a user holding e.g. USDT or USDC on Coinbase/Binance cannot onramp 
 ckUSDT/ckUSDC without first withdrawing to a self-custody wallet, funding it with ETH
 for gas, and interacting with the helper contract — a prohibitive UX. Funds sent
 directly to the minter address today are simply unaccounted, with no recovery path
-(see the comment on `EthBalance::eth_balance` in `src/state.rs`).
+(see the documentation of the `eth_balance` field of the `EthBalance` struct in
+`src/state.rs`).
 
 The only attribution channel a CEX supports is the **destination address**. This design
 therefore gives each IC account a **unique, deterministic deposit address**, controlled

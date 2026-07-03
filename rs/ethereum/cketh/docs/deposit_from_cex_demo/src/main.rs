@@ -23,7 +23,8 @@
 //!       "anvil --host 0.0.0.0"
 
 use alloy::{
-    eips::eip7702::{Authorization, SignedAuthorization},
+    consensus::{Transaction, TxEnvelope},
+    eips::{eip2718::Encodable2718, eip7702::Authorization, eip7702::SignedAuthorization},
     network::{EthereumWallet, TransactionBuilder, TransactionBuilder7702},
     primitives::{Address, U256, keccak256},
     providers::{DynProvider, Provider, ProviderBuilder},
@@ -55,10 +56,16 @@ const CKSWEEPER_BYTECODE: &str = include_str!("../artifacts/CkSweeper.bin.hex");
 const MOCKUSDT_BYTECODE: &str = include_str!("../artifacts/MockUSDT.bin.hex");
 
 // Anvil's first two well-known dev accounts.
-const MINTER_PK: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-const CEX_PK: &str = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+const MINTER_PRIVATE_KEY: &str =
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+const CEX_PRIVATE_KEY: &str = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 
 const USDT_SUPPLY: u64 = 1_000_000_000_000; // 1M USDT (6 decimals)
+
+// The demo is fully deterministic (fixed keys, fixed contracts, fresh chain),
+// so the gas used by both sweep transactions is a constant.
+const SINGLE_SWEEP_GAS_USED: u64 = 66_889;
+const BATCH_SWEEP_GAS_USED: u64 = 118_982;
 
 fn step(title: &str) {
     println!("\n== {title}");
@@ -76,22 +83,55 @@ fn ok(what: &str) {
 /// deterministically derives one child key per IC account. On the IC the
 /// private key never exists anywhere; sign_with_ecdsa produces the signatures.
 fn derive_deposit_signer(principal: &str) -> PrivateKeySigner {
-    let seed = keccak256(format!("cketh-deposit-address|{MINTER_PK}|{principal}"));
+    let seed = keccak256(format!(
+        "cketh-deposit-address|{MINTER_PRIVATE_KEY}|{principal}"
+    ));
     PrivateKeySigner::from_bytes(&seed).expect("valid derived key")
+}
+
+/// Fills chain id, nonce, fees and gas, then signs with the given wallet,
+/// without sending.
+async fn fill_and_sign(
+    provider: &DynProvider,
+    wallet: &EthereumWallet,
+    from: Address,
+    tx: TransactionRequest,
+) -> Result<TxEnvelope> {
+    let fees = provider.estimate_eip1559_fees().await?;
+    let mut tx = tx
+        .with_from(from)
+        .with_chain_id(provider.get_chain_id().await?)
+        .with_nonce(provider.get_transaction_count(from).await?)
+        .with_max_fee_per_gas(fees.max_fee_per_gas)
+        .with_max_priority_fee_per_gas(fees.max_priority_fee_per_gas);
+    let gas_limit = provider.estimate_gas(tx.clone()).await?;
+    tx = tx.with_gas_limit(gas_limit);
+    Ok(tx.build(wallet).await?)
 }
 
 async fn deploy(
     provider: &DynProvider,
-    from: Address,
+    wallet: &EthereumWallet,
+    deployer: &str,
+    deployer_address: Address,
     bytecode_hex: &str,
     constructor_args: Vec<u8>,
 ) -> Result<Address> {
     let mut code = hex::decode(bytecode_hex.trim().trim_start_matches("0x"))?;
     code.extend(constructor_args);
-    let tx = TransactionRequest::default()
-        .with_from(from)
-        .with_deploy_code(code);
-    let receipt = provider.send_transaction(tx).await?.get_receipt().await?;
+    let envelope = fill_and_sign(
+        provider,
+        wallet,
+        deployer_address,
+        TransactionRequest::default().with_deploy_code(code),
+    )
+    .await?;
+    show(&format!("{deployer} nonce (deploy):"), envelope.nonce());
+    let receipt = provider
+        .send_tx_envelope(envelope)
+        .await?
+        .get_receipt()
+        .await?;
     receipt.contract_address.context("no contract address")
 }
 
@@ -109,7 +149,28 @@ fn sign_delegation(
     Ok(authorization.into_signed(signature))
 }
 
-fn print_sweep_transaction(receipt: &TransactionReceipt, authorizations: &[SignedAuthorization]) {
+/// Signs a sweep transaction with the minter's wallet, prints it in full
+/// (including the minter's nonce and the raw signed transaction hex), sends it
+/// and prints the resulting receipt.
+async fn send_and_print_sweep_transaction(
+    minter_provider: &DynProvider,
+    minter_wallet: &EthereumWallet,
+    minter: Address,
+    tx: TransactionRequest,
+    authorizations: &[SignedAuthorization],
+) -> Result<TransactionReceipt> {
+    let envelope = fill_and_sign(minter_provider, minter_wallet, minter, tx).await?;
+    show("minter nonce (sweep):", envelope.nonce());
+    show(
+        "raw signed transaction:",
+        alloy::hex::encode_prefixed(envelope.encoded_2718()),
+    );
+    let receipt = minter_provider
+        .send_tx_envelope(envelope)
+        .await?
+        .get_receipt()
+        .await?;
+
     show("transaction hash:", receipt.transaction_hash);
     show(
         "transaction type:",
@@ -149,6 +210,7 @@ fn print_sweep_transaction(receipt: &TransactionReceipt, authorizations: &[Signe
             );
         }
     }
+    Ok(receipt)
 }
 
 #[tokio::main]
@@ -156,28 +218,37 @@ async fn main() -> Result<()> {
     let rpc_url =
         std::env::var("ETH_RPC_URL").unwrap_or_else(|_| "http://127.0.0.1:8545".to_string());
 
-    let minter_signer: PrivateKeySigner = MINTER_PK.parse()?;
-    let cex_signer: PrivateKeySigner = CEX_PK.parse()?;
+    let minter_signer: PrivateKeySigner = MINTER_PRIVATE_KEY.parse()?;
+    let cex_signer: PrivateKeySigner = CEX_PRIVATE_KEY.parse()?;
     let minter = minter_signer.address();
     let cex = cex_signer.address();
-    let mut wallet = EthereumWallet::from(minter_signer);
-    wallet.register_signer(cex_signer);
-    let provider = ProviderBuilder::new()
-        .wallet(wallet)
+    // The minter and the CEX are unrelated parties: two separate wallets.
+    let minter_wallet = EthereumWallet::from(minter_signer);
+    let cex_wallet = EthereumWallet::from(cex_signer);
+    let minter_provider = ProviderBuilder::new()
+        .wallet(minter_wallet.clone())
         .connect_http(rpc_url.parse()?)
         .erased();
-    let chain_id = provider.get_chain_id().await?;
+    let cex_provider = ProviderBuilder::new()
+        .wallet(cex_wallet.clone())
+        .connect_http(rpc_url.parse()?)
+        .erased();
+    let chain_id = minter_provider.get_chain_id().await?;
 
     step("0) Setup: minter EOA, CEX hot wallet, contracts");
     let sweeper_address = deploy(
-        &provider,
+        &minter_provider,
+        &minter_wallet,
+        "minter",
         minter,
         CKSWEEPER_BYTECODE,
         CkSweeper::constructorCall { minter }.abi_encode(),
     )
     .await?;
     let usdt_address = deploy(
-        &provider,
+        &cex_provider,
+        &cex_wallet,
+        "CEX",
         cex,
         MOCKUSDT_BYTECODE,
         MockUSDT::constructorCall {
@@ -187,7 +258,8 @@ async fn main() -> Result<()> {
         .abi_encode(),
     )
     .await?;
-    let usdt = MockUSDT::new(usdt_address, provider.clone());
+    let usdt = MockUSDT::new(usdt_address, minter_provider.clone());
+    let usdt_as_cex = MockUSDT::new(usdt_address, cex_provider.clone());
     show("minter (EOA, pays all sweep gas):", minter);
     show("CEX hot wallet (EOA):", cex);
     show("CkSweeper delegate + batcher:", sweeper_address);
@@ -211,17 +283,17 @@ async fn main() -> Result<()> {
 
     step("2) Deposit addresses are unfunded: no ETH, no token, no code");
     for address in &deposit_addresses {
-        ensure!(provider.get_balance(*address).await?.is_zero());
+        ensure!(minter_provider.get_balance(*address).await?.is_zero());
         ensure!(usdt.balanceOf(*address).call().await?.is_zero());
-        ensure!(provider.get_code_at(*address).await?.is_empty());
+        ensure!(minter_provider.get_code_at(*address).await?.is_empty());
     }
     ok("every deposit address has 0 ETH, 0 USDT and no code");
 
     step("3) Users withdraw USDT from the CEX (plain ERC-20 transfers)");
     let amounts: [u64; 4] = [250_000_000, 100_000_000, 75_000_000, 50_000_000];
     for (address, amount) in deposit_addresses.iter().zip(amounts) {
-        usdt.transfer(*address, U256::from(amount))
-            .from(cex)
+        usdt_as_cex
+            .transfer(*address, U256::from(amount))
             .send()
             .await?
             .get_receipt()
@@ -232,14 +304,13 @@ async fn main() -> Result<()> {
         );
     }
     for address in &deposit_addresses {
-        ensure!(provider.get_balance(*address).await?.is_zero());
+        ensure!(minter_provider.get_balance(*address).await?.is_zero());
     }
     ok("deposit addresses still have 0 ETH (cannot pay gas themselves)");
 
     step("4) Minter sweeps ONE deposit address in ONE EIP-7702 transaction");
     let single_authorization = sign_delegation(&deposit_signers[0], sweeper_address, chain_id)?;
     let single_sweep = TransactionRequest::default()
-        .with_from(minter)
         .with_to(deposit_addresses[0])
         .with_input(
             CkSweeper::sweepErc20Call {
@@ -248,12 +319,14 @@ async fn main() -> Result<()> {
             .abi_encode(),
         )
         .with_authorization_list(vec![single_authorization.clone()]);
-    let single_receipt = provider
-        .send_transaction(single_sweep)
-        .await?
-        .get_receipt()
-        .await?;
-    print_sweep_transaction(&single_receipt, &[single_authorization]);
+    let single_receipt = send_and_print_sweep_transaction(
+        &minter_provider,
+        &minter_wallet,
+        minter,
+        single_sweep,
+        &[single_authorization],
+    )
+    .await?;
 
     ensure!(single_receipt.status(), "single sweep reverted");
     ensure!(usdt.balanceOf(deposit_addresses[0]).call().await?.is_zero());
@@ -261,11 +334,11 @@ async fn main() -> Result<()> {
     ok("250 USDT swept to the minter; deposit address needed 0 ETH throughout");
     let single_gas = single_receipt.gas_used;
     ensure!(
-        (60_000..=90_000).contains(&single_gas),
-        "unexpected single-sweep gas: {single_gas}"
+        single_gas == SINGLE_SWEEP_GAS_USED,
+        "unexpected single-sweep gas: {single_gas}, expected {SINGLE_SWEEP_GAS_USED}"
     );
     ok(&format!(
-        "gas used {single_gas} within expected bounds [60000, 90000] \
+        "gas used is exactly {SINGLE_SWEEP_GAS_USED} \
          (21000 base + 25000 authorization + ~21000 delegated ERC-20 sweep)"
     ));
 
@@ -276,7 +349,6 @@ async fn main() -> Result<()> {
         .collect::<Result<_>>()?;
     let batch_targets = deposit_addresses[1..].to_vec();
     let batch_sweep = TransactionRequest::default()
-        .with_from(minter)
         .with_to(sweeper_address)
         .with_input(
             CkSweeper::sweepErc20BatchCall {
@@ -286,12 +358,14 @@ async fn main() -> Result<()> {
             .abi_encode(),
         )
         .with_authorization_list(batch_authorizations.clone());
-    let batch_receipt = provider
-        .send_transaction(batch_sweep)
-        .await?
-        .get_receipt()
-        .await?;
-    print_sweep_transaction(&batch_receipt, &batch_authorizations);
+    let batch_receipt = send_and_print_sweep_transaction(
+        &minter_provider,
+        &minter_wallet,
+        minter,
+        batch_sweep,
+        &batch_authorizations,
+    )
+    .await?;
 
     ensure!(batch_receipt.status(), "batched sweep reverted");
     for address in &batch_targets {
@@ -303,13 +377,13 @@ async fn main() -> Result<()> {
 
     let batch_gas = batch_receipt.gas_used;
     ensure!(
-        batch_gas < 3 * single_gas,
-        "batching brought no amortization: {batch_gas} vs 3 x {single_gas}"
+        batch_gas == BATCH_SWEEP_GAS_USED,
+        "unexpected batch-sweep gas: {batch_gas}, expected {BATCH_SWEEP_GAS_USED}"
     );
     let marginal = (batch_gas - single_gas) / 2;
     ok(&format!(
-        "gas used {batch_gas} for 3 EOAs < 3 x {single_gas} (3 separate sweeps); \
-         ~{marginal} gas per additional EOA"
+        "gas used is exactly {BATCH_SWEEP_GAS_USED} for 3 EOAs < 3 x {single_gas} \
+         (3 separate sweeps); ~{marginal} gas per additional EOA"
     ));
 
     println!("\nDemo completed successfully.");
