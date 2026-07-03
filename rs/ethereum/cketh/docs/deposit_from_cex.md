@@ -301,9 +301,9 @@ sequenceDiagram
     Note over Minter: amount >= min (R4), sender not blocked (R3),<br/>dedup by (tx hash, log index) (R2)
     Minter->>CkUsdtLedger: mint 250 - fee to p
     Minter->>CkUsdtLedger: mint fee to minter fee account
-    Note over Minter: user is credited; sweeping is asynchronous<br/>treasury consolidation (R5)
+    Note over Minter: user is credited - sweeping is asynchronous<br/>treasury consolidation (R5)
     Minter->>CkEthLedger: burn max_tx_fee - prepaid_sweep_gas<br/>from the ckETH fee account (R14)
-    Note over Minter: sign EIP-7702 authorization for addr(p)<br/>(tECDSA; only before the first sweep)
+    Note over Minter: sign EIP-7702 authorization for addr(p)<br/>(tECDSA, only before the first sweep)
     Minter->>Eth: type-0x04 tx: sweepErc20 on addr(p)<br/>USDT: addr(p) -> minter address
     Eth-->>Minter: receipt: prepaid_sweep_gas -= effective fee
 ```
