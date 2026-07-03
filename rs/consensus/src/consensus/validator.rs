@@ -130,6 +130,7 @@ enum InvalidArtifactReason {
     ReplicaVersionMismatch,
     NotABlockmaker,
     InvalidHeightInSplittingCatchUpPackageShare,
+    InvalidSubnetIdInSplittingCatchUpPackage,
     RegistryVersionNotFrozenDuringSubnetSplitting {
         context_registry_version: RegistryVersion,
     },
@@ -314,8 +315,6 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
             .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?
             .dkg_id
             .clone();
-        //let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
-        //.ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -337,17 +336,29 @@ impl SignatureVerify for CatchUpPackage {
     ) -> ValidationResult<ValidatorError> {
         let cup_registry_version = self.content.registry_version();
 
-        let registry_subnet_id = membership
+        let registry_subnet_id = match membership
             .registry_client
             .get_subnet_id_from_node_id(cfg.node_id, cup_registry_version)
-            .map_err(ValidationFailure::RegistryClientError)?;
+        {
+            Ok(Some(subnet_id)) => subnet_id,
+            Ok(None) => {
+                return Err(ValidationError::ValidationFailed(
+                    ValidationFailure::SubnetSplittingError(format!(
+                        "Node {} is not assigned to any subnet at registry version {}",
+                        cfg.node_id, cup_registry_version
+                    )),
+                ));
+            }
+            Err(e) => {
+                return Err(ValidationError::ValidationFailed(
+                    ValidationFailure::RegistryClientError(e),
+                ));
+            }
+        };
 
-        if registry_subnet_id.is_some_and(|subnet_id| subnet_id != membership.subnet_id) {
-            return Err(ValidationError::ValidationFailed(
-                ValidationFailure::SubnetSplittingError(format!(
-                    "Wrong subnet id in the CUP: {registry_subnet_id:?} != {}",
-                    membership.subnet_id,
-                )),
+        if registry_subnet_id != membership.subnet_id {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidArtifactReason::InvalidSubnetIdInSplittingCatchUpPackage,
             ));
         }
 
