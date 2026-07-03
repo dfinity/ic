@@ -16,6 +16,7 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
+use ic_canonical_state::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
@@ -550,29 +551,20 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                 .map_or_else(
                     || Err(QueryExecutionError::CertifiedStateUnavailable),
                     |(state, cert)| {
-                        // Make sure the public key in the NNS delegation matches the one in the certified state.
+                        // Make sure NNS delegation is valid with respect to the certified state.
                         // Otherwise the client would not be able to verify the query response against the delegation.
                         if let Some(delegation) = &certificate_delegation {
-                            let (subnet_id, public_key_from_delegation) = delegation
-                                .get_subnet_id_and_public_key()
-                                .map_err(|err| QueryExecutionError::InvalidDelegation(err))?;
-
-                            if subnet_id != state.get_ref().metadata.own_subnet_id {
-                                return Err(QueryExecutionError::OutdatedDelegation);
-                            }
-                            // let own_subnet_id = state.get_ref().metadata.own_subnet_id;
-                            let public_key_from_certified_state = state
-                                .get_ref()
-                                .metadata
-                                .network_topology
-                                .subnets()
-                                .get(&subnet_id)
-                                .map(|subnet| subnet.public_key.clone())
-                                .ok_or_else(|| {
-                                    QueryExecutionError::PublicKeyNotFoundInTopology(subnet_id)
-                                })?;
-                            if public_key_from_delegation != public_key_from_certified_state {
-                                return Err(QueryExecutionError::OutdatedDelegation);
+                            match is_delegation_valid_with_respect_to_state(
+                                delegation,
+                                state.get_ref(),
+                            ) {
+                                Ok(true) => {}
+                                Ok(false) => {
+                                    return Err(QueryExecutionError::OutdatedDelegation);
+                                }
+                                Err(err) => {
+                                    return Err(QueryExecutionError::InvalidDelegation(err));
+                                }
                             }
                         }
 

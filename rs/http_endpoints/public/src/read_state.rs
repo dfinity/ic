@@ -4,7 +4,7 @@ use crate::{
     HttpError, ReplicaHealthStatus,
     common::{
         Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error,
-        verify_delegation_matches_certified_public_key,
+        verify_delegation_matches_certified_state,
     },
     metrics::HttpHandlerMetrics,
 };
@@ -400,7 +400,7 @@ fn get_certificate_and_create_response(
     // about to serve. Otherwise the client would not be able to verify the certificate.
     if let Some(delegation) = &delegation_from_nns
         && let Err(HttpError { status, message }) =
-            verify_delegation_matches_certified_public_key(delegation, certified_state_reader)
+            verify_delegation_matches_certified_state(delegation, certified_state_reader)
     {
         return (status, message).into_response();
     }

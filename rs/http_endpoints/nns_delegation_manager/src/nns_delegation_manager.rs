@@ -6,13 +6,14 @@ use hickory_resolver::{Resolver, config::LookupIpStrategy};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
+use ic_canonical_state::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tree_hash::{LabeledTree, Path, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
@@ -28,8 +29,8 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope,
+        Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
+        HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
 };
@@ -144,9 +145,9 @@ impl DelegationManager {
             return Some(false);
         };
 
-        does_delegation_match_certified_public_key(
+        is_delegation_valid_with_respect_to_state(
             &old_delegation.build_or_original(CanisterRangesFilter::None, &self.log),
-            self.state_reader.get_certified_state_snapshot()?.as_ref(),
+            self.state_reader.get_latest_certified_state()?.get_ref(),
         )
         .inspect_err(|err| {
             warn!(
@@ -678,38 +679,6 @@ fn get_root_threshold_public_key(
         Err(err) => Err(format!("Failed to get key for subnet: {err}")),
         Ok(None) => Err(format!("Received no public key for subnet {nns_subnet_id}")),
     }
-}
-
-/// Checks that the subnet's public key recorded in the certified state served by the replica
-/// matches the public key embedded in the given NNS delegation.
-///
-/// This guards against serving a response whose certificate the client is guaranteed to reject:
-/// e.g. right after a subnet split the subnet starts certifying with a fresh threshold key while
-/// the cached NNS delegation may still carry the previous key for up to a few minutes. In that
-/// window the two keys disagree, so we return an error instead of a response that cannot be
-/// verified.
-/// Similarly, right before a subnet split, the delegation might already carry the new key while the
-/// certified state still carries the old key.
-pub fn does_delegation_match_certified_public_key(
-    delegation: &CertificateDelegation,
-    certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
-) -> Result<bool, String> {
-    let (subnet_id, public_key_from_delegation) = delegation.get_subnet_id_and_public_key()?;
-    if subnet_id != certified_state_reader.get_state().metadata.own_subnet_id {
-        return Ok(false);
-    }
-    let public_key_from_certified_state = certified_state_reader
-        .get_state()
-        .metadata
-        .network_topology
-        .subnets()
-        .get(&subnet_id)
-        .map(|subnet| subnet.public_key.clone())
-        .ok_or_else(|| {
-            format!("The public key of subnet {subnet_id} is missing from the certified state")
-        })?;
-
-    Ok(public_key_from_delegation == public_key_from_certified_state)
 }
 
 #[cfg(test)]
@@ -1542,23 +1511,6 @@ mod tests {
         (Arc::new(state_manager), mutable_handle)
     }
 
-    fn fake_state_with_public_key(
-        subnet_id: SubnetId,
-        public_key: Vec<u8>,
-    ) -> Arc<dyn StateReader<State = ReplicatedState>> {
-        fake_state_with_subnets(
-            subnet_id,
-            BTreeMap::from_iter([(
-                subnet_id,
-                SubnetTopology {
-                    public_key,
-                    ..Default::default()
-                },
-            )]),
-        )
-        .0
-    }
-
     /// Fetches a valid delegation from the (mocked) NNS to be used as a "previous" delegation.
     async fn fetch_initial_delegation(
         rt_handle: &tokio::runtime::Handle,
@@ -1797,90 +1749,6 @@ mod tests {
         assert_ne!(
             newest_delegation.certificate,
             refreshed_delegation.certificate
-        );
-    }
-
-    /// Builds a `MixedHashTree` containing `/subnet/<subnet_id>/public_key -> public_key`.
-    fn public_key_tree(subnet_id: SubnetId, public_key: &[u8]) -> MixedHashTree {
-        MixedHashTree::Labeled(
-            Label::from("subnet"),
-            Box::new(MixedHashTree::Labeled(
-                Label::from(subnet_id.get().to_vec()),
-                Box::new(MixedHashTree::Labeled(
-                    Label::from("public_key"),
-                    Box::new(MixedHashTree::Leaf(public_key.to_vec())),
-                )),
-            )),
-        )
-    }
-
-    /// Builds a delegation whose certificate embeds `tree`.
-    fn delegation_with_tree(subnet_id: SubnetId, tree: MixedHashTree) -> CertificateDelegation {
-        let certificate = Certificate {
-            tree,
-            signature: Blob(vec![]),
-            delegation: None,
-        };
-        CertificateDelegation {
-            subnet_id: Blob(subnet_id.get().to_vec()),
-            certificate: Blob(into_cbor(&certificate).unwrap()),
-        }
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_succeeds_on_match() {
-        let subnet_id = subnet_test_id(1);
-        let public_key = vec![1, 2, 3, 4, 5];
-        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &public_key));
-        let certified_state = fake_state_with_public_key(subnet_id, public_key)
-            .get_certified_state_snapshot()
-            .unwrap();
-
-        assert!(
-            does_delegation_match_certified_public_key(&delegation, certified_state.as_ref())
-                .is_ok()
-        );
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_fails_on_mismatch() {
-        let subnet_id = subnet_test_id(1);
-        let delegation =
-            delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3, 4, 5]));
-        let certified_state = fake_state_with_public_key(subnet_id, vec![5, 4, 3, 2, 1])
-            .get_certified_state_snapshot()
-            .unwrap();
-
-        assert_matches!(
-            does_delegation_match_certified_public_key(&delegation, certified_state.as_ref()),
-            Ok(false)
-        );
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_state() {
-        let subnet_id = subnet_test_id(1);
-        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3]));
-        let certified_state = FakeCertifiedStateSnapshot {
-            height: Height::from(0),
-            state: Arc::new(ReplicatedState::new(subnet_id, SubnetType::Application)),
-        };
-
-        assert_matches!(does_delegation_match_certified_public_key(&delegation, &certified_state),
-            Err(err) if err.contains("missing from the certified state")
-        );
-    }
-
-    #[test]
-    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_delegation() {
-        let subnet_id = subnet_test_id(1);
-        let delegation = delegation_with_tree(subnet_id, MixedHashTree::Empty);
-        let certified_state = fake_state_with_public_key(subnet_id, vec![1, 2, 3])
-            .get_certified_state_snapshot()
-            .unwrap();
-
-        assert_matches!(does_delegation_match_certified_public_key(&delegation, certified_state.as_ref()),
-            Err(err) if err.contains("missing from the delegation")
         );
     }
 }

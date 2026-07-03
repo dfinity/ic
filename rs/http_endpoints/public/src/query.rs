@@ -322,8 +322,7 @@ pub(crate) async fn query(
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             return certified_state_unavailable_error().into_response();
         }
-        Err(QueryExecutionError::InvalidDelegation(_))
-        | Err(QueryExecutionError::PublicKeyNotFoundInTopology(_)) => {
+        Err(QueryExecutionError::InvalidDelegation(_)) => {
             return invalid_delegation_error().into_response();
         }
         Err(QueryExecutionError::OutdatedDelegation) => {

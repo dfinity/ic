@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     HttpError,
-    common::{Cbor, WithTimeout, into_cbor, verify_delegation_matches_certified_public_key},
+    common::{Cbor, WithTimeout, into_cbor, verify_delegation_matches_certified_state},
     metrics::{
         CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, HttpHandlerMetrics,
         SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
@@ -427,7 +427,7 @@ async fn tree_cert_deleg_for_message(
     };
     let delegation = nns_delegation_reader.get_delegation(delegation_filter);
     if let Some(delegation) = delegation.as_ref() {
-        verify_delegation_matches_certified_public_key(delegation, certified_state_reader.as_ref())?
+        verify_delegation_matches_certified_state(delegation, certified_state_reader.as_ref())?
     }
 
     // We always add time path to comply with the IC spec.

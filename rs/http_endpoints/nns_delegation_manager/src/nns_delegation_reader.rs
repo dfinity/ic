@@ -325,7 +325,7 @@ impl NNSDelegationBuilderInner {
     }
 }
 
-pub(crate) fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
+fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
     let mut serializer = serde_cbor::Serializer::new(Vec::new());
     serializer
         .self_describe()

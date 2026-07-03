@@ -9,7 +9,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion, ReplicaVersion,
-    SubnetId, Time,
+    Time,
     batch::ChainKeyData,
     ingress::{IngressStatus, WasmResult},
     messages::{
@@ -584,9 +584,7 @@ pub enum QueryExecutionError {
     CertifiedStateUnavailable,
     #[error("Invalid delegation: {0}")]
     InvalidDelegation(String),
-    #[error("Public key not found in topology for subnet {0}")]
-    PublicKeyNotFoundInTopology(SubnetId),
-    #[error("Delegation is outdated compared to the current certified state")]
+    #[error("Outdated delegation with respect to the current certified state")]
     OutdatedDelegation,
 }
 

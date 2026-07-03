@@ -918,7 +918,6 @@ impl Player {
                 panic!("Certified state unavailable for query call.")
             }
             Err(QueryExecutionError::InvalidDelegation(_))
-            | Err(QueryExecutionError::PublicKeyNotFoundInTopology(_))
             | Err(QueryExecutionError::OutdatedDelegation) => {
                 unreachable!("QueryExecutionErrors above only found when a delegation is given")
             }
@@ -1276,7 +1275,6 @@ async fn get_changes_since(
             Err("Certified state unavailable for query call.".to_string())
         }
         Err(QueryExecutionError::InvalidDelegation(_))
-        | Err(QueryExecutionError::PublicKeyNotFoundInTopology(_))
         | Err(QueryExecutionError::OutdatedDelegation) => {
             unreachable!("QueryExecutionErrors above only found when a delegation is given")
         }
@@ -1326,7 +1324,6 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
                 ));
             }
             Err(QueryExecutionError::InvalidDelegation(_))
-            | Err(QueryExecutionError::PublicKeyNotFoundInTopology(_))
             | Err(QueryExecutionError::OutdatedDelegation) => {
                 unreachable!("QueryExecutionErrors above only found when a delegation is given")
             }

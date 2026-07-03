@@ -10,8 +10,8 @@ use crate::{
         MessageId, Query, ReadState, SignedIngressContent, UserSignature, message_id::hash_key_val,
     },
 };
-use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId, SubnetId, hash_of_map};
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree, Path, lookup_path};
+use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId, hash_of_map};
+use ic_crypto_tree_hash::{MixedHashTree, Path};
 use ic_heap_bytes::DeterministicHeapBytes;
 use maplit::btreemap;
 #[cfg(test)]
@@ -858,30 +858,6 @@ pub struct CertificateDelegationMetadata {
 pub struct CertificateDelegation {
     pub subnet_id: Blob,
     pub certificate: Blob,
-}
-
-impl CertificateDelegation {
-    pub fn get_subnet_id_and_public_key(&self) -> Result<(SubnetId, Vec<u8>), String> {
-        let subnet_id = SubnetId::from(
-            PrincipalId::try_from(self.subnet_id.0.as_slice())
-                .map_err(|err| format!("Failed to parse subnet id from the delegation: {err}"))?,
-        );
-        let public_key_path = &[b"subnet", subnet_id.get_ref().as_ref(), b"public_key"];
-
-        let certificate: Certificate = serde_cbor::from_slice(&self.certificate)
-            .map_err(|err| format!("Failed to parse the delegation certificate: {err}"))?;
-        let delegation_tree = LabeledTree::try_from(certificate.tree)
-            .map_err(|err| format!("Invalid hash tree in the delegation certificate: {err:?}"))?;
-        let Some(LabeledTree::Leaf(public_key_from_delegation)) =
-            lookup_path(&delegation_tree, public_key_path)
-        else {
-            return Err(format!(
-                "The public key of subnet {subnet_id} is missing from the delegation certificate"
-            ));
-        };
-
-        Ok((subnet_id, public_key_from_delegation.clone()))
-    }
 }
 
 /// Different stages required for the full initialization of the HTTPS endpoint.

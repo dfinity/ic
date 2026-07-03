@@ -7,13 +7,13 @@ use http::{
 };
 use http_body_util::BodyExt;
 use hyper::{Response, StatusCode, header};
+use ic_canonical_state::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_nns_delegation_manager::does_delegation_match_certified_public_key;
 use ic_registry_client_helpers::crypto::{
     CryptoRegistry, root_of_trust::RegistryRootOfTrustProvider,
 };
@@ -332,11 +332,12 @@ where
     }
 }
 
-pub(crate) fn verify_delegation_matches_certified_public_key(
+pub(crate) fn verify_delegation_matches_certified_state(
     delegation: &CertificateDelegation,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
 ) -> Result<(), HttpError> {
-    match does_delegation_match_certified_public_key(delegation, certified_state_reader) {
+    match is_delegation_valid_with_respect_to_state(delegation, certified_state_reader.get_state())
+    {
         Ok(true) => Ok(()),
         Ok(false) => Err(outdated_delegation_error()),
         Err(_err) => Err(invalid_delegation_error()),
