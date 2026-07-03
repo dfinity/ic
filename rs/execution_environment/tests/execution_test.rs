@@ -2999,8 +2999,9 @@ fn list_canisters_via_inter_canister_call_succeeds() {
 
 // A non-admin canister calling `list_canisters` via an inter-canister call is
 // rejected, and the rejected call must not consume any round instructions:
-// only a successful call pays for computing the response, per the cost model
-// checked by `list_canisters_respects_round_instruction_limit` above.
+// instructions are only deducted from the round limits for a successful call,
+// per the cost model checked by `list_canisters_respects_round_instruction_limit`
+// above.
 #[test]
 fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
     let admin = user_test_id(100).get();
