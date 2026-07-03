@@ -117,7 +117,7 @@ jobs:
     outputs:
       worker-image: ${{ steps.worker.outputs.worker-image }}
     steps:
-      - name: Mirror ic-build to nscr.io and optimize for Bazel Remote Execution
+      - name: Mirror ic-build to nscr.io and optimize it for Remote Build Execution @ Namespace
         id: worker
         shell: bash
         run: |
@@ -127,12 +127,11 @@ jobs:
 
           ic_build_repo="ghcr.io/dfinity/ic-build"
           src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
-          worker_repo="${NSC_CONTAINER_REGISTRY}/ic-build-worker"
           upload_log="$(nsc base-image upload "$src" "ic-build-worker:${{ needs.build-image-prep.outputs.image_tag }}" 2>&1)"
           echo "$upload_log"
           worker_digest="$(printf '%s\n' "$upload_log" | grep -i 'Uploaded base image' | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
           : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
-          worker_image="${worker_repo}@${worker_digest}"
+          worker_image="${NSC_CONTAINER_REGISTRY}/ic-build-worker@${worker_digest}"
           echo "Resolved worker image: $worker_image"
 
           nsc base-image optimize --image_ref "$worker_image"
