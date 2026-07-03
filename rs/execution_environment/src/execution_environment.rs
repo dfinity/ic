@@ -1085,9 +1085,14 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ListCanisters) => match &msg {
                 CanisterCall::Request(_) => {
-                    round_limits.instructions -=
-                        as_round_instructions(list_canisters_instructions(&state));
                     let res = list_canisters(&state, msg.sender(), payload).map(|res| (res, None));
+                    // Only charge for the cost of building the response (i.e. the
+                    // canister ID range computation) when access control succeeds;
+                    // a rejected call must not consume round instructions.
+                    if res.is_ok() {
+                        round_limits.instructions -=
+                            as_round_instructions(list_canisters_instructions(&state));
+                    }
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),

@@ -20,7 +20,8 @@ fn admin_canister_id() -> CanisterId {
 /// Builds a `StateMachine` whose subnet has subnet admins configured (which
 /// requires a `Free` cost schedule on an application subnet), installs the test
 /// canister as the sole subnet admin, and populates the subnet with
-/// `canisters_number` additional canisters.
+/// `canisters_number` additional canisters. Returns the `StateMachine` and the
+/// test canister ID.
 fn setup_with_canisters(canisters_number: u64) -> (StateMachine, CanisterId) {
     let hypervisor_config = HypervisorConfig {
         rate_limiting_of_heap_delta: FlagStatus::Disabled,

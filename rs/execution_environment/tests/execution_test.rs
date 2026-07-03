@@ -13,15 +13,15 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
     CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload, SignWithECDSAArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities_execution_environment::{get_reject, get_reply};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
@@ -2952,6 +2952,95 @@ fn list_canisters_respects_round_instruction_limit() {
         env.subnet_message_instructions() - instructions_baseline,
         (NUM_CALLS * cost_per_call) as f64
     );
+}
+
+// A subnet admin canister can call `list_canisters` via an inter-canister
+// call and receives a successful response. Coalescing of the returned
+// canister ID ranges is tested separately by `test_list_canisters_success` in
+// `query_handler/tests.rs`.
+#[test]
+fn list_canisters_via_inter_canister_call_succeeds() {
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args().other_side(EmptyBlob.encode()),
+        )
+        .build();
+    let msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        admin_canister,
+        "update",
+        list_canisters,
+    );
+    let reply = get_reply(env.await_ingress(msg_id, 100));
+    ListCanistersResponse::decode(&reply).unwrap();
+}
+
+// A non-admin canister calling `list_canisters` via an inter-canister call is
+// rejected, and the rejected call must not consume any round instructions:
+// only a successful call pays for computing the response, per the cost model
+// checked by `list_canisters_respects_round_instruction_limit` above.
+#[test]
+fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
+    let admin = user_test_id(100).get();
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+
+    let non_admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let instructions_baseline = env.subnet_message_instructions();
+    let msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        non_admin_canister,
+        "update",
+        list_canisters,
+    );
+    let reject = get_reject(env.await_ingress(msg_id, 100));
+    assert!(reject.contains("Only the subnet admins can perform certain actions"));
+
+    assert_eq!(env.subnet_message_instructions(), instructions_baseline);
 }
 
 #[test]
