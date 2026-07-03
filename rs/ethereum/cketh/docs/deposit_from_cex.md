@@ -89,6 +89,12 @@ The design is delivered in two phases:
   supported token of at least the per-token minimum deposit amount. (Registrations
   are free for callers; anything the minter spends per registration is a DoS vector
   on its cycles and ETH.)
+* `R14`: Sweeping never reduces the 1:1 backing of ckETH. Before any ETH is spent on
+  a sweep transaction, the minter burns from its fee account on the ckETH ledger at
+  least the maximum fee of that transaction; at all times, cumulative ckETH burned
+  for sweeping ≥ cumulative ETH spent on sweeping. Burned-but-unspent amounts are
+  tracked and offset against subsequent burns; they are never re-minted. If the fee
+  account cannot cover a sweep, no sweep is submitted.
 
 ### Phase 2 (ckETH)
 
@@ -119,6 +125,11 @@ The design is delivered in two phases:
   this invisible in practice.
 * **Automatic recovery of unsupported-token deposits**: funds remain recoverable
   (key-controlled address) but recovery tooling is future work.
+* **Replenishing the sweep-gas fee account**: sweep gas is burned from the minter's
+  ckETH fee account (`R14`), while deposit-fee revenue accrues per ckToken
+  (ckUSDC, ckUSDT, …). Converting that revenue into ckETH to keep the fee account
+  funded is a treasury/market operation outside this design; the design only
+  requires that sweeping halts safely when the fee account is empty.
 * Accepted residual limitations:
   * A CEX that batches ETH withdrawals through a contract (internal transactions)
     provides no sender information without trace APIs; Phase 2 compliance screening is
@@ -184,11 +195,28 @@ The design is delivered in two phases:
   harmless (ERC-20 transfers never execute recipient code), so one authorization per
   address — ever — suffices. Phase 2 sidesteps the question for native ETH with
   separate, never-delegated ETH deposit addresses (see below).
-* **Fees are deducted from the minted amount.** A CEX depositor owns no ckETH to pay
-  gas with, so the sweep cost is recovered as a per-token flat fee subtracted at mint
-  time (`minted = amount - deposit_fee`), like ckBTC's check fee. Flat and
+* **Fees are deducted from the minted amount and land in a fee account.** A CEX
+  depositor owns no ckETH to pay gas with, so the sweep cost is recovered as a
+  per-token flat fee: the depositor is credited `amount - deposit_fee` and the fee
+  portion is minted to a minter-controlled fee account on the same ckToken ledger —
+  the full deposited amount is swept, so minting it in full keeps supply exactly
+  equal to backing and makes fee revenue explicit and auditable. Flat and
   proposal-configurable rather than oracle-priced, for simplicity and predictability
   (`R7`).
+* **Sweep gas is paid by the minter's ETH, but never out of ckETH backing (`R14`).**
+  The ETH at the minter's main address backs ckETH 1:1, so spending it on sweep gas
+  without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefore
+  funded exclusively through the minter's fee account on the ckETH ledger, mirroring
+  how withdrawals already pay for gas (burn ckETH, spend ETH): before submitting a
+  sweep, the minter **burns first** — at least the transaction's maximum fee
+  (`gas_limit × max_fee_per_gas`, an overestimate by construction) minus any
+  previously burned-but-unspent credit. The receipt's effective fee is then deducted
+  from a running `prepaid_sweep_gas` counter; the leftover of the overestimate is
+  **not re-minted** but carried as credit for the next burn, so the invariant
+  "cumulative burned ≥ cumulative spent" holds at every instant. An empty ckETH fee
+  account halts sweeping (safely: under variant A, credited balances are unaffected
+  and deposits keep accumulating at key-controlled addresses; under variant B,
+  crediting pauses with sweeping); replenishing it is out of scope (see Non-goals).
 
 ### Open decision: what the sweep does — variant A (direct) vs variant B (through the helper contract)
 
@@ -389,6 +417,13 @@ is moot (fixed destination, no state).
   per batch (gas-limit bound; initial `N ≈ 20`). Only addresses that pass this gate
   ever cost the minter anything: the delegation authorization is signed here, not at
   registration time (`R13`).
+* Before submission, burn `max(0, gas_limit × max_fee_per_gas - prepaid_sweep_gas)`
+  from the minter's fee account on the ckETH ledger and add it to
+  `prepaid_sweep_gas`; abort the sweep (and retry later) if the burn fails (`R14`).
+  On the receipt, subtract the effective transaction fee from `prepaid_sweep_gas` —
+  the surplus of the overestimate stays as credit for the next burn and is never
+  re-minted. Both movements are recorded as audit events and `prepaid_sweep_gas` is
+  exposed on the dashboard (`R8`, `R9`).
 * One type-`0x04` transaction from the main address:
   * `authorization_list`: tuples for all not-yet-delegated addresses in the batch
     (≈ 12'500–25'000 gas each, one-time);
