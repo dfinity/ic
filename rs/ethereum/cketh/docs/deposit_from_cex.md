@@ -83,6 +83,12 @@ The design is delivered in two phases:
   credited-but-unswept balances per token, delegation status, and sweep activity.
 * `R10`: Withdrawals (ckERC20 → ERC-20 and ckETH → ETH) are unaffected: they continue
   to be served from the minter's main address and its existing nonce sequence.
+* `R13`: Registering a deposit address (`get_deposit_address`) triggers no
+  threshold-ECDSA signature and no Ethereum transaction. The minter only signs a
+  delegation and sweeps an address after having observed there a balance of a
+  supported token of at least the per-token minimum deposit amount. (Registrations
+  are free for callers; anything the minter spends per registration is a DoS vector
+  on its cycles and ETH.)
 
 ### Phase 2 (ckETH)
 
@@ -161,10 +167,21 @@ The design is delivered in two phases:
   cheap; continuously scraping `Transfer` logs for an unbounded, growing set of
   addresses is not. This mirrors ckBTC's `update_balance`. (The existing helper-contract
   scraping is unchanged.)
-* **Phase 1 delegation is installed lazily, before the first sweep, and is permanent.**
-  For ERC-20-only crediting, delegated code on the deposit address is harmless
-  (ERC-20 transfers never execute recipient code), so one authorization per address —
-  ever — suffices. Phase 2 revisits this for native ETH (see below).
+* **No up-front spending per registered address (anti-DoS).** `get_deposit_address`
+  is pure key derivation plus a state entry: no threshold-ECDSA signature, no
+  Ethereum transaction (`R13`). Registrations are free for callers, so any eager
+  per-address spending — signing the delegation up-front, let alone submitting it
+  on-chain — would let an attacker drain the minter's cycles and ETH by spamming
+  registrations. The pipeline is strictly gated: register → observe a balance of a
+  supported token ≥ the per-token minimum at the address (targeted, claim-driven
+  scan) → only then sign the delegation and sweep. For the same reason the balance
+  scanning itself must stay bounded: the registered set is attacker-inflatable, so
+  scans are claim-driven (`notify_deposit`, guarded per account) or bounded batches,
+  never an unbounded standing scan of every registered address.
+* **Phase 1 delegation is therefore installed lazily, with the first sweep, and is
+  permanent.** For ERC-20-only crediting, delegated code on the deposit address is
+  harmless (ERC-20 transfers never execute recipient code), so one authorization per
+  address — ever — suffices. Phase 2 revisits this for native ETH (see below).
 * **Fees are deducted from the minted amount.** A CEX depositor owns no ckETH to pay
   gas with, so the sweep cost is recovered as a per-token flat fee subtracted at mint
   time (`minted = amount - deposit_fee`), like ckBTC's check fee. Flat and
@@ -261,7 +278,10 @@ own principal is rejected).
   first call is an update call that registers the address in state
   (`deposit_addresses: Account ↔ Address` bimap + per-address bookkeeping:
   `registered_at_block`, delegation status, credited/swept counters), emitting a
-  `DepositAddressRegistered` audit event. Subsequent calls are cheap lookups.
+  `DepositAddressRegistered` audit event — and does nothing else: no threshold-ECDSA
+  signature, no Ethereum transaction (`R13`). Any per-address spending happens only
+  once a balance ≥ the per-token minimum has been observed at the address.
+  Subsequent calls are cheap lookups.
 
 ### Deposit detection and minting (Phase 1, ckERC20)
 
@@ -345,9 +365,11 @@ is moot (fixed destination, no state).
 
 ### Sweeping task
 
-* A periodic task selects deposit addresses with credited-but-unswept balances where
+* A periodic task selects deposit addresses with observed-but-unswept balances where
   `unswept_value ≥ sweep_gas_cost × margin` or `age > max_age`, up to `N` addresses
-  per batch (gas-limit bound; initial `N ≈ 20`).
+  per batch (gas-limit bound; initial `N ≈ 20`). Only addresses that pass this gate
+  ever cost the minter anything: the delegation authorization is signed here, not at
+  registration time (`R13`).
 * One type-`0x04` transaction from the main address:
   * `authorization_list`: tuples for all not-yet-delegated addresses in the batch
     (≈ 12'500–25'000 gas each, one-time);
