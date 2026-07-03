@@ -239,28 +239,35 @@ async fn call_sync(
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
     // to the ingress pool.
-    if let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
-        (nns_delegation_reader, delegation_filter),
+    match tree_cert_deleg_for_message(
+        (&nns_delegation_reader, delegation_filter),
         state_reader.clone(),
         message_id.clone(),
     )
     .await
-    .map_err(|err| SyncCallResponse::HttpError(err))?
-        && let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id)
     {
-        let signature = certification.signed.signature.signature.get().0;
+        Ok(Some((tree, certification, delegation)))
+            if matches!(
+                parsed_message_status(&tree, &message_id),
+                ParsedMessageStatus::Known(_)
+            ) =>
+        {
+            let signature = certification.signed.signature.signature.get().0;
 
-        metrics
-            .sync_call_early_response_trigger_total
-            .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
-            .inc();
+            metrics
+                .sync_call_early_response_trigger_total
+                .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
+                .inc();
 
-        return SyncCallResponse::Certificate(Certificate {
-            tree,
-            signature: Blob(signature),
-            delegation,
-        });
-    };
+            return SyncCallResponse::Certificate(Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation,
+            });
+        }
+        Ok(None) | Ok(Some(_)) => (),
+        Err(err) => return SyncCallResponse::HttpError(err),
+    }
 
     let certification_subscriber = match ingress_watcher_handle
         .subscribe_for_certification(message_id.clone())
@@ -333,16 +340,20 @@ async fn call_sync(
         }
     }
 
-    let Some((tree, certification, delegation)) = tree_and_certificate_for_message(
-        (nns_delegation_reader, delegation_filter),
+    let (tree, certification, delegation) = match tree_cert_deleg_for_message(
+        (&nns_delegation_reader, delegation_filter),
         state_reader,
         message_id.clone(),
     )
     .await
-    else {
-        return SyncCallResponse::Accepted(
-            "Certified state is not available. Please try /read_state.",
-        );
+    {
+        Ok(Some((tree, certification, delegation))) => (tree, certification, delegation),
+        Ok(None) => {
+            return SyncCallResponse::Accepted(
+                "Certified state is not available. Please try /read_state.",
+            );
+        }
+        Err(err) => return SyncCallResponse::HttpError(err),
     };
 
     let message_status = parsed_message_status(&tree, &message_id);
@@ -401,7 +412,7 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
     }
 }
 
-async fn tree_and_certificate_for_message(
+async fn tree_cert_deleg_for_message(
     (nns_delegation_reader, delegation_filter): (&NNSDelegationReader, CanisterRangesFilter),
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,

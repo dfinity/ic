@@ -339,7 +339,7 @@ pub(crate) fn verify_delegation_matches_certified_public_key(
     match does_delegation_match_certified_public_key(delegation, certified_state_reader) {
         Ok(true) => Ok(()),
         Ok(false) => Err(outdated_delegation_error()),
-        Err(err) => Err(invalid_delegation_error()),
+        Err(_err) => Err(invalid_delegation_error()),
     }
 }
 

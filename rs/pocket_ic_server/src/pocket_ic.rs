@@ -5066,7 +5066,6 @@ impl Operation for QueryRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
-                    subnet.state_manager.clone(),
                     query_handler,
                     subnet_id,
                     self.version,

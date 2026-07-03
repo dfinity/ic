@@ -5,7 +5,7 @@ use ic_config::{Config, crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
-    IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
+    IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;

@@ -18,7 +18,6 @@ use crate::{
 use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_tree_hash::lookup_path;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -32,6 +31,7 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
@@ -39,7 +39,6 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
 };
-use ic_types::{PrincipalId, QueryStatsEpoch, SubnetId};
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
@@ -545,7 +544,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
 
                 let result = get_latest_certified_state_and_data_certificate(
                     state_reader,
-                    certificate_delegation,
+                    certificate_delegation.clone(),
                     query.receiver,
                 )
                 .map_or_else(

@@ -25,13 +25,9 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error};
-use ic_nns_delegation_manager::{
-    CanisterRangesFilter, NNSDelegationReader, does_delegation_match_certified_public_key,
-};
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, NodeId, PrincipalId, SubnetId,
     crypto::threshold_sig::IcRootOfTrust,
@@ -68,7 +64,6 @@ pub struct QueryService {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     nns_delegation_reader: NNSDelegationReader,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
@@ -85,7 +80,6 @@ pub struct QueryServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
     nns_delegation_reader: NNSDelegationReader,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
@@ -114,7 +108,6 @@ impl QueryServiceBuilder {
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier>,
         nns_delegation_reader: NNSDelegationReader,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         query_execution_service: QueryExecutionService,
         subnet_id: SubnetId,
         version: Version,
@@ -126,7 +119,6 @@ impl QueryServiceBuilder {
             health_status: None,
             malicious_flags: None,
             nns_delegation_reader,
-            state_reader,
             time_source: None,
             ingress_verifier,
             registry_client,
@@ -173,7 +165,6 @@ impl QueryServiceBuilder {
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             nns_delegation_reader: self.nns_delegation_reader,
-            state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
@@ -207,7 +198,6 @@ pub(crate) async fn query(
         health_status,
         signer,
         nns_delegation_reader,
-        state_reader,
         additional_root_of_trust,
         query_execution_service,
         subnet_id,
