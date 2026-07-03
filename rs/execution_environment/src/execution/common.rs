@@ -462,10 +462,16 @@ pub(crate) fn list_canisters(
 /// Computes the number of round instructions consumed by executing the
 /// `list_canisters` management method against the given state.
 ///
-/// TODO: Replace this placeholder with an actual cost model (e.g. proportional
-/// to the number of canisters hosted on the subnet).
-pub(crate) fn list_canisters_instructions(_state: &ReplicatedState) -> NumInstructions {
-    NumInstructions::new(1)
+/// The cost model was derived from the `list_canisters` benchmark using the
+/// conversion `2B instructions = 1 second` (i.e. `2M instructions = 1 ms`):
+///   - a base cost of 20M instructions (≈10ms), and
+///   - a variable cost of 10K instructions per canister hosted on the subnet
+///     (`list_canisters` iterates over all of them to build the ID ranges).
+pub(crate) fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 10_000;
+    let num_canisters = state.num_canisters() as u64;
+    NumInstructions::new(BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters)
 }
 
 /// Unregisters the callback corresponding to the given response.
