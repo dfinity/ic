@@ -445,20 +445,24 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 ));
             }
 
-            StepType::UploadStateToSourceSubnet if self.params.upload_node_source.is_none() => {
-                self.params.upload_node_source = read_optional(
-                    &self.logger,
-                    "Enter IP of node in the Source Subnet with admin access: ",
-                );
+            #[allow(clippy::collapsible_match)]
+            StepType::UploadStateToSourceSubnet => {
+                if self.params.upload_node_source.is_none() {
+                    self.params.upload_node_source = read_optional(
+                        &self.logger,
+                        "Enter IP of node in the Source Subnet with admin access: ",
+                    );
+                }
             }
 
-            StepType::UploadStateToDestinationSubnet
-                if self.params.upload_node_destination.is_none() =>
-            {
-                self.params.upload_node_destination = read_optional(
-                    &self.logger,
-                    "Enter IP of node in the Destination Subnet with admin access: ",
-                );
+            #[allow(clippy::collapsible_match)]
+            StepType::UploadStateToDestinationSubnet => {
+                if self.params.upload_node_destination.is_none() {
+                    self.params.upload_node_destination = read_optional(
+                        &self.logger,
+                        "Enter IP of node in the Destination Subnet with admin access: ",
+                    );
+                }
             }
 
             StepType::UnhaltDestinationSubnet | StepType::CompleteCanisterMigration => {
