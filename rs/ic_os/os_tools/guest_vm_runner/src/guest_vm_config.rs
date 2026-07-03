@@ -22,6 +22,8 @@ const DEFAULT_VM_MEMORY_GIB: u32 = 480;
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GIB: u32 = 4;
 
+const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
+
 #[derive(Template)]
 #[template(path = "guestos_vm_template.xml", escape = "xml")]
 pub struct GuestOSTemplateProps {
@@ -32,6 +34,7 @@ pub struct GuestOSTemplateProps {
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
     pub topology: Topology,
+    pub cid: Option<u32>,
     pub mac_address: macaddr::MacAddr6,
     pub disk_device: PathBuf,
     pub config_media_path: PathBuf,
@@ -171,6 +174,7 @@ pub fn generate_vm_config(
         vm_memory: vm_memory_gib,
         nr_of_vcpus,
         topology,
+        cid: guest_vm_slot.map(|v| v as u32 + VIR_VSOCK_GUEST_CID_MIN),
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,

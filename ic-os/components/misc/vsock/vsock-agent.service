@@ -2,7 +2,6 @@
 Description=VSOCK agent daemon
 
 [Service]
-ExecCondition=/opt/ic/bin/skip-vsock.sh
 ExecStart=/opt/ic/bin/vsock_host
 Restart=on-failure
 

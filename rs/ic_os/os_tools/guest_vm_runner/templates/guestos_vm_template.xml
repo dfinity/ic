@@ -191,7 +191,11 @@
       <alias name='console1'/>
     </console>
     <vsock model='virtio'>
+  {%- if cid.is_some() %}
+      <cid address='{{cid.unwrap()}}'/>
+  {% else %}
       <cid auto='yes'/>
+  {%- endif %}
     </vsock>
     <input type='mouse' bus='ps2'>
       <alias name='input0'/>
