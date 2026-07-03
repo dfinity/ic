@@ -153,8 +153,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          # head_ref is only set for pull_request; fall back to ref_name for push /
-          # workflow_dispatch so the checkout and git push target the right branch.
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ steps.app-token.outputs.token }}
 
@@ -174,10 +172,9 @@ jobs:
           popd
           pushd .github
           sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
-          popd
-
           WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
-          sed -i -E "s|nscr\.io/[^\"/]+/ic-build-worker@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" .github/workflows/rbe-namespace-test.yml
+          sed -i -E "s|nscr\.io/[^\"/]+/ic-build-worker@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" -- workflow*/*
+          popd
 
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
