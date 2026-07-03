@@ -8746,6 +8746,7 @@ dependencies = [
  "ic-sys",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-in-memory-logger",
+ "ic-test-utilities-privileges",
  "ic-test-utilities-time",
  "ic-types",
  "ic-types-test-utils",
@@ -14222,6 +14223,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-wasm",
+ "ic-test-utilities-privileges",
  "ic-wasm",
  "itertools 0.12.1",
  "json-patch",
@@ -14960,6 +14962,7 @@ dependencies = [
  "ic-test-utilities-io",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
+ "ic-test-utilities-privileges",
  "ic-test-utilities-state",
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
@@ -15091,6 +15094,7 @@ dependencies = [
  "cvt",
  "hex",
  "ic-crypto-sha2",
+ "ic-test-utilities-privileges",
  "lazy_static",
  "libc",
  "nix 0.24.3",
@@ -15457,6 +15461,24 @@ version = "0.9.0"
 dependencies = [
  "ic-metrics",
  "prometheus",
+]
+
+[[package]]
+name = "ic-test-utilities-privileges"
+version = "0.9.0"
+dependencies = [
+ "ic-test-utilities-privileges-macros",
+ "nix 0.24.3",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-test-utilities-privileges-macros"
+version = "0.9.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
