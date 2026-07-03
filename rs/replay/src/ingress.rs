@@ -325,6 +325,7 @@ pub(crate) fn cmd_add_ledger_account(
 
 /// Creates an ingress message that updates the subnet list record in the registry to contain only
 /// the player's subnet id.
+///
 /// It also unsets the default Initial DKG subnet ID such that the invariant checking that the
 /// latter is present in the subnet list is satisfied.
 pub(crate) fn cmd_overwrite_subnet_list_with_singleton(
@@ -332,12 +333,12 @@ pub(crate) fn cmd_overwrite_subnet_list_with_singleton(
     player: &crate::player::Player,
     time: Time,
 ) -> Result<Vec<SignedIngress>, String> {
+    let initial_dkg_msg = unset_default_initial_dkg_subnet_id(agent, time)?;
+
     let subnet_list_record = SubnetListRecord {
         subnets: vec![player.subnet_id.get().into_vec()],
     };
-
     let subnet_list_msg = update_subnet_list_record(agent, subnet_list_record, time)?;
-    let initial_dkg_msg = unset_default_initial_dkg_subnet_id(agent, time)?;
 
     Ok(vec![initial_dkg_msg, subnet_list_msg])
 }
