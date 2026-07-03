@@ -123,9 +123,10 @@ The design is delivered in two phases:
   * A CEX that batches ETH withdrawals through a contract (internal transactions)
     provides no sender information without trace APIs; Phase 2 compliance screening is
     therefore weaker for ETH than for ERC-20 (see Phase 2 section).
-  * During the short window in which a deposit address carries delegated code, a
-    fixed-21'000-gas ETH transfer to it fails on the sender side (`R12` guarantees no
-    loss).
+  * An account's ETH deposit address (Phase 2) differs from its ERC-20 one, matching
+    the per-asset deposit-address UX of exchanges; sending the wrong asset class to
+    an address is not credited automatically, but funds always remain recoverable
+    (key-controlled addresses, `R12` guarantees no loss on the sender side).
 
 ## Design Decisions
 
@@ -181,7 +182,8 @@ The design is delivered in two phases:
 * **Phase 1 delegation is therefore installed lazily, with the first sweep, and is
   permanent.** For ERC-20-only crediting, delegated code on the deposit address is
   harmless (ERC-20 transfers never execute recipient code), so one authorization per
-  address — ever — suffices. Phase 2 revisits this for native ETH (see below).
+  address — ever — suffices. Phase 2 sidesteps the question for native ETH with
+  separate, never-delegated ETH deposit addresses (see below).
 * **Fees are deducted from the minted amount.** A CEX depositor owns no ckETH to pay
   gas with, so the sweep cost is recovered as a per-token flat fee subtracted at mint
   time (`minted = amount - deposit_fee`), like ckBTC's check fee. Flat and
@@ -419,21 +421,40 @@ Two ETH-specific problems and their resolutions:
      compliance before Phase 2 ships.
 2. **Fixed 21'000-gas transfers vs delegated code (`R12`).** A value transfer to an
    address with EIP-7702 delegated code *executes* that code, and a transfer with
-   exactly 21'000 gas has zero gas left for execution — it always fails. Exchanges
-   commonly hard-code 21'000 for ETH withdrawals. Phase 2 therefore switches the
-   delegation lifecycle for accounts using ETH deposits from *permanent* to
-   *set-and-clear*:
-   * Sweep batch transaction 1: authorizations installing the delegate + Multicall3
-     `sweepEth()`/`sweepErc20()` calls;
-   * Sweep batch transaction 2: authorizations delegating to `address(0)`, which
-     clears the code (per EIP-7702), restoring a plain EOA.
-   * Cost: two tECDSA signatures and ≈ 2 × 12'500–25'000 gas per address per sweep
-     cycle, instead of one signature ever. Outside the short set→clear window, the
-     address is codeless and fixed-gas transfers succeed; inside it they fail on the
-     sender side without loss (`R12`).
-   * Whether Phase 1 addresses also move to set-and-clear (uniform policy) or keep
-     permanent delegation (cheaper) is decided at Phase 2 based on measured CEX
-     behavior for ETH withdrawals.
+   exactly 21'000 gas has zero gas left for execution — it always fails (with the
+   Phase 1 delegate, which deliberately has no `receive()`, it fails at any gas).
+   Exchanges commonly hard-code 21'000 for ETH withdrawals, so ETH deposits and a
+   (permanently) delegated address are incompatible.
+
+   Resolution: **a separate, ETH-specific deposit address per account, which is
+   never delegated.** The key observation is that a native-ETH deposit *carries its
+   own gas* — the EIP-7702 machinery exists only because ERC-20 tokens cannot pay
+   for their own movement, and ETH can:
+   * Derivation reuses the Phase 1 scheme with a second schema tag
+     (`SCHEMA_ETH_DEPOSIT_ADDRESS = [2u8]` instead of `[1u8]`), so an account's ETH
+     deposit address differs from its ERC-20 one.
+   * The ETH address never carries code: fixed-21'000-gas CEX withdrawals *always*
+     succeed — `R12` is satisfied trivially, with no failure window at all.
+   * Sweep: a plain EIP-1559 transfer of `balance - fee` signed with the address'
+     own derived key (`sign_with_ecdsa`), gas paid from the swept balance itself —
+     21'000 gas, the cheapest possible sweep; the ETH minimum deposit covers it.
+     One tECDSA signature and a per-address nonce (only the minter ever sends from
+     it) per sweep; fee-refund dust left at the address rolls into the next sweep.
+   * Under variant B, the sweep is instead a call to the helper's
+     `depositEth{value: balance - fee}(principal, subaccount)` signed the same way:
+     slightly more gas, but the sweep emits the canonical event and the existing
+     pipeline credits ckETH unchanged.
+   * Cross-asset mistakes remain recoverable in both directions: ERC-20 sent to an
+     ETH address sits at a tECDSA-controlled EOA (delegate it on demand to sweep);
+     ETH sent to a not-yet-delegated ERC-20 address is recovered by the delegate's
+     `sweepEth`, and once the ERC-20 address is delegated, plain ETH sends to it
+     fail on the sender side, so funds never leave the exchange.
+
+   The previously considered *set-and-clear* delegation lifecycle on a single shared
+   address (install the delegate, sweep, re-delegate to `address(0)` — two tECDSA
+   signatures and ≈ 2 × 12'500–25'000 gas per sweep cycle, with a short window in
+   which fixed-gas ETH transfers fail) is kept only as a fallback if per-asset
+   addresses are rejected for UX reasons.
 
 ### Test plan
 
