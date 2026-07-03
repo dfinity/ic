@@ -270,7 +270,7 @@ impl LocalBackend {
     /// and the task subprocesses are spawned: `unshare` moves only the calling
     /// thread, while threads and processes created *afterwards* inherit its
     /// namespace. Calling this early therefore puts the entire process tree —
-    /// task subprocesses, libvirtd, QEMU, `dnsmasq` — into the same netns.
+    /// task subprocesses, QEMU, `dnsmasq` — into the same netns.
     pub fn ensure_administrable_netns(logger: &Logger) -> Result<()> {
         // Unprivileged: the linux-sandbox netns is administrable via the
         // capability launcher, and without CAP_SYS_ADMIN over the current
