@@ -6,6 +6,7 @@ use crate::{
     ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
     canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
 };
+use candid::Encode;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -18,11 +19,14 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types_private::{
+    CanisterIdRange, CanisterStatusType, EmptyBlob, ListCanistersResponse, Payload as _,
+};
+use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
-    SystemState,
+    ReplicatedState, SystemState,
 };
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
@@ -415,6 +419,53 @@ pub(crate) fn validate_controller_or_subnet_admin(
             controller_provided: *sender,
         })
     }
+}
+
+/// Computes the response to the `list_canisters` management canister method.
+///
+/// The method takes no arguments and is only available on subnets with subnet
+/// admins configured, in which case the caller must be a subnet admin. On
+/// success, it returns the Candid-encoded `ListCanistersResponse` listing the
+/// ranges of canister IDs hosted on this subnet.
+pub(crate) fn list_canisters(
+    state: &ReplicatedState,
+    caller: &PrincipalId,
+    payload: &[u8],
+) -> Result<Vec<u8>, UserError> {
+    EmptyBlob::decode(payload)?;
+    match state.get_own_subnet_admins() {
+        Some(ref admins) => validate_subnet_admin(admins, caller).map_err(UserError::from)?,
+        None => {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "list_canisters is only available on subnets with subnet admins",
+            ));
+        }
+    }
+    let mut canisters: Vec<CanisterIdRange> = Vec::new();
+    for id in state.canister_states().all_keys() {
+        let id_u64 = canister_id_into_u64(*id);
+        match canisters.last_mut() {
+            Some(last) if canister_id_into_u64(last.end).checked_add(1) == Some(id_u64) => {
+                last.end = *id;
+            }
+            _ => canisters.push(CanisterIdRange {
+                start: *id,
+                end: *id,
+            }),
+        }
+    }
+    let response = ListCanistersResponse { canisters };
+    Ok(Encode!(&response).unwrap())
+}
+
+/// Computes the number of round instructions consumed by executing the
+/// `list_canisters` management method against the given state.
+///
+/// TODO: Replace this placeholder with an actual cost model (e.g. proportional
+/// to the number of canisters hosted on the subnet).
+pub(crate) fn list_canisters_instructions(_state: &ReplicatedState) -> NumInstructions {
+    NumInstructions::new(1)
 }
 
 /// Unregisters the callback corresponding to the given response.

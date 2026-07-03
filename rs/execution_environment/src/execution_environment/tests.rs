@@ -30,6 +30,7 @@ use ic_test_utilities_execution_environment::{
     get_reject, get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_types::{
     CanisterId, CountBytes, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
@@ -5833,4 +5834,86 @@ fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
     );
     let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
     let _ = get_reject(res);
+}
+
+// A subnet admin canister can call `list_canisters` via an inter-canister call
+// and receives the coalesced ranges of canister IDs hosted on the subnet.
+#[test]
+fn list_canisters_via_inter_canister_call_succeeds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_subnet = subnet_test_id(2);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![caller_canister.get()])
+        .with_caller(caller_subnet, caller_canister)
+        .build();
+
+    // IDs 5, 6, 7 are consecutive (coalesce into [5,7]) and ID 10 is isolated.
+    for raw_id in [5_u64, 6, 7, 10] {
+        test.state_mut().put_canister_state(
+            CanisterStateBuilder::new()
+                .with_canister_id(CanisterId::from(raw_id))
+                .build(),
+        );
+    }
+
+    test.inject_call_to_ic00(Method::ListCanisters, EmptyBlob.encode(), Cycles::new(0));
+    test.execute_all();
+
+    let RequestOrResponse::Response(response) = test.xnet_messages()[0].clone() else {
+        panic!("Type should be RequestOrResponse::Response");
+    };
+    assert_eq!(response.originator, caller_canister);
+    let Payload::Data(data) = &response.response_payload else {
+        panic!(
+            "list_canisters was rejected: {:?}",
+            response.response_payload
+        );
+    };
+    let list = ic00::ListCanistersResponse::decode(data).unwrap();
+    assert_eq!(
+        list.canisters,
+        vec![
+            ic00::CanisterIdRange {
+                start: CanisterId::from(5_u64),
+                end: CanisterId::from(7_u64),
+            },
+            ic00::CanisterIdRange {
+                start: CanisterId::from(10_u64),
+                end: CanisterId::from(10_u64),
+            },
+        ]
+    );
+}
+
+// A non-admin canister calling `list_canisters` via an inter-canister call is
+// rejected.
+#[test]
+fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
+    let own_subnet = subnet_test_id(1);
+    let caller_subnet = subnet_test_id(2);
+    let admin = canister_test_id(1);
+    let non_admin = canister_test_id(2);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .with_caller(caller_subnet, non_admin)
+        .build();
+
+    test.inject_call_to_ic00(Method::ListCanisters, EmptyBlob.encode(), Cycles::new(0));
+    test.execute_all();
+
+    let RequestOrResponse::Response(response) = test.xnet_messages()[0].clone() else {
+        panic!("Type should be RequestOrResponse::Response");
+    };
+    let Payload::Reject(context) = &response.response_payload else {
+        panic!(
+            "Expected a reject response, got: {:?}",
+            response.response_payload
+        );
+    };
+    assert_eq!(context.code(), RejectCode::CanisterReject);
 }

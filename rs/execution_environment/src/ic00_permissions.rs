@@ -37,6 +37,7 @@ impl Ic00MethodPermissions {
             Ic00Method::CanisterStatus
             | Ic00Method::CanisterInfo
             | Ic00Method::CanisterMetadata
+            | Ic00Method::ListCanisters
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
             | Ic00Method::SignWithECDSA
