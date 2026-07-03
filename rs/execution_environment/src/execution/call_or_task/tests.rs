@@ -739,8 +739,10 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
 
         let a = wasm()
             .stable64_grow(1)
-            .stable64_fill(0, 0, 500_000)
-            .stable64_fill(0, 0, 500_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .build();
 
         let (ingress_id, _) = test.ingress_raw(a_id, method, a);
@@ -800,8 +802,10 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
 
         let a = wasm()
             .stable64_grow(1)
-            .stable64_fill(0, 0, 500_000)
-            .stable64_fill(0, 0, 500_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .build();
 
         let (ingress_id, _) = test.ingress_raw(a_id, method, a);
@@ -1088,10 +1092,10 @@ fn dts_uninstall_with_aborted_replicated_execution() {
 
         let wasm_payload = wasm()
             .stable64_grow(1)
-            .stable64_fill(0, 0, 500_000)
-            .stable64_fill(0, 0, 500_000)
-            .stable64_fill(0, 0, 500_000)
-            .stable64_fill(0, 0, 500_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .build();
 
         let (message_id, _) = test.ingress_raw(canister_id, method, wasm_payload);
