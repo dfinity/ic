@@ -328,6 +328,11 @@ Two ETH-specific problems and their resolutions:
 
 ### Test plan
 
+A runnable end-to-end demonstration of the sweep mechanism (unfunded deposit EOA,
+plain USDT-style transfer, single type-`0x04` sweep transaction with gas paid by the
+minter) against a local Prague-enabled node is available in
+[`deposit_from_cex_demo/demo.sh`](deposit_from_cex_demo/demo.sh).
+
 Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 
 * Address derivation: determinism, uniqueness across principals/subaccounts,
