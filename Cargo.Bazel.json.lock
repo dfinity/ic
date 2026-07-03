@@ -1,5 +1,5 @@
 {
-  "checksum": "38103317d567f55d66cf98e7e5911c5a309d016b6999f8d374bc6b2b8f101d49",
+  "checksum": "5bca82fc8dd27c4b4684b0cfe0d438f282ba73c8f54c92d9732f28f32e19f219",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -23648,11 +23648,11 @@
               "target": "toml"
             },
             {
-              "id": "tonic 0.12.3",
+              "id": "tonic 0.13.1",
               "target": "tonic"
             },
             {
-              "id": "tonic-build 0.12.3",
+              "id": "tonic-build 0.13.1",
               "target": "tonic_build"
             },
             {
@@ -86545,14 +86545,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tonic 0.12.3": {
+    "tonic 0.13.1": {
       "name": "tonic",
-      "version": "0.12.3",
+      "version": "0.13.1",
       "package_url": "https://github.com/hyperium/tonic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tonic/0.12.3/download",
-          "sha256": "877c5b330756d856ffcc4553ab34a5684481ade925ecc54bcd1bf02b1d0d4d52"
+          "url": "https://static.crates.io/crates/tonic/0.13.1/download",
+          "sha256": "7e581ba15a835f4d9ea06c55ab1bd4dce26fc53752c69a04aac00703bfb49ba9"
         }
       },
       "targets": [
@@ -86589,11 +86589,7 @@
         "deps": {
           "common": [
             {
-              "id": "async-stream 0.3.6",
-              "target": "async_stream"
-            },
-            {
-              "id": "axum 0.7.9",
+              "id": "axum 0.8.9",
               "target": "axum"
             },
             {
@@ -86657,7 +86653,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
@@ -86685,7 +86681,7 @@
           ],
           "selects": {}
         },
-        "version": "0.12.3"
+        "version": "0.13.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -86836,14 +86832,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tonic-build 0.12.3": {
+    "tonic-build 0.13.1": {
       "name": "tonic-build",
-      "version": "0.12.3",
+      "version": "0.13.1",
       "package_url": "https://github.com/hyperium/tonic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tonic-build/0.12.3/download",
-          "sha256": "9557ce109ea773b399c9b9e5dca39294110b74f1f342cb347a80d1fce8c26a11"
+          "url": "https://static.crates.io/crates/tonic-build/0.13.1/download",
+          "sha256": "eac6f67be712d12f0b41328db3137e0d0757645d8904b4cb7d51cd9c2279e847"
         }
       },
       "targets": [
@@ -86904,7 +86900,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.12.3"
+        "version": "0.13.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -87054,25 +87050,14 @@
         "crate_features": {
           "common": [
             "__common",
-            "balance",
-            "buffer",
             "default",
-            "discover",
             "futures-core",
             "futures-util",
-            "indexmap",
-            "limit",
-            "load",
             "log",
-            "make",
             "pin-project",
             "pin-project-lite",
-            "rand",
-            "ready-cache",
-            "slab",
             "timeout",
             "tokio",
-            "tokio-util",
             "tracing",
             "util"
           ],
@@ -87089,10 +87074,6 @@
               "target": "futures_util"
             },
             {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
-            },
-            {
               "id": "pin-project 1.1.2",
               "target": "pin_project"
             },
@@ -87101,20 +87082,8 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "rand 0.8.6",
-              "target": "rand"
-            },
-            {
-              "id": "slab 0.4.8",
-              "target": "slab"
-            },
-            {
               "id": "tokio 1.50.0",
               "target": "tokio"
-            },
-            {
-              "id": "tokio-util 0.7.17",
-              "target": "tokio_util"
             },
             {
               "id": "tower-layer 0.3.3",
@@ -103363,8 +103332,8 @@
     "tokio-tungstenite 0.26.2",
     "tokio-util 0.7.17",
     "toml 0.5.11",
-    "tonic 0.12.3",
-    "tonic-build 0.12.3",
+    "tonic 0.13.1",
+    "tonic-build 0.13.1",
     "tower 0.5.2",
     "tower-http 0.6.11",
     "tower-request-id 0.3.0",
