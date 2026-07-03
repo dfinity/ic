@@ -105,21 +105,14 @@ jobs:
 
   rbe-worker-image:
     name: Create Remote Build Execution Worker Image @ Namespace
-    # Runs on a Namespace runner where 'nsc' is pre-authenticated. 'update-image-references'
-    # waits for this job and pins the resulting digest in the same commit. Like
-    # 'ic-build-image', this job is required: if it fails, that's a bug to fix.
     runs-on: namespace-profile-default;permissions.additional_grant=baseimage:*:*
-    # nsc authenticates via the runner's Namespace workspace identity, not the
-    # GITHUB_TOKEN, so this job needs no GitHub permissions (least privilege).
     permissions: {}
     needs: [build-image-prep, ic-build-image]
-    # Restricted to the dfinity/ic repo and, for pull_request events, to non-fork
-    # PRs -- this job runs on a privileged Namespace runner with pre-authenticated
-    # 'nsc', so it must never run untrusted code from a fork.
     if: |
       needs.build-image-prep.outputs.build_image == 'true' &&
       github.repository == 'dfinity/ic' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     timeout-minutes: 30
     outputs:
       worker-image: ${{ steps.worker.outputs.worker-image }}
@@ -130,51 +123,24 @@ jobs:
         run: |
           set -xeuo pipefail
 
-          # 'nsc base-image upload' pushes a *relative* name into the Namespace tenant
-          # registry, prepending $NSC_CONTAINER_REGISTRY (e.g. nscr.io/<tenant>). Do NOT
-          # pass a fully-qualified ref here or it gets double-prefixed.
-          : "${NSC_CONTAINER_REGISTRY:?NSC_CONTAINER_REGISTRY is not set on this runner}"
+          nsc docker login
 
-          # Mirror the (unchanged) ic-build image -- just pushed to GHCR and pinned by
-          # digest -- into the Namespace tenant registry. Namespace RBE workers boot
-          # from this image. NOTE: the repo is kept in a variable (rather than a literal
-          # "ghcr.io/dfinity/ic-build@...") so the 'update-image-references' sed below --
-          # which rewrites ghcr.io/dfinity/ic-build(:|@)... across .github/workflow*/* --
-          # does not clobber this dynamic digest reference into a hardcoded one.
           ic_build_repo="ghcr.io/dfinity/ic-build"
           src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
           worker_repo="${NSC_CONTAINER_REGISTRY}/ic-build-worker"
-          worker_tag="${{ needs.build-image-prep.outputs.image_tag }}"
-
-          nsc docker login
-
-          # Upload, then read the pushed digest from nsc's own "Uploaded base image:"
-          # line. We parse the upload output rather than 'docker buildx imagetools
-          # inspect', whose --format prints the whole manifest for the multi-platform
-          # attestation index that docker/build-push-action emits. RBE needs an
-          # immutable digest (mutable tags are rejected).
-          upload_log="$(nsc base-image upload "$src" "ic-build-worker:$worker_tag" 2>&1)"
+          upload_log="$(nsc base-image upload "$src" "ic-build-worker:${{ needs.build-image-prep.outputs.image_tag }}" 2>&1)"
           echo "$upload_log"
           worker_digest="$(printf '%s\n' "$upload_log" | grep -i 'Uploaded base image' | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
           : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
           worker_image="${worker_repo}@${worker_digest}"
           echo "Resolved worker image: $worker_image"
 
-          # Optimize the pinned digest into a fast-booting worker variant. This blocks
-          # until ready and only needs to be done once per digest.
-          # NOTE: requires the 'baseimage:optimize' permission on the tenant registry.
           nsc base-image optimize --image_ref "$worker_image"
-
           echo "worker-image=$worker_image" >> "$GITHUB_OUTPUT"
 
   update-image-references:
     name: Update Image References in Repo
     runs-on: ubuntu-latest
-    # Waits for the (slower) 'rbe-worker-image' to finish before committing: the push
-    # this job makes triggers a new workflow run, and 'cancel-in-progress' in the
-    # concurrency group would otherwise cancel 'rbe-worker-image' mid-optimize.
-    # Both 'ic-build-image' and 'rbe-worker-image' are required (default 'needs'
-    # semantics): if either fails, that's a bug to fix.
     needs: [build-image-prep, ic-build-image, rbe-worker-image]
     if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
     steps:
@@ -199,7 +165,6 @@ jobs:
           # Update container image references
           set -xeuo pipefail
 
-
           IMAGE_PREFIX="ghcr.io/dfinity/"
           IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${{ needs.ic-build-image.outputs.ic-build-imageid }}"
           IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${{ needs.ic-build-image.outputs.ic-dev-imageid }}"
@@ -212,9 +177,6 @@ jobs:
           sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
           popd
 
-          # Pin the RBE worker image (always produced by the required 'rbe-worker-image')
-          # in the experimental RBE test workflow. Match any tenant in the registry path
-          # so this keeps working if the Namespace tenant ever changes.
           WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
           sed -i -E "s|nscr\.io/[^\"/]+/ic-build-worker@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" .github/workflows/rbe-namespace-test.yml
 
