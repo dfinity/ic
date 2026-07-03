@@ -106,24 +106,21 @@ function resize_partition() {
         log_and_halt_installation_on_error "${?}" "Unable to cleanup initial GuestOS volume"
 
         # And set up new split volumes
-        free=$(vgs --noheadings -o vg_free_count hostlvm | tr -d ' ')
+        min_pv_free=$(pvs --noheadings -o pv_pe_count,pv_pe_alloc_count -S vg_name=hostlvm | awk '{print $1 - $2}' | sort -n | head -n1)
 
         create_guestos_lvs() {
             local total="$1"
-            local each=$((free / total))
-            local last=$((total - 1))
+            local each=$(((min_pv_free / total) * count))
             local i
 
-            for ((i = 0; i < last; i++)); do
+            for ((i = 0; i < total; i++)); do
                 lvcreate -i "${count}" --type striped -l "${each}" -n "guestos${i}" hostlvm >/dev/null 2>&1
                 log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
             done
-
-            lvcreate -i "${count}" --type striped -l 100%FREE -n "guestos${last}" hostlvm >/dev/null 2>&1
-            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
         }
 
         case "${node_reward_type}" in
+            type4.0) create_guestos_lvs 120 ;;
             type4.1) create_guestos_lvs 32 ;;
             type4.2) create_guestos_lvs 8 ;;
             type4.3) create_guestos_lvs 4 ;;
