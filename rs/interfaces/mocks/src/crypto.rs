@@ -67,7 +67,7 @@ use ic_types::crypto::{
     IndividualMultiSigOf, ThresholdSigShareOf, UserPublicKey,
 };
 use ic_types::messages::{MessageId, QueryResponseHash, WebAuthnEnvelope};
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -119,14 +119,20 @@ macro_rules! impl_basic_sig_verifier {
 
             fn verify_basic_sig_batch_multi_msg(
                 &self,
-                inputs: &[(NodeId, &BasicSigOf<$t>, &$t)],
-                registry_version: RegistryVersion,
+                inputs: &[BasicSigBatchEntry<'_, $t>],
             ) -> CryptoResult<()> {
-                let owned: Vec<(NodeId, BasicSigOf<$t>, $t)> = inputs
+                let owned: Vec<(NodeId, BasicSigOf<$t>, $t, RegistryVersion)> = inputs
                     .iter()
-                    .map(|(signer, sig, msg)| (*signer, (*sig).clone(), (*msg).clone()))
+                    .map(|entry| {
+                        (
+                            entry.signer,
+                            entry.signature.clone(),
+                            entry.message.clone(),
+                            entry.registry_version,
+                        )
+                    })
                     .collect();
-                self.$verify_sigs_batch(owned, registry_version)
+                self.$verify_sigs_batch(owned)
             }
         }
     };
@@ -329,8 +335,7 @@ mockall::mock! {
 
         pub fn verify_basic_sig_batch_multi_msg_block(
             &self,
-            inputs: Vec<(NodeId, BasicSigOf<BlockMetadata>, BlockMetadata)>,
-            registry_version: RegistryVersion,
+            inputs: Vec<(NodeId, BasicSigOf<BlockMetadata>, BlockMetadata, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // consensus_dkg::DealingContent
@@ -355,8 +360,7 @@ mockall::mock! {
 
         pub fn verify_basic_sig_batch_multi_msg_dkg_dealing_content(
             &self,
-            inputs: Vec<(NodeId, BasicSigOf<consensus_dkg::DealingContent>, consensus_dkg::DealingContent)>,
-            registry_version: RegistryVersion,
+            inputs: Vec<(NodeId, BasicSigOf<consensus_dkg::DealingContent>, consensus_dkg::DealingContent, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // SignedIDkgDealing
@@ -380,8 +384,7 @@ mockall::mock! {
 
         pub fn verify_basic_sig_batch_multi_msg_signed_idkg_dealing(
             &self,
-            inputs: Vec<(NodeId, BasicSigOf<SignedIDkgDealing>, SignedIDkgDealing)>,
-            registry_version: RegistryVersion,
+            inputs: Vec<(NodeId, BasicSigOf<SignedIDkgDealing>, SignedIDkgDealing, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // IDkgDealing
@@ -403,8 +406,7 @@ mockall::mock! {
 
         pub fn verify_basic_sig_batch_multi_msg_idkg(
             &self,
-            inputs: Vec<(NodeId, BasicSigOf<IDkgDealing>, IDkgDealing)>,
-            registry_version: RegistryVersion,
+            inputs: Vec<(NodeId, BasicSigOf<IDkgDealing>, IDkgDealing, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // IDkgComplaintContent
@@ -428,8 +430,7 @@ mockall::mock! {
 
         pub fn verify_basic_sig_batch_multi_msg_idkg_complaint(
             &self,
-            inputs: Vec<(NodeId, BasicSigOf<IDkgComplaintContent>, IDkgComplaintContent)>,
-            registry_version: RegistryVersion,
+            inputs: Vec<(NodeId, BasicSigOf<IDkgComplaintContent>, IDkgComplaintContent, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // IDkgOpeningContent
@@ -453,8 +454,7 @@ mockall::mock! {
 
         pub fn verify_basic_sig_batch_multi_msg_idkg_opening(
             &self,
-            inputs: Vec<(NodeId, BasicSigOf<IDkgOpeningContent>, IDkgOpeningContent)>,
-            registry_version: RegistryVersion,
+            inputs: Vec<(NodeId, BasicSigOf<IDkgOpeningContent>, IDkgOpeningContent, RegistryVersion)>,
         ) -> CryptoResult<()>;
 
         // CanisterHttpResponseReceipt
@@ -484,8 +484,8 @@ mockall::mock! {
                 NodeId,
                 BasicSigOf<CanisterHttpResponseReceipt>,
                 CanisterHttpResponseReceipt,
+                RegistryVersion,
             )>,
-            registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
         // ── ThresholdSigner<T> ──────────────────────────────────────────

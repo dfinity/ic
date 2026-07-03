@@ -7,8 +7,8 @@ use candid::Principal;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
 use ic_engine_controller::{
-    CreateEngineArgs, DeleteEngineArgs, DeployGuestosToAllSubnetNodesPayload,
-    EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
+    ChangeSubnetMembershipPayload, CreateEngineArgs, DeleteEngineArgs,
+    DeployGuestosToAllSubnetNodesPayload, EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -357,6 +357,23 @@ async fn deploy_guestos_to_all_subnet_nodes(
     .map_err(|e| format!("registry.deploy_guestos_to_all_subnet_nodes call failed: {e:?}"))?
     .candid::<()>()
     .map_err(|e| format!("Failed to decode registry response: {e}"))?;
+
+    Ok(())
+}
+
+/// Proxies to the registry's `change_subnet_membership` endpoint. The
+/// registry enforces that, when invoked by the engine controller, the target
+/// subnet must be of type `CloudEngine`.
+#[update]
+async fn change_subnet_membership(payload: ChangeSubnetMembershipPayload) -> Result<(), String> {
+    ensure_authorized()?;
+
+    Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "change_subnet_membership")
+        .with_arg(payload)
+        .await
+        .map_err(|e| format!("registry.change_subnet_membership call failed: {e:?}"))?
+        .candid::<()>()
+        .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
     Ok(())
 }

@@ -32,7 +32,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, Height, NodeId, PrincipalId, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, Refund, Request, Response, StreamMessage},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
 use std::convert::{AsRef, TryFrom, TryInto};
@@ -293,6 +293,10 @@ where
     queue: &'a StreamIndexedQueue<T>,
     certification_version: CertificationVersion,
     mk_tree: fn(StreamIndex, &'a T, CertificationVersion) -> LazyTree<'a>,
+    /// Produces a [`SubtreeSource`] for a child, to be used to create a reusable
+    /// [stub](`NodeKind::Stub`). Stream messages' contents are immutable once
+    /// enqueued, so the digest of any index present in a baseline can be reused.
+    mk_source: fn(&'a T, CertificationVersion) -> SubtreeSource,
 }
 
 impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
@@ -318,6 +322,14 @@ impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
 
     fn len(&self) -> usize {
         self.queue.len()
+    }
+
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        let mk_source = self.mk_source;
+        let version = self.certification_version;
+        Some(Box::new(self.queue.iter().map(move |(idx, v)| {
+            (idx.to_label(), mk_source(v, version))
+        })))
     }
 }
 
@@ -536,6 +548,7 @@ fn streams_as_tree<'a>(
                         mk_tree: |_idx, msg, certification_version| {
                             blob(move || encode_message(msg, certification_version))
                         },
+                        mk_source: message_source,
                     }),
                 ),
         )
@@ -557,6 +570,73 @@ fn streams_as_tree<'a>(
             certification_version,
             mk_tree,
         })
+    }
+}
+
+/// Expands `$ty`/`$variant` to a 1-leaf [`HashTree`] (re-encoding the message
+/// under the const certification version `V`), and a `select_*` helper that
+/// picks the `V`-specific monomorphization — so the stored function pointer
+/// alone fully determines the expansion. See [`message_source`].
+macro_rules! message_expander {
+    ($expand:ident, $select:ident, $ty:ty, $variant:path) => {
+        fn $expand<const V: u32>(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+            let inner = source.downcast_arc::<$ty>();
+            let version = CertificationVersion::try_from(V)
+                .expect("const version parameter is a valid certification version");
+            let msg = $variant(inner);
+            hash_lazy_tree(&blob(move || encode_message(&msg, version)), None)
+        }
+
+        fn $select(version: CertificationVersion) -> SubtreeExpander {
+            match version {
+                CertificationVersion::V19 => $expand::<{ CertificationVersion::V19 as u32 }>,
+                CertificationVersion::V20 => $expand::<{ CertificationVersion::V20 as u32 }>,
+                CertificationVersion::V21 => $expand::<{ CertificationVersion::V21 as u32 }>,
+                CertificationVersion::V22 => $expand::<{ CertificationVersion::V22 as u32 }>,
+                CertificationVersion::V23 => $expand::<{ CertificationVersion::V23 as u32 }>,
+                CertificationVersion::V24 => $expand::<{ CertificationVersion::V24 as u32 }>,
+                CertificationVersion::V25 => $expand::<{ CertificationVersion::V25 as u32 }>,
+                CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
+            }
+        }
+    };
+}
+
+message_expander!(
+    expand_request,
+    select_request_expander,
+    Request,
+    StreamMessage::Request
+);
+message_expander!(
+    expand_response,
+    select_response_expander,
+    Response,
+    StreamMessage::Response
+);
+message_expander!(
+    expand_refund,
+    select_refund_expander,
+    Refund,
+    StreamMessage::Refund
+);
+
+/// Produces a [`SubtreeSource`] for a stream message, identified by its backing
+/// `Arc<Request|Response|Refund>`, used to create a reusable
+/// [stub](`NodeKind::Stub`).
+///
+/// A message's contents never change once enqueued, so any index present in a
+/// baseline keeps the same `Arc` and its precomputed digest can be reused; only
+/// newly enqueued messages must be encoded and hashed.
+fn message_source(msg: &StreamMessage, version: CertificationVersion) -> SubtreeSource {
+    match msg {
+        StreamMessage::Request(req) => SubtreeSource::new(req, select_request_expander(version)),
+        StreamMessage::Response(resp) => {
+            SubtreeSource::new(resp, select_response_expander(version))
+        }
+        StreamMessage::Refund(refund) => {
+            SubtreeSource::new(refund, select_refund_expander(version))
+        }
     }
 }
 
@@ -644,6 +724,17 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
     fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// Collapse ingress messages into reusable stubs identified by their respective
+    /// `Arc<IngressStatus>`.
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        Some(Box::new(self.0.statuses_arc().map(|(id, status)| {
+            (
+                Label::from(id.as_bytes()),
+                SubtreeSource::new(status, expand_ingress_status),
+            )
+        })))
+    }
 }
 
 const ERROR_CODE_LABEL: &[u8] = b"error_code";
@@ -714,16 +805,17 @@ const REJECT_STATUS_LABELS: [&[u8]; 4] = [
 #[derive(Clone)]
 struct RejectStatus<'a> {
     reject_code: u64,
-    error_code: Option<ErrorCode>,
+    error_code: ErrorCode,
     message: &'a str,
 }
 
 impl<'a> LazyFork<'a> for RejectStatus<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         match label.as_bytes() {
-            ERROR_CODE_LABEL => self
-                .error_code
-                .map(|code| blob(move || code.to_string().into_bytes())),
+            ERROR_CODE_LABEL => {
+                let error_code = self.error_code;
+                Some(blob(move || error_code.to_string().into_bytes()))
+            }
             REJECT_CODE_LABEL => Some(num::<'a>(self.reject_code)),
             REJECT_MESSAGE_LABEL => Some(string(self.message)),
             STATUS_LABEL => Some(string("rejected")),
@@ -749,18 +841,20 @@ impl<'a> LazyFork<'a> for RejectStatus<'a> {
     }
 }
 
+/// Produces one of a few small, focused [`LazyFork`] shapes (reply / reject /
+/// status-only) for the given [`IngressStatus`].
 fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
     match status {
         IngressStatus::Known { state, .. } => match state {
             IngressState::Completed(WasmResult::Reply(b)) => fork(ReplyStatus(b)),
             IngressState::Completed(WasmResult::Reject(s)) => fork(RejectStatus {
                 reject_code: RejectCode::CanisterReject as u64,
-                error_code: Some(ErrorCode::CanisterRejectedMessage),
+                error_code: ErrorCode::CanisterRejectedMessage,
                 message: s,
             }),
             IngressState::Failed(error) => fork(RejectStatus {
                 reject_code: error.reject_code() as u64,
-                error_code: Some(error.code()),
+                error_code: error.code(),
                 message: error.description(),
             }),
             IngressState::Processing | IngressState::Received | IngressState::Done => {
@@ -769,6 +863,13 @@ fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
         },
         IngressStatus::Unknown => fork(OnlyStatus(status.as_str())),
     }
+}
+
+/// Materializes a stubbed ingress message's [`HashTree`], by recovering the
+/// `&IngressStatus` from the stub's [`SubtreeSource`].
+fn expand_ingress_status(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let status = source.downcast::<IngressStatus>();
+    hash_lazy_tree(&status_to_tree(status), None)
 }
 
 const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";

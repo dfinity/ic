@@ -929,6 +929,7 @@ pub fn sign_query_with_empty_domain_separator(
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: None,
+        sender_info: None,
     };
     let signable = msg.to_request_id().signable();
     identity
@@ -948,6 +949,7 @@ pub fn sign_update_with_empty_domain_separator(
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+        sender_info: None,
     };
     let signable = msg.to_request_id().signable();
     identity

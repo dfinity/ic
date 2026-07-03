@@ -5,7 +5,8 @@ use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
-use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
+use ic_cycles_account_manager::ResourceSaturation;
+use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::compile,
@@ -13,7 +14,7 @@ use ic_embedders::{
         WasmtimeInstance,
         system_api::{
             ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
-            ModificationTracking, SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
+            ModificationTracking, SystemApiImpl,
         },
     },
 };
@@ -29,7 +30,7 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions, time::UNIX_EPOCH};
-use ic_types_cycles::CanisterCyclesCostSchedule;
+use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesAccountManagerSubnetConfig};
 use ic_wasm_types::BinaryEncodedWasm;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -168,7 +169,7 @@ impl WasmtimeInstanceBuilder {
         let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
             &system_state,
             cycles_account_manager,
-            &self.network_topology,
+            std::sync::Arc::new(self.network_topology.clone()),
             ComputeAllocation::default(),
             subnet_available_callbacks,
             Default::default(),

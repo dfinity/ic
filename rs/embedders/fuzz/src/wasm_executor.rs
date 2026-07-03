@@ -157,7 +157,7 @@ pub(crate) fn get_sandbox_safe_system_state(
     SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &network_topology,
+        Arc::new(network_topology),
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),

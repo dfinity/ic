@@ -103,7 +103,7 @@ fn test_api_for_update(
     let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),

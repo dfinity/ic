@@ -228,7 +228,7 @@ pub fn get_system_api(
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
