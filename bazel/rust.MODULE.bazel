@@ -1335,6 +1335,7 @@ crate.spec(
         "json",
         "multipart",
         "rustls",
+        "socks",
         "stream",
     ],
     package = "reqwest",

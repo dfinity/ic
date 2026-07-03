@@ -23482,6 +23482,7 @@ dependencies = [
  "sev",
  "tempfile",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 {
-  "checksum": "d36b6f62a49fb36997ade69ef1aad99494c289a40f2934b9f271d3fb3e4829e8",
+  "checksum": "38103317d567f55d66cf98e7e5911c5a309d016b6999f8d374bc6b2b8f101d49",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -68892,6 +68892,7 @@
             "multipart",
             "query",
             "rustls",
+            "socks",
             "stream"
           ],
           "selects": {}
