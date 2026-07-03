@@ -15,16 +15,23 @@ INSERT NEW RELEASES HERE
 
 http://dashboard.internetcomputer.org/proposal/142679
 
+## Fixed
+
+* Delete zombie neuron during claim_neuron when Ledger is unavailable.
+
+
+# 2026-05-17: Proposal 142447
+
+http://dashboard.internetcomputer.org/proposal/142447
+
 ## Added
+
+* Added a new field to GuestLaunchMeasurementMetadata to identify the VCPU type.
 
 * Added a new `NnsFunction` variant `SetDefaultInitialDkgSubnet`, which
   proposes to set or unset the default subnet to which `SetupInitialDKG`
   management canister calls are routed when no subnet is specified explicitly
   in the request.
-
-## Fixed
-
-* Delete zombie neuron during claim_neuron when Ledger is unavailable.
 
 
 # 2026-05-17: Proposal 141779
