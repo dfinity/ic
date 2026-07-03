@@ -465,11 +465,13 @@ pub(crate) fn list_canisters(
 /// The cost model was derived from the `list_canisters` benchmark using the
 /// conversion `2B instructions = 1 second` (i.e. `2M instructions = 1 ms`):
 ///   - a base cost of 20M instructions (≈10ms), and
-///   - a variable cost of 10K instructions per canister hosted on the subnet
+///   - a variable cost of 16K instructions per canister hosted on the subnet
 ///     (`list_canisters` iterates over all of them to build the ID ranges).
+///     The variable cost reflects the worst case where the canister IDs form
+///     gaps so that each canister becomes its own ID range.
 pub(crate) fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
     const BASE_INSTRUCTIONS: u64 = 20_000_000;
-    const INSTRUCTIONS_PER_CANISTER: u64 = 10_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
     let num_canisters = state.num_canisters() as u64;
     NumInstructions::new(BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters)
 }

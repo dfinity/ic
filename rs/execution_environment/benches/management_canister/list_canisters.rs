@@ -1,6 +1,6 @@
 use crate::create_canisters::CreateCanistersArgs;
 use crate::utils::{CANISTERS_PER_BATCH, expect_reply, test_canister_wasm};
-use candid::{Encode, Principal};
+use candid::Encode;
 use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::CanisterId;
 use ic_config::subnet_config::SubnetConfig;
@@ -47,21 +47,33 @@ fn setup_with_canisters(canisters_number: u64) -> (StateMachine, CanisterId) {
         .expect("failed to install the test canister");
 
     // Populate the subnet with `canisters_number` additional canisters via the
-    // test canister (batched inter-canister `create_canister` calls).
-    if canisters_number > 0 {
+    // test canister (batched inter-canister calls). The canisters are created
+    // with gaps in between so that the subnet's canister IDs form roughly
+    // `canisters_number` distinct ranges, which `list_canisters` must report.
+    //
+    // The work is split into chunks so that no single ingress message exceeds
+    // the state machine's per-message tick budget (each chunk creates twice as
+    // many canisters and then deletes half of them). Gaps are preserved across
+    // chunk boundaries because each chunk ends with a deleted canister ID.
+    const CHUNK: u64 = 5_000;
+    let mut remaining_to_create = canisters_number;
+    let mut created_ranges = 0;
+    while remaining_to_create > 0 {
+        let chunk = remaining_to_create.min(CHUNK);
+        remaining_to_create -= chunk;
         let result = env.execute_ingress(
             test_canister,
-            "create_canisters",
+            "create_canisters_with_gaps",
             Encode!(&CreateCanistersArgs {
-                canisters_number,
+                canisters_number: chunk,
                 canisters_per_batch: CANISTERS_PER_BATCH,
                 initial_cycles: 0,
             })
             .unwrap(),
         );
-        let created: Vec<Principal> = expect_reply(result);
-        assert_eq!(created.len(), canisters_number as usize);
+        created_ranges += expect_reply::<u64>(result);
     }
+    assert_eq!(created_ranges, canisters_number);
 
     (env, test_canister)
 }
@@ -78,8 +90,9 @@ fn run_bench<M: criterion::measurement::Measurement>(
         b.iter(|| {
             let result = env.execute_ingress(test_canister, "list_canisters", Encode!().unwrap());
             let ranges: u64 = expect_reply(result);
-            // At least the range covering the freshly created canisters.
-            assert!(ranges >= 1);
+            // The canisters are created with gaps, so there should be roughly
+            // one range per canister on the subnet.
+            assert!(ranges >= canisters_number / 2);
         });
     });
 }
