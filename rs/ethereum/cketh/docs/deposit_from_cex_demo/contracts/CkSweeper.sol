@@ -24,6 +24,14 @@ contract CkSweeper {
         }
     }
 
+    /// Batch entry point: the deployed CkSweeper instance doubles as the
+    /// batcher, sweeping many delegated deposit EOAs in a single transaction.
+    function sweepErc20Batch(address[] calldata depositAddresses, address[] calldata tokens) external {
+        for (uint256 i = 0; i < depositAddresses.length; ++i) {
+            CkSweeper(depositAddresses[i]).sweepErc20(tokens);
+        }
+    }
+
     function sweepEth() external {
         uint256 balance = address(this).balance;
         if (balance > 0) {

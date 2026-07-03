@@ -142,10 +142,11 @@ The design is delivered in two phases:
   one transaction. No deposit address ever needs an ETH balance for gas.
 * **Sweeps are permissionless-safe.** The delegate's sweep functions are callable by
   anyone because the destination is hardcoded (`R6`); a third party triggering a sweep
-  only donates gas. This removes access-control state from the delegate and lets the
-  minter batch calls through the canonical, already-deployed
-  [Multicall3](https://www.multicall3.com/) (`0xcA11bde05977b3631167028862bE2a173976CA11`)
-  instead of deploying and auditing a custom batcher.
+  only donates gas. This removes access-control state from the delegate and lets one
+  transaction sweep many deposit addresses through a batch entry point on the deployed
+  `CkSweeper` instance itself — the delegate doubles as the batcher, so no additional
+  contract is needed (the canonical, already-deployed
+  [Multicall3](https://www.multicall3.com/) would work as well).
 * **Mint on finalized deposit, sweep asynchronously.** The user is credited as soon as
   the deposit is finalized and detected; sweeping is pure treasury consolidation,
   batched to amortize gas, and never blocks or reverts a mint (`R5`). This decouples
@@ -244,6 +245,14 @@ contract CkSweeper {
         }
     }
 
+    /// Batch entry point: the deployed CkSweeper instance doubles as the
+    /// batcher, sweeping many delegated deposit EOAs in a single transaction.
+    function sweepErc20Batch(address[] calldata depositAddresses, address[] calldata tokens) external {
+        for (uint i = 0; i < depositAddresses.length; ++i) {
+            CkSweeper(depositAddresses[i]).sweepErc20(tokens);
+        }
+    }
+
     function sweepEth() external {
         if (address(this).balance > 0) {
             (bool ok,) = MINTER.call{value: address(this).balance}("");
@@ -282,8 +291,9 @@ is moot (fixed destination, no state).
 * One type-`0x04` transaction from the main address:
   * `authorization_list`: tuples for all not-yet-delegated addresses in the batch
     (≈ 12'500–25'000 gas each, one-time);
-  * `to = Multicall3`, `data = aggregate3([...])` calling
-    `sweepErc20([tokens])` on each deposit address (≈ 30–50k gas per address/token).
+  * `to = CkSweeper`, `data = sweepErc20Batch(deposit_addresses, [tokens])`. Measured
+    in the runnable demo (mock token): ≈ 67k gas for a first single-address sweep
+    including its authorization, ≈ 26k marginal gas per additional address in a batch.
 * Confirmation via transaction receipt, exactly like withdrawals; on success emit
   `SweepConfirmed` events updating per-address `total_swept`. Sweep gas is paid from
   the main address' ETH balance and recouped by `deposit_fee` (`R7`); the effective
@@ -328,10 +338,10 @@ Two ETH-specific problems and their resolutions:
 
 ### Test plan
 
-A runnable end-to-end demonstration of the sweep mechanism (unfunded deposit EOA,
-plain USDT-style transfer, single type-`0x04` sweep transaction with gas paid by the
-minter) against a local Prague-enabled node is available in
-[`deposit_from_cex_demo/demo.sh`](deposit_from_cex_demo/demo.sh).
+A runnable end-to-end demonstration of the sweep mechanism (unfunded deposit EOAs,
+plain USDT-style transfers, single and batched type-`0x04` sweep transactions with gas
+paid by the minter, gas assertions) against a local Prague-enabled node is available
+in [`deposit_from_cex_demo/`](deposit_from_cex_demo/README.md).
 
 Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 

@@ -1,0 +1,15 @@
+[package]
+name = "deposit-from-cex-demo"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone on purpose: this is a runnable design-doc demo, not part of the IC
+# build (not a member of the root Cargo workspace, no bazel target).
+[workspace]
+
+[dependencies]
+alloy = { version = "1", features = ["full"] }
+anyhow = "1"
+hex = "0.4"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
