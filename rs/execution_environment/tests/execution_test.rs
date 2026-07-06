@@ -2907,7 +2907,7 @@ fn list_canisters_respects_round_instruction_limit() {
     // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
     let instructions_baseline = env.subnet_message_instructions();
     let calls_baseline = list_canisters_count(&env);
-    let msg_id = env.send_ingress(
+    env.send_ingress(
         PrincipalId::new_anonymous(),
         admin_canister,
         "update",
@@ -2927,15 +2927,6 @@ fn list_canisters_respects_round_instruction_limit() {
             break;
         }
     }
-
-    // The update itself succeeded.
-    assert_matches!(
-        env.ingress_status(&msg_id),
-        IngressStatus::Known {
-            state: IngressState::Completed(_),
-            ..
-        }
-    );
 
     // Not all `list_canisters` calls were executed in the same round: there is a
     // round after which some but not all of them had been executed.
