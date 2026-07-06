@@ -117,7 +117,7 @@ fn bench_collections(c: &mut Criterion) {
     // absent (worst case for `eq`: every comparison runs to completion).
     let absent = CanisterId::from_u64(u64::MAX);
     group.bench_function("linear_find_u64", |bench| {
-        bench.iter(|| black_box(black_box(&ids).iter().any(|id| *id == absent)))
+        bench.iter(|| black_box(black_box(&ids).contains(&absent)))
     });
 
     group.finish();
@@ -154,7 +154,7 @@ fn bench_hash(c: &mut Criterion) {
         .map(|i| (CanisterId::from_u64(i.wrapping_mul(2_654_435_761)), i))
         .collect();
 
-    let present = CanisterId::from_u64(500u64.wrapping_mul(2_654_435_761));
+    let present = CanisterId::from_u64(500_u64.wrapping_mul(2_654_435_761));
     group.bench_function("hashmap_get_hit", |bench| {
         bench.iter(|| black_box(map.get(black_box(&present))))
     });
