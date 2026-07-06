@@ -30,6 +30,7 @@ use crate::{AdapterLimits, BudgetTracker, MAX_RESPONSE_TIME, NetworkUsage, Prici
 //     + 50 * transformed_response_bytes_i * N + transform_instructions_i / 13
 const PER_DOWNLOADED_BYTE_FEE: u128 = 50;
 const PER_RESPONSE_MS_FEE: u128 = 300;
+// TODO: Determine and use the reference subnet size instead.
 const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
 const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 
