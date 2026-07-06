@@ -69,6 +69,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 &item.snapshot_visibility,
             )
             .into(),
+            status_visibility: pb_canister_state_bits::StatusVisibility::from(
+                &item.status_visibility,
+            )
+            .into(),
             log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
@@ -223,6 +227,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             snapshot_visibility: try_from_option_field(
                 value.snapshot_visibility,
                 "CanisterStateBits::snapshot_visibility",
+            )
+            .unwrap_or_default(),
+            status_visibility: try_from_option_field(
+                value.status_visibility,
+                "CanisterStateBits::status_visibility",
             )
             .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),

@@ -2,7 +2,7 @@ use crate::as_round_instructions;
 use crate::canister_settings::CanisterSettings;
 use crate::execution::common::{
     validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility,
-    validate_subnet_admin,
+    validate_status_visibility, validate_subnet_admin,
 };
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
@@ -355,6 +355,11 @@ impl CanisterManager {
         // Snapshot visibility: apply.
         if let Some(snapshot_visibility) = settings.snapshot_visibility() {
             canister.system_state.snapshot_visibility = snapshot_visibility.clone();
+        }
+
+        // Status visibility: apply.
+        if let Some(status_visibility) = settings.status_visibility() {
+            canister.system_state.status_visibility = status_visibility.clone();
         }
 
         // Wasm memory threshold: apply.
@@ -1069,10 +1074,10 @@ impl CanisterManager {
         ready_for_migration: bool,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-        // Skip the controller check if the canister itself is requesting its
+        // Skip the visibility check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
-            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?
+            validate_status_visibility(canister, subnet_admins, &sender)?
         }
 
         let controller = canister.system_state.controller();
@@ -1103,6 +1108,7 @@ impl CanisterManager {
             canister.system_state.minimum_incoming_canister_call_cycles;
         let log_visibility = canister.system_state.log_visibility.clone();
         let snapshot_visibility = canister.system_state.snapshot_visibility.clone();
+        let status_visibility = canister.system_state.status_visibility.clone();
         let log_memory_limit = canister.log_memory_limit().get();
         let wasm_memory_limit = canister.system_state.wasm_memory_limit;
         let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
@@ -1135,6 +1141,7 @@ impl CanisterManager {
             minimum_incoming_canister_call_cycles.get(),
             log_visibility,
             snapshot_visibility,
+            status_visibility,
             log_memory_limit,
             self.cycles_account_manager
                 .idle_cycles_burned_rate(

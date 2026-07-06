@@ -1282,6 +1282,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
+            status_visibility: canister_state.system_state.status_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
             next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
