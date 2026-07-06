@@ -314,7 +314,11 @@ burn-first); funding runs in the background, independently of any deposit.
 The ETH at the minter's main address backs ckETH 1:1: spending it on sweep gas
 without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefore
 funded exclusively through the minter's **fee account (a minter subaccount) on the
-ckETH ledger**:
+ckETH ledger**. This account already exists on mainnet:
+`owner = sv3dd-oaaaa-aaaar-qacoa-cai` (the ckETH minter),
+`subaccount = 0x0000000000000000000000000000000000000000000000000000000000000fee`,
+with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as of
+2026-07-06 — the funding pipeline starts with capital already in place:
 
 0. **Inflows into the fee account**: sponsored gas — `deposit_erc20` transfers the
    caller-specified ckETH amount into the fee account (`icrc2_transfer_from`, see
