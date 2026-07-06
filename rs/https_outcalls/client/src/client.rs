@@ -1192,14 +1192,31 @@ mod tests {
         let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         let (svc, mut handle) = setup_system_query_mock();
 
-        // A multi-byte message whose 1200 bytes exceed the 1024-byte limit, with
-        // emoji straddling the truncation boundary to exercise char safety.
-        let oversized_message = "😀".repeat(300);
+        // 300 four-byte emoji (1200 bytes) followed by a single one-byte 'x'
+        // (1201 bytes total). `ellipsize` keeps a prefix + "..." + suffix; the
+        // trailing byte makes the total length not a multiple of 4 so that the
+        // both suffix and prefix cut, fall *inside* an emoji.
+        const PREFIX_PERCENTAGE: usize = 90;
+        let oversized_message = format!("{}x", "😀".repeat(300));
         let oversized_len = oversized_message.len();
         assert!(oversized_len > MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES);
+
+        // The exact byte offsets `ellipsize` cuts at.
+        let budget = MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES - "...".len();
+        let prefix_cut = MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES * PREFIX_PERCENTAGE / 100;
+        let suffix_cut = oversized_len - (budget - prefix_cut);
+        assert!(
+            !oversized_message.is_char_boundary(prefix_cut),
+            "prefix cut at byte {prefix_cut} must fall inside a multi-byte emoji"
+        );
+        assert!(
+            !oversized_message.is_char_boundary(suffix_cut),
+            "suffix cut at byte {suffix_cut} must fall inside a multi-byte emoji"
+        );
+
         // The client must apply exactly this truncation before pricing the response.
-        let expected_message =
-            oversized_message.ellipsize(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, 90);
+        let expected_message = oversized_message
+            .ellipsize(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PREFIX_PERCENTAGE);
         tokio::spawn(async move {
             let (_, rsp) = handle.next_request().await.unwrap();
             rsp.send_response(Ok((
@@ -1231,14 +1248,34 @@ mod tests {
                     let CanisterHttpResponseContent::Reject(reject) = r.content else {
                         panic!("expected a reject response");
                     };
-                    // Ellipsized exactly as the limit dictates: this pins the size,
-                    // the ellipsize parameters, and char-boundary safety in one check.
+                    // Ellipsized exactly as the limit dictates: this pins the size
+                    // and the ellipsize parameters.
                     assert_eq!(
                         reject.message, expected_message,
                         "reject message should be ellipsized to the allowed size"
                     );
                     assert!(reject.message.len() <= MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES);
                     assert!(reject.message.len() < oversized_len);
+
+                    // Although both cuts fell inside an emoji (asserted above), the
+                    // returned message is well-formed: no emoji was split. Every
+                    // character retained on either side of the ellipsis is a whole
+                    // emoji (plus the preserved trailing 'x' at the very end).
+                    let (head, tail) = reject
+                        .message
+                        .split_once("...")
+                        .expect("ellipsized message must contain the ellipsis");
+                    assert!(
+                        !head.is_empty() && head.chars().all(|c| c == '😀'),
+                        "prefix must consist of whole emoji, got {head:?}"
+                    );
+                    assert!(
+                        tail.strip_suffix('x')
+                            .expect("trailing byte should be preserved")
+                            .chars()
+                            .all(|c| c == '😀'),
+                        "suffix must be whole emoji followed by the trailing byte, got {tail:?}"
+                    );
                     break;
                 }
             }
