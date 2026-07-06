@@ -5,6 +5,7 @@ use ic_config::execution_environment::{
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_execution_environment::units::{KIB, MIB};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -24,9 +25,9 @@ use ic_test_utilities_execution_environment::{
     ExecutionTestBuilder, get_reject, get_reply, wat_canister, wat_fn,
 };
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
-use ic_types::canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES;
-use ic_types::{CanisterId, CanisterLog, NumInstructions, ingress::WasmResult};
-use ic_types_cycles::Cycles;
+use ic_test_utilities_types::ids::subnet_test_id;
+use ic_types::{CanisterId, CanisterLog, NumBytes, NumInstructions, ingress::WasmResult};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
@@ -118,6 +119,27 @@ fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachi
 fn setup_env() -> StateMachine {
     let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
     setup_env_with(replicated_inter_canister_log_fetch)
+}
+
+/// A [`CyclesAccountManager`] and subnet config mirroring the default application
+/// subnet used by these tests, so that the production fee functions can be reused
+/// to compute the expected `fetch_canister_logs` fees instead of recomputing the
+/// fee formula inline.
+fn cycles_account_manager() -> CyclesAccountManager {
+    CyclesAccountManager::new(
+        NumInstructions::new(0),
+        SubnetType::Application,
+        subnet_test_id(0),
+        SubnetConfig::new(SubnetType::Application).cycles_account_manager_config,
+    )
+}
+
+fn subnet_cycles_config() -> CyclesAccountManagerSubnetConfig {
+    CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        SMALL_APP_SUBNET_MAX_SIZE,
+    )
 }
 
 fn create_canister(env: &StateMachine, settings: CanisterSettingsArgs) -> CanisterId {
@@ -2670,14 +2692,8 @@ fn test_fetch_canister_logs_update_call_cycles_threshold_is_exact() {
     );
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    // The required payment is the fee for a maximum-size response, scaled by the
-    // subnet size (the default `StateMachine` subnet has `SMALL_APP_SUBNET_MAX_SIZE`
-    // nodes).
-    let cam_config = SubnetConfig::new(SubnetType::Application).cycles_account_manager_config;
-    let max_fee = (cam_config.fetch_canister_logs_base_fee
-        + cam_config.fetch_canister_logs_per_byte_fee
-            * MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64)
-        * SMALL_APP_SUBNET_MAX_SIZE;
+    // The required payment is the fee for a maximum-size response.
+    let max_fee = cycles_account_manager().max_fetch_canister_logs_fee(subnet_cycles_config());
 
     // One cycle below the required max fee is rejected, and the reject message
     // reports the exact required amount.
@@ -2695,7 +2711,7 @@ fn test_fetch_canister_logs_update_call_cycles_threshold_is_exact() {
 }
 
 #[test]
-fn test_fetch_canister_logs_update_call_deducts_cycles() {
+fn test_fetch_canister_logs_update_call_deducts_and_refunds_cycles() {
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();
     let canister_a = create_and_install_canister(
@@ -2717,30 +2733,55 @@ fn test_fetch_canister_logs_update_call_deducts_cycles() {
     );
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    let balance_before = env.cycle_balance(canister_a);
-
-    // Provide more than enough cycles for the fetch.
-    let cycles_sent = Cycles::new(5_000_000_000);
-    let records = fetch_log_records_intercanister(&env, canister_a, canister_b, cycles_sent);
+    // Fetch the logs via a query (canister_a is a controller of canister_b) to
+    // learn the exact size of the encoded response. The inter-canister update
+    // call returns the same encoded response, so its fee is computed from this
+    // length.
+    let reply = get_reply(fetch_canister_logs_query(
+        &env,
+        canister_a.get(),
+        canister_b,
+    ));
+    let records = FetchCanisterLogsResponse::decode(&reply)
+        .unwrap()
+        .canister_log_records;
     assert_eq!(records.len(), 1);
+    let response_size = reply.len() as u64;
 
-    let balance_after = env.cycle_balance(canister_a);
-    let cycles_spent = balance_before - balance_after;
-
-    // Some cycles must have been deducted (fetch fee + execution overhead).
+    // The fetch fee is charged for the actual response size; everything above it
+    // must be refunded to the caller.
+    let expected_fee = cycles_account_manager()
+        .fetch_canister_logs_fee(NumBytes::new(response_size), subnet_cycles_config());
+    let cycles_sent = Cycles::new(5_000_000_000);
     assert!(
-        cycles_spent > 0,
-        "Expected some cycles to be spent, but balance is unchanged"
+        cycles_sent > expected_fee,
+        "Test setup error: sent {cycles_sent} cycles, but the fee is {expected_fee}"
     );
-    // The refund should have returned most of the overpayment.
-    // cycles_sent was 5B, and the actual fetch fee for a small response
-    // plus execution overhead should be well under 2B.
-    assert_lt!(
-        cycles_spent,
-        2_000_000_000,
-        "Expected most cycles to be refunded, but {} were spent",
-        cycles_spent
+    let expected_refund = cycles_sent - expected_fee;
+
+    // Perform the inter-canister fetch with more than enough cycles, capturing
+    // the cycles refunded to the caller in the reply callback.
+    let result = env.execute_ingress(
+        canister_a,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reply(wasm().msg_cycles_refunded().reply_int64().build())
+                    .on_reject(wasm().reject_message().reject()),
+                cycles_sent,
+            )
+            .build(),
     );
+    let refunded_bytes = get_reply(result);
+    let refunded = Cycles::new(u64::from_le_bytes(refunded_bytes[..8].try_into().unwrap()) as u128);
+
+    // Exactly the unused cycles (sent minus the fee for the actual response
+    // size) are refunded.
+    assert_eq!(refunded, expected_refund);
 }
 
 #[test]
