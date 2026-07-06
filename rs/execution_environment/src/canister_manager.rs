@@ -180,11 +180,31 @@ impl CanisterManager {
                 }
             }
 
+            // `CanisterStatus` is governed by the canister's status visibility
+            // settings: subnet admins always retain access; otherwise access is
+            // granted to the controllers plus any additional allowed viewers, or
+            // to everyone if the status is public.
+            Ok(Ic00Method::CanisterStatus) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            format!("Canister {canister_id} not found"),
+                        ))?;
+                        let subnet_admins = state.get_own_subnet_admins();
+                        validate_status_visibility(canister, subnet_admins, &sender.get()).map_err(|err| err.into())
+                    },
+                    None => Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
+                    )),
+                }
+            },
+
             // These methods are only valid if they are sent by the controller
             // of the canister or a subnet admin. We assume that the canister
             // always wants to accept such messages.
-            Ok(Ic00Method::CanisterStatus)
-            | Ok(Ic00Method::StartCanister)
+            Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister)
