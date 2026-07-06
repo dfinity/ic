@@ -137,7 +137,8 @@ The design is delivered in two phases:
   holds a sufficient balance of the withdrawn asset: credited-but-unswept deposits
   count as *unavailable* liquidity. A withdrawal that cannot be covered yet is
   queued (never failed on-chain for insufficient balance) and served once sweeps
-  have consolidated enough funds.
+  have consolidated enough funds. (Under the decided variant B this holds by
+  construction: the mint follows the consolidation.)
 * `R17`: A stuck (submitted but unmined) sweep transaction never delays a
   withdrawal. Sweeps are issued from a **dedicated sweeper address** with its own
   nonce sequence — never from the main address, whose nonce sequence serves
@@ -199,7 +200,10 @@ deposit: **(1)** retrieve the deposit address, **(2)** withdraw from the CEX to 
 funds to the minter. One section per step; where a step has variants, a table
 weighs them.
 
-Two variants cut across steps 0 and 3–5 and the decision between them is **not yet taken**:
+Two variants cut across steps 0 and 3–5. **Decided: variant B** — the sweep goes
+through the existing helper contract and the existing pipeline credits the deposit.
+Variant A stays documented (diagrams, tables) so the trade-offs are not
+relitigated:
 
 * **Variant A — direct sweep**: the sweeper delegate transfers funds straight to the
   minter's main address; crediting happens through a *new* detection→mint path,
@@ -216,8 +220,8 @@ sweep with their own principal is rejected).
 
 ### End-to-end flows
 
-Deposit of USDT from a CEX under **variant A** (direct sweep; crediting via a new
-detection path, mint on finalized deposit, sweep asynchronously):
+Deposit of USDT from a CEX under **variant A** (discarded; direct sweep, crediting
+via a new detection path, mint on finalized deposit, sweep asynchronously):
 
 ```mermaid
 sequenceDiagram
@@ -248,8 +252,8 @@ sequenceDiagram
     Eth-->>Minter: receipt: sweeper balance -= effective fee
 ```
 
-Deposit of USDT from a CEX under **variant B** (sweep through the existing helper
-contract; crediting via the unchanged existing pipeline):
+Deposit of USDT from a CEX under **variant B** (decided; sweep through the
+existing helper contract, crediting via the unchanged existing pipeline):
 
 ```mermaid
 sequenceDiagram
@@ -566,7 +570,9 @@ is deducted: the full amount goes to the beneficiary. Fees are flat and
 proposal-configurable rather than oracle-priced. Deduplication is by `(transaction hash, log index)` (`R2`), memo and
 quarantine-on-panic machinery as in today's `mint()` path.
 
-*Where* the mint comes from is the open A/B decision:
+*Where* the mint comes from was the crux of the A/B decision. **Decided:
+variant B** — the mint is triggered by the sweep's own finalized helper event,
+through the existing pipeline. The weighed trade-offs:
 
 | Variant | Pros | Cons |
 |---|---|---|
