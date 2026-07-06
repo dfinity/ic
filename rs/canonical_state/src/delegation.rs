@@ -210,59 +210,117 @@ fn certified_canister_ranges(
 
 #[cfg(test)]
 mod tests {
-    use ic_crypto_tree_hash::{Label, MixedHashTree};
+    use super::{DelegationValidationError, is_delegation_valid_with_respect_to_state};
+    use crate::encoding::encode_subnet_canister_ranges;
+    use assert_matches::assert_matches;
+    use ic_canonical_state_tree_hash_test_utils::build_witness_gen;
+    use ic_crypto_tree_hash::{Label, LabeledTree, WitnessGenerator, flatmap};
+    use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         ReplicatedState, SubnetTopology, metadata_state::testing::NetworkTopologyTesting,
     };
     use ic_test_utilities_types::ids::SUBNET_1;
     use ic_types::{
-        SubnetId,
-        messages::{Blob, Certificate, CertificateDelegation},
+        CanisterId, PrincipalId, SubnetId,
+        messages::{Blob, Certificate, CertificateDelegation, CertificateDelegationFormat},
     };
     use serde::Serialize;
 
-    use crate::lazy_tree_conversion::is_delegation_valid_with_respect_to_state;
-
-    /// Builds a `MixedHashTree` containing `/subnet/<subnet_id>/public_key -> public_key`.
-    fn public_key_tree(subnet_id: SubnetId, public_key: &[u8]) -> MixedHashTree {
-        MixedHashTree::Labeled(
-            Label::from("subnet"),
-            Box::new(MixedHashTree::Labeled(
-                Label::from(subnet_id.get().to_vec()),
-                Box::new(MixedHashTree::Labeled(
-                    Label::from("public_key"),
-                    Box::new(MixedHashTree::Leaf(public_key.to_vec())),
-                )),
-            )),
-        )
-    }
-
-    fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
-        let mut serializer = serde_cbor::Serializer::new(Vec::new());
-        serializer
-            .self_describe()
-            .map_err(|err| format!("Could not write magic tag: {err}"))?;
-        certificate
-            .serialize(&mut serializer)
-            .map_err(|err| format!("Failed to serialize the object: {err}"))?;
-        Ok(serializer.into_inner())
-    }
-
-    /// Builds a delegation whose certificate embeds `tree`.
-    fn delegation_with_tree(subnet_id: SubnetId, tree: MixedHashTree) -> CertificateDelegation {
-        let certificate = Certificate {
-            tree,
-            signature: Blob(vec![]),
-            delegation: None,
-        };
-        CertificateDelegation {
-            subnet_id: Blob(subnet_id.get().to_vec()),
-            certificate: Blob(into_cbor(&certificate).unwrap()),
+    fn range(start: u64, end: u64) -> CanisterIdRange {
+        CanisterIdRange {
+            start: CanisterId::from_u64(start),
+            end: CanisterId::from_u64(end),
         }
     }
 
-    fn fake_replicated_state(subnet_id: SubnetId, public_key: Vec<u8>) -> ReplicatedState {
+    /// Encodes canister ranges into a leaf, exactly as the canonical state does
+    /// (see [`encode_subnet_canister_ranges`]).
+    fn ranges_leaf(ranges: &[CanisterIdRange]) -> LabeledTree<Vec<u8>> {
+        let pairs: Vec<(PrincipalId, PrincipalId)> = ranges
+            .iter()
+            .map(|r| (r.start.get(), r.end.get()))
+            .collect();
+        LabeledTree::Leaf(encode_subnet_canister_ranges(Some(&pairs)))
+    }
+
+    /// `/subnet/<subnet_id>/{canister_ranges, public_key}` (the `Flat` layout).
+    fn flat_tree(
+        subnet_id: SubnetId,
+        public_key: &[u8],
+        ranges: &[CanisterIdRange],
+    ) -> LabeledTree<Vec<u8>> {
+        LabeledTree::SubTree(flatmap![
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => ranges_leaf(ranges),
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.to_vec()),
+                ]),
+            ]),
+        ])
+    }
+
+    /// `/subnet/<subnet_id>/public_key` plus a `/canister_ranges/<subnet_id>`
+    /// subtree whose leaves hold the ranges split into two chunks (the `Tree`
+    /// layout).
+    fn tree_layout(
+        subnet_id: SubnetId,
+        public_key: &[u8],
+        chunk_a: &[CanisterIdRange],
+        chunk_b: &[CanisterIdRange],
+    ) -> LabeledTree<Vec<u8>> {
+        LabeledTree::SubTree(flatmap![
+            Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from(chunk_a[0].start.get().to_vec()) => ranges_leaf(chunk_a),
+                    Label::from(chunk_b[0].start.get().to_vec()) => ranges_leaf(chunk_b),
+                ]),
+            ]),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.to_vec()),
+                ]),
+            ]),
+        ])
+    }
+
+    /// `/subnet/<subnet_id>/public_key` only (the `Pruned` layout).
+    fn pruned_tree(subnet_id: SubnetId, public_key: &[u8]) -> LabeledTree<Vec<u8>> {
+        LabeledTree::SubTree(flatmap![
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("public_key") => LabeledTree::Leaf(public_key.to_vec()),
+                ]),
+            ]),
+        ])
+    }
+
+    /// Wraps `tree` into a delegation for `subnet_id`. The signature is
+    /// irrelevant: the validator never verifies it.
+    fn delegation(subnet_id: SubnetId, tree: &LabeledTree<Vec<u8>>) -> CertificateDelegation {
+        let certificate = Certificate {
+            tree: build_witness_gen(tree)
+                .mixed_hash_tree(tree)
+                .expect("failed to build a MixedHashTree"),
+            signature: Blob(vec![]),
+            delegation: None,
+        };
+        let mut serializer = serde_cbor::Serializer::new(Vec::new());
+        serializer.self_describe().unwrap();
+        certificate.serialize(&mut serializer).unwrap();
+        CertificateDelegation {
+            subnet_id: Blob(subnet_id.get().to_vec()),
+            certificate: Blob(serializer.into_inner()),
+        }
+    }
+
+    /// A replicated state whose certification view maps `subnet_id` to
+    /// `public_key` and `ranges`.
+    fn state_with(
+        subnet_id: SubnetId,
+        public_key: Vec<u8>,
+        ranges: &[CanisterIdRange],
+    ) -> ReplicatedState {
         let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
         state.metadata.network_topology.subnets_mut().insert(
             subnet_id,
@@ -271,49 +329,146 @@ mod tests {
                 ..SubnetTopology::default()
             },
         );
+        let routing_table = state.metadata.network_topology.routing_table_mut();
+        for range in ranges {
+            routing_table.insert(*range, subnet_id).unwrap();
+        }
         state
     }
 
     #[test]
-    fn is_delegation_valid_with_respect_to_state_succeeds_on_matching_public_key() {
-        let subnet_id = SUBNET_1;
-        let public_key = vec![1, 2, 3, 4, 5];
-        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &public_key));
-        let certified_state = fake_replicated_state(subnet_id, public_key);
+    fn flat_delegation_matching_public_key_and_ranges_is_valid() {
+        let public_key = vec![1, 2, 3];
+        let ranges = [range(10, 20), range(100, 200)];
+        let state = state_with(SUBNET_1, public_key.clone(), &ranges);
+        let delegation = delegation(SUBNET_1, &flat_tree(SUBNET_1, &public_key, &ranges));
 
-        assert!(is_delegation_valid_with_respect_to_state(&delegation, &certified_state).is_ok());
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Flat,
+                &state,
+            ),
+            Ok(true)
+        );
     }
 
     #[test]
-    fn verify_delegation_matches_certified_public_key_fails_on_mismatch() {
-        let subnet_id = SUBNET_1;
-        let delegation =
-            delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3, 4, 5]));
-        let certified_state = fake_replicated_state(subnet_id, vec![5, 4, 3, 2, 1]);
+    fn tree_delegation_matching_public_key_and_ranges_is_valid() {
+        let public_key = vec![1, 2, 3];
+        // The state holds both ranges; the delegation splits them across two leaves.
+        let state = state_with(
+            SUBNET_1,
+            public_key.clone(),
+            &[range(10, 20), range(100, 200)],
+        );
+        let delegation = delegation(
+            SUBNET_1,
+            &tree_layout(SUBNET_1, &public_key, &[range(10, 20)], &[range(100, 200)]),
+        );
 
         assert_matches!(
-            is_delegation_valid_with_respect_to_state(&delegation, &certified_state),
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Tree,
+                &state,
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn pruned_delegation_ignores_ranges_and_only_checks_public_key() {
+        let public_key = vec![1, 2, 3];
+        // The state has ranges, but a pruned delegation carries none: they must
+        // not be compared, so a matching public key is enough. The tree only
+        // contains the public key.
+        let state = state_with(SUBNET_1, public_key.clone(), &[range(10, 20)]);
+        let delegation = delegation(SUBNET_1, &pruned_tree(SUBNET_1, &public_key));
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Pruned,
+                &state,
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn mismatching_public_key_is_invalid() {
+        let ranges = [range(10, 20)];
+        let state = state_with(SUBNET_1, vec![1, 2, 3], &ranges);
+        // Same ranges, different public key.
+        let delegation = delegation(SUBNET_1, &flat_tree(SUBNET_1, &[9, 9, 9], &ranges));
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Flat,
+                &state,
+            ),
             Ok(false)
         );
     }
 
     #[test]
-    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_state() {
-        let subnet_id = SUBNET_1;
-        let delegation = delegation_with_tree(subnet_id, public_key_tree(subnet_id, &[1, 2, 3]));
-        assert_matches!(is_delegation_valid_with_respect_to_state(&delegation, &ReplicatedState::new(subnet_id, SubnetType::Application)),
-            Err(err) if err.contains("missing from the certified state")
+    fn mismatching_canister_ranges_are_invalid() {
+        let public_key = vec![1, 2, 3];
+        let state = state_with(SUBNET_1, public_key.clone(), &[range(10, 20)]);
+        // Same public key, but the delegation certifies a different range.
+        let delegation = delegation(
+            SUBNET_1,
+            &flat_tree(SUBNET_1, &public_key, &[range(10, 999)]),
+        );
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Flat,
+                &state,
+            ),
+            Ok(false)
         );
     }
 
     #[test]
-    fn verify_delegation_matches_certified_public_key_fails_when_missing_from_delegation() {
-        let subnet_id = SUBNET_1;
-        let delegation = delegation_with_tree(subnet_id, MixedHashTree::Empty);
-        let certified_state = fake_replicated_state(subnet_id, vec![1, 2, 3]);
+    fn unknown_subnet_is_an_error() {
+        // The state does not know about SUBNET_1.
+        let state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
+        let delegation = delegation(SUBNET_1, &flat_tree(SUBNET_1, &[1, 2, 3], &[range(10, 20)]));
 
-        assert_matches!(is_delegation_valid_with_respect_to_state(&delegation, &certified_state),
-            Err(err) if err.contains("missing from the delegation")
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Flat,
+                &state,
+            ),
+            Err(DelegationValidationError::UnknownSubnet(_))
+        );
+    }
+
+    #[test]
+    fn public_key_missing_from_delegation_is_an_error() {
+        let state = state_with(SUBNET_1, vec![1, 2, 3], &[range(10, 20)]);
+        // A tree that has canister ranges but no public_key leaf.
+        let tree = LabeledTree::SubTree(flatmap![
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(SUBNET_1.get().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("canister_ranges") => ranges_leaf(&[range(10, 20)]),
+                ]),
+            ]),
+        ]);
+        let delegation = delegation(SUBNET_1, &tree);
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(
+                &delegation,
+                CertificateDelegationFormat::Flat,
+                &state,
+            ),
+            Err(DelegationValidationError::UnexpectedTreeShape(_))
         );
     }
 }
