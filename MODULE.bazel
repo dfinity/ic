@@ -754,9 +754,10 @@ http_archive(
     # reproducibility. See the patch for details.
     patch_strip = 1,
     patches = ["//bazel:e2fsprogs_no_external_config.patch"],
-    sha256 = "da274408bebbfd13a5a2fc3cfc66e3ffff17c48534673aa67f88d49b99123b96",
+    sha256 = "9f82eaa7002673291629077b80ee005cadfcd49854907a22007fed70b0ef596e",
     strip_prefix = "e2fsprogs-1.47.4",
-    urls = ["https://www.kernel.org/pub/linux/kernel/people/tytso/e2fsprogs/v1.47.4/e2fsprogs-1.47.4.tar.gz"],
+    type = "tar.gz",
+    urls = ["https://codeload.github.com/tytso/e2fsprogs/tar.gz/refs/tags/v1.47.4"],
 )
 
 http_archive(
@@ -819,8 +820,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "dd8a95dd5a784e9b7c8c79fc4fa3a5c97d449f9666afe57aefa960aef0d68b8c",
-    url = "https://github.com/dfinity/pocketic/releases/download/10.0.0/pocket-ic-x86_64-linux.gz",
+    sha256 = "1186d16d98dbed1a9dbf06194ef11e3938a5386e8bf6c45d4f1165f62c8f04e0",
+    url = "https://download.dfinity.systems/ic/c0126e95b74ee154caf4c3ebd7f3c91dcdd51301/binaries/x86_64-linux/pocket-ic.gz",
 )
 
 ## Rosetta CLI
@@ -935,6 +936,23 @@ http_archive(
     build_file = "@//third_party:BUILD.dfx.bazel",
     sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
     url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
+)
+
+# We pull in the binary artifact to break a circular dependency
+# between repositories: `canbench` is hosted in a separate repository
+# and depends on `pocket_ic` hosted in this repository;
+# this prevents us from bumping `reqwest` from 0.12 to 0.13
+# in `canbench` and `pocket_ic` in an atomic step if we want to build
+# both from sources => we pull in `canbench` as a binary artifact instead.
+# Bumping `reqwest` from 0.12 to 0.13 in an atomic step is required
+# because having both version in the dependency tree (of this repository)
+# causes issues.
+http_file(
+    name = "canbench_bin",
+    downloaded_file_path = "canbench",
+    executable = True,
+    sha256 = "9d55976505e0e77a47be2f3240813090f84242f3912bb587fda8b97b9304bdd4",
+    url = "https://github.com/dfinity/canbench/releases/download/v0.6.0/canbench",
 )
 
 http_file(

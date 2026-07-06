@@ -1,11 +1,11 @@
 //! Per-group console-log streamer for the Local system-test backend.
 //!
 //! Each VM booted by the [`LocalBackend`](crate::driver::local_backend::LocalBackend)
-//! has its serial console captured by QEMU/libvirt into a `console.log` file
-//! (see the `<serial>` / `<console>` devices in
-//! `rs/tests/driver/templates/guestos_vm_template.xml`). This task discovers
-//! those files and tails each of them to the test log, prefixing every line with
-//! `[console=<vm>]`.
+//! has its serial console captured by QEMU into a `console.log` file (see the
+//! `-chardev file,...,append=on` / `-device isa-serial` args built in
+//! [`LocalBackend::start_vm`](crate::driver::local_backend::LocalBackend::start_vm)).
+//! This task discovers those files and tails each of them to the test log,
+//! prefixing every line with `[console=<vm>]`.
 //!
 //! Discovery is event-based: an `inotify` watch on the per-group `vms` directory
 //! spawns a tailer the instant a VM's directory is created — before the VM has
@@ -65,8 +65,8 @@ pub(crate) fn log_consoles_task(group_ctx: GroupContext) {
     // The Local backend materializes each VM under
     // `<group_dir>/local_backend/vms/<sanitized_vm_name>/`, writing the serial
     // console to `console.log` in that directory (see
-    // `LocalBackend::vm_dir` / `start_vm` in `local_backend.rs`). We deliberately
-    // only need the path here and never open the live libvirtd socket.
+    // `LocalBackend::vm_dir` / `start_vm` in `local_backend.rs`). We derive the
+    // directory path directly; the backend owns and populates it.
     let vms_dir = group_ctx.group_dir.join("local_backend").join("vms");
 
     // Wait for the backend to create `vms_dir`. It is created lazily, together
@@ -252,7 +252,7 @@ fn strip_control_codes(line: &str) -> String {
 /// is already queued by the kernel and wakes us immediately — no line is missed.
 async fn stream_console_file(logger: Logger, label: String, path: PathBuf) {
     // Arm a `MODIFY` watch on the console file. It appears slightly after the VM
-    // directory (when libvirt boots the domain), so retry until it exists: a
+    // directory (when the backend launches QEMU), so retry until it exists: a
     // failed `add` (ENOENT) doubles as the wait for the file to be created.
     let inotify = Inotify::init().expect("failed to initialize inotify");
     while let Err(_err) = inotify.watches().add(&path, WatchMask::MODIFY) {

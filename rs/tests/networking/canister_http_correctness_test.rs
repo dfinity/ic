@@ -1139,15 +1139,25 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
         },
     ));
 
-    let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
+    // Newer `hyper_util` versions embed the target socket address in the
+    // `ConnectError`, so we only check the stable prefix and suffix.
+    let expected_error_message_prefix = "Error(Connect, ConnectError(\"tcp connect error\", ";
+    let expected_error_message_suffix =
+        "Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
     let err_response = response.clone().unwrap_err();
 
     assert_matches!(err_response.reject_code, RejectCode::SysTransient);
 
     assert!(
-        err_response.reject_message.contains(expected_error_message),
-        "Expected error message to contain, {}, got: {}",
-        expected_error_message,
+        err_response
+            .reject_message
+            .contains(expected_error_message_prefix)
+            && err_response
+                .reject_message
+                .contains(expected_error_message_suffix),
+        "Expected error message to contain {} and {}, got: {}",
+        expected_error_message_prefix,
+        expected_error_message_suffix,
         err_response.reject_message
     );
 }
