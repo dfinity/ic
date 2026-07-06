@@ -3,8 +3,8 @@ use crate::utils::{CANISTERS_PER_BATCH, expect_reply, test_canister_wasm};
 use candid::Encode;
 use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::CanisterId;
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::SubnetConfig;
-use ic_config::{execution_environment::Config as HypervisorConfig, flag_status::FlagStatus};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -23,17 +23,12 @@ fn admin_canister_id() -> CanisterId {
 /// `canisters_number` additional canisters. Returns the `StateMachine` and the
 /// test canister ID.
 fn setup_with_canisters(canisters_number: u64) -> (StateMachine, CanisterId) {
-    let hypervisor_config = HypervisorConfig {
-        rate_limiting_of_heap_delta: FlagStatus::Disabled,
-        ..Default::default()
-    };
     let admin = admin_canister_id();
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             SubnetConfig::new(SubnetType::Application),
-            hypervisor_config,
+            HypervisorConfig::default(),
         )))
-        .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
         .with_subnet_admins(vec![admin.get()])
