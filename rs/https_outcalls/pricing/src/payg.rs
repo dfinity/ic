@@ -94,6 +94,7 @@ impl PayAsYouGoTracker {
 
 impl BudgetTracker for PayAsYouGoTracker {
     fn get_adapter_limits(&self) -> AdapterLimits {
+        // TODO: Adjust limits based on remaining budget.
         AdapterLimits {
             max_response_size: self.max_response_size,
             max_response_time: MAX_RESPONSE_TIME,
@@ -112,6 +113,7 @@ impl BudgetTracker for PayAsYouGoTracker {
     }
 
     fn get_transform_limit(&self) -> NumInstructions {
+        // TODO: Adjust limits based on remaining budget.
         MAX_INSTRUCTIONS_PER_QUERY_MESSAGE
     }
 
