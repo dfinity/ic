@@ -6856,6 +6856,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "criterion",
  "hex",
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
@@ -9983,6 +9984,7 @@ dependencies = [
  "more-asserts",
  "num-traits",
  "phantom_newtype",
+ "pprof",
  "prometheus",
  "proptest",
  "rand 0.8.6",
@@ -16503,9 +16505,9 @@ dependencies = [
 
 [[package]]
 name = "ic_principal"
-version = "0.1.2"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b2b6c5941dfd659e77b262342fa58ad49489367ad026255cda8c43682d0c534"
+checksum = "0c2732829022822ec69021c336d23b32a053e07abdd08553c71407d6e2d1675d"
 dependencies = [
  "arbitrary",
  "crc32fast",

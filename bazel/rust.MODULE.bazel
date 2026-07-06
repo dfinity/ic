@@ -762,7 +762,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "ic_principal",
-    version = "^0.1.1",
+    version = "^0.1.5",
 )
 crate.spec(
     package = "ic-response-verification",
