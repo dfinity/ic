@@ -192,7 +192,7 @@ impl CanisterManager {
                             format!("Canister {canister_id} not found"),
                         ))?;
                         let subnet_admins = state.get_own_subnet_admins();
-                        validate_status_visibility(canister, subnet_admins, &sender.get()).map_err(|err| err.into())
+                        validate_status_visibility(canister, subnet_admins, &sender.get(), method_name).map_err(|err| err.into())
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
@@ -1097,7 +1097,7 @@ impl CanisterManager {
         // Skip the visibility check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
         if sender != canister.canister_id().get() {
-            validate_status_visibility(canister, subnet_admins, &sender)?
+            validate_status_visibility(canister, subnet_admins, &sender, "canister_status")?
         }
 
         let controller = canister.system_state.controller();

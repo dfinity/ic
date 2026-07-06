@@ -501,6 +501,10 @@ pub(crate) enum CanisterManagerError {
         caller: PrincipalId,
         method_name: String,
     },
+    CanisterStatusAccessDenied {
+        caller: PrincipalId,
+        method_name: String,
+    },
     FetchCanisterLogsNotEnoughCycles {
         sent: Cycles,
         required: Cycles,
@@ -758,6 +762,11 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterSnapshotAccessDenied { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a principal with snapshot read access."
+                    .to_string(),
+                doc_link: doc_ref("invalid-controller"),
+            },
+            CanisterManagerError::CanisterStatusAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with canister status read access."
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
             },
@@ -1195,6 +1204,13 @@ impl From<CanisterManagerError> for UserError {
                 "The caller is not authorized to call this method.".to_string(),
             ),
             CanisterSnapshotAccessDenied {
+                caller,
+                method_name,
+            } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("Caller {caller} is not allowed to call {method_name}"),
+            ),
+            CanisterStatusAccessDenied {
                 caller,
                 method_name,
             } => Self::new(

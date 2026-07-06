@@ -151,14 +151,13 @@ fn test_status_visibility_of_canister_status() {
                 ));
                 assert_eq!(
                     err.code(),
-                    ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
+                    ErrorCode::CanisterRejectedMessage,
                     "unexpected error for status_visibility: {status_visibility:?}, \
                      sender: {sender_label}, call path: {call_path:?}"
                 );
                 assert!(
                     err.description().contains(&format!(
-                        "Only the controllers of the canister {canister_id} \
-                         or subnet admins can perform certain actions"
+                        "Caller {sender} is not allowed to call canister_status"
                     )),
                     "unexpected error description for status_visibility: {status_visibility:?}, \
                      sender: {sender_label}, call path: {call_path:?}, description: {}",
