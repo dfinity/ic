@@ -388,19 +388,24 @@ fn fetch_canister_logs_response_within_limit() {
     // stored data size (`CanisterLogRecord::data_size()` = 40 B + content per
     // record), while Candid encodes each record's fixed fields in fewer bytes (two
     // `nat64` = 16 B). The worst case is therefore the fewest/largest records, so we
-    // sweep record sizes from empty up to a single near-maximal record and assert the
-    // encoded response fits within the constant (with margin for Candid framing).
+    // sweep record sizes up to a single near-maximal record and assert the encoded
+    // response fits within the constant (with margin for Candid framing). The sizes
+    // are kept large enough that a full buffer exceeds `RESULT_MAX_SIZE`: the ring
+    // buffer holds only a few hundred records (its index table is one page), so tiny
+    // records could never fill it past the cap.
     let aggregate_capacity = 3 * RESULT_MAX_SIZE.get() as usize;
     for content_len in [
-        0,
-        100,
-        4 * KIB,
-        100 * KIB,
+        16 * KIB,
+        128 * KIB,
         RESULT_MAX_SIZE.get() as usize - CanisterLogRecord::default().data_size(),
     ] {
         let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
         s.resize_for_testing(aggregate_capacity);
-        // Fill well past `RESULT_MAX_SIZE` so the response is trimmed to the cap.
+        // Append records into store `s`, starting at record index `0`, until at least
+        // `2 * RESULT_MAX_SIZE` bytes have been added (twice the result cap, so the
+        // buffer ends up larger than what can be returned in a single result), packing
+        // each delta up to `MAX_DELTA_LOG_MEMORY_LIMIT` with records whose content is
+        // `content_len` bytes.
         append_deltas(
             &mut s,
             0,
@@ -408,6 +413,8 @@ fn fetch_canister_logs_response_within_limit() {
             MAX_DELTA_LOG_MEMORY_LIMIT,
             content_len,
         );
+        // The buffer now holds more than the result cap, so `records()` must trim.
+        assert_gt!(s.bytes_used(), RESULT_MAX_SIZE.get() as usize);
 
         let records = s.records(None);
         // The returned records are trimmed to `RESULT_MAX_SIZE` by stored data size.
