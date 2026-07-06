@@ -2883,7 +2883,16 @@ fn list_canisters_respects_round_instruction_limit() {
     );
     assert_eq!(admin_canister, admin);
 
+    // Create an additional canister so that the subnet hosts more than just
+    // the admin canister, exercising the per-canister cost of `list_canisters`.
+    create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
     let num_canisters = env.get_latest_state().num_canisters() as u64;
+    assert_eq!(num_canisters, 2);
     let cost_per_call = BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters;
 
     // Build an update that fires `NUM_CALLS` concurrent `list_canisters`
