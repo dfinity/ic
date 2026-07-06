@@ -822,45 +822,92 @@ control, which is the recovery story of step 1.
 
 A single immutable Solidity contract, deployed once per network, with **no storage**
 (EIP-7702 delegates share the EOA's storage; using none avoids collision hazards
-entirely) and the minter's main address hardcoded as an `immutable`. Shown below for
-variant A; variant B's delegate (`CkSweeperViaHelper` in the demo) has the same shape
-but calls the helper's `depositErc20` with caller-supplied principal/subaccount and
-restricts callers to the minter (see step 5):
+entirely and leaves nothing behind on re-delegation) and its configuration held in
+`immutable`s (immutables live in the code, so they travel with the delegation).
+Per decided variant B, sweeping one token is three steps, all executing *as* the
+deposit EOA — under delegation, `address(this)` **is** the deposit address:
+
+1. **Get the balance**: `balanceOf(address(this))`. The whole current balance is
+   swept; there is no partial sweep.
+2. **Approve the balance**: approve the helper for exactly that balance, through a
+   USDT-tolerant `_safeApprove` (USDT's `approve` returns no value and reverts
+   unless the current allowance is zero — guaranteed here, because step 3 always
+   consumes the allowance in full).
+3. **Transfer the whole balance**: call the existing helper's
+   `depositErc20(token, balance, principal, subaccount)`, which `transferFrom`s
+   the balance from the deposit EOA to the minter's main address (`R6`) and emits
+   the canonical `ReceivedEthOrErc20` event that the unchanged deposit pipeline
+   mints from (step 4).
 
 ```solidity
-contract CkSweeper {
-    address payable private immutable MINTER;
-    constructor(address minter) { MINTER = payable(minter); }
+contract CkSweeperViaHelper {
+    address private immutable SWEEPER; // dedicated sweep-sending address (R17)
+    address private immutable HELPER;  // DepositHelperWithSubaccount (CkDeposit)
+    address private immutable SELF;    // deployed instance, doubles as batcher
 
-    /// Callable by anyone: funds can only move to MINTER (R6).
-    function sweepErc20(IERC20[] calldata tokens) external {
-        for (uint i = 0; i < tokens.length; ++i) {
-            uint256 b = tokens[i].balanceOf(address(this));
-            if (b > 0) tokens[i].safeTransfer(MINTER, b); // USDT-safe transfer
+    constructor(address sweeper, address helper) {
+        SWEEPER = sweeper;
+        HELPER = helper;
+        SELF = address(this);
+    }
+
+    function sweepErc20(address[] calldata tokens, bytes32 principal, bytes32 subaccount) external {
+        // Sub-variant "caller-gating" (step 5); under "one-time self-attestation"
+        // this line is replaced by the ecrecover check on the attestation.
+        require(msg.sender == SWEEPER || msg.sender == SELF, "caller is not the minter");
+        for (uint256 i = 0; i < tokens.length; ++i) {
+            // 1) get balance
+            uint256 balance = IErc20Balance(tokens[i]).balanceOf(address(this));
+            if (balance > 0) {
+                // 2) approve balance
+                _safeApprove(tokens[i], HELPER, balance);
+                // 3) transfer whole balance (helper transferFroms + emits the event)
+                ICkDeposit(HELPER).depositErc20(tokens[i], balance, principal, subaccount);
+            }
         }
     }
 
-    /// Batch entry point: the deployed CkSweeper instance doubles as the
-    /// batcher, sweeping many delegated deposit EOAs in a single transaction.
-    function sweepErc20Batch(address[] calldata depositAddresses, address[] calldata tokens) external {
-        for (uint i = 0; i < depositAddresses.length; ++i) {
-            CkSweeper(depositAddresses[i]).sweepErc20(tokens);
+    /// Batch entry point on the deployed instance: one transaction sweeps many
+    /// delegated deposit EOAs, each towards its own IC account.
+    function sweepErc20Batch(
+        address[] calldata depositAddresses,
+        bytes32[] calldata principals,
+        bytes32[] calldata subaccounts,
+        address[] calldata tokens
+    ) external {
+        require(msg.sender == SWEEPER, "caller is not the minter");
+        require(
+            depositAddresses.length == principals.length && principals.length == subaccounts.length,
+            "length mismatch"
+        );
+        for (uint256 i = 0; i < depositAddresses.length; ++i) {
+            CkSweeperViaHelper(depositAddresses[i]).sweepErc20(tokens, principals[i], subaccounts[i]);
         }
     }
 
-    function sweepEth() external {
-        if (address(this).balance > 0) {
-            (bool ok,) = MINTER.call{value: address(this).balance}("");
-            require(ok);
-        }
+    /// Tolerates non-standard ERC-20s such as USDT whose approve returns no value.
+    function _safeApprove(address token, address spender, uint256 value) private {
+        (bool ok, bytes memory data) =
+            token.call(abi.encodeWithSignature("approve(address,uint256)", spender, value));
+        require(ok && (data.length == 0 || abi.decode(data, (bool))), "approve failed");
     }
 }
 ```
 
-Notes: `safeTransfer` handles non-standard ERC-20s (USDT returns no value); no
-`receive()` on purpose — plain ETH sends to a delegated address must fail rather
-than be silently accepted (`R12`); reentrancy is moot (fixed destination, no
-state).
+Notes:
+
+* `SELF` must be captured at construction: inside a delegated EOA `address(this)`
+  is the EOA, so the batch gate cannot be written as `msg.sender == address(this)`.
+* The approval is for exactly `balance` and is consumed in full within the same
+  call — no standing allowance toward the helper ever survives a sweep.
+* No `receive()`/`fallback` and no ETH sweep entry point on purpose: plain ETH
+  sends to a delegated ERC-20 address must fail rather than be silently accepted
+  (`R12`); Phase 2 ETH addresses are never delegated and sweep via a key-signed
+  `depositEth` call (step 5).
+* Reentrancy is moot: no storage, and funds can only move through the helper
+  toward the minter's main address.
+* The demo's [`CkSweeperViaHelper.sol`](deposit_from_cex_demo/contracts/CkSweeperViaHelper.sol)
+  is this contract with the sweeper address approximated by a single minter EOA.
 
 ### Test plan
 
