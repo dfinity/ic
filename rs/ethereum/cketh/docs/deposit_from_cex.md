@@ -68,7 +68,8 @@ The design is delivered in two phases:
   deposit address is excluded from sweeping: the deposit is recorded as invalid and
   the funds stay segregated at the deposit address (release only via explicit manual
   or governance intervention — they never mix with the funds backing ckTokens at the
-  minter's main address).
+  minter's main address). An address holding both blocked and clean un-swept
+  deposits is frozen entirely: no sweep and no further mint for that address.
 * `R4`: Transfers below the per-token minimum deposit amount, and transfers of
   unsupported ERC-20 tokens, are not credited. No funds are ever burned or destroyed:
   they remain at a tECDSA-controlled address and remain recoverable by the minter.
@@ -357,18 +358,31 @@ Scanning is a two-stage funnel, cheap-first:
 **Blocklist screening** happens here, against the same compiled-in blocklist used
 for helper deposits today (`src/blocklist.rs`, checked like
 `register_deposit_events` in `src/deposit.rs`): the screened address is the
-`Transfer` log's `from` — for a CEX deposit, the exchange hot wallet. If it is
-blocked: no mint, the deposit is recorded as invalid, and — an *improvement* over
-today, where blocked helper-deposit funds already sit commingled at the minter
-address — the deposit address is excluded from sweeping, so the funds stay
-segregated at the key-controlled deposit address until an explicit manual/governance
-release (`R3`). Under variant B the same screening runs *before scheduling the
-sweep* (the helper event's `owner` is the deposit EOA, not the real sender, so
-screening cannot be left to the pipeline); the pipeline's owner↔principal
-cross-check remains as belt-and-braces. For native ETH, balance deltas carry no
-sender: screening is limited to address-level checks plus optional
-caller-supplied withdrawal transaction hashes — an accepted weakening to review
-with compliance before Phase 2 ships (see Non-goals).
+`Transfer` log's `from` — for a CEX deposit, the exchange hot wallet. Note that the
+minter is never limited to the bare balance it observed at an EOA: **the balance
+scan of stage 1 is only a trigger, never a source of truth.** A standard ERC-20
+balance can only change through `transfer`/`transferFrom`/mint, all of which emit a
+`Transfer` log, so every balance increase noticed by stage 1 has a corresponding
+stage-2 log carrying the sender — including transfers initiated by contracts
+(internal transactions). No crediting, screening decision, or sweep is ever based on
+a balance observation alone; consequently, **under variant B the stage-2 log query
+is mandatory before scheduling any sweep** (after the sweep, the helper event's
+`owner` is the deposit EOA, not the real sender, so screening cannot be left to the
+pipeline; the pipeline's owner↔principal cross-check remains as belt-and-braces).
+
+If a screened sender is blocked: no mint, the deposit is recorded as invalid, and —
+an *improvement* over today, where blocked helper-deposit funds already sit
+commingled at the minter address — the deposit address is excluded from sweeping, so
+the funds stay segregated at the key-controlled deposit address until an explicit
+manual/governance release (`R3`). Since a sweep always moves an address' whole
+balance, an address holding a *mix* of blocked and clean un-swept transfers is
+frozen entirely (no sweep, no further mint): partially sweeping "clean" amounts out
+of an address holding sanctioned funds is deliberately not attempted.
+
+For native ETH (Phase 2) the trigger and the observation coincide — a balance delta
+has no log and carries no sender: screening is limited to address-level checks plus
+optional caller-supplied withdrawal transaction hashes — an accepted weakening to
+review with compliance before Phase 2 ships (see Non-goals).
 
 An optional `notify_deposit(account)` endpoint (guarded per account, like ckBTC's
 `update_balance`) remains useful as an accelerator and as the re-arming mechanism
