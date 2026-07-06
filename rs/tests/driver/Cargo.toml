@@ -9,6 +9,8 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+askama = { workspace = true }
+axum = { workspace = true }
 bare_metal_deployment = { path = "../../ic_os/dev_test_tools/bare_metal_deployment" }
 bincode = { workspace = true }
 candid = { workspace = true }
@@ -77,8 +79,10 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+inotify = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
+libc = { workspace = true }
 macaddr = { workspace = true }
 nix = { workspace = true }
 num_cpus = "1.13.1"
@@ -86,6 +90,7 @@ on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rcgen = { workspace = true }
 regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
@@ -105,6 +110,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }

@@ -11,7 +11,7 @@ use crate::{
     messages::CallbackId,
     signature::BasicSignature,
 };
-use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_base_types::{NodeId, PrincipalId};
 use ic_error_types::RejectCode;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
@@ -215,7 +215,6 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 canister_id: Some(pb::CanisterId::from(payload.content.canister_id)),
             }),
             hash: metadata.content_hash.get().0,
-            registry_version: metadata.registry_version.get(),
             replica_version: metadata.replica_version.into(),
             signatures: signatures
                 .into_iter()
@@ -285,7 +284,6 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                     )),
                     content_size: payload.content_size,
                     is_reject: payload.is_reject,
-                    registry_version: RegistryVersion::new(payload.registry_version),
                     replica_version: ReplicaVersion::try_from(payload.replica_version)
                         .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?,
                 },
@@ -370,7 +368,6 @@ impl From<CanisterHttpResponseShare> for pb::CanisterHttpShare {
             metadata: Some(pb::CanisterHttpResponseMetadata {
                 id: metadata.id.get(),
                 content_hash: metadata.content_hash.get().0,
-                registry_version: metadata.registry_version.get(),
                 replica_version: metadata.replica_version.into(),
                 content_size: metadata.content_size,
                 is_reject: metadata.is_reject,
@@ -392,7 +389,6 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
             .ok_or(ProxyDecodeError::MissingField("share.metadata"))?;
         let id = CanisterHttpRequestId::new(metadata.id);
         let content_hash = CryptoHashOf::new(CryptoHash(metadata.content_hash));
-        let registry_version = RegistryVersion::new(metadata.registry_version);
         let replica_version = ReplicaVersion::try_from(metadata.replica_version)
             .map_err(|err| ProxyDecodeError::ReplicaVersionParseError(Box::new(err)))?;
         let signature = share
@@ -409,7 +405,6 @@ impl TryFrom<pb::CanisterHttpShare> for CanisterHttpResponseShare {
                     content_hash,
                     content_size: metadata.content_size,
                     is_reject: metadata.is_reject,
-                    registry_version,
                     replica_version,
                 },
                 payment_receipt,
@@ -642,7 +637,6 @@ mod tests {
                     ])),
                     content_size: 42,
                     is_reject: false,
-                    registry_version: RegistryVersion::new(2),
                     replica_version: ReplicaVersion::default(),
                 },
                 payment_receipt: CanisterHttpPaymentReceipt {

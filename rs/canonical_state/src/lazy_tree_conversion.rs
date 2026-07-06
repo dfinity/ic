@@ -9,9 +9,10 @@ use crate::{
 };
 use LazyTree::Blob;
 use ic_canonical_state_tree_hash::{
-    hash_tree::HashTree,
+    hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
     lazy_tree::{
-        Lazy, LazyFork, LazyTree, blob, fork, materialize::materialize_partial, num, string,
+        Lazy, LazyFork, LazyTree, SubtreeExpander, SubtreeSource, blob, fork,
+        materialize::materialize_partial, num, string,
     },
 };
 use ic_crypto_tree_hash::{Label, Witness, sparse_labeled_tree_from_paths};
@@ -31,7 +32,7 @@ use ic_replicated_state::{
 use ic_types::{
     CanisterId, Height, NodeId, PrincipalId, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, Refund, Request, Response, StreamMessage},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
 use std::convert::{AsRef, TryFrom, TryInto};
@@ -229,7 +230,7 @@ impl<K, V> MapFilter<K, V> for NoFilter {
 #[derive(Clone)]
 struct MapTransformFork<'a, K, V, MF, F>
 where
-    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a>,
+    F: Fn(&'a K, &'a V, CertificationVersion) -> LazyTree<'a>,
     MF: MapFilter<K, V>,
 {
     map: &'a BTreeMap<K, V>,
@@ -243,7 +244,7 @@ where
     K: Ord + LabelLike + Clone + Send + Sync,
     V: Send + Sync,
     MF: MapFilter<K, V> + Send + Sync,
-    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
+    F: Fn(&'a K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
 {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let k = K::from_label(label.as_bytes())?;
@@ -251,8 +252,8 @@ where
             return None;
         }
         self.map
-            .get(&k)
-            .map(move |v| (self.mk_tree)(k, v, self.certification_version))
+            .get_key_value(&k)
+            .map(|(k, v)| (self.mk_tree)(k, v, self.certification_version))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
@@ -272,7 +273,7 @@ where
                 .map(move |(k, v)| {
                     (
                         k.to_label(),
-                        (self.mk_tree)(k.clone(), v, self.certification_version),
+                        (self.mk_tree)(k, v, self.certification_version),
                     )
                 }),
         )
@@ -292,6 +293,10 @@ where
     queue: &'a StreamIndexedQueue<T>,
     certification_version: CertificationVersion,
     mk_tree: fn(StreamIndex, &'a T, CertificationVersion) -> LazyTree<'a>,
+    /// Produces a [`SubtreeSource`] for a child, to be used to create a reusable
+    /// [stub](`NodeKind::Stub`). Stream messages' contents are immutable once
+    /// enqueued, so the digest of any index present in a baseline can be reused.
+    mk_source: fn(&'a T, CertificationVersion) -> SubtreeSource,
 }
 
 impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
@@ -317,6 +322,14 @@ impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
 
     fn len(&self) -> usize {
         self.queue.len()
+    }
+
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        let mk_source = self.mk_source;
+        let version = self.certification_version;
+        Some(Box::new(self.queue.iter().map(move |(idx, v)| {
+            (idx.to_label(), mk_source(v, version))
+        })))
     }
 }
 
@@ -535,6 +548,7 @@ fn streams_as_tree<'a>(
                         mk_tree: |_idx, msg, certification_version| {
                             blob(move || encode_message(msg, certification_version))
                         },
+                        mk_source: message_source,
                     }),
                 ),
         )
@@ -556,6 +570,73 @@ fn streams_as_tree<'a>(
             certification_version,
             mk_tree,
         })
+    }
+}
+
+/// Expands `$ty`/`$variant` to a 1-leaf [`HashTree`] (re-encoding the message
+/// under the const certification version `V`), and a `select_*` helper that
+/// picks the `V`-specific monomorphization — so the stored function pointer
+/// alone fully determines the expansion. See [`message_source`].
+macro_rules! message_expander {
+    ($expand:ident, $select:ident, $ty:ty, $variant:path) => {
+        fn $expand<const V: u32>(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+            let inner = source.downcast_arc::<$ty>();
+            let version = CertificationVersion::try_from(V)
+                .expect("const version parameter is a valid certification version");
+            let msg = $variant(inner);
+            hash_lazy_tree(&blob(move || encode_message(&msg, version)), None)
+        }
+
+        fn $select(version: CertificationVersion) -> SubtreeExpander {
+            match version {
+                CertificationVersion::V19 => $expand::<{ CertificationVersion::V19 as u32 }>,
+                CertificationVersion::V20 => $expand::<{ CertificationVersion::V20 as u32 }>,
+                CertificationVersion::V21 => $expand::<{ CertificationVersion::V21 as u32 }>,
+                CertificationVersion::V22 => $expand::<{ CertificationVersion::V22 as u32 }>,
+                CertificationVersion::V23 => $expand::<{ CertificationVersion::V23 as u32 }>,
+                CertificationVersion::V24 => $expand::<{ CertificationVersion::V24 as u32 }>,
+                CertificationVersion::V25 => $expand::<{ CertificationVersion::V25 as u32 }>,
+                CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
+            }
+        }
+    };
+}
+
+message_expander!(
+    expand_request,
+    select_request_expander,
+    Request,
+    StreamMessage::Request
+);
+message_expander!(
+    expand_response,
+    select_response_expander,
+    Response,
+    StreamMessage::Response
+);
+message_expander!(
+    expand_refund,
+    select_refund_expander,
+    Refund,
+    StreamMessage::Refund
+);
+
+/// Produces a [`SubtreeSource`] for a stream message, identified by its backing
+/// `Arc<Request|Response|Refund>`, used to create a reusable
+/// [stub](`NodeKind::Stub`).
+///
+/// A message's contents never change once enqueued, so any index present in a
+/// baseline keeps the same `Arc` and its precomputed digest can be reused; only
+/// newly enqueued messages must be encoded and hashed.
+fn message_source(msg: &StreamMessage, version: CertificationVersion) -> SubtreeSource {
+    match msg {
+        StreamMessage::Request(req) => SubtreeSource::new(req, select_request_expander(version)),
+        StreamMessage::Response(resp) => {
+            SubtreeSource::new(resp, select_response_expander(version))
+        }
+        StreamMessage::Refund(refund) => {
+            SubtreeSource::new(refund, select_refund_expander(version))
+        }
     }
 }
 
@@ -643,6 +724,17 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
     fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// Collapse ingress messages into reusable stubs identified by their respective
+    /// `Arc<IngressStatus>`.
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        Some(Box::new(self.0.statuses_arc().map(|(id, status)| {
+            (
+                Label::from(id.as_bytes()),
+                SubtreeSource::new(status, expand_ingress_status),
+            )
+        })))
+    }
 }
 
 const ERROR_CODE_LABEL: &[u8] = b"error_code";
@@ -713,16 +805,17 @@ const REJECT_STATUS_LABELS: [&[u8]; 4] = [
 #[derive(Clone)]
 struct RejectStatus<'a> {
     reject_code: u64,
-    error_code: Option<ErrorCode>,
+    error_code: ErrorCode,
     message: &'a str,
 }
 
 impl<'a> LazyFork<'a> for RejectStatus<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         match label.as_bytes() {
-            ERROR_CODE_LABEL => self
-                .error_code
-                .map(|code| blob(move || code.to_string().into_bytes())),
+            ERROR_CODE_LABEL => {
+                let error_code = self.error_code;
+                Some(blob(move || error_code.to_string().into_bytes()))
+            }
             REJECT_CODE_LABEL => Some(num::<'a>(self.reject_code)),
             REJECT_MESSAGE_LABEL => Some(string(self.message)),
             STATUS_LABEL => Some(string("rejected")),
@@ -748,18 +841,20 @@ impl<'a> LazyFork<'a> for RejectStatus<'a> {
     }
 }
 
+/// Produces one of a few small, focused [`LazyFork`] shapes (reply / reject /
+/// status-only) for the given [`IngressStatus`].
 fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
     match status {
         IngressStatus::Known { state, .. } => match state {
             IngressState::Completed(WasmResult::Reply(b)) => fork(ReplyStatus(b)),
             IngressState::Completed(WasmResult::Reject(s)) => fork(RejectStatus {
                 reject_code: RejectCode::CanisterReject as u64,
-                error_code: Some(ErrorCode::CanisterRejectedMessage),
+                error_code: ErrorCode::CanisterRejectedMessage,
                 message: s,
             }),
             IngressState::Failed(error) => fork(RejectStatus {
                 reject_code: error.reject_code() as u64,
-                error_code: Some(error.code()),
+                error_code: error.code(),
                 message: error.description(),
             }),
             IngressState::Processing | IngressState::Received | IngressState::Done => {
@@ -770,8 +865,14 @@ fn status_to_tree(status: &IngressStatus) -> LazyTree<'_> {
     }
 }
 
+/// Materializes a stubbed ingress message's [`HashTree`], by recovering the
+/// `&IngressStatus` from the stub's [`SubtreeSource`].
+fn expand_ingress_status(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let status = source.downcast::<IngressStatus>();
+    hash_lazy_tree(&status_to_tree(status), None)
+}
+
 const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
-const CONTROLLER_LABEL: &[u8] = b"controller";
 const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
@@ -792,60 +893,93 @@ struct CanisterFork<'a> {
 }
 
 impl<'a> CanisterFork<'a> {
-    /// Like `edge`, but skips the version check on every call.
-    fn edge_no_checks(&self, label: &[u8]) -> Option<LazyTree<'a>> {
+    /// Like `edge`, but assumes valid labels only.
+    fn edge_no_checks(&self, label: &[u8]) -> LazyTree<'a> {
         let canister = self.canister;
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
-                CERTIFIED_DATA_LABEL => Some(Blob(&canister.system_state.certified_data[..], None)),
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
-                CONTROLLERS_LABEL => Some(blob(move || {
-                    encode_controllers(&canister.system_state.controllers)
-                })),
-                METADATA_LABEL => Some(canister_metadata_as_tree(execution_state, self.version)),
-                MODULE_HASH_LABEL => Some(blob(move || {
-                    execution_state.wasm_binary.binary.module_hash().to_vec()
-                })),
-                _ => None,
+                CERTIFIED_DATA_LABEL => Blob(canister.system_state.certified_data.as_slice(), None),
+                CONTROLLERS_LABEL => {
+                    blob(move || encode_controllers(&canister.system_state.controllers))
+                }
+                METADATA_LABEL => canister_metadata_as_tree(execution_state, self.version),
+                MODULE_HASH_LABEL => {
+                    Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
+                }
+                _ => unreachable!(),
             },
             None => match label {
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
-                CONTROLLERS_LABEL => Some(blob(move || {
-                    encode_controllers(&canister.system_state.controllers)
-                })),
-                _ => None,
+                CONTROLLERS_LABEL => {
+                    blob(move || encode_controllers(&canister.system_state.controllers))
+                }
+                _ => unreachable!(),
             },
+        }
+    }
+
+    /// Returns the labels applicable to this canister.
+    #[inline]
+    fn valid_labels(&self) -> &'static [&'static [u8]] {
+        match self.canister.execution_state {
+            Some(_) => &CANISTER_LABELS,
+            None => &CANISTER_NO_MODULE_LABELS,
         }
     }
 }
 
 impl<'a> LazyFork<'a> for CanisterFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
-        CANISTER_LABELS.iter().find(|l| *l == &label.as_bytes())?;
-        self.edge_no_checks(label.as_bytes())
+        self.valid_labels()
+            .iter()
+            .find(|l| *l == &label.as_bytes())?;
+        Some(self.edge_no_checks(label.as_bytes()))
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
-        match self.canister.execution_state {
-            Some(_) => Box::new(CANISTER_LABELS.iter().map(From::from)),
-            None => Box::new(CANISTER_NO_MODULE_LABELS.iter().map(From::from)),
-        }
+        Box::new(self.valid_labels().iter().map(From::from))
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         let canister = self.clone();
         Box::new(
-            CANISTER_LABELS.iter().filter_map(move |label| {
-                Some((Label::from(label), canister.edge_no_checks(label)?))
-            }),
+            self.valid_labels()
+                .iter()
+                .map(move |label| (Label::from(label), canister.edge_no_checks(label))),
         )
     }
 
     fn len(&self) -> usize {
-        match self.canister.execution_state {
-            Some(_) => CANISTER_LABELS.len(),
-            None => CANISTER_NO_MODULE_LABELS.len(),
-        }
+        self.valid_labels().len()
+    }
+}
+
+/// Rebuilds a canister's stubbed [subtree](`NodeKind::Stub`) for witness
+/// generation, by recovering the `&CanisterState` from the stub's
+/// [`SubtreeSource`] and traversing its [`CanisterFork`].
+///
+/// The certification version (which the canonical encoding depends on) is baked
+/// in as the const parameter `V`, so the stored function pointer alone fully
+/// determines the expansion — see [`select_canister_expander`].
+fn expand_canister<const V: u32>(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let canister = source.downcast::<CanisterState>();
+    let version = CertificationVersion::try_from(V)
+        .expect("const version parameter is a valid certification version");
+    hash_lazy_tree(&fork(CanisterFork { canister, version }), None)
+}
+
+/// Selects the [`expand_canister`] monomorphization for `version`, so the
+/// resulting [`SubtreeExpander`] function pointer carries the version with it
+/// (rather than replicating it in every stub).
+fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
+    match version {
+        CertificationVersion::V19 => expand_canister::<{ CertificationVersion::V19 as u32 }>,
+        CertificationVersion::V20 => expand_canister::<{ CertificationVersion::V20 as u32 }>,
+        CertificationVersion::V21 => expand_canister::<{ CertificationVersion::V21 as u32 }>,
+        CertificationVersion::V22 => expand_canister::<{ CertificationVersion::V22 as u32 }>,
+        CertificationVersion::V23 => expand_canister::<{ CertificationVersion::V23 as u32 }>,
+        CertificationVersion::V24 => expand_canister::<{ CertificationVersion::V24 as u32 }>,
+        CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
+        CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
     }
 }
 
@@ -919,6 +1053,19 @@ impl<'a> LazyFork<'a> for CanisterStatesFork<'a> {
     fn len(&self) -> usize {
         self.canisters.len()
     }
+
+    /// Every canister's certified subtree is stored as a reusable stub identified
+    /// by the backing `Arc<CanisterState>` and the version-specific expander. An
+    /// unchanged canister keeps the same `Arc` (copy-on-write) and the same
+    /// expander, so its precomputed digest is reused from the baseline; any
+    /// mutation or version change yields a mismatched [`SubtreeSource`] and a
+    /// rebuild.
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        let expander = select_canister_expander(self.certification_version);
+        Some(Box::new(self.canisters.all_iter().map(
+            move |(k, canister)| (k.to_label(), SubtreeSource::new(canister, expander)),
+        )))
+    }
 }
 
 fn subnets_as_tree<'a>(
@@ -942,17 +1089,15 @@ fn subnets_as_tree<'a>(
                         blob({
                             let inverted_routing_table = Arc::clone(&inverted_routing_table);
                             move || {
-                                encode_subnet_canister_ranges(
-                                    inverted_routing_table.get(&subnet_id),
-                                )
+                                encode_subnet_canister_ranges(inverted_routing_table.get(subnet_id))
                             }
                         }),
                     )
-                    .with_if(subnet_id == own_subnet_id, "node", move || {
+                    .with_if(subnet_id == &own_subnet_id, "node", move || {
                         nodes_as_tree(own_subnet_node_public_keys, certification_version)
                     })
                     .with_tree_if(
-                        subnet_id == own_subnet_id,
+                        subnet_id == &own_subnet_id,
                         "metrics",
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
@@ -977,7 +1122,7 @@ fn canister_ranges_as_tree(
         map_filter: NoFilter,
         certification_version,
         mk_tree: move |subnet_id, _subnet_topology, _certification_version| {
-            let split_ranges = split_routing_table.get(&subnet_id).map(Arc::clone);
+            let split_ranges = split_routing_table.get(subnet_id).map(Arc::clone);
             fork(CanisterRangesFork {
                 split_ranges,
                 phantom: PhantomData,

@@ -627,7 +627,7 @@ impl StateMachine for FakeStateMachine {
         node_public_keys: NodePublicKeys,
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
-        state.metadata.network_topology = network_topology;
+        state.metadata.network_topology = Arc::new(network_topology);
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
@@ -1025,7 +1025,10 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // defined above). Additionally check the `registry_execution_settings` are also passed
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
-        assert_ne!(&network_topology, &latest_state.metadata.network_topology);
+        assert_ne!(
+            &network_topology,
+            latest_state.metadata.network_topology.as_ref()
+        );
         assert_ne!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1050,7 +1053,10 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
-        assert_eq!(&network_topology, &latest_state.metadata.network_topology);
+        assert_eq!(
+            &network_topology,
+            latest_state.metadata.network_topology.as_ref()
+        );
         assert_eq!(
             own_subnet_features,
             latest_state.metadata.own_subnet_features
@@ -1670,8 +1676,8 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
             rental_subnet_record_from_topo.subnet_admins,
             btreeset! {rental_subnet_admin.get()}
         );
-        // CloudEngine subnets are filtered out of the topology on non-NNS subnets.
-        assert!(network_topology.subnets().get(&engine_subnet_id).is_none());
+        // CloudEngine subnets are visible in the full topology on all subnets.
+        assert!(network_topology.subnets().get(&engine_subnet_id).is_some());
     });
 }
 
@@ -1743,8 +1749,8 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         // Check that subnet admins are reset and a critical error is raised.
         let own_subnet_record_from_topo = network_topology.subnets().get(&own_subnet_id).unwrap();
         assert_eq!(own_subnet_record_from_topo.subnet_admins, BTreeSet::new());
-        // CloudEngine subnets are filtered out of the topology on non-NNS subnets.
-        assert!(network_topology.subnets().get(&engine_subnet_id).is_none());
+        // CloudEngine subnets are visible in the full topology on all subnets.
+        assert!(network_topology.subnets().get(&engine_subnet_id).is_some());
         let nns_subnet_record_from_topo = network_topology.subnets().get(&nns_subnet_id).unwrap();
         assert_eq!(nns_subnet_record_from_topo.subnet_admins, BTreeSet::new());
         // The critical error is still raised for all 3 subnets (before filtering).
@@ -1815,70 +1821,23 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
     )
 }
 
-/// Tests that a CloudEngine subnet sees only itself in the resulting topology:
-/// `subnets`, `routing_table`, `subnets_for_certification`, and `routing_table_for_certification`
-/// all contain only the own subnet.
+/// Tests that a CloudEngine subnet sees the full topology (all three subnets):
+/// `subnets`, `routing_table`, `subnets_for_certification`, and
+/// `routing_table_for_certification` all contain every subnet.
 #[test]
-fn try_read_registry_engine_subnet_sees_only_itself() {
+fn try_read_registry_engine_subnet_sees_full_topology() {
     with_test_replica_logger(|log| {
-        let (registry, _app_subnet_id, engine_subnet_id, _nns_subnet_id) =
+        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
             setup_three_subnet_registry();
 
         let network_topology = try_to_read_registry(registry, log, engine_subnet_id)
             .unwrap()
             .0;
 
-        // Filtered view: only the own engine subnet.
-        assert_eq!(
-            network_topology.subnets().keys().collect::<Vec<_>>(),
-            vec![&engine_subnet_id],
-        );
-        assert_eq!(
-            network_topology
-                .routing_table()
-                .iter()
-                .map(|(_, sid)| *sid)
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([engine_subnet_id]),
-        );
-
-        // Engine accessors also return only the own subnet (no full_topology on engines).
-        assert_eq!(
-            network_topology
-                .subnets_for_certification()
-                .keys()
-                .collect::<Vec<_>>(),
-            vec![&engine_subnet_id],
-        );
-        assert_eq!(
-            network_topology
-                .routing_table_for_certification()
-                .iter()
-                .map(|(_, sid)| *sid)
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([engine_subnet_id]),
-        );
-    });
-}
-
-/// Tests that an Application subnet filters out CloudEngine subnets from its
-/// topology: `subnets`, `routing_table`, `subnets_for_certification`, and
-/// `routing_table_for_certification` all exclude the engine subnet.
-#[test]
-fn try_read_registry_application_subnet_filters_out_engines() {
-    with_test_replica_logger(|log| {
-        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
-            setup_three_subnet_registry();
-
-        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
-            .unwrap()
-            .0;
-
-        // Filtered view: app and NNS subnets are visible, engine is excluded.
         let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
         assert!(subnet_keys.contains(&app_subnet_id));
+        assert!(subnet_keys.contains(&engine_subnet_id));
         assert!(subnet_keys.contains(&nns_subnet_id));
-        assert!(!subnet_keys.contains(&engine_subnet_id));
 
         let rt_subnets: BTreeSet<_> = network_topology
             .routing_table()
@@ -1886,10 +1845,10 @@ fn try_read_registry_application_subnet_filters_out_engines() {
             .map(|(_, sid)| *sid)
             .collect();
         assert!(rt_subnets.contains(&app_subnet_id));
+        assert!(rt_subnets.contains(&engine_subnet_id));
         assert!(rt_subnets.contains(&nns_subnet_id));
-        assert!(!rt_subnets.contains(&engine_subnet_id));
 
-        // Engine accessors also exclude the engine (no full_topology on non-NNS subnets).
+        // No full_topology on engine subnets; certification accessors fall back to subnets().
         assert_eq!(
             network_topology.subnets_for_certification(),
             network_topology.subnets(),
@@ -1901,9 +1860,47 @@ fn try_read_registry_application_subnet_filters_out_engines() {
     });
 }
 
-/// Tests that the NNS subnet filters out CloudEngine subnets from `subnets()`
-/// and `routing_table()`, but `subnets_for_certification()` and
-/// `routing_table_for_certification()` include all subnets (via `full_topology`).
+/// Tests that an Application subnet sees the full topology (all three subnets),
+/// including CloudEngine subnets.
+#[test]
+fn try_read_registry_application_subnet_sees_full_topology() {
+    with_test_replica_logger(|log| {
+        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
+            setup_three_subnet_registry();
+
+        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
+            .unwrap()
+            .0;
+
+        // Full view: all three subnets are visible, including the engine.
+        let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
+        assert!(subnet_keys.contains(&app_subnet_id));
+        assert!(subnet_keys.contains(&nns_subnet_id));
+        assert!(subnet_keys.contains(&engine_subnet_id));
+
+        let rt_subnets: BTreeSet<_> = network_topology
+            .routing_table()
+            .iter()
+            .map(|(_, sid)| *sid)
+            .collect();
+        assert!(rt_subnets.contains(&app_subnet_id));
+        assert!(rt_subnets.contains(&nns_subnet_id));
+        assert!(rt_subnets.contains(&engine_subnet_id));
+
+        // No full_topology on non-NNS subnets; certification accessors fall back to subnets().
+        assert_eq!(
+            network_topology.subnets_for_certification(),
+            network_topology.subnets(),
+        );
+        assert_eq!(
+            network_topology.routing_table_for_certification(),
+            network_topology.routing_table(),
+        );
+    });
+}
+
+/// Tests that the NNS subnet sees all subnets in both `subnets()` and
+/// `subnets_for_certification()` (via `full_topology`), including engines.
 #[test]
 fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
     with_test_replica_logger(|log| {
@@ -1914,31 +1911,163 @@ fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
             .unwrap()
             .0;
 
-        // Filtered view: app and NNS subnets are visible, engine is excluded.
+        // subnets() includes all three subnets.
         let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
         assert!(subnet_keys.contains(&app_subnet_id));
         assert!(subnet_keys.contains(&nns_subnet_id));
-        assert!(!subnet_keys.contains(&engine_subnet_id));
+        assert!(subnet_keys.contains(&engine_subnet_id));
 
-        // subnets_for_certification includes all three subnets via full_topology.
-        let all_keys: Vec<_> = network_topology
+        // subnets_for_certification also includes all three (via full_topology).
+        let cert_keys: Vec<_> = network_topology
             .subnets_for_certification()
             .keys()
             .copied()
             .collect();
-        assert!(all_keys.contains(&app_subnet_id));
-        assert!(all_keys.contains(&engine_subnet_id));
-        assert!(all_keys.contains(&nns_subnet_id));
+        assert!(cert_keys.contains(&app_subnet_id));
+        assert!(cert_keys.contains(&engine_subnet_id));
+        assert!(cert_keys.contains(&nns_subnet_id));
 
         // routing_table_for_certification includes ranges for all three subnets.
-        let rt_with_engines_subnets: BTreeSet<_> = network_topology
+        let rt_cert: BTreeSet<_> = network_topology
             .routing_table_for_certification()
             .iter()
             .map(|(_, sid)| *sid)
             .collect();
-        assert!(rt_with_engines_subnets.contains(&app_subnet_id));
-        assert!(rt_with_engines_subnets.contains(&engine_subnet_id));
-        assert!(rt_with_engines_subnets.contains(&nns_subnet_id));
+        assert!(rt_cert.contains(&app_subnet_id));
+        assert!(rt_cert.contains(&engine_subnet_id));
+        assert!(rt_cert.contains(&nns_subnet_id));
+    });
+}
+
+/// Like `setup_three_subnet_registry`, but also enables chain keys: `shared_key`
+/// on both the Application and CloudEngine subnets, and `engine_only_key` on the
+/// CloudEngine subnet alone.
+fn setup_three_subnet_registry_with_chain_keys()
+-> (Arc<FakeRegistryClient>, SubnetId, SubnetId, SubnetId) {
+    use Integrity::*;
+
+    let dummy_transcript = dummy_transcript_for_tests();
+
+    let app_subnet_id = subnet_test_id(1);
+    let app_subnet_record = SubnetRecord {
+        subnet_type: SubnetType::Application,
+        ..Default::default()
+    };
+    let engine_subnet_id = subnet_test_id(2);
+    let engine_subnet_record = SubnetRecord {
+        subnet_type: SubnetType::CloudEngine,
+        ..Default::default()
+    };
+    let nns_subnet_id = subnet_test_id(3);
+    let nns_subnet_record = SubnetRecord {
+        subnet_type: SubnetType::System,
+        ..Default::default()
+    };
+
+    let mut routing_table = RoutingTable::new();
+    routing_table_insert_subnet(&mut routing_table, app_subnet_id).unwrap();
+    routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
+    routing_table_insert_subnet(&mut routing_table, nns_subnet_id).unwrap();
+
+    let chain_key_enabled_subnets = btreemap! {
+        shared_chain_key() => Valid(vec![app_subnet_id, engine_subnet_id]),
+        engine_only_chain_key() => Valid(vec![engine_subnet_id]),
+    };
+
+    let fixture = RegistryFixture::new();
+    fixture
+        .write_test_records(&TestRecords {
+            subnet_ids: Valid([app_subnet_id, engine_subnet_id, nns_subnet_id]),
+            subnet_records: [
+                Valid(&app_subnet_record),
+                Valid(&engine_subnet_record),
+                Valid(&nns_subnet_record),
+            ],
+            ni_dkg_transcripts: [Valid(Some(&dummy_transcript)); 3],
+            nns_subnet_id: Valid(nns_subnet_id),
+            chain_key_enabled_subnets: &chain_key_enabled_subnets,
+            provisional_whitelist: Missing,
+            routing_table: Valid(&routing_table),
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
+        })
+        .unwrap();
+
+    (
+        fixture.registry,
+        app_subnet_id,
+        engine_subnet_id,
+        nns_subnet_id,
+    )
+}
+
+fn shared_chain_key() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "shared_key".to_string(),
+    })
+}
+
+fn engine_only_chain_key() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "engine_only_key".to_string(),
+    })
+}
+
+/// A non-engine (Application) subnet must not list a CloudEngine subnet as a
+/// signing subnet for a chain key, since a chain-key request to it would be
+/// rejected at the engine boundary. A key held *only* on an engine is pruned
+/// entirely.
+#[test]
+fn chain_key_enabled_subnets_prune_engine_signers_on_application_subnet() {
+    with_test_replica_logger(|log| {
+        let (registry, app_subnet_id, _engine_subnet_id, _nns_subnet_id) =
+            setup_three_subnet_registry_with_chain_keys();
+
+        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
+            .unwrap()
+            .0;
+
+        // The shared key keeps only the Application subnet; the engine is pruned.
+        assert_eq!(
+            network_topology.chain_key_enabled_subnets(&shared_chain_key()),
+            &[app_subnet_id],
+        );
+        // The engine-only key is pruned to an empty list and thus dropped.
+        assert!(
+            network_topology
+                .chain_key_enabled_subnets(&engine_only_chain_key())
+                .is_empty()
+        );
+    });
+}
+
+/// A CloudEngine subnet may serve chain keys it holds itself (loopback never
+/// crosses the boundary), but must not list a non-engine signing subnet, as a
+/// chain-key request to it would be rejected at the engine boundary.
+#[test]
+fn chain_key_enabled_subnets_keep_only_loopback_on_engine_subnet() {
+    with_test_replica_logger(|log| {
+        let (registry, _app_subnet_id, engine_subnet_id, _nns_subnet_id) =
+            setup_three_subnet_registry_with_chain_keys();
+
+        let network_topology = try_to_read_registry(registry, log, engine_subnet_id)
+            .unwrap()
+            .0;
+
+        // The shared key keeps only the engine itself; the Application subnet is pruned.
+        assert_eq!(
+            network_topology.chain_key_enabled_subnets(&shared_chain_key()),
+            &[engine_subnet_id],
+        );
+        // The engine-only key is kept (loopback).
+        assert_eq!(
+            network_topology.chain_key_enabled_subnets(&engine_only_chain_key()),
+            &[engine_subnet_id],
+        );
     });
 }
 

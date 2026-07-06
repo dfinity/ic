@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_SANDBOX_RUNTIME_DEPS", "DEFAULT_VCPUS_PER_VM", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -40,6 +40,8 @@ rust_library(
 
 system_test_nns(
     name = "sr_app_same_nodes_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -57,6 +59,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_provision_write_access_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -74,6 +78,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -91,6 +97,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -108,6 +116,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 16 * DEFAULT_VCPUS_PER_VM,  # 16 IC Node VMs (4 NNS + 4 source app + 4 app + 4 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -125,6 +135,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_enable_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 16 * DEFAULT_VCPUS_PER_VM,  # 16 IC Node VMs (4 NNS + 4 source app + 4 app + 4 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -142,6 +154,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_with_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 16 * DEFAULT_VCPUS_PER_VM,  # 16 IC Node VMs (4 NNS + 4 source app + 8 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -159,6 +173,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -176,6 +192,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_local_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -193,6 +211,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -210,6 +230,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_with_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 unassigned) * 6 vCPUs.
     guestos_update = "test",
     tags = [
         "colocate",
@@ -227,6 +249,8 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_large_no_upgrade_with_chain_keys_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + 114 * DEFAULT_VCPUS_PER_VM,  # 114 IC Node VMs (40 NNS + 37 source app + 37 unassigned) * 6 vCPUs.
     enable_head_nns_variant = False,  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     guestos_update = "test",
     tags = [
@@ -245,6 +269,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
+    cpus = MIN_LOCAL_CPUS + 9 * DEFAULT_VCPUS_PER_VM,  # 9 IC Node VMs (4 broken NNS + 1 restore NNS + 4 unassigned) * 6 vCPUs.
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.

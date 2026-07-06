@@ -1,10 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions,
@@ -1039,7 +1036,7 @@ where
     F: FnOnce(&StateMachine, CanisterId),
     G: FnOnce(&StateMachine, CanisterId),
 {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),

@@ -158,6 +158,14 @@ pub struct InternetIdentityFrontendInit {
 }
 
 #[derive(CandidType)]
+pub struct SsoCredentialMigrationEntry {
+    pub discovery_domain: String,
+    pub issuer: String,
+    pub client_id: String,
+    pub name: Option<String>,
+}
+
+#[derive(CandidType)]
 pub struct InternetIdentityInit {
     pub assigned_user_number_range: Option<(AnchorNumber, AnchorNumber)>,
     pub archive_config: Option<ArchiveConfig>,
@@ -167,13 +175,16 @@ pub struct InternetIdentityInit {
     pub related_origins: Option<Vec<String>>,
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
+    pub sso_discoverable_domains: Option<Vec<String>>,
+    pub sso_allow_any_domain: Option<bool>,
+    pub sso_credential_migration: Option<Vec<SsoCredentialMigrationEntry>>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub backend_canister_id: Option<Principal>,
     pub backend_origin: Option<String>,
-    pub sso_discoverable_domains: Option<Vec<String>>,
+    pub enable_dnssec_email_recovery: Option<bool>,
     pub dnssec_config: Option<Option<DnssecConfig>>,
     pub doh_config: Option<Option<DohConfig>>,
 }
