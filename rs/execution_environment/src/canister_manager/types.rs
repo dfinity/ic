@@ -768,7 +768,7 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CanisterStatusAccessDenied { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a principal with canister status read access."
                     .to_string(),
-                doc_link: doc_ref("invalid-controller"),
+                doc_link: "".to_string(),
             },
             CanisterManagerError::FetchCanisterLogsAccessDenied { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or \
