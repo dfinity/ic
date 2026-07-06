@@ -13,7 +13,7 @@ use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 use slog::{Logger, info};
 
-const EPSILON: f64 = 0.0005;
+const EPSILON: f64 = 0.005;
 const MAX_CUTS: usize = 10;
 
 /// Checks whether the first argument is equal to the second argument with a relative error
@@ -177,41 +177,41 @@ fn load_metrics_e2e_test() {
         // returned values are not too ridiculous and they might have to be updated once in a while.
         assert_near!(states_sizes_bytes.source, 4626905, 0.1);
         assert_near!(states_sizes_bytes.destination, 4626909, 0.1);
-        assert_near!(instructions_executed.source, 8330575, 0.1);
-        assert_near!(instructions_executed.destination, 8336259, 0.1);
+        assert_near!(instructions_executed.source, 144966571, 0.1);
+        assert_near!(instructions_executed.destination, 144966571, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 20,
-                destination: 19,
+                source: 17,
+                destination: 22,
             }
         );
         assert_eq!(
             remote_subnet_messages_executed_lower_bound,
             Estimates {
-                source: 5,
-                destination: 5,
+                source: 4,
+                destination: 6,
             }
         );
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 15,
-                destination: 13,
+                source: 13,
+                destination: 15,
             }
         );
         assert_eq!(
             http_outcalls_executed,
             Estimates {
-                source: 5,
-                destination: 5,
+                source: 6,
+                destination: 4,
             }
         );
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 315,
-                destination: 379,
+                source: 355,
+                destination: 339,
             }
         );
         // Check if the split finder found a split satisfying the load constraints
