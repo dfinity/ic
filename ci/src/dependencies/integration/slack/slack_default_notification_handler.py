@@ -20,7 +20,7 @@ from scanner.scanner_job_type import ScannerJobType
 SLACK_CHANNEL_ID = "C05CYLM94KU"
 SLACK_CHANNEL = "#eng-node-psec"
 SLACK_LOG_TO_CONSOLE = False
-APP_OWNERS = "<!subteam^S05FTRNRC5A>" # @node-team
+APP_OWNERS = "<!subteam^S05FTRNRC5A>"  # @node-team
 
 SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:
