@@ -426,12 +426,13 @@ pub(crate) fn validate_controller_or_subnet_admin(
 /// The method takes no arguments and is only available on subnets with subnet
 /// admins configured, in which case the caller must be a subnet admin. On
 /// success, it returns the Candid-encoded `ListCanistersResponse` listing the
-/// ranges of canister IDs hosted on this subnet.
+/// ranges of canister IDs hosted on this subnet, together with the number of
+/// round instructions the caller must deduct for computing it.
 pub(crate) fn list_canisters(
     state: &ReplicatedState,
     caller: &PrincipalId,
     payload: &[u8],
-) -> Result<Vec<u8>, UserError> {
+) -> Result<(Vec<u8>, NumInstructions), UserError> {
     EmptyBlob::decode(payload)?;
     match state.get_own_subnet_admins() {
         Some(ref admins) => validate_subnet_admin(admins, caller).map_err(UserError::from)?,
@@ -456,7 +457,10 @@ pub(crate) fn list_canisters(
         }
     }
     let response = ListCanistersResponse { canisters };
-    Ok(Encode!(&response).unwrap())
+    Ok((
+        Encode!(&response).unwrap(),
+        list_canisters_instructions(state),
+    ))
 }
 
 /// Computes the number of round instructions consumed by executing the
@@ -471,7 +475,7 @@ pub(crate) fn list_canisters(
 ///     gaps so that each canister becomes its own ID range.
 // Keep in sync with `list_canisters_respects_round_instruction_limit` in
 // `execution_test.rs`.
-pub(crate) fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
+fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
     const BASE_INSTRUCTIONS: u64 = 20_000_000;
     const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
     let num_canisters = state.num_canisters() as u64;

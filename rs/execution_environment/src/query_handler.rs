@@ -253,7 +253,7 @@ impl InternalHttpQueryHandler {
                     let since = Instant::now();
                     let caller = query.source();
                     let result = list_canisters(state.get_ref(), &caller, &query.method_payload)
-                        .map(WasmResult::Reply);
+                        .map(|(res, _instructions)| WasmResult::Reply(res));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::ListCanisters,
                         since.elapsed().as_secs_f64(),
