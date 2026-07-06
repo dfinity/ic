@@ -36,7 +36,7 @@ const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 pub struct PayAsYouGoTracker {
     /// Number of nodes (`N`) on the subnet.
     subnet_size: NumberOfNodes,
-    /// Whether this responses to this outcalls are gossiped (only flexible and non-replicated).
+    /// Whether responses to this outcalls are gossiped (only flexible and non-replicated).
     is_gossiping: bool,
     /// Whether the subnet uses a free cost schedule. When `true` the tracker
     /// charges nothing and refunds the full allowance.
