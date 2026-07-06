@@ -1,9 +1,7 @@
 //! Identity type and module.
 //!
-//! Trimmed from `dfx_core::identity`: retains identity *loading* (plaintext PEM,
-//! encrypted PEM, keyring, and HSM) as used to build an `ic_agent` identity.
-//! Wallet handling, `CallSender`, and identity creation/rename/remove are not
-//! vendored.
+//! Wallets are a map of network-identity, but don't have their own types or manager
+//! type.
 use crate::error::identity::{
     LoadPemIdentityError, LoadPemIdentityError::ReadIdentityFileFailed, NewHardwareIdentityError,
     NewHardwareIdentityError::InstantiateHardwareIdentityFailed, NewIdentityError,

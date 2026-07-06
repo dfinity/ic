@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::error::fs`: only the errors used by the retained
-//! read-side filesystem helpers.
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -27,7 +25,7 @@ pub struct ReadFileError {
 }
 
 #[derive(Error, Debug)]
-#[error("failed to read from {path}")]
+#[error("failed to read {path} as string")]
 pub struct ReadToStringError {
     pub path: PathBuf,
     pub source: std::io::Error,

@@ -1,36 +1,15 @@
-//! A minimal, in-tree vendoring of the parts of the external [`dfx-core`] crate
-//! that SNS tooling depends on: resolving a dfx identity + network into an
+//! A subset of the [`dfx-core`] crate (derived from `dfx-core 0.4.0`), covering
+//! only what SNS tooling needs: resolving a dfx identity + network into an
 //! [`ic_agent::Agent`], and resolving a dfx identity name to its principal.
 //!
-//! # Why this exists
+//! `dfx` is deprecated. See the crate `README.md` for why this exists, what was
+//! kept vs. dropped, and the maintenance policy (no new dependents).
 //!
-//! `dfx-core` re-exports `ic-agent` in its public API, so its major version is
-//! bumped in lockstep with `ic-agent`. Depending on the published crate would
-//! tie this monorepo's `ic-agent` upgrades to `dfx-core` releases. Once the
-//! `dfinity/sdk` repository is archived those releases can no longer be cut,
-//! which would block `ic-agent` upgrades here. Vendoring the small slice we use
-//! removes that coupling while keeping behaviour identical for the supported
-//! cases.
+//! Most modules are copied from `dfx-core` at the same relative path so they can
+//! be diffed against upstream; only [`network`] and this crate root are compact
+//! reimplementations rather than trimmed copies.
 //!
-//! # Scope (what was kept vs. dropped)
-//!
-//! Derived from `dfx-core` `0.3.0` (which itself depends on `ic-agent 0.45`,
-//! matching this workspace). Kept:
-//!
-//! * Identity **loading** for the storage modes dfx supports: plaintext PEM,
-//!   password-encrypted PEM, OS keyring, and HSM.
-//! * Network resolution for `ic` (mainnet), `local` (shared or project,
-//!   honouring a running replica's `webserver-port`), and an explicit IC HTTP
-//!   endpoint URL.
-//! * Building an `ic_agent::Agent` (round-robin route provider + rustls client).
-//!
-//! Dropped (unused by SNS): identity creation/rename/removal/export, wallets,
-//! the extension manager, `dfx.json`/`networks.json` project config parsing
-//! beyond the `local` bind, playground networks, and arbitrary named networks.
-//!
-//! The identity modules are copied close to verbatim from `dfx-core` so they can
-//! be diffed against upstream; the network resolution is a compact
-//! reimplementation of the `ic`/`local`/URL cases.
+//! [`dfx-core`]: https://crates.io/crates/dfx-core
 
 pub mod config;
 pub mod error;

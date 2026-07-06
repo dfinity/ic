@@ -4022,7 +4022,7 @@ dependencies = [
 
 [[package]]
 name = "dfx-core-vendored"
-version = "0.9.0"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -4033,6 +4033,7 @@ dependencies = [
  "ic-agent",
  "ic-identity-hsm",
  "keyring",
+ "lazy_static",
  "reqwest",
  "security-framework 3.7.0",
  "serde",

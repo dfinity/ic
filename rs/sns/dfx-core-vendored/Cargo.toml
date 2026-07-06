@@ -1,13 +1,12 @@
 [package]
 name = "dfx-core-vendored"
-version.workspace = true
+# Tracks the upstream `dfx-core` release this crate was derived from, not the
+# workspace version, so the copied modules can be diffed against that release.
+version = "0.4.0"
 authors.workspace = true
 edition.workspace = true
 description.workspace = true
 documentation.workspace = true
-
-[lib]
-path = "src/lib.rs"
 
 [dependencies]
 aes-gcm = { version = "0.10.3", features = ["std"] }
@@ -17,6 +16,7 @@ dialoguer = { version = "0.11.0" }
 directories-next = { version = "2.0.0" }
 hex = { workspace = true }
 ic-agent = { workspace = true }
+lazy_static = { workspace = true }
 ic-identity-hsm = { workspace = true }
 keyring = { version = "3", features = [
     "apple-native",

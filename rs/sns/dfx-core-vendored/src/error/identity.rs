@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::error::identity`: only the error types reachable when
-//! *loading* an identity (create/rename/remove/export paths are not vendored).
 use crate::error::{
     config::ConfigError, encryption::EncryptionError, fs::ReadFileError,
     get_user_home::GetUserHomeError, keyring::KeyringError, structured_file::StructuredFileError,
@@ -95,9 +93,7 @@ pub enum NewIdentityManagerError {
     #[error("The specified identity must exist")]
     OverrideIdentityMustExist(#[source] RequireIdentityExistsError),
 
-    #[error(
-        r#"No identity configuration found.  Please run "dfx identity get-principal" or "dfx identity new <identity name>" to create a new identity."#
-    )]
+    #[error(r#"No identity configuration found.  Please run "dfx identity get-principal" or "dfx identity new <identity name>" to create a new identity."#)]
     NoIdentityConfigurationFound,
 }
 

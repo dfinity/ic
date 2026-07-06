@@ -8,11 +8,6 @@ use serde::{Deserialize, Serialize};
 
 /// Gets an agent for a given network and identity. This is similar to the code DFX uses internally to get an agent.
 /// If no identity is provided, it will use the identity currently selected in the DFX CLI.
-///
-/// Network and identity resolution is handled by the in-tree `dfx-core-vendored`
-/// crate (a trimmed vendoring of `dfx-core`), so this behaves like dfx for the
-/// supported networks (`ic`, `local`, and IC HTTP endpoint URLs) and identity
-/// storage modes (plaintext/encrypted PEM, keyring, and HSM).
 pub async fn get_agent(network_name: &str, identity: Option<String>) -> Result<Agent> {
     dfx_core_vendored::get_agent(network_name, identity.clone())
         .await

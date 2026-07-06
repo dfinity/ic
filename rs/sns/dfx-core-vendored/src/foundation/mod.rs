@@ -1,4 +1,3 @@
-//! Trimmed from `dfx_core::foundation`: only `get_user_home`.
 use crate::error::get_user_home::GetUserHomeError;
 use crate::error::get_user_home::GetUserHomeError::NoHomeInEnvironment;
 use std::ffi::OsString;

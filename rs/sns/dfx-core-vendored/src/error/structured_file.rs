@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::error::structured_file`: only the read-side JSON
-//! errors (the write path is not vendored).
 use crate::error::fs::ReadFileError;
 use std::path::PathBuf;
 use thiserror::Error;

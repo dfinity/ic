@@ -1,8 +1,3 @@
-//! Trimmed from `dfx_core::identity::identity_manager`: retains reading the
-//! selected/named identity and its configuration and instantiating it. Identity
-//! *creation* (`create_new_identity`, `initialize`, key generation, mnemonics),
-//! renaming, removal, export, and wallet handling are not vendored — dfx itself
-//! manages the identity store; this crate only reads it.
 use crate::config::directories::get_user_dfx_config_dir;
 use crate::error::identity::{
     GetIdentityConfigOrDefaultError,
@@ -22,7 +17,7 @@ use crate::json::load_json_file;
 use candid::Principal;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, trace};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const DEFAULT_IDENTITY_NAME: &str = "default";
 
@@ -238,6 +233,6 @@ pub(super) fn get_dfx_hsm_pin() -> Result<String, String> {
         .map_err(|_| "There is no DFX_HSM_PIN environment variable.".to_string())
 }
 
-fn load_configuration(path: &std::path::Path) -> Result<Configuration, StructuredFileError> {
+fn load_configuration(path: &Path) -> Result<Configuration, StructuredFileError> {
     load_json_file(path)
 }

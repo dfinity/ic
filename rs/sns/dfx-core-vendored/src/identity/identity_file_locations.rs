@@ -1,5 +1,3 @@
-//! Verbatim from `dfx_core::identity::identity_file_locations` (minus the unused
-//! `root()` accessor).
 use crate::identity::IdentityConfiguration;
 use std::path::PathBuf;
 

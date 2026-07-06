@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::error::encryption`: only the errors reachable on the
-//! decrypt (load) path. The encrypt (save) path is not vendored.
 use thiserror::Error;
 
 #[derive(Error, Debug)]

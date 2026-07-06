@@ -1,6 +1,3 @@
-//! Trimmed from `dfx_core::config::directories`: the user dfx config directory
-//! and shared-network data directory resolution. Wallet-config path resolution
-//! is not vendored.
 use crate::error::config::ConfigError;
 use crate::error::config::ConfigError::{
     DetermineConfigDirectoryFailed, EnsureConfigDirectoryExistsFailed,
@@ -16,8 +13,9 @@ use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 
 pub fn project_dirs() -> Result<&'static ProjectDirs, GetUserHomeError> {
-    static DIRS: LazyLock<Option<ProjectDirs>> =
-        LazyLock::new(|| ProjectDirs::from("org", "dfinity", "dfx"));
+    lazy_static::lazy_static! {
+        static ref DIRS: Option<ProjectDirs> = ProjectDirs::from("org", "dfinity", "dfx");
+    }
     DIRS.as_ref().ok_or(NoHomeInEnvironment())
 }
 

@@ -1,4 +1,3 @@
-//! Trimmed from `dfx_core::fs::composite`: only `ensure_dir_exists`.
 use crate::error::fs::EnsureDirExistsError;
 use crate::error::fs::EnsureDirExistsError::NotADirectory;
 use std::path::Path;

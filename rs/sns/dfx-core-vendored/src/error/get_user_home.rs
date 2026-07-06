@@ -1,4 +1,3 @@
-//! Verbatim from `dfx_core::error::get_user_home`.
 use thiserror::Error;
 
 #[derive(Error, Debug)]

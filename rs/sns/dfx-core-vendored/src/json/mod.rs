@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::json`: only `load_json_file` (the save path is not
-//! vendored).
 use crate::error::structured_file::StructuredFileError;
 use crate::error::structured_file::StructuredFileError::DeserializeJsonFileFailed;
 use crate::error::structured_file::StructuredFileError::ReadJsonFileFailed;

@@ -1,6 +1,3 @@
-//! Trimmed from `dfx_core::fs`: only the read-side helpers used by the retained
-//! identity- and network-resolution paths. Each wraps a `std::fs` call with a
-//! path-annotated error, matching upstream behaviour and messages.
 pub mod composite;
 
 use crate::error::fs::{CreateDirAllError, ReadFileError, ReadToStringError};

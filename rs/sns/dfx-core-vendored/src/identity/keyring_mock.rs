@@ -1,7 +1,3 @@
-//! Trimmed from `dfx_core::identity::keyring_mock`: only the keyring *load* path
-//! (`load_pem_from_keyring`). Writing, deleting, and availability checks are not
-//! vendored. The `DFX_CI_MOCK_KEYRING_LOCATION` test hook is preserved so
-//! behaviour matches dfx exactly.
 use crate::error::keyring::KeyringError::{
     DecodePemFailed, GetPasswordFailed, LoadMockKeyringFailed, MockKeyNotFound, MockUnavailable,
     NewEntryFailed,

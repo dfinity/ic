@@ -1,6 +1,3 @@
-//! Trimmed from `dfx_core::identity::pem_safekeeping`: only the *load* path
-//! (plaintext, encrypted, and keyring). Saving/encrypting PEM content is not
-//! vendored.
 use super::identity_manager::EncryptionConfiguration;
 use super::{IdentityConfiguration, IdentityType};
 use crate::error::{
@@ -68,7 +65,7 @@ pub fn load_pem_from_file(
     ))
 }
 
-/// If the IdentityConfiguration suggests that the content of the pem file is encrypted,
+/// If the IndentityConfiguration suggests that the content of the pem file is encrypted,
 /// then the user is prompted for the password to the pem file.
 /// The decrypted pem file content is then returned.
 ///
@@ -90,6 +87,9 @@ fn maybe_decrypt_pem(
     }
 }
 
+/// Unlike the original, this does not take a `PromptMode`. It behaves like the
+/// original when `PromptMode::DecryptingToUse` is passed (the only mode reached
+/// on the load path; encryption/creation is not vendored).
 fn password_prompt() -> Result<String, EncryptionError> {
     dialoguer::Password::new()
         .with_prompt("Please enter the passphrase for your identity")

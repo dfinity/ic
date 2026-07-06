@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::error::keyring`: only the errors reachable on the
-//! keyring *load* path. Write/delete/availability-check paths are not vendored.
 use crate::error::structured_file::StructuredFileError;
 use thiserror::Error;
 

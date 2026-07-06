@@ -1,5 +1,3 @@
-//! Trimmed from `dfx_core::error::config`: only `ConfigError`, used when
-//! resolving the user dfx config directory.
 use crate::error::fs::EnsureDirExistsError;
 use crate::error::get_user_home::GetUserHomeError;
 use thiserror::Error;
