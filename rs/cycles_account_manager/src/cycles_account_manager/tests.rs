@@ -251,3 +251,67 @@ fn test_convert_instructions_to_cycles() {
     // `convert_instructions_to_cycles(u64::MAX) != 10 * (u64::MAX / 10)`
     assert_ne!(u64_max_cycles, (10 * (u128::from(u64::MAX) / 10)).into());
 }
+
+#[test]
+fn test_fetch_canister_logs_fee() {
+    let subnet_size: usize = 13;
+    let reference_subnet_size: usize = 13;
+    let cycles_account_manager = create_cycles_account_manager();
+
+    // Base and per-byte fees for the application subnet configuration.
+    let base_fee = Cycles::new(5_000_000);
+    let per_byte_fee = Cycles::new(80);
+
+    let normal = |subnet_size: usize| {
+        CyclesAccountManagerSubnetConfig::new(
+            subnet_size,
+            CanisterCyclesCostSchedule::Normal,
+            reference_subnet_size,
+        )
+    };
+    let free = |subnet_size: usize| {
+        CyclesAccountManagerSubnetConfig::new(
+            subnet_size,
+            CanisterCyclesCostSchedule::Free,
+            reference_subnet_size,
+        )
+    };
+
+    // Fetching logs is free on a subnet with a free cost schedule.
+    assert_eq!(
+        cycles_account_manager.fetch_canister_logs_fee(NumBytes::new(1_000), free(subnet_size)),
+        Cycles::zero()
+    );
+    assert_eq!(
+        cycles_account_manager.max_fetch_canister_logs_fee(free(subnet_size)),
+        Cycles::zero()
+    );
+
+    // An empty response only costs the base fee, scaled by the subnet size.
+    assert_eq!(
+        cycles_account_manager.fetch_canister_logs_fee(NumBytes::new(0), normal(subnet_size)),
+        base_fee * subnet_size
+    );
+
+    // A non-empty response costs the base fee plus the per-byte fee for each
+    // response byte, scaled by the subnet size.
+    let response_size = 1_000_u64;
+    assert_eq!(
+        cycles_account_manager
+            .fetch_canister_logs_fee(NumBytes::new(response_size), normal(subnet_size)),
+        (base_fee + per_byte_fee * response_size) * subnet_size
+    );
+
+    // The fee scales linearly with the subnet size.
+    assert_eq!(
+        cycles_account_manager
+            .fetch_canister_logs_fee(NumBytes::new(response_size), normal(2 * subnet_size)),
+        (base_fee + per_byte_fee * response_size) * (2 * subnet_size)
+    );
+
+    // The maximum fee is the fee for a maximum-size response.
+    assert_eq!(
+        cycles_account_manager.max_fetch_canister_logs_fee(normal(subnet_size)),
+        (base_fee + per_byte_fee * MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64) * subnet_size
+    );
+}

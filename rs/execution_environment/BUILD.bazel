@@ -163,6 +163,7 @@ rust_ic_test_suite(
         "//rs/interfaces",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
+        "//rs/limits",
         "//rs/monitoring/metrics",
         "//rs/nns/constants",
         "//rs/registry/resource_limits",

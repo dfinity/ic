@@ -7,6 +7,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_execution_environment::units::{KIB, MIB};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
@@ -23,6 +24,7 @@ use ic_test_utilities_execution_environment::{
     ExecutionTestBuilder, get_reject, get_reply, wat_canister, wat_fn,
 };
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
+use ic_types::canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES;
 use ic_types::{CanisterId, CanisterLog, NumInstructions, ingress::WasmResult};
 use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_le, assert_lt};
@@ -2643,6 +2645,53 @@ fn test_fetch_canister_logs_update_call_rejected_insufficient_cycles() {
         reject_message.contains("cycles are required"),
         "Expected insufficient cycles error, got: {reject_message}"
     );
+}
+
+#[test]
+fn test_fetch_canister_logs_update_call_cycles_threshold_is_exact() {
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // The required payment is the fee for a maximum-size response, scaled by the
+    // subnet size (the default `StateMachine` subnet has `SMALL_APP_SUBNET_MAX_SIZE`
+    // nodes).
+    let cam_config = SubnetConfig::new(SubnetType::Application).cycles_account_manager_config;
+    let max_fee = (cam_config.fetch_canister_logs_base_fee
+        + cam_config.fetch_canister_logs_per_byte_fee
+            * MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64)
+        * SMALL_APP_SUBNET_MAX_SIZE;
+
+    // One cycle below the required max fee is rejected, and the reject message
+    // reports the exact required amount.
+    let result =
+        fetch_canister_logs_intercanister(&env, canister_a, canister_b, max_fee - Cycles::new(1));
+    let reject_message = get_reject(result);
+    assert!(
+        reject_message.contains(&format!("{max_fee} cycles are required")),
+        "Expected insufficient cycles error mentioning the exact max fee, got: {reject_message}"
+    );
+
+    // Exactly the required max fee is accepted.
+    let records = fetch_log_records_intercanister(&env, canister_a, canister_b, max_fee);
+    assert_eq!(records.len(), 1);
 }
 
 #[test]
