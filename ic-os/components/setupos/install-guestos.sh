@@ -21,11 +21,23 @@ function install_guestos() {
     tar xaf /data/guest-os.img.tar.zst -C "${TMPDIR}" disk.img
     log_and_halt_installation_on_error "${?}" "Unable to extract GuestOS disk-image."
 
-    for lv in "${LV}"*; do
-        echo "* Writing the GuestOS image to ${lv}..."
-        dd if="${TMPDIR}/disk.img" of="${lv}" bs=10M conv=sparse status=progress
-        log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image to ${lv}."
+    local lvs=("${LV}"*)
+
+    for lv in "${lvs[@]}"; do
+        blkdiscard "${lv}" || echo "* WARNING: Unable to discard ${lv}, continuing..."
     done
+
+    if [ "${#lvs[@]}" -eq 1 ]; then
+        echo "* Writing the GuestOS image to ${lvs[0]}..."
+        dd if="${TMPDIR}/disk.img" of="${lvs[0]}" bs=10M conv=sparse oflag=direct status=progress
+        log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image to ${lvs[0]}."
+    else
+        echo "* Writing the GuestOS image to ${#lvs[@]} volumes..."
+        printf '%s\n' "${lvs[@]}" | xargs -P 4 -I {} \
+            sh -c 'dd if="$1" of=$2 bs=10M conv=sparse oflag=direct status=none && echo "* Finished writing to $2"' \
+            _ "${TMPDIR}/disk.img" {}
+        log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image."
+    fi
 
     rm -rf "${TMPDIR}"
 
