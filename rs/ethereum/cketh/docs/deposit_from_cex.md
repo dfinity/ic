@@ -617,6 +617,63 @@ balance itself — see step 0 for the fee cap this requires.
 | **One-time self-attestation**: the minter signs, with the *deposit address' own derived key*, a domain-separated message `keccak("ck-deposit-owner" ‖ chain_id ‖ helper ‖ principal ‖ subaccount)`; the delegate checks `ecrecover(message, sig) == address(this)` (≈ 3k gas), the attestation riding in the sweep calldata | Sweeping is permissionless again with the address↔principal binding *cryptographically enforced* — the attestation is a public fact, replayable harmlessly (funds still only move through `depositErc20` with the attested principal); one extra tECDSA signature per address, one-time, consuming no account nonce | Forfeits the best-effort `R3` sweep exclusion (a third party can sweep a tainted address — status quo, no new risk); slightly larger delegate and calldata |
 | **On-chain re-derivation**: the delegate recomputes `derive(master_pubkey, principal, subaccount)` and compares with `address(this)` | No extra signature at all — the binding is verified from first principles | Uneconomical: the IC's generalized BIP-32 derivation needs one HMAC-SHA512 per path element, and the EVM has no SHA-512 precompile — several hundred thousand gas per sweep in pure Solidity (only the elliptic-curve step is cheap: `ecrecover(−t·rₓ mod n, v, rₓ, rₓ)` returns `address(P + t·G)` for ≈ 3k gas). Rejected |
 
+#### The one-time self-attestation in detail
+
+The attestation is a plain secp256k1 signature by the *deposit address' own
+derived key* over a domain-separated digest binding the address to its IC account:
+
+```
+digest = keccak256("ck-deposit-owner" ‖ chain_id ‖ helper_address
+                   ‖ principal_bytes32 ‖ subaccount_bytes32)
+```
+
+* All fields are fixed-length (no encoding ambiguity). `chain_id` prevents
+  cross-chain replay; `helper_address` binds the attestation to one helper
+  deployment (a new helper requires new attestations). The ASCII prefix (first
+  byte `0x63`) cannot collide with any other signed preimage domain: typed
+  transactions start `0x00`–`0x04`, EIP-7702 authorizations `0x05`, EIP-191/712
+  `0x19`, legacy-transaction RLP `≥ 0xc0`.
+* **Lifecycle**: signed once per address via `sign_with_ecdsa` (same derivation
+  path as the address), lazily at first sweep together with the EIP-7702
+  authorization — two tECDSA signatures at first sweep, zero at registration
+  (`R13`). It consumes no account nonce (neither a transaction nor an
+  authorization), is recorded as an audit event (`R8`) and exposed publicly (it is
+  a fact, not a secret): anyone holding it can sweep.
+* **Verification** in the delegate (≈ 3k gas + 65 bytes of calldata per sweep):
+
+```solidity
+function sweepErc20(
+    address[] calldata tokens,
+    bytes32 principal,
+    bytes32 subaccount,
+    bytes calldata attestation
+) external {
+    bytes32 digest = keccak256(abi.encodePacked(
+        "ck-deposit-owner", block.chainid, HELPER, principal, subaccount));
+    require(ECDSA.recover(digest, attestation) == address(this), "wrong owner");
+    // approve + HELPER.depositErc20(token, balance, principal, subaccount) ...
+}
+```
+
+  Running as a delegate, `address(this)` is the deposit EOA, so only the account
+  signed by *that* address' key passes — an arbitrary caller supplying their own
+  principal fails the `recover` check. Replay is harmless by design: the
+  attestation authorizes nothing but crediting the attested account through the
+  helper, and re-using it for later deposits is exactly the intent.
+* **Batching**: `sweepErc20Batch` takes parallel arrays of accounts and
+  attestations; since no caller gating remains, Multicall3 becomes usable as an
+  external batcher again.
+* **The one real risk**: the delegate accepts *any* valid signature by the
+  address' key, and there is no on-chain revocation — if the minter ever signed a
+  second, conflicting attestation for the same address, whoever holds it could
+  route that address' deposits to the wrong account forever. The mitigation is
+  making a conflicting signature impossible rather than recoverable: the signing
+  input is derived deterministically from the registration map (one account per
+  address, `R1`), and the attestation is only ever signed over that entry.
+* **Phase 2 ETH addresses need no attestation**: their sweeps are transactions
+  signed by the deposit key itself, so the binding is asserted directly in the
+  signed `depositEth(principal, subaccount)` call.
+
 ## Implementation
 
 ### Constraints
