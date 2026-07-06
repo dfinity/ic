@@ -133,12 +133,8 @@ pub fn is_delegation_valid_with_respect_to_state(
     // 2. The certified canister ranges must match the ranges the state assigns
     //    to the subnet. Pruned delegations carry no ranges, so there is nothing
     //    left to compare once the public key matches.
-    let certified_ranges = match certified_canister_ranges(&tree, format, subnet_id)? {
-        Some(mut ranges) => {
-            ranges.sort();
-            ranges
-        }
-        None => return Ok(true),
+    let Some(certified_ranges) = certified_canister_ranges(&tree, format, subnet_id)? else {
+        return Ok(true);
     };
 
     let expected_ranges: Vec<(PrincipalId, PrincipalId)> = network_topology
@@ -156,7 +152,7 @@ pub fn is_delegation_valid_with_respect_to_state(
 ///
 /// Returns `Ok(None)` for [`CertificateDelegationFormat::Pruned`] (the ranges
 /// are absent, so there is nothing to compare), and `Ok(Some(ranges))`
-/// otherwise. The returned ranges are not necessarily sorted.
+/// otherwise.
 fn certified_canister_ranges(
     tree: &LabeledTree<Vec<u8>>,
     format: CertificateDelegationFormat,
