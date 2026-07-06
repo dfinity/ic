@@ -382,7 +382,14 @@ of an address holding sanctioned funds is deliberately not attempted.
 For native ETH (Phase 2) the trigger and the observation coincide — a balance delta
 has no log and carries no sender: screening is limited to address-level checks plus
 optional caller-supplied withdrawal transaction hashes — an accepted weakening to
-review with compliance before Phase 2 ships (see Non-goals).
+review with compliance before Phase 2 ships (see Non-goals). Concrete illustration
+of why ETH moved by a contract is invisible to plain JSON-RPC: in mainnet tx
+[`0x939e3c86…cf3e`](https://etherscan.io/tx/0x939e3c86551a25f90da40b546da308dc3616306e0e46c19108f146e4c2e1cf3e)
+a batching contract (Disperse) forwarded ≈ 0.0575 ETH to each of four recipients;
+`eth_getTransactionByHash` shows only `to = the contract` and `value = the total`,
+and `eth_getTransactionReceipt` shows `logs: []` — the per-recipient transfers exist
+only in the execution trace (Etherscan's "Internal Txns" tab re-executes the
+transaction with a tracer to display them).
 
 An optional `notify_deposit(account)` endpoint (guarded per account, like ckBTC's
 `update_balance`) remains useful as an accelerator and as the re-arming mechanism
