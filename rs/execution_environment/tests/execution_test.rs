@@ -2987,13 +2987,7 @@ fn list_canisters_via_inter_canister_call_succeeds() {
             call_args().other_side(EmptyBlob.encode()),
         )
         .build();
-    let msg_id = env.send_ingress(
-        PrincipalId::new_anonymous(),
-        admin_canister,
-        "update",
-        list_canisters,
-    );
-    let reply = get_reply(env.await_ingress(msg_id, 100));
+    let reply = get_reply(env.execute_ingress(admin_canister, "update", list_canisters));
     ListCanistersResponse::decode(&reply).unwrap();
 }
 
@@ -3032,13 +3026,7 @@ fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
         .build();
 
     let instructions_baseline = env.subnet_message_instructions();
-    let msg_id = env.send_ingress(
-        PrincipalId::new_anonymous(),
-        non_admin_canister,
-        "update",
-        list_canisters,
-    );
-    let reject = get_reject(env.await_ingress(msg_id, 100));
+    let reject = get_reject(env.execute_ingress(non_admin_canister, "update", list_canisters));
     assert!(reject.contains("Only the subnet admins can perform certain actions"));
 
     assert_eq!(env.subnet_message_instructions(), instructions_baseline);
