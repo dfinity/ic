@@ -64,12 +64,16 @@ The design is delivered in two phases:
   minimum deposit amount, then the minter mints `amount - deposit_fee` ckERC20 to the
   associated IC account, exactly once (deduplication by `(transaction hash, log
   index)`, as for helper-based deposits).
-* `R3`: If the ERC-20 `Transfer` sender is on the blocklist, no mint occurs and the
-  deposit address is excluded from sweeping: the deposit is recorded as invalid and
-  the funds stay segregated at the deposit address (release only via explicit manual
-  or governance intervention — they never mix with the funds backing ckTokens at the
-  minter's main address). An address holding both blocked and clean un-swept
-  deposits is frozen entirely: no sweep and no further mint for that address.
+* `R3`: If the ERC-20 `Transfer` sender is on the blocklist, no mint occurs (the
+  deposit is recorded as invalid) and the **minter never sweeps** the deposit
+  address; release only via explicit manual or governance intervention. An address
+  holding both blocked and clean un-swept deposits is frozen entirely: no sweep and
+  no further mint for that address. The no-mint half is the hard guarantee; the
+  sweep exclusion is *best-effort segregation*, not a security boundary — receipt
+  of ERC-20 is not consentable on Ethereum, so tainted funds can always be pushed
+  into the main pool directly (already the case today: a blocked sender using the
+  helper contract lands its funds, unminted, commingled at the minter address), and
+  under permissionless sweeping a third party can sweep a tainted deposit address.
 * `R4`: Transfers below the per-token minimum deposit amount, and transfers of
   unsupported ERC-20 tokens, are not credited. No funds are ever burned or destroyed:
   they remain at a tECDSA-controlled address and remain recoverable by the minter.
@@ -408,14 +412,19 @@ mandatory before scheduling any sweep** (after the sweep, the helper event's
 `owner` is the deposit EOA, not the real sender, so screening cannot be left to the
 pipeline; the pipeline's owner↔principal cross-check remains as belt-and-braces).
 
-If a screened sender is blocked: no mint, the deposit is recorded as invalid, and —
+If a screened sender is blocked: no mint, the deposit is recorded as invalid, and
+the minter never sweeps the address, so the funds stay segregated at the
+key-controlled deposit address until an explicit manual/governance release (`R3`) —
 an *improvement* over today, where blocked helper-deposit funds already sit
-commingled at the minter address — the deposit address is excluded from sweeping, so
-the funds stay segregated at the key-controlled deposit address until an explicit
-manual/governance release (`R3`). Since a sweep always moves an address' whole
-balance, an address holding a *mix* of blocked and clean un-swept transfers is
-frozen entirely (no sweep, no further mint): partially sweeping "clean" amounts out
-of an address holding sanctioned funds is deliberately not attempted.
+commingled at the minter address. Per `R3`, this segregation is best-effort
+diligence, not a security boundary: the blocklist controls what is *minted*, never
+what the pool *receives* (direct transfers to the main address are unpreventable
+today and remain so), and third-party sweeps — where permitted — can collapse the
+segregation back to the status quo without creating any new risk. Since a sweep
+always moves an address' whole balance, an address holding a *mix* of blocked and
+clean un-swept transfers is frozen entirely (no sweep, no further mint): partially
+sweeping "clean" amounts out of an address holding sanctioned funds is deliberately
+not attempted.
 
 For native ETH (Phase 2) the trigger and the observation coincide — a balance delta
 has no log and carries no sender: screening is limited to address-level checks plus
@@ -487,8 +496,16 @@ balance itself — see step 6 for the fee cap this requires.
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **A — direct sweep** (`CkSweeper`): delegate transfers straight to the minter's main address | Permissionless-safe: destination hardcoded (`R6`), any caller only donates gas → no access control in the delegate; cheapest — measured 66'854 gas for a first single-address sweep incl. authorization, ≈ 26k marginal per additional address in a batch | Requires the new crediting path of step 4 variant A |
-| **B — sweep through the helper** (`CkSweeperViaHelper`): delegate approves + calls `depositErc20(token, balance, principal, subaccount)` on the existing helper | Sweep emits the canonical `ReceivedEthOrErc20` event → step 4 variant B's pipeline reuse; native ETH works symmetrically via `depositEth` | The principal is a sweep argument → sweeping must be restricted to the minter (`msg.sender ∈ {MINTER, SELF}` via two immutables, keeping the delegate stateless); more gas — measured 82'207 single (+15'353), 164'746 for a batch re-delegating three EOAs and sweeping two |
+| **A — direct sweep** (`CkSweeper`): delegate transfers straight to the minter's main address | Permissionless-safe: destination hardcoded (`R6`), any caller only donates gas → no access control in the delegate (with the `R3` caveat that a third party may sweep a tainted address — no worse than today); cheapest — measured 66'854 gas for a first single-address sweep incl. authorization, ≈ 26k marginal per additional address in a batch | Requires the new crediting path of step 4 variant A |
+| **B — sweep through the helper** (`CkSweeperViaHelper`): delegate approves + calls `depositErc20(token, balance, principal, subaccount)` on the existing helper | Sweep emits the canonical `ReceivedEthOrErc20` event → step 4 variant B's pipeline reuse; native ETH works symmetrically via `depositEth` | The principal is a sweep argument → it must be protected against spoofing (an arbitrary caller crediting a deposit to their own principal) by caller-gating or a one-time attestation — see the sub-variants below; more gas — measured 82'207 single (+15'353), 164'746 for a batch re-delegating three EOAs and sweeping two |
+
+**Sub-variants (variant B only) — how to prevent principal spoofing:**
+
+| Sub-variant | Pros | Cons |
+|---|---|---|
+| **Caller-gating**: `require(msg.sender ∈ {MINTER, SELF})` via two immutables (`SELF` = the deployed instance's address, captured at construction, so the batch entry point still works) | Simplest delegate, zero extra signatures; as a side effect preserves the best-effort sweep exclusion of `R3` (nobody but the minter can sweep a tainted address) | Only the minter can sweep; Multicall3 unusable as batcher (inner `msg.sender` would be Multicall3) |
+| **One-time self-attestation**: the minter signs, with the *deposit address' own derived key*, a domain-separated message `keccak("ck-deposit-owner" ‖ chain_id ‖ helper ‖ principal ‖ subaccount)`; the delegate checks `ecrecover(message, sig) == address(this)` (≈ 3k gas), the attestation riding in the sweep calldata | Sweeping is permissionless again with the address↔principal binding *cryptographically enforced* — the attestation is a public fact, replayable harmlessly (funds still only move through `depositErc20` with the attested principal); one extra tECDSA signature per address, one-time, consuming no account nonce | Forfeits the best-effort `R3` sweep exclusion (a third party can sweep a tainted address — status quo, no new risk); slightly larger delegate and calldata |
+| **On-chain re-derivation**: the delegate recomputes `derive(master_pubkey, principal, subaccount)` and compares with `address(this)` | No extra signature at all — the binding is verified from first principles | Uneconomical: the IC's generalized BIP-32 derivation needs one HMAC-SHA512 per path element, and the EVM has no SHA-512 precompile — several hundred thousand gas per sweep in pure Solidity (only the elliptic-curve step is cheap: `ecrecover(−t·rₓ mod n, v, rₓ, rₓ)` returns `address(P + t·G)` for ≈ 3k gas). Rejected |
 
 ### Step 6: Pay the transaction fees without touching the ckETH backing
 
