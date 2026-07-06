@@ -323,6 +323,25 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
           cat /tmp/bazel-cache.bazelrc
+
+          # EXPERIMENT: reuse the Namespace cache endpoint as a Bazel remote
+          # downloader (Remote Asset API) so repository downloads (e.g. apt .debs
+          # from snapshot.ubuntu.com) are proxied/cached instead of hitting the
+          # origin on every fetch (which gets rate-limited with 503s). Only valid
+          # for a gRPC endpoint; the local fallback keeps the build working if the
+          # endpoint doesn't implement the Remote Asset API's FetchBlob.
+          cache_endpoint="$(sed -n 's/.*--remote_cache=\([^ ]*\).*/\1/p' /tmp/bazel-cache.bazelrc | head -n1)"
+          case "$cache_endpoint" in
+            grpc://*|grpcs://*)
+              {
+                echo "build --experimental_remote_downloader=$cache_endpoint"
+                echo "build --experimental_remote_downloader_local_fallback"
+              } >> /tmp/bazel-cache.bazelrc
+              echo "::notice::Configured remote downloader -> $cache_endpoint" ;;
+            *)
+              echo "::notice::Cache endpoint '$cache_endpoint' is not gRPC; Remote Asset API needs gRPC — skipping remote downloader experiment." ;;
+          esac
+          cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Build and Test
