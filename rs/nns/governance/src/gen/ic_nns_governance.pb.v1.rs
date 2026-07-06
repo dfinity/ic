@@ -3321,19 +3321,11 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
-    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
-    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
-    #[prost(bool, tag = "31")]
-    pub eight_year_gang_bonus_migration_done: bool,
     /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
     /// dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
     #[prost(map = "uint64, message", tag = "32")]
     pub neuron_id_to_pre_clamp_dissolve_state:
         ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
-    /// Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
-    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
-    #[prost(bool, tag = "33")]
-    pub relaxed_eight_year_gang_bonus_migration_done: bool,
     /// ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
     #[prost(message, optional, tag = "34")]
     pub icp_price_history: ::core::option::Option<IcpPriceHistory>,
