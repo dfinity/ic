@@ -730,7 +730,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
-        ApiBoundaryNodes,
     ) {
         loop {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
@@ -777,7 +776,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             ResourceLimits,
             RegistryExecutionSettings,
             NodePublicKeys,
-            ApiBoundaryNodes,
         ),
         ReadRegistryError,
     > {
@@ -792,7 +790,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             .try_into()
             .unwrap_or(SubnetType::CloudEngine);
 
-        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
         let network_topology = self.try_to_populate_network_topology(
             registry_version,
             own_subnet_id,
@@ -914,7 +911,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 registry_version,
             },
             node_public_keys,
-            api_boundary_nodes,
         ))
     }
 
@@ -1156,6 +1152,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             None
         };
 
+        let api_boundary_nodes = self.try_to_populate_api_boundary_nodes(registry_version)?;
+
         Ok(NetworkTopology::new(
             subnets,
             Arc::new(routing_table),
@@ -1166,6 +1164,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             self.bitcoin_config.mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         ))
     }
 
@@ -1395,7 +1394,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             resource_limits,
             registry_execution_settings,
             node_public_keys,
-            api_boundary_nodes,
         ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
@@ -1424,7 +1422,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
             resource_limits,
             &registry_execution_settings,
             node_public_keys,
-            api_boundary_nodes,
         );
 
         let garbage_collect_timer = self.metrics.start_phase_timer(PHASE_GARBAGE_COLLECT);
