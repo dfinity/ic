@@ -27,6 +27,9 @@ pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 pub const MAX_FETCH_CANISTER_LOGS_RESULT_BYTES: usize = 2_000_000;
 
 /// Maximum number of response bytes for a fetch canister logs request.
+/// This must not exceed the maximum update call response size
+/// (`MAX_INTER_CANISTER_PAYLOAD_IN_BYTES`), otherwise a `fetch_canister_logs`
+/// response of this size could not be returned to the caller.
 ///
 /// The `fetch_canister_logs` fee is prepaid based on this value, so it must be an
 /// upper bound on the size of a Candid-encoded `FetchCanisterLogsResponse`. The
@@ -41,6 +44,10 @@ pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize =
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
+const _: () = assert!(
+    MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES
+        <= crate::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize
+);
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
