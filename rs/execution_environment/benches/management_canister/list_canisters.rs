@@ -86,9 +86,9 @@ fn run_bench<M: criterion::measurement::Measurement>(
         b.iter(|| {
             let result = env.execute_ingress(test_canister, "list_canisters", Encode!().unwrap());
             let ranges: u64 = expect_reply(result);
-            // The canisters are created with gaps, so there should be roughly
-            // one range per canister on the subnet.
-            assert!(ranges >= canisters_number / 2);
+            // The canisters are created with gaps, so there is exactly one
+            // range per canister on the subnet.
+            assert_eq!(ranges, canisters_number);
         });
     });
 }
