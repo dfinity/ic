@@ -2907,6 +2907,7 @@ fn list_canisters_respects_round_instruction_limit() {
     // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
     let instructions_baseline = env.subnet_message_instructions();
     let calls_baseline = list_canisters_count(&env);
+    assert_eq!(calls_baseline, 0);
     env.send_ingress(
         PrincipalId::new_anonymous(),
         admin_canister,
