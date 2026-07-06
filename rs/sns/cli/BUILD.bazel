@@ -149,6 +149,7 @@ rust_test(
         "//rs/sns/governance/api",
         "//rs/sns/init",
         "//rs/sns/root",
+        "//rs/test_utilities/privileges",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "@crate_index//:anyhow",

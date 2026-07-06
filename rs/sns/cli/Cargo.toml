@@ -55,4 +55,5 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-test-utilities-privileges = { path = "../../test_utilities/privileges" }
 lazy_static = { workspace = true }
