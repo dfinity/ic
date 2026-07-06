@@ -49,7 +49,7 @@ The design is delivered in two phases:
   crediting straightforward.
 * **Phase 2 — ckETH**: native ETH transfers emit no logs and interact badly with
   EIP-7702 delegated code under fixed 21'000 gas limits; this phase has additional
-  design constraints, described separately.
+  design constraints, described per step.
 
 ## Requirements
 
@@ -64,8 +64,11 @@ The design is delivered in two phases:
   minimum deposit amount, then the minter mints `amount - deposit_fee` ckERC20 to the
   associated IC account, exactly once (deduplication by `(transaction hash, log
   index)`, as for helper-based deposits).
-* `R3`: If the ERC-20 `Transfer` sender is on the blocklist, no mint occurs; the
-  deposit is recorded as invalid (same semantics as today's blocked helper deposits).
+* `R3`: If the ERC-20 `Transfer` sender is on the blocklist, no mint occurs and the
+  deposit address is excluded from sweeping: the deposit is recorded as invalid and
+  the funds stay segregated at the deposit address (release only via explicit manual
+  or governance intervention — they never mix with the funds backing ckTokens at the
+  minter's main address).
 * `R4`: Transfers below the per-token minimum deposit amount, and transfers of
   unsupported ERC-20 tokens, are not credited. No funds are ever burned or destroyed:
   they remain at a tECDSA-controlled address and remain recoverable by the minter.
@@ -83,7 +86,7 @@ The design is delivered in two phases:
   credited-but-unswept balances per token, delegation status, and sweep activity.
 * `R10`: Withdrawals (ckERC20 → ERC-20 and ckETH → ETH) are unaffected: they continue
   to be served from the minter's main address and its existing nonce sequence.
-* `R13`: Registering a deposit address (`get_deposit_address`) triggers no
+* `R13`: Registering a deposit address (`retrieve_deposit_address`) triggers no
   threshold-ECDSA signature and no Ethereum transaction. The minter only signs a
   delegation and sweeps an address after having observed there a balance of a
   supported token of at least the per-token minimum deposit amount. (Registrations
@@ -95,6 +98,12 @@ The design is delivered in two phases:
   for sweeping ≥ cumulative ETH spent on sweeping. Burned-but-unspent amounts are
   tracked and offset against subsequent burns; they are never re-minted. If the fee
   account cannot cover a sweep, no sweep is submitted.
+* `R15`: A single user-visible step suffices: after one `retrieve_deposit_address`
+  call, a deposit arriving at that address within its *scanning window* is credited
+  with no further canister call by the user or frontend. Re-calling
+  `retrieve_deposit_address` (idempotent, free of per-address spending per `R13`)
+  re-arms the window; a deposit arriving on a dormant address is credited once the
+  address is re-armed and is never lost in the meantime.
 
 ### Phase 2 (ckETH)
 
@@ -105,8 +114,7 @@ The design is delivered in two phases:
   never exceeds total received).
 * `R12`: A plain ETH transfer sent with a fixed 21'000 gas limit to a deposit address
   MUST NOT be permanently locked: it either succeeds (address has no code at transfer
-  time) or fails on the sender side (funds never leave the exchange). See the
-  delegation lifecycle decision below.
+  time) or fails on the sender side (funds never leave the exchange).
 
 ## Non-goals
 
@@ -120,9 +128,10 @@ The design is delivered in two phases:
   documented as unsupported).
 * **Replacing the helper-contract flow**: the existing flow remains the cheapest path
   for power users and is untouched.
-* **Automatic discovery without any user/frontend interaction**: crediting is
-  claim-based (see Design Decisions); a frontend polling on the user's behalf makes
-  this invisible in practice.
+* **Indefinite unattended scanning**: an address is actively scanned only within its
+  scanning window (`R15`); scanning every registered address forever would hand an
+  attacker an unbounded cycles bill (the registered set is inflatable for free,
+  `R13`).
 * **Automatic recovery of unsupported-token deposits**: funds remain recoverable
   (key-controlled address) but recovery tooling is future work.
 * **Replenishing the sweep-gas fee account**: sweep gas is burned from the minter's
@@ -131,148 +140,39 @@ The design is delivered in two phases:
   funded is a treasury/market operation outside this design; the design only
   requires that sweeping halts safely when the fee account is empty.
 * Accepted residual limitations:
+  * A deposit arriving *after* the scanning window has expired is credited only once
+    the address is re-armed (`R15`) — e.g. the user re-opens the frontend. Funds sit
+    safely at a key-controlled address in the meantime.
   * A CEX that batches ETH withdrawals through a contract (internal transactions)
     provides no sender information without trace APIs; Phase 2 compliance screening is
-    therefore weaker for ETH than for ERC-20 (see Phase 2 section).
+    therefore weaker for ETH than for ERC-20 (see step 3).
   * An account's ETH deposit address (Phase 2) differs from its ERC-20 one, matching
     the per-asset deposit-address UX of exchanges; sending the wrong asset class to
     an address is not credited automatically, but funds always remain recoverable
     (key-controlled addresses, `R12` guarantees no loss on the sender side).
 
-## Design Decisions
+## Design
 
-* **Attribution by destination address, not by sender or contract call.** This is the
-  only mechanism compatible with plain CEX transfers. Chosen over sender-address
-  registration (CEX hot wallets are shared and unpredictable) and exact-amount
-  matching (collision-prone, griefable); see Discussed Alternatives.
-* **Deposit addresses are tECDSA-derived EOAs, not contracts.** The minter derives one
-  EOA per IC account using a non-empty ECDSA derivation path (the main address keeps
-  the empty path `MAIN_DERIVATION_PATH`). Decisive property: *the minter holds the
-  key*. Funds at a deposit address are never dependent on contract code being correct —
-  even with no EIP-7702 at all, any balance is recoverable by classically funding the
-  address with gas and signing a normal transfer. Chosen over CREATE2 counterfactual
-  forwarder contracts, where funds are controlled by code alone (see Discussed
-  Alternatives).
-* **Sweeping via EIP-7702, gas paid by the minter's main address.** Each deposit EOA
-  signs (threshold ECDSA) a one-time EIP-7702 authorization delegating its code to a
-  single immutable, storage-less sweeper delegate whose only capability is *transfer
-  everything to the minter's main address*. Sweep transactions are type-`0x04`
-  transactions sent from the funded main address; many deposit addresses are swept in
-  one transaction. No deposit address ever needs an ETH balance for gas.
-* **Sweeps are permissionless-safe** (variant A). The delegate's sweep functions are
-  callable by anyone because the destination is hardcoded (`R6`); a third party
-  triggering a sweep only donates gas. This removes access-control state from the
-  delegate and lets one transaction sweep many deposit addresses through a batch entry
-  point on the deployed `CkSweeper` instance itself — the delegate doubles as the
-  batcher, so no additional contract is needed (the canonical, already-deployed
-  [Multicall3](https://www.multicall3.com/) would work as well). Variant B trades this
-  property away, see the open decision below.
-* **Mint on finalized deposit, sweep asynchronously** (variant A). The user is
-  credited as soon as the deposit is finalized and detected; sweeping is pure treasury
-  consolidation, batched to amortize gas, and never blocks or reverts a mint (`R5`).
-  This decouples UX latency from gas-optimization policy. Variant B instead credits on
-  the sweep's own finalized event, see the open decision below.
-* **Claim-based detection instead of continuous scraping.** Deposits are detected when
-  a `notify_deposit` endpoint is called for a specific account (by the user, or
-  transparently by a frontend/timer polling recently active addresses). A targeted
-  `eth_getLogs` on one token contract filtered by one recipient address is small and
-  cheap; continuously scraping `Transfer` logs for an unbounded, growing set of
-  addresses is not. This mirrors ckBTC's `update_balance`. (The existing helper-contract
-  scraping is unchanged.)
-* **No up-front spending per registered address (anti-DoS).** `get_deposit_address`
-  is pure key derivation plus a state entry: no threshold-ECDSA signature, no
-  Ethereum transaction (`R13`). Registrations are free for callers, so any eager
-  per-address spending — signing the delegation up-front, let alone submitting it
-  on-chain — would let an attacker drain the minter's cycles and ETH by spamming
-  registrations. The pipeline is strictly gated: register → observe a balance of a
-  supported token ≥ the per-token minimum at the address (targeted, claim-driven
-  scan) → only then sign the delegation and sweep. For the same reason the balance
-  scanning itself must stay bounded: the registered set is attacker-inflatable, so
-  scans are claim-driven (`notify_deposit`, guarded per account) or bounded batches,
-  never an unbounded standing scan of every registered address.
-* **Phase 1 delegation is therefore installed lazily, with the first sweep, and is
-  permanent.** For ERC-20-only crediting, delegated code on the deposit address is
-  harmless (ERC-20 transfers never execute recipient code), so one authorization per
-  address — ever — suffices. Phase 2 sidesteps the question for native ETH with
-  separate, never-delegated ETH deposit addresses (see below).
-* **Fees are deducted from the minted amount and land in a fee account.** A CEX
-  depositor owns no ckETH to pay gas with, so the sweep cost is recovered as a
-  per-token flat fee: the depositor is credited `amount - deposit_fee` and the fee
-  portion is minted to a minter-controlled fee account on the same ckToken ledger —
-  the full deposited amount is swept, so minting it in full keeps supply exactly
-  equal to backing and makes fee revenue explicit and auditable. Flat and
-  proposal-configurable rather than oracle-priced, for simplicity and predictability
-  (`R7`).
-* **Sweep gas is paid by the minter's ETH, but never out of ckETH backing (`R14`).**
-  The ETH at the minter's main address backs ckETH 1:1, so spending it on sweep gas
-  without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefore
-  funded exclusively through the minter's fee account on the ckETH ledger, mirroring
-  how withdrawals already pay for gas (burn ckETH, spend ETH): before submitting a
-  sweep, the minter **burns first** — at least the transaction's maximum fee
-  (`gas_limit × max_fee_per_gas`, an overestimate by construction) minus any
-  previously burned-but-unspent credit. The receipt's effective fee is then deducted
-  from a running `prepaid_sweep_gas` counter; the leftover of the overestimate is
-  **not re-minted** but carried as credit for the next burn, so the invariant
-  "cumulative burned ≥ cumulative spent" holds at every instant. An empty ckETH fee
-  account halts sweeping (safely: under variant A, credited balances are unaffected
-  and deposits keep accumulating at key-controlled addresses; under variant B,
-  crediting pauses with sweeping); replenishing it is out of scope (see Non-goals).
+The flow is five steps: **(1)** retrieve the deposit address, **(2)** withdraw from
+the CEX to it, **(3)** detect the deposit, **(4)** credit (mint) the ckToken,
+**(5)** sweep the funds to the minter, paying the fees **(6)** without touching the
+ckETH backing. One section per step below; where a step has design variants, a table
+weighs them.
 
-### Open decision: what the sweep does — variant A (direct) vs variant B (through the helper contract)
+Two variants cut across steps 3–6 and the decision between them is **not yet taken**:
 
-Both variants share everything above (address derivation, EIP-7702 delegation,
-batching, fees); they differ in the delegate's action and, consequently, in *where
-crediting happens*. The decision between them is **not yet taken**.
+* **Variant A — direct sweep**: the sweeper delegate transfers funds straight to the
+  minter's main address; crediting happens through a *new* detection→mint path,
+  independent of sweeping.
+* **Variant B — sweep through the existing helper contract**: the sweeper delegate
+  calls `depositErc20`/`depositEth` on the already-deployed helper
+  (`DepositHelperWithSubaccount.sol`), so every sweep emits the canonical
+  `ReceivedEthOrErc20` event and the **existing** scrape→parse→dedup→mint pipeline
+  credits the deposit unchanged.
 
-**Variant A — direct sweep (`CkSweeper`).** The delegate transfers the funds straight
-to the minter's main address. Crediting requires a *new* detection-and-mint path in
-the minter (`notify_deposit` → finalized `Transfer` log → mint), with its own event
-types, deduplication and audit trail. Sweeps are permissionless-safe and mint timing
-is independent of sweep scheduling. Measured in the demo (mock USDT): 66'854 gas for
-a first single-address sweep including its authorization, ≈ 26k marginal gas per
-additional address in a batch.
-
-**Variant B — sweep through the existing helper contract (`CkSweeperViaHelper`).**
-The delegate approves and calls `depositErc20` on the already-deployed helper
-(`DepositHelperWithSubaccount.sol`): the helper moves the funds to the minter *and
-emits the canonical `ReceivedEthOrErc20` event* — with the deposit EOA as `owner` and
-a caller-supplied IC principal/subaccount — at the single contract address the minter
-already scrapes. **The minter's crediting pipeline (scrape → parse → dedup → mint) is
-reused unchanged.** Consequences:
-
-* *Massively smaller minter change.* No second crediting path: deposit detection is
-  demoted from a correctness-critical component to a mere sweep-scheduling hint (it
-  can be sloppy, delayed, or even frontend-driven without any double-mint or
-  lost-credit risk). Correctness lives entirely in the existing, battle-tested
-  pipeline.
-* *Sweeping must be restricted to the minter.* The principal is a sweep argument, so a
-  permissionless sweep would let anyone credit a deposit to their own principal. The
-  delegate stays stateless via two immutables: `MINTER`, and `SELF` (the deployed
-  instance's own address, captured at construction), accepting
-  `msg.sender ∈ {MINTER, SELF}` so the batch entry point still works. Belt-and-braces,
-  the minter additionally validates scraped events whose `owner` is a registered
-  deposit address against its own address↔account map and quarantines mismatches.
-* *Minting follows the sweep, but latency need not suffer.* The minter can schedule
-  the sweep as soon as it observes the deposit at the `latest` block, **without
-  waiting for the deposit to be finalized**: crediting only ever follows the
-  *finalized* helper event emitted by the sweep itself, so a reorg that drops the
-  deposit merely wastes the sweep's gas (the delegate sweeps a zero balance — a
-  no-op) and costs some cycles; a reorged sweep transaction is handled by the
-  existing nonce-tracking and resubmission machinery. End-to-end latency is then
-  comparable to today's helper flow (deposit inclusion + sweep + finalization).
-* *Screening point shifts.* The scraped event's `from`/`owner` is the deposit EOA,
-  not the CEX hot wallet, so blocklist screening of the actual sender (`R3`) must
-  happen when scheduling the sweep, based on the observed `Transfer` log.
-* *Extra gas per sweep* for `approve` + `transferFrom` + event. Measured in the demo:
-  82'207 gas single (+15'353 vs variant A), 164'746 for a batch re-delegating three
-  EOAs and sweeping two of them through the helper.
-* *Native ETH works symmetrically* via the helper's `depositEth` (Phase 2).
-
-Both variants are exercised end-to-end in the runnable demo, including the
-adversarial case for variant B (a non-minter caller attempting to sweep with their
-own principal is rejected).
-
-## Implementation
+Both variants are exercised end-to-end in the runnable demo (see Test plan),
+including the adversarial case for variant B (a non-minter caller attempting to
+sweep with their own principal is rejected).
 
 ### End-to-end flows
 
@@ -289,15 +189,15 @@ sequenceDiagram
     participant CkUsdtLedger as ckUSDT ledger
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: get_deposit_address(p)
-    Note right of Minter: derive addr(p) locally, register it.<br/>No tECDSA signature, no Ethereum tx (R13)
+    User->>Minter: retrieve_deposit_address(p)
+    Note right of Minter: derive addr(p) locally, register it and<br/>arm its scanning window (R15).<br/>No tECDSA signature, no Ethereum tx (R13)
     Minter-->>User: addr(p)
     User->>CEX: withdraw USDT to addr(p)
     CEX->>Eth: USDT.transfer(addr(p), 250)
-    loop frontend polls until credited
-        User->>Minter: notify_deposit(p)
-        Minter->>Eth: eth_getLogs(USDT Transfer to addr(p), up to finalized)
+    loop background task, while addr(p) is in its scanning window
+        Minter->>Eth: bulk balance scan of active addresses (finalized)
     end
+    Minter->>Eth: eth_getLogs(USDT Transfer to addr(p), up to finalized)
     Note over Minter: amount >= min (R4), sender not blocked (R3),<br/>dedup by (tx hash, log index) (R2)
     Minter->>CkUsdtLedger: mint 250 - fee to p
     Minter->>CkUsdtLedger: mint fee to minter fee account
@@ -321,11 +221,11 @@ sequenceDiagram
     participant CkUsdtLedger as ckUSDT ledger
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: get_deposit_address(p)
+    User->>Minter: retrieve_deposit_address(p)
     Minter-->>User: addr(p)
     User->>CEX: withdraw USDT to addr(p)
     CEX->>Eth: USDT.transfer(addr(p), 250)
-    Minter->>Eth: balance scan of registered addresses (latest block)
+    Minter->>Eth: bulk balance scan of active addresses (latest block)
     Note over Minter: scheduling hint only, no finality needed:<br/>a reorged deposit just wastes the sweep's gas
     Minter->>CkEthLedger: burn max_tx_fee - prepaid_sweep_gas (R14)
     Minter->>Eth: type-0x04 tx: sweepErc20(tokens, p, s) on addr(p)<br/>= approve + helper.depositErc20:<br/>USDT: addr(p) -> minter address, and the helper emits<br/>ReceivedEthOrErc20(USDT, addr(p), 250, p, s)
@@ -348,12 +248,13 @@ sequenceDiagram
     participant Eth as Ethereum (via EVM-RPC)
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: get_deposit_address(p) for ETH
+    User->>Minter: retrieve_deposit_address(p) for ETH
     Minter-->>User: eth_addr(p) (schema 2: never delegated, never any code)
     User->>CEX: withdraw ETH to eth_addr(p)
     CEX->>Eth: plain transfer, even with a fixed 21000 gas limit (R12)
-    User->>Minter: notify_deposit(p) (frontend polls)
-    Minter->>Eth: eth_getBalance(eth_addr(p), finalized)
+    loop background task, while eth_addr(p) is in its scanning window
+        Minter->>Eth: eth_getBalance(eth_addr(p), finalized)
+    end
     alt variant A
         Minter->>CkEthLedger: mint balance delta - fee to p (R11),<br/>fee to minter fee account
         Minter->>Eth: EIP-1559 tx FROM eth_addr(p), signed via tECDSA:<br/>transfer balance - gas to the minter address<br/>(max fee capped by the charged deposit fee)
@@ -363,6 +264,199 @@ sequenceDiagram
         Minter->>CkEthLedger: mint to p (existing pipeline, unchanged)
     end
 ```
+
+### Step 1: Retrieve the deposit address
+
+Attribution is by **destination address** — the only channel a CEX supports (the
+sender is a shared hot wallet, plain transfers carry no memo). Each IC account gets a
+unique, deterministic deposit address, derived from the minter's threshold-ECDSA key:
+
+* Derivation path for account `(p, s)`: `[SCHEMA, p.as_slice(), s]` where `SCHEMA`
+  is a 1-byte tag (`[1u8]` for ERC-20 deposit addresses, `[2u8]` for Phase 2 ETH
+  deposit addresses) and `s` is the 32-byte subaccount (all-zero for the default
+  subaccount). Non-empty by construction, hence distinct from the main address' empty
+  path (`MAIN_DERIVATION_PATH`).
+* The child *public key* (and hence the address) is computed locally from the cached
+  master public key using non-hardened derivation (`ic-secp256k1`'s
+  `derive_subkey` / `DerivationPath`, as ckBTC does) — no management-canister call
+  and no signature is needed to *create* an address. Decisive property: **the minter
+  holds the key.** Funds at a deposit address are never dependent on contract code
+  being correct — even with no EIP-7702 at all, any balance is recoverable by
+  classically funding the address with gas and signing a normal transfer.
+* Endpoint `retrieve_deposit_address(account) -> String` (EIP-55 checksummed). This
+  is deliberately an **update call** — despite returning a deterministically derivable
+  value — because it has side effects: it registers the address in state
+  (`deposit_addresses: Account ↔ Address` bimap + per-address bookkeeping:
+  `registered_at_block`, delegation status, credited/swept counters, scanning-window
+  expiry), arms the address' scanning window (`R15`) and emits a
+  `DepositAddressRegistered` audit event. The `retrieve_` naming (rather than `get_`)
+  signals this: a query could neither register nor re-arm. It does nothing else — no
+  threshold-ECDSA signature, no Ethereum transaction (`R13`): registrations are free
+  for callers, so any eager per-address spending would let an attacker drain the
+  minter's cycles and ETH by spamming registrations. Repeated calls are cheap
+  lookups that re-arm the window.
+
+**Variants — address layout across asset classes** (decided: per-asset, introduced
+with Phase 2):
+
+| Variant | Pros | Cons |
+|---|---|---|
+| **Per-asset addresses** (chosen): ERC-20 address (schema 1, delegated once, permanently) + ETH address (schema 2, never delegated) | ETH address never has code → fixed-21'000-gas CEX withdrawals always work (`R12`), no failure window; ETH sweeps need no EIP-7702 at all (deposit pays its own gas, 21'000 gas, cheapest possible); ERC-20 delegation stays one-signature-ever | Two addresses per account to register/scan; user must use the right address per asset (matches CEX per-asset UX; wrong-asset deposits recoverable, see Non-goals) |
+| **Single shared address** with *set-and-clear* delegation (install delegate, sweep, re-delegate to `address(0)`) | One address per account | Two tECDSA signatures + ≈ 2 × 12'500–25'000 gas per sweep cycle; short window in which fixed-gas ETH transfers fail at the sender; more complex delegation lifecycle |
+| **Single shared address** with permanent delegation | One address, one authorization ever | Breaks ETH deposits entirely: plain sends to a delegated address without `receive()` revert — funds bounce at the CEX (`R12` holds, but ETH deposits are impossible) |
+
+### Step 2: Withdraw from the CEX to the deposit address
+
+The user pastes the deposit address into the exchange withdrawal form; the CEX
+performs a plain ERC-20 `transfer` (or a native ETH send, Phase 2) from its hot
+wallet. Properties the design must absorb:
+
+* The transfer may come from any address (shared hot wallet), possibly via an
+  internal transaction (contract-batched withdrawal) for ETH.
+* ERC-20 transfers always emit a `Transfer` log and never execute recipient code, so
+  a delegated ERC-20 deposit address is harmless to the sender. Native ETH sends
+  execute recipient code — hence the per-asset address layout of step 1.
+* Amounts below the per-token minimum, and unsupported ERC-20 tokens, are not
+  credited (`R4`) — the minimum is not only fee economics but the anti-DoS bound
+  that keeps an attacker from forcing unprofitable sweeps. Nothing is ever lost:
+  funds sit at a key-controlled address.
+
+No variants for this step: the CEX side is not under our control by definition.
+
+### Step 3: Detect the deposit
+
+The single-step target UX (`R15`) demands that after `retrieve_deposit_address`, no
+further user or frontend action is required — a two-step flow (retrieve, then claim)
+is not reliably implementable by a frontend (the browser may be closed between the
+steps), and today's helper-based deposits are single-step too.
+
+Detection therefore runs as a **minter background task over "active" addresses**:
+registration (or re-registration) arms a per-address *scanning window*; while the
+window is open, the address belongs to the active set that a periodic task scans in
+bounded batches. The window (e.g. days, configurable) bounds the DoS surface
+(`R13`): spam registrations inflate the active set only temporarily, the per-tick
+scan budget is fixed, and dormant addresses cost nothing until re-armed.
+
+Scanning is a two-stage funnel, cheap-first:
+
+1. **Bulk balance scan** of the active set: many `balanceOf` `eth_call`s /
+   `eth_getBalance`s per HTTPS outcall. This requires **JSON-RPC batch support in
+   the EVM-RPC canister** (`eth_batch`,
+   [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
+   in progress); until it lands, one [Multicall3](https://www.multicall3.com/)
+   `aggregate3` `eth_call` reads a whole batch (including native ETH via
+   `getEthBalance`) in a single request. The scan only decides *whether to act* — it
+   can be stale or lossy without correctness impact.
+2. **Per-address confirmation** for addresses with a non-zero delta: targeted
+   `eth_getLogs` for `Transfer(*, deposit_address)` on the supported token contracts
+   over `(last_checked_block, finalized]`, chunked by the existing 500-block spread
+   logic (variant A: source of truth for crediting; variant B: input to sweep
+   scheduling). For ETH (Phase 2) there are no logs: the finalized balance delta
+   itself is the observation (`R11`).
+
+**Blocklist screening** happens here, against the same compiled-in blocklist used
+for helper deposits today (`src/blocklist.rs`, checked like
+`register_deposit_events` in `src/deposit.rs`): the screened address is the
+`Transfer` log's `from` — for a CEX deposit, the exchange hot wallet. If it is
+blocked: no mint, the deposit is recorded as invalid, and — an *improvement* over
+today, where blocked helper-deposit funds already sit commingled at the minter
+address — the deposit address is excluded from sweeping, so the funds stay
+segregated at the key-controlled deposit address until an explicit manual/governance
+release (`R3`). Under variant B the same screening runs *before scheduling the
+sweep* (the helper event's `owner` is the deposit EOA, not the real sender, so
+screening cannot be left to the pipeline); the pipeline's owner↔principal
+cross-check remains as belt-and-braces. For native ETH, balance deltas carry no
+sender: screening is limited to address-level checks plus optional
+caller-supplied withdrawal transaction hashes — an accepted weakening to review
+with compliance before Phase 2 ships (see Non-goals).
+
+An optional `notify_deposit(account)` endpoint (guarded per account, like ckBTC's
+`update_balance`) remains useful as an accelerator and as the re-arming mechanism
+for dormant addresses, but nothing in the flow *requires* it.
+
+**Variants — what triggers detection:**
+
+| Variant | Pros | Cons |
+|---|---|---|
+| **Registration-armed scanning window** (chosen): background bulk scans of the active set while the window is open | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (fixed per-tick budget, windows expire); re-armed for free by `retrieve_deposit_address` | Deposits after window expiry wait for re-arming; needs `eth_batch` (#561) or Multicall3 for bulk reads |
+| **Claim endpoint only** (`notify_deposit`, ckBTC's `update_balance` model) | Cheapest possible: minter does nothing unprompted; precise targeting | Two-step flow breaks the target UX — a frontend cannot reliably guarantee the second call (browser closed after the CEX withdrawal); kept only as optional accelerator |
+| **Continuous scraping of all registered addresses forever** (`eth_getLogs` topic disjunctions / standing balance scans) | Best possible UX, no windows | Unbounded cost growth with the (attacker-inflatable, free) registered set — a standing cycles drain (`R13`); topic-disjunction limits across providers; still misses native ETH |
+
+### Step 4: Credit the deposit (mint)
+
+The deposited amount is minted in full: `amount - deposit_fee` to the depositor's
+account, and `deposit_fee` to a minter-controlled fee account **on the same ckToken
+ledger** — the full deposited amount is swept, so minting it in full keeps supply
+exactly equal to backing and makes fee revenue explicit and auditable (`R7`). Fees
+are flat and proposal-configurable rather than oracle-priced, for simplicity and
+predictability. Deduplication is by `(transaction hash, log index)` (`R2`), memo and
+quarantine-on-panic machinery as in today's `mint()` path.
+
+*Where* the mint comes from is the crux of the open A/B decision:
+
+| Variant | Pros | Cons |
+|---|---|---|
+| **A — mint on the finalized deposit** (new detection→mint path) | Lowest, sweep-independent crediting latency; crediting keeps working even when sweeping halts (e.g. empty `R14` fee account); permissionless-safe sweeps (step 5) | A second correctness-critical crediting path in the minter: new event types, dedup, audit trail — the highest-risk part of the whole feature |
+| **B — mint via the existing pipeline, on the sweep's own finalized helper event** | The battle-tested scrape→parse→dedup→mint pipeline is reused **unchanged** — detection (step 3) is demoted from correctness-critical to a mere scheduling hint; massively smaller minter change | Mint follows the sweep: crediting halts if sweeping halts (empty fee account); latency tied to sweep scheduling — mitigated by sweeping on `latest`-block observations without waiting for deposit finality (a reorged deposit only wastes the sweep's gas: the delegate sweeps a zero balance, and a reorged sweep tx is absorbed by the existing nonce-tracking/resubmission machinery), making end-to-end latency comparable to today's helper flow |
+
+### Step 5: Sweep the funds to the minter
+
+Shared mechanics (both variants): each ERC-20 deposit EOA signs (threshold ECDSA)
+**one** EIP-7702 authorization — lazily, together with its first sweep, never at
+registration (`R13`) — delegating its code to a single immutable, storage-less
+sweeper delegate. Sweep transactions are type-`0x04` transactions sent from the
+minter's funded main address (sharing its existing nonce sequence, `R10`); many
+deposit addresses are swept in one transaction, the deployed delegate instance
+doubling as the batcher. No deposit address ever needs an ETH balance for gas. A
+periodic task selects addresses with observed-but-unswept balances where
+`unswept_value ≥ sweep_gas_cost × margin` or `age > max_age`, up to `N ≈ 20` per
+batch (gas-limit bound); confirmation is via transaction receipt, like withdrawals,
+emitting `SweepConfirmed` audit events (`R5`, `R8`).
+
+For Phase 2 ETH addresses no delegation is involved at all: the sweep is a plain
+EIP-1559 transfer (variant A) or a `depositEth{value}` helper call (variant B) of
+`balance - fee`, signed with the address' own derived key, gas paid from the swept
+balance itself — see step 6 for the fee cap this requires.
+
+| Variant | Pros | Cons |
+|---|---|---|
+| **A — direct sweep** (`CkSweeper`): delegate transfers straight to the minter's main address | Permissionless-safe: destination hardcoded (`R6`), any caller only donates gas → no access control in the delegate; cheapest — measured 66'854 gas for a first single-address sweep incl. authorization, ≈ 26k marginal per additional address in a batch | Requires the new crediting path of step 4 variant A |
+| **B — sweep through the helper** (`CkSweeperViaHelper`): delegate approves + calls `depositErc20(token, balance, principal, subaccount)` on the existing helper | Sweep emits the canonical `ReceivedEthOrErc20` event → step 4 variant B's pipeline reuse; native ETH works symmetrically via `depositEth` | The principal is a sweep argument → sweeping must be restricted to the minter (`msg.sender ∈ {MINTER, SELF}` via two immutables, keeping the delegate stateless); more gas — measured 82'207 single (+15'353), 164'746 for a batch re-delegating three EOAs and sweeping two |
+
+### Step 6: Pay the transaction fees without touching the ckETH backing
+
+The ETH at the minter's main address backs ckETH 1:1, so spending it on sweep gas
+without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefore
+funded exclusively through the minter's **fee account on the ckETH ledger**,
+mirroring how withdrawals already pay for gas (burn ckETH, spend ETH):
+
+* **Burn first** (`R14`): before submitting a sweep, burn
+  `max(0, gas_limit × max_fee_per_gas - prepaid_sweep_gas)` from the ckETH fee
+  account (the transaction's maximum fee — an overestimate by construction) and add
+  it to `prepaid_sweep_gas`; abort the sweep (and retry later) if the burn fails.
+* On the receipt, subtract the effective transaction fee from `prepaid_sweep_gas` —
+  the surplus of the overestimate is **not re-minted** but carried as credit for the
+  next burn, so "cumulative burned ≥ cumulative spent" holds at every instant. Both
+  movements are audit events; `prepaid_sweep_gas` and the effective fee/cost ratio
+  are exposed on the dashboard (`R8`, `R9`) to recalibrate `deposit_fee` via
+  proposal.
+* An empty ckETH fee account halts sweeping safely: under variant A, credited
+  balances are unaffected and deposits keep accumulating at key-controlled
+  addresses; under variant B, crediting pauses with sweeping. Replenishing the fee
+  account (converting per-ckToken fee revenue into ckETH) is out of scope (see
+  Non-goals).
+* **Phase 2 ETH sweeps involve no `R14` burn**: their gas is paid from the deposit
+  itself, before the ETH ever reaches the (counted) backing at the main address.
+  However, since under variant A the account is credited `balance - fee` *before*
+  the sweep executes, the sweep's `gas_limit × max_fee_per_gas` must be capped by
+  the charged deposit fee — waiting out gas spikes if necessary — so the gas spent
+  can never exceed what was withheld from minting. Fee-refund dust left at the
+  address rolls into the next sweep.
+
+No variants for this step beyond what variants A/B already imply (see step 4 for
+the fee-account outage behavior).
+
+## Implementation
 
 ### Constraints
 
@@ -379,66 +473,29 @@ sequenceDiagram
   deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
   use the same reduction strategies.
 * Each EVM-RPC call today is one HTTPS outcall *per provider* and each outcall burns
-  cycles, so observing the balances of many registered addresses (`R13` gate) must
-  not cost one call per address. This depends on **JSON-RPC batch request support in
-  the EVM-RPC canister** (`eth_batch`,
+  cycles, so the bulk balance scans of step 3 depend on **JSON-RPC batch request
+  support in the EVM-RPC canister** (`eth_batch`,
   [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
-  in progress): one batch of `eth_getBalance` / `eth_call` requests per outcall.
-  Until it lands, a [Multicall3](https://www.multicall3.com/) `aggregate3` `eth_call`
-  can read many `balanceOf` (and, via `getEthBalance`, native ETH) values in a single
-  request — at the cost of depending on an extra on-chain contract.
+  in progress), with Multicall3 `aggregate3` as the interim alternative.
 * The minter is event-sourced (`src/state/audit.rs`, `src/state/event.rs`): all new
   state must be reconstructible from persisted events (`R8`).
 * Deposits are only credited at *finalized* blocks, as today.
 
-### Address derivation and registration
+### EIP-7702 support in the transaction layer (`src/tx.rs`)
 
-* Derivation path for account `(p, s)`:
-  `[SCHEMA_DEPOSIT_ADDRESS, p.as_slice(), s]` where `SCHEMA_DEPOSIT_ADDRESS = [1u8]`
-  is a schema tag reserving room for future schemes, and `s` is the 32-byte subaccount
-  (all-zero for the default subaccount). Non-empty by construction, hence distinct
-  from the main address path.
-* The child *public key* (and hence the address) is computed locally from the cached
-  master public key using non-hardened derivation (`ic-secp256k1`'s
-  `derive_subkey` / `DerivationPath`, as ckBTC does) — no management-canister call and
-  no signature is needed to *create* an address; `sign_with_ecdsa` with the same path
-  is only invoked to sign authorizations (and, as a recovery fallback, transactions).
-* New endpoint `get_deposit_address(account) -> String` (EIP-55 checksummed). The
-  first call is an update call that registers the address in state
-  (`deposit_addresses: Account ↔ Address` bimap + per-address bookkeeping:
-  `registered_at_block`, delegation status, credited/swept counters), emitting a
-  `DepositAddressRegistered` audit event — and does nothing else: no threshold-ECDSA
-  signature, no Ethereum transaction (`R13`). Any per-address spending happens only
-  once a balance ≥ the per-token minimum has been observed at the address.
-  Subsequent calls are cheap lookups.
-
-### Deposit detection and minting (Phase 1, ckERC20)
-
-* New endpoint `notify_deposit(account, token?)` (update, fee-less, guarded against
-  concurrent calls per account like `update_balance` in ckBTC):
-  1. Look up the registered deposit address; determine the block range
-     `(last_checked_block + 1) ..= latest_finalized_block`.
-  2. `eth_getLogs` with `address = token contract(s)`, `topics = [Transfer,
-     any, deposit_address]` over that range (chunked by the existing 500-block spread
-     logic). The response is tiny: it concerns a single recipient.
-  3. For each log: validate amount ≥ per-token minimum (`R4`), screen the `Transfer`
-     sender against the blocklist (`R3`), deduplicate by `(tx_hash, log_index)` and
-     record `AcceptedErc20Deposit`-style events with a new deposit-source variant;
-     invalid ones are recorded like today's `InvalidDeposit`.
-  4. Mint through the existing `mint()` path with `amount - deposit_fee`, reusing the
-     ledger-client, memo (tx hash + log index) and quarantine-on-panic machinery
-     (`R2`).
-* A frontend (e.g. OISY) polls `notify_deposit` after showing the address, so the flow
-  is automatic from the user's perspective; a background timer may additionally
-  re-check addresses with recent activity, bounded to a fixed batch per tick.
-* Scanning many registered addresses at once (the `R13` gate, and cheap periodic
-  re-checks) reads balances in bulk rather than per address: a single JSON-RPC batch
-  of `balanceOf` `eth_call`s / `eth_getBalance`s per HTTPS outcall once the EVM-RPC
-  canister supports `eth_batch`
-  ([dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561)),
-  or one Multicall3 `aggregate3` `eth_call` for a whole batch meanwhile. A cheap
-  balance scan decides *whether* to act; the log-based steps above remain the source
-  of truth for crediting (variant A) or the helper event does (variant B).
+* New `Eip7702TransactionRequest` with `SET_CODE_TX_ID: u8 = 4`, payload
+  `0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit,
+  to, value, data, access_list, authorization_list, y_parity, r, s])`.
+* `AuthorizationTuple { chain_id, delegate, nonce, y_parity, r, s }`, signed over
+  `keccak256(0x05 || rlp([chain_id, delegate, nonce]))` with `sign_with_ecdsa` using
+  the deposit address' derivation path; `chain_id` is set explicitly (never 0) to
+  prevent cross-chain replay; recovery-id determination reuses the existing
+  `Eip1559Signature` machinery.
+* Deposit-EOA nonces: fetched via `eth_getTransactionCount` (finalized) with the usual
+  consensus strategy at authorization-signing time; an applied authorization increments
+  the EOA nonce, tracked in state to avoid re-fetching. Deposit EOAs never send
+  transactions themselves (Phase 1), so races are limited to re-delegation.
+* Resubmission with fee bumping mirrors the existing `Resubmittable` logic.
 
 ### Sweeper delegate contract
 
@@ -447,7 +504,7 @@ A single immutable Solidity contract, deployed once per network, with **no stora
 entirely) and the minter's main address hardcoded as an `immutable`. Shown below for
 variant A; variant B's delegate (`CkSweeperViaHelper` in the demo) has the same shape
 but calls the helper's `depositErc20` with caller-supplied principal/subaccount and
-restricts callers to the minter (see the open decision above):
+restricts callers to the minter (see step 5):
 
 ```solidity
 contract CkSweeper {
@@ -481,111 +538,8 @@ contract CkSweeper {
 
 Notes: `safeTransfer` handles non-standard ERC-20s (USDT returns no value); no
 `receive()` is defined on purpose — plain ETH sends to a *delegated* address are meant
-to fail rather than be silently accepted while delegated (Phase 2, `R12`); reentrancy
-is moot (fixed destination, no state).
-
-### EIP-7702 support in the transaction layer (`src/tx.rs`)
-
-* New `Eip7702TransactionRequest` with `SET_CODE_TX_ID: u8 = 4`, payload
-  `0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit,
-  to, value, data, access_list, authorization_list, y_parity, r, s])`.
-* `AuthorizationTuple { chain_id, delegate, nonce, y_parity, r, s }`, signed over
-  `keccak256(0x05 || rlp([chain_id, delegate, nonce]))` with `sign_with_ecdsa` using
-  the deposit address' derivation path; `chain_id` is set explicitly (never 0) to
-  prevent cross-chain replay; recovery-id determination reuses the existing
-  `Eip1559Signature` machinery.
-* Deposit-EOA nonces: fetched via `eth_getTransactionCount` (finalized) with the usual
-  consensus strategy at authorization-signing time; an applied authorization increments
-  the EOA nonce, tracked in state to avoid re-fetching. Deposit EOAs never send
-  transactions themselves, so races are limited to re-delegation.
-* Resubmission with fee bumping mirrors the existing `Resubmittable` logic.
-
-### Sweeping task
-
-* A periodic task selects deposit addresses with observed-but-unswept balances where
-  `unswept_value ≥ sweep_gas_cost × margin` or `age > max_age`, up to `N` addresses
-  per batch (gas-limit bound; initial `N ≈ 20`). Only addresses that pass this gate
-  ever cost the minter anything: the delegation authorization is signed here, not at
-  registration time (`R13`).
-* Before submission, burn `max(0, gas_limit × max_fee_per_gas - prepaid_sweep_gas)`
-  from the minter's fee account on the ckETH ledger and add it to
-  `prepaid_sweep_gas`; abort the sweep (and retry later) if the burn fails (`R14`).
-  On the receipt, subtract the effective transaction fee from `prepaid_sweep_gas` —
-  the surplus of the overestimate stays as credit for the next burn and is never
-  re-minted. Both movements are recorded as audit events and `prepaid_sweep_gas` is
-  exposed on the dashboard (`R8`, `R9`).
-* One type-`0x04` transaction from the main address:
-  * `authorization_list`: tuples for all not-yet-delegated addresses in the batch
-    (≈ 12'500–25'000 gas each, one-time);
-  * `to = CkSweeper`, `data = sweepErc20Batch(deposit_addresses, [tokens])`. Measured
-    in the runnable demo (mock token): ≈ 67k gas for a first single-address sweep
-    including its authorization, ≈ 26k marginal gas per additional address in a batch.
-* Confirmation via transaction receipt, exactly like withdrawals; on success emit
-  `SweepConfirmed` events updating per-address `total_swept`. Sweep gas is paid from
-  the main address' ETH balance and recouped by `deposit_fee` (`R7`); the effective
-  fee/cost ratio is exported as a metric to recalibrate fees via proposal.
-* Accounting invariant: main-address liquidity for withdrawals = today's
-  `eth_balance` bookkeeping; credited-but-unswept amounts are tracked per address and
-  shown on the dashboard (`R9`).
-
-### Phase 2: native ETH
-
-Two ETH-specific problems and their resolutions:
-
-1. **Detection without logs.** Plain ETH transfers emit no events, and CEXs may send
-   ETH via internal transactions (contract-batched withdrawals), which even
-   `eth_getTransactionByHash` cannot attribute without trace APIs. Detection is
-   therefore **balance-based**: `notify_deposit` reads `eth_getBalance(addr,
-   finalized)` and credits `balance + total_swept - total_credited` when the delta
-   exceeds the ETH minimum (`R11`). This is robust to internal transactions and
-   requires no trace support from providers.
-   * Compliance caveat: balance deltas carry no sender information. Screening is
-     limited to (a) optional sender screening when the caller supplies withdrawal
-     transaction hashes, and (b) address-level screening. This weakening relative to
-     `R3` is an accepted limitation (see Non-goals) and should be reviewed with
-     compliance before Phase 2 ships.
-2. **Fixed 21'000-gas transfers vs delegated code (`R12`).** A value transfer to an
-   address with EIP-7702 delegated code *executes* that code, and a transfer with
-   exactly 21'000 gas has zero gas left for execution — it always fails (with the
-   Phase 1 delegate, which deliberately has no `receive()`, it fails at any gas).
-   Exchanges commonly hard-code 21'000 for ETH withdrawals, so ETH deposits and a
-   (permanently) delegated address are incompatible.
-
-   Resolution: **a separate, ETH-specific deposit address per account, which is
-   never delegated.** The key observation is that a native-ETH deposit *carries its
-   own gas* — the EIP-7702 machinery exists only because ERC-20 tokens cannot pay
-   for their own movement, and ETH can:
-   * Derivation reuses the Phase 1 scheme with a second schema tag
-     (`SCHEMA_ETH_DEPOSIT_ADDRESS = [2u8]` instead of `[1u8]`), so an account's ETH
-     deposit address differs from its ERC-20 one.
-   * The ETH address never carries code: fixed-21'000-gas CEX withdrawals *always*
-     succeed — `R12` is satisfied trivially, with no failure window at all.
-   * Sweep: a plain EIP-1559 transfer of `balance - fee` signed with the address'
-     own derived key (`sign_with_ecdsa`), gas paid from the swept balance itself —
-     21'000 gas, the cheapest possible sweep; the ETH minimum deposit covers it.
-     One tECDSA signature and a per-address nonce (only the minter ever sends from
-     it) per sweep; fee-refund dust left at the address rolls into the next sweep.
-   * No `R14` burn is involved: the gas never comes out of the minter's
-     main-address backing. However, since (under variant A) the account is credited
-     `balance - fee` *before* the sweep executes, the sweep's
-     `gas_limit × max_fee_per_gas` must be capped by the charged deposit fee — if
-     gas prices exceed that cap, the sweep waits — so that the gas spent can never
-     exceed what was withheld from minting.
-   * Under variant B, the sweep is instead a call to the helper's
-     `depositEth{value: balance - fee}(principal, subaccount)` signed the same way:
-     slightly more gas, but the sweep emits the canonical event and the existing
-     pipeline credits ckETH unchanged.
-   * Cross-asset mistakes remain recoverable in both directions: ERC-20 sent to an
-     ETH address sits at a tECDSA-controlled EOA (delegate it on demand to sweep);
-     ETH sent to a not-yet-delegated ERC-20 address is recovered by the delegate's
-     `sweepEth`, and once the ERC-20 address is delegated, plain ETH sends to it
-     fail on the sender side, so funds never leave the exchange.
-
-   The previously considered *set-and-clear* delegation lifecycle on a single shared
-   address (install the delegate, sweep, re-delegate to `address(0)` — two tECDSA
-   signatures and ≈ 2 × 12'500–25'000 gas per sweep cycle, with a short window in
-   which fixed-gas ETH transfers fail) is kept only as a fallback if per-asset
-   addresses are rejected for UX reasons.
+to fail rather than be silently accepted while delegated (`R12`); reentrancy is moot
+(fixed destination, no state).
 
 ### Test plan
 
@@ -600,29 +554,34 @@ delegated deposit EOAs, and the rejected non-minter sweep attempt.
 
 Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 
-* Address derivation: determinism, uniqueness across principals/subaccounts,
-  non-collision with the main address, EIP-55 encoding (`R1`).
+* Address derivation: determinism, uniqueness across principals/subaccounts and
+  schema tags, non-collision with the main address, EIP-55 encoding (`R1`).
 * Type-`0x04` transaction and authorization encoding/signing against EIP-7702
   published test vectors; authorization hash `0x05 || rlp(...)`; recovery-id
   round-trip (`R5`, `R6` plumbing).
 * `Transfer`-log parsing, minimum/fee arithmetic incl. `amount ≤ fee` rejection
-  (`R2`, `R4`), blocklist screening (`R3`), dedup by `(tx_hash, log_index)` (`R2`).
+  (`R2`, `R4`), blocklist screening incl. sweep exclusion (`R3`), dedup by
+  `(tx_hash, log_index)` (`R2`).
+* Scanning-window state machine: arming, expiry, re-arming, bounded active set
+  (`R13`, `R15`).
 * Balance-delta crediting monotonicity across sweep interleavings (`R11`).
+* `prepaid_sweep_gas` accounting: burn-first, surplus carry-over, never re-minted
+  (`R14`).
 * Event replay: state reconstructed from audit events equals live state (`R8`).
 
 Integration tests (state-machine tests in `rs/ethereum/cketh/minter/tests` with the
 mocked EVM-RPC canister, extending the existing fixtures):
 
-* End-to-end Phase 1 happy path: register address → mock `Transfer` log → notify →
-  mint − fee → sweep tx submitted with expected `0x04` payload → receipt → swept
-  (`R2`, `R5`, `R7`).
-* Double-notify / concurrent-notify produce a single mint (`R2`); blocked sender
-  (`R3`); below-minimum and unsupported token (`R4`); sweep failure then retry with
-  fee bump, mint unaffected (`R5`); withdrawal flow regression (`R10`); dashboard
-  rendering (`R9`).
-* Solidity: Foundry tests for `CkSweeper` (permissionless sweep only reaches minter,
-  USDT-style token, delegated-EOA execution against a Prague-enabled local node)
-  (`R6`, `R12`).
+* End-to-end Phase 1 happy path: retrieve address → mock `Transfer` log → background
+  scan → mint − fee → `R14` burn → sweep tx submitted with expected `0x04` payload →
+  receipt → swept (`R2`, `R5`, `R7`, `R14`, `R15`).
+* Concurrent scans/notifies produce a single mint (`R2`); blocked sender: no mint,
+  no sweep (`R3`); below-minimum and unsupported token (`R4`); sweep failure then
+  retry with fee bump, mint unaffected (`R5`); empty fee account halts sweeping only
+  (`R14`); withdrawal flow regression (`R10`); dashboard rendering (`R9`).
+* Solidity: Foundry tests for the delegate(s) (permissionless sweep only reaches
+  minter / minter-only sweep for variant B, USDT-style token, delegated-EOA
+  execution against a Prague-enabled local node) (`R6`, `R12`).
 
 Verification commands: `bazel test //rs/ethereum/cketh/minter:lib_unit_tests
 //rs/ethereum/cketh/minter/tests:...` (exact targets per PR), plus `forge test` for
@@ -633,16 +592,20 @@ the delegate.
 1. **EIP-7702 transaction support** in `src/tx.rs` + authorization signing in
    `src/management` — pure library code, no behavior change. AC: encoding/signing unit
    tests vs. EIP test vectors.
-2. **Deposit address derivation, registration state, `get_deposit_address`** + audit
-   events + dashboard section. AC: `R1`, `R8`, `R9` (addresses only).
-3. **ckERC20 deposit detection and minting** (`notify_deposit`, log queries, fees,
-   minimums, blocklist). AC: `R2`, `R3`, `R4`, `R7` (fee deduction), `R8`.
+2. **Deposit address derivation, registration state, `retrieve_deposit_address`,
+   scanning-window state** + audit events + dashboard section. AC: `R1`, `R8`, `R9`
+   (addresses only), `R13`, `R15` (state machine only).
+3. **ckERC20 deposit detection and crediting** (background scans, log queries, fees,
+   minimums, blocklist incl. sweep exclusion). AC: `R2`, `R3`, `R4`, `R7`, `R8`,
+   `R15`.
 4. **Sweeper delegate contract** (Solidity, audited) + **sweeping task** (delegation,
-   Multicall3 batching, receipts, metrics). AC: `R5`, `R6`, `R7`, `R9`, `R10`.
+   batching, receipts, `R14` burn accounting, metrics). AC: `R5`, `R6`, `R7`, `R9`,
+   `R10`, `R14`.
 5. **Phase 1 launch on Sepolia**, then mainnet via NNS upgrade proposal; frontend
-   (OISY) integration of `get_deposit_address` + `notify_deposit` polling.
-6. **Phase 2: ckETH** (balance-delta crediting, set-and-clear delegation lifecycle,
-   compliance sign-off). AC: `R11`, `R12`.
+   (OISY) integration of `retrieve_deposit_address` (single call — no polling
+   required, `R15`).
+6. **Phase 2: ckETH** (schema-2 addresses, balance-delta crediting, key-signed
+   sweeps with fee cap, compliance sign-off). AC: `R11`, `R12`.
 
 ## Discussed Alternatives
 
@@ -672,13 +635,9 @@ the delegate.
   fee-adjusted amounts, griefable by front-running), or per-exchange integration of
   the helper contract (business-development dependency, not a protocol design). All
   rejected as unsound.
-* **Continuous scraping of `Transfer` logs for all deposit addresses** instead of
-  claim-based detection: `eth_getLogs` with a growing disjunction of thousands of
-  recipient topics scales linearly in cost with the user base, must be chunked across
-  providers' topic limits, and still misses native ETH. Rejected in favor of targeted,
-  claim-triggered queries; can be revisited as an optimization for hot addresses.
 * **Pre-funding deposit EOAs with ETH for gas** (no EIP-7702): requires one extra
   funding transaction per sweep (≈21k gas + transfer latency), doubles the transaction
   count, leaves ETH dust stranded on every deposit address, and complicates fee
   accounting. Kept only as the implicit *recovery* path that key-controlled addresses
-  always allow.
+  always allow (and, for native ETH, as the *chosen* mechanism in inverted form: the
+  deposit itself is the gas, see step 5).
