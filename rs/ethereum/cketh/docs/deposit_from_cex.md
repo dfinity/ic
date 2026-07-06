@@ -112,7 +112,7 @@ The design is delivered in two phases:
   sweeper address' gas balance (`R17`).
 * `R10`: Withdrawals (ckERC20 → ERC-20 and ckETH → ETH) are unaffected: they continue
   to be served from the minter's main address and its existing nonce sequence.
-* `R13`: Registering a deposit address (`retrieve_deposit_address`) triggers no
+* `R13`: Registering a deposit address (`retrieve_erc20_deposit_address`) triggers no
   threshold-ECDSA signature and no Ethereum transaction. The minter only signs a
   delegation and sweeps an address after having observed there a balance of a
   supported token of at least the per-token minimum deposit amount. (Registrations
@@ -126,10 +126,10 @@ The design is delivered in two phases:
   account cannot cover a sweep, no sweep is submitted. (The burn happens ahead of
   time: funding the sweeper address is an ordinary ckETH withdrawal from the fee
   account, covering many sweeps — see step 0.)
-* `R15`: A single user-visible step suffices: after one `retrieve_deposit_address`
+* `R15`: A single user-visible step suffices: after one `retrieve_erc20_deposit_address`
   call, a deposit arriving at that address within its *scanning window* is credited
   with no further canister call by the user or frontend. Re-calling
-  `retrieve_deposit_address` (idempotent, free of per-address spending per `R13`)
+  `retrieve_erc20_deposit_address` (idempotent, free of per-address spending per `R13`)
   re-arms the window; a deposit arriving on a dormant address is credited once the
   address is re-armed and is never lost in the meantime.
 * `R16`: A withdrawal transaction is only submitted when the minter's main address
@@ -228,7 +228,7 @@ sequenceDiagram
     participant CkUsdtLedger as ckUSDT ledger
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: retrieve_deposit_address(p)
+    User->>Minter: retrieve_erc20_deposit_address(p)
     Note right of Minter: derive addr(p) locally, register it and<br/>arm its scanning window (R15).<br/>No tECDSA signature, no Ethereum tx (R13)
     Minter-->>User: addr(p)
     User->>CEX: withdraw USDT to addr(p)
@@ -260,7 +260,7 @@ sequenceDiagram
     participant CkUsdtLedger as ckUSDT ledger
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: retrieve_deposit_address(p)
+    User->>Minter: retrieve_erc20_deposit_address(p)
     Minter-->>User: addr(p)
     User->>CEX: withdraw USDT to addr(p)
     CEX->>Eth: USDT.transfer(addr(p), 250)
@@ -287,7 +287,7 @@ sequenceDiagram
     participant Eth as Ethereum (via EVM-RPC)
     participant CkEthLedger as ckETH ledger
 
-    User->>Minter: retrieve_deposit_address(p) for ETH
+    User->>Minter: retrieve_eth_deposit_address(p)
     Minter-->>User: eth_addr(p) (schema 2: never delegated, never any code)
     User->>CEX: withdraw ETH to eth_addr(p)
     CEX->>Eth: plain transfer, even with a fixed 21000 gas limit (R12)
@@ -379,8 +379,12 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
   funds at a deposit address never depend on contract code — even without
   EIP-7702, any balance is recoverable by funding the address with gas and signing
   a normal transfer.
-* Endpoint `retrieve_deposit_address(account) -> String` (EIP-55 checksummed). An
-  **update call** because it has side effects: it registers the address in state
+* Endpoint `retrieve_erc20_deposit_address(account) -> String` (EIP-55
+  checksummed). **Decided: the endpoint is ERC-20-specific** — mirroring the
+  existing `withdraw_eth`/`withdraw_erc20` split — so whether different tokens
+  ever get different deposit addresses stays open (today all ERC-20s share the
+  schema-1 address); Phase 2 adds `retrieve_eth_deposit_address` for the schema-2
+  address. An **update call** because it has side effects: it registers the address in state
   (`deposit_addresses: Account ↔ Address` bimap + per-address bookkeeping:
   `registered_at_block`, delegation status, credited/swept counters, scanning-window
   expiry), arms the scanning window (`R15`) and emits a `DepositAddressRegistered`
@@ -419,7 +423,7 @@ No variants: the CEX side is not under our control.
 
 ### Step 3: Detect the deposit
 
-After `retrieve_deposit_address`, no further user or frontend action is required
+After `retrieve_erc20_deposit_address`, no further user or frontend action is required
 (`R15`): a two-step flow (retrieve, then claim) is not reliably implementable by a
 frontend (the browser may close between the steps), and today's helper-based
 deposits are single-step too.
@@ -530,7 +534,7 @@ optional sender-screening enrichment for native ETH.
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **Registration-armed scanning window** (chosen): background bulk scans of the active set while the window is open | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (fixed per-tick budget, windows expire); re-armed for free by `retrieve_deposit_address`; the ERC-20 log query batches natively (one filter for all active addresses × supported tokens) | Deposits after window expiry wait for re-arming; the ETH balance reads need `eth_batch` (#561) or Multicall3 |
+| **Registration-armed scanning window** (chosen): background bulk scans of the active set while the window is open | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (fixed per-tick budget, windows expire); re-armed for free by `retrieve_erc20_deposit_address`; the ERC-20 log query batches natively (one filter for all active addresses × supported tokens) | Deposits after window expiry wait for re-arming; the ETH balance reads need `eth_batch` (#561) or Multicall3 |
 | **Claim endpoint only** (`notify_deposit`, ckBTC's `update_balance` model) | Cheapest possible: minter does nothing unprompted; precise targeting | Two-step flow breaks the target UX — a frontend cannot reliably guarantee the second call (browser closed after the CEX withdrawal); kept only as optional accelerator |
 | **User supplies the transaction ID** (`claim_deposit(account, tx_hash)`: the minter fetches the receipt, verifies a finalized `Transfer` to the caller's deposit address, credits from its logs) | Cheapest and most precise of all: one targeted receipt query per claim, O(1) in the registered-set size, no scanning state, no `eth_batch` dependency; no window expiry; sender screening comes directly from the receipt logs | Worst UX of all: the tx hash is only known to the CEX/user (not derivable by a frontend, unlike `notify_deposit`), so the second step is genuinely *manual* — many users cannot find the hash in their exchange UI; does not even fully work for native ETH (a contract-batched CEX withdrawal moves ETH in an *internal* transaction: the receipt shows no value transfer and no log — verification would need trace APIs) |
 | **Continuous scraping of all registered addresses forever** | Best possible UX, no windows | Same batched-`eth_getLogs` mechanism as the chosen variant — the rejection is about the *unbounded* set, not the mechanism: cost grows without bound with the (attacker-inflatable, free) registered set, a standing cycles drain (`R13`); still misses native ETH |
@@ -832,7 +836,7 @@ the delegate.
 1. **EIP-7702 transaction support** in `src/tx.rs` + authorization signing in
    `src/management` — pure library code, no behavior change. AC: encoding/signing unit
    tests vs. EIP test vectors.
-2. **Deposit address derivation, registration state, `retrieve_deposit_address`,
+2. **Deposit address derivation, registration state, `retrieve_erc20_deposit_address`,
    scanning-window state** + audit events + dashboard section. AC: `R1`, `R8`, `R9`
    (addresses only), `R13`, `R15` (state machine only).
 3. **ckERC20 deposit detection and crediting** (background scans, log queries, fees,
@@ -843,7 +847,7 @@ the delegate.
    withdrawal-liquidity gating, optional caller-paid `deposit_erc20`, metrics).
    AC: `R5`, `R6`, `R7`, `R9`, `R10`, `R14`, `R16`, `R17`.
 5. **Phase 1 launch on Sepolia**, then mainnet via NNS upgrade proposal; frontend
-   (OISY) integration of `retrieve_deposit_address` (single call — no polling
+   (OISY) integration of `retrieve_erc20_deposit_address` (single call — no polling
    required, `R15`).
 6. **Phase 2: ckETH** (schema-2 addresses, balance-delta crediting, key-signed
    sweeps with fee cap, compliance sign-off). AC: `R11`, `R12`.
