@@ -625,13 +625,11 @@ impl StateMachine for FakeStateMachine {
         resource_limits: ResourceLimits,
         registry_settings: &RegistryExecutionSettings,
         node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         state.metadata.network_topology = Arc::new(network_topology);
         state.metadata.own_subnet_features = subnet_features;
         state.metadata.own_resource_limits = resource_limits;
         state.metadata.node_public_keys = node_public_keys;
-        state.metadata.api_boundary_nodes = api_boundary_nodes;
         state.put_canister_state(
             CanisterStateBuilder::new()
                 .with_canister_id(canister_test_id(1))
@@ -696,7 +694,6 @@ fn try_to_read_registry(
         ResourceLimits,
         RegistryExecutionSettings,
         NodePublicKeys,
-        ApiBoundaryNodes,
     ),
     ReadRegistryError,
 > {
@@ -894,7 +891,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             own_resource_limits,
             registry_execution_settings,
             node_public_keys,
-            api_boundary_nodes,
         ) = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap();
@@ -951,6 +947,30 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(&routing_table, network_topology.routing_table().as_ref());
         assert_eq!(canister_migrations, *network_topology.canister_migrations);
 
+        // Check API Boundary Nodes.
+        let api_boundary_nodes = &network_topology.api_boundary_nodes;
+        assert_eq!(api_boundary_nodes.len(), 2);
+        let entry_1 = api_boundary_nodes.get(&node_test_id(11)).unwrap();
+        assert_eq!(
+            entry_1,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn11.example.org".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            }
+        );
+        let entry_2 = api_boundary_nodes.get(&node_test_id(12)).unwrap();
+        assert_eq!(
+            entry_2,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn12.example.org".to_string(),
+                ipv4_address: None,
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                pubkey: None,
+            }
+        );
+
         // Check registry execution settings.
         assert_eq!(
             own_subnet_record.max_number_of_canisters,
@@ -989,29 +1009,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 *node_public_keys.get(&node_id).unwrap(),
             );
         }
-
-        // Check API Boundary Nodes.
-        assert_eq!(api_boundary_nodes.len(), 2);
-        let entry_1 = api_boundary_nodes.get(&node_test_id(11)).unwrap();
-        assert_eq!(
-            entry_1,
-            &ApiBoundaryNodeEntry {
-                domain: "api-bn11.example.org".to_string(),
-                ipv4_address: Some("127.0.0.1".to_string()),
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-                pubkey: None,
-            }
-        );
-        let entry_2 = api_boundary_nodes.get(&node_test_id(12)).unwrap();
-        assert_eq!(
-            entry_2,
-            &ApiBoundaryNodeEntry {
-                domain: "api-bn12.example.org".to_string(),
-                ipv4_address: None,
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
-                pubkey: None,
-            }
-        );
 
         // Commit a state with `own_subnet_id` in its metadata to ensure the latest
         // state corresponds to the registry records written above.
@@ -1128,7 +1125,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, _, registry_execution_settings, _, _) = result.unwrap();
+        let (_, _, _, registry_execution_settings, _) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -1453,7 +1450,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, _, node_public_keys, _) = res.unwrap();
+        let (_, _, _, _, node_public_keys) = res.unwrap();
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
@@ -1592,7 +1589,8 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
 
         // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
         // Hence, only one nodes are retrieved.
-        let (_, _, _, _, _, api_boundary_nodes) = res.unwrap();
+        let (network_topology, _, _, _, _) = res.unwrap();
+        let api_boundary_nodes = &network_topology.api_boundary_nodes;
         assert_eq!(api_boundary_nodes.len(), 1);
         assert!(api_boundary_nodes.contains_key(&node_test_id(11)));
 
