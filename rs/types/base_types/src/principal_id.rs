@@ -101,6 +101,7 @@ impl PrincipalId {
         self.0.as_slice()
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub const fn len(&self) -> u8 {
         self.0.len()
     }

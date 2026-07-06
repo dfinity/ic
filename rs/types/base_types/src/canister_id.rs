@@ -4,10 +4,16 @@ use candid::{CandidType, Principal};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize, de::Error};
-use std::{convert::TryFrom, fmt};
+use std::convert::TryFrom;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 
 /// A type representing a canister's [`PrincipalId`].
-#[derive(Copy, Clone, Eq, DeterministicHeapBytes, Hash, Debug)]
+///
+/// We use a `bool` plus principal ID instead of an enum because some clients
+/// require access to the underlying byte slice (which wouldn't be available in
+/// the `u64` variant).
+#[derive(Copy, Clone, Eq, DeterministicHeapBytes, Debug)]
 pub struct CanisterId {
     /// Whether `id` is a `u64`-based canister ID (see [`CanisterId::from_u64`]),
     /// which allows `eq`/`cmp` to take a fast path over the leading `u64`.
@@ -40,6 +46,20 @@ impl Ord for CanisterId {
 impl PartialOrd for CanisterId {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl Hash for CanisterId {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        if self.is_u64 {
+            // Fast path: a `u64`-based canister ID is fully determined by its
+            // leading `u64`, so hashing just those 8 bytes is both sufficient
+            // and consistent with `PartialEq` (which compares the same `u64`).
+            as_u64(self.id).hash(state);
+        } else {
+            self.id.hash(state);
+        }
     }
 }
 
@@ -228,7 +248,7 @@ const fn is_canister_id(principal_id: PrincipalId) -> bool {
     }
 
     // Byte 8 (penultimate) must be 0x01.
-    return raw[LENGTH] == 0x01;
+    raw[LENGTH] == 0x01
 }
 
 /// Returns the `u64` value of a canister ID, assuming that the given

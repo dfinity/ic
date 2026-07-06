@@ -13,6 +13,9 @@
 //! ```
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_base_types::{CanisterId, PrincipalId};
+use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::hint::black_box;
 
 /// A `CanisterId` backed by a full-length (29 byte) principal, i.e. one that
@@ -120,5 +123,49 @@ fn bench_collections(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_eq, bench_cmp, bench_collections);
+/// Hashes a single value with the standard-library (SipHash) hasher and returns
+/// the finished hash, mirroring what `HashMap`/`HashSet` do per key.
+fn hash_one<T: Hash>(v: &T) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    v.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn bench_hash(c: &mut Criterion) {
+    let mut group = c.benchmark_group("CanisterId::hash");
+
+    // Hashing a single `u64` canister ID (fast path: 8 bytes fed to the hasher).
+    let a = CanisterId::from_u64(0x0123_4567_89ab_cdef);
+    group.bench_function("hash_u64", |bench| {
+        bench.iter(|| black_box(hash_one(black_box(&a))))
+    });
+
+    // Hashing a single long/opaque canister ID (fall back to hashing the full
+    // principal).
+    let a = long_canister_id(0x11);
+    group.bench_function("hash_long", |bench| {
+        bench.iter(|| black_box(hash_one(black_box(&a))))
+    });
+
+    // Realistic workload: `HashMap<CanisterId, _>` lookups, which hash the key
+    // and then use `eq` to resolve the bucket.
+    const N: usize = 1024;
+    let map: HashMap<CanisterId, u64> = (0..N as u64)
+        .map(|i| (CanisterId::from_u64(i.wrapping_mul(2_654_435_761)), i))
+        .collect();
+
+    let present = CanisterId::from_u64(500u64.wrapping_mul(2_654_435_761));
+    group.bench_function("hashmap_get_hit", |bench| {
+        bench.iter(|| black_box(map.get(black_box(&present))))
+    });
+
+    let absent = CanisterId::from_u64(u64::MAX);
+    group.bench_function("hashmap_get_miss", |bench| {
+        bench.iter(|| black_box(map.get(black_box(&absent))))
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_eq, bench_cmp, bench_collections, bench_hash);
 criterion_main!(benches);
