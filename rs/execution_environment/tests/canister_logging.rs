@@ -2705,9 +2705,19 @@ fn test_fetch_canister_logs_update_call_cycles_threshold_is_exact() {
         "Expected insufficient cycles error mentioning the exact max fee, got: {reject_message}"
     );
 
-    // Exactly the required max fee is accepted.
+    // Exactly the required max fee is accepted. Even though the caller attaches the
+    // full max fee, only the fee for the actual (small) response is charged and the
+    // rest is refunded, so the caller spends strictly less than the attached max fee.
+    let balance_before = env.cycle_balance(canister_a);
     let records = fetch_log_records_intercanister(&env, canister_a, canister_b, max_fee);
     assert_eq!(records.len(), 1);
+    let cycles_spent = balance_before - env.cycle_balance(canister_a);
+    assert!(cycles_spent > 0, "expected some cycles to be spent");
+    assert_lt!(
+        cycles_spent,
+        max_fee.get(),
+        "expected the unused portion of the max fee to be refunded"
+    );
 }
 
 #[test]
