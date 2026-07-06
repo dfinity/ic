@@ -83,8 +83,8 @@ pub(crate) enum OrchestratorError {
     /// at the given registry version.
     RoleError(String, RegistryVersion),
 
-    /// The given node is missing a domain name
-    DomainNameMissingError(NodeId),
+    /// The given node is missing a domain name at the given registry version.
+    DomainNameMissingError(NodeId, RegistryVersion),
 }
 
 impl OrchestratorError {
@@ -185,8 +185,11 @@ impl fmt::Display for OrchestratorError {
                     registry version {registry_version}: {msg}"
                 )
             }
-            OrchestratorError::DomainNameMissingError(node_id) => {
-                write!(f, "Node {node_id} does not have an associated domain name")
+            OrchestratorError::DomainNameMissingError(node_id, registry_version) => {
+                write!(
+                    f,
+                    "Node {node_id} does not have an associated domain name at registry version {registry_version}"
+                )
             }
         }
     }

@@ -3,7 +3,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
     orchestrator::SubnetAssignment,
-    process_manager::{Process, ProcessManager},
+    processes::MultipleProcessesManager,
     registry_helper::RegistryHelper,
 };
 use async_trait::async_trait;
@@ -31,10 +31,9 @@ use ic_types::{
     },
 };
 use std::{
-    collections::{BTreeMap, HashMap},
-    ffi::OsString,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -57,34 +56,6 @@ pub(crate) enum OrchestratorControlFlow {
     Unassigned,
     /// The node should stop the orchestrator.
     Stop,
-}
-
-pub struct ReplicaProcess {
-    version: ReplicaVersion,
-    binary: PathBuf,
-    args: Vec<OsString>,
-}
-
-impl Process for ReplicaProcess {
-    const NAME: &'static str = "Replica";
-
-    type Version = ReplicaVersion;
-
-    fn get_version(&self) -> &Self::Version {
-        &self.version
-    }
-
-    fn get_binary(&self) -> &Path {
-        &self.binary
-    }
-
-    fn get_args(&self) -> &[OsString] {
-        &self.args
-    }
-
-    fn get_env(&self) -> HashMap<OsString, OsString> {
-        HashMap::new()
-    }
 }
 
 /// Trait for the registry replicator used by the upgrade module.
@@ -118,13 +89,12 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    processes_manager: Arc<RwLock<MultipleProcessesManager>>,
     manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
-    pub ic_binary_dir: PathBuf,
     pub image_path: PathBuf,
     registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
     init_time: Instant,
@@ -141,14 +111,13 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        processes_manager: Arc<RwLock<MultipleProcessesManager>>,
         manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
         node_id: NodeId,
-        ic_binary_dir: PathBuf,
         registry_replicator: Arc<dyn RegistryReplicatorForUpgrade>,
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
@@ -160,14 +129,13 @@ impl Upgrade {
         let value = Self {
             registry,
             metrics,
-            replica_process,
+            processes_manager,
             manageboot_runner,
             cup_provider,
             subnet_assignment,
             node_id,
             replica_version,
             replica_config_file,
-            ic_binary_dir,
             image_path: release_content_dir.join("image.bin"),
             registry_replicator,
             init_time,
@@ -207,8 +175,8 @@ impl Upgrade {
     /// 2. Detecting if a recovery is taking place (i.e. there is a CUP in the registry with higher
     ///    height than any available).
     /// 3. Downloading and upgrading to a new replica version if necessary.
-    /// 4. Launching the replica process if assigned to a subnet.
-    /// 5. Stopping the replica process and removing the node state if leaving the subnet.
+    /// 4. Launching the child processes if assigned to a subnet.
+    /// 5. Stopping the child processes and removing the node state if leaving the subnet.
     pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
 
@@ -382,7 +350,7 @@ impl Upgrade {
                 // We are no longer part of the subnet.
                 *self.subnet_assignment.write().unwrap() = SubnetAssignment::Unassigned;
 
-                self.stop_replica()?;
+                self.stop_children()?;
 
                 self.remove_state().await.inspect_err(|_| {
                     self.metrics.critical_error_state_removal_failed.inc();
@@ -431,8 +399,12 @@ impl Upgrade {
             old_subnet_id,
         );
 
-        // This will start a new replica process if none is running.
-        self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
+        // This will start new child processes if any of them is not running
+        self.ensure_children_are_running(
+            self.replica_version.clone(),
+            subnet_id,
+            latest_registry_version,
+        )?;
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.
@@ -485,10 +457,10 @@ impl Upgrade {
             )
             .await
             .map_err(OrchestratorError::FileDownloadError)?;
-        if let Err(e) = self.stop_replica() {
-            // Even though we fail to stop the replica, we should still
+        if let Err(e) = self.stop_children() {
+            // Even though we fail to stop child processes, we should still
             // replace the registry local store, so we simply issue a warning.
-            warn!(self.logger, "Failed to stop replica with error {:?}", e);
+            warn!(self.logger, "Failed to stop children with error {:?}", e);
         }
         let new_local_store = LocalStoreImpl::new(local_store_location);
         self.registry_replicator
@@ -578,16 +550,6 @@ impl Upgrade {
             .await
             .map_err(OrchestratorError::from)
             .map(|Rebooting| OrchestratorControlFlow::Stop)
-    }
-
-    /// Stop the current replica process.
-    pub fn stop_replica(&self) -> OrchestratorResult<()> {
-        self.replica_process.lock().unwrap().stop().map_err(|e| {
-            OrchestratorError::IoError(
-                "Error when attempting to stop replica during upgrade".into(),
-                e,
-            )
-        })
     }
 
     /// Ensure that an upgrade to the given `new_replica_version` should be executed.
@@ -717,47 +679,29 @@ impl Upgrade {
 
         // Restarting the replica is enough to pass the CUP forward.
         // If we fail, restart the current process instead.
-        if let Err(e) = self.stop_replica() {
+        if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
             warn!(self.logger, "Failed to stop replica with error {:?}", e);
             reexec_current_process(&self.logger);
         }
     }
 
-    /// Start the replica process if not running already
-    fn ensure_replica_is_running(
-        &self,
-        replica_version: &ReplicaVersion,
-        subnet_id: SubnetId,
-    ) -> OrchestratorResult<()> {
-        if self.replica_process.lock().unwrap().is_running() {
-            return Ok(());
-        }
-        info!(self.logger, "Starting new replica process");
-        self.metrics.replica_process_start_attempts.inc();
-        let cup_path = self.cup_provider.get_cup_path();
-        let replica_binary = self.ic_binary_dir.join("replica");
-        let cmd = vec![
-            format!("--replica-version={}", replica_version.as_ref()).into(),
-            format!(
-                "--config-file={}",
-                self.replica_config_file.as_path().display()
-            )
-            .into(),
-            format!("--catch-up-package={}", cup_path.as_path().display()).into(),
-            format!("--force-subnet={}", subnet_id).into(),
-        ];
+    /// Stop all child processes, including the replica.
+    pub fn stop_children(&self) -> OrchestratorResult<()> {
+        self.processes_manager.write().unwrap().stop_all()
+    }
 
-        self.replica_process
-            .lock()
-            .unwrap()
-            .start(ReplicaProcess {
-                version: replica_version.clone(),
-                binary: replica_binary,
-                args: cmd,
-            })
-            .map_err(|e| {
-                OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
-            })
+    /// Start all child processes appropriate for this node.
+    fn ensure_children_are_running(
+        &self,
+        replica_version: ReplicaVersion,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> OrchestratorResult<()> {
+        self.processes_manager.write().unwrap().start_all(
+            replica_version,
+            subnet_id,
+            registry_version,
+        )
     }
 }
 
@@ -1244,6 +1188,11 @@ fn report_master_public_key_changed_metric(
 mod tests {
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
+    use crate::process_manager::{Process, ProcessRunner};
+    use crate::processes::{
+        IcGatewayProcess, IcGatewayProcessConfig, ProcessManager, ReplicaProcess,
+        ReplicaProcessConfig,
+    };
 
     use super::*;
     use assert_matches::assert_matches;
@@ -1267,7 +1216,8 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
-        replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
+        replica_version::v1::ReplicaVersionRecord,
+        subnet::v1::{SubnetRecord, SubnetType},
     };
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -1318,17 +1268,30 @@ mod tests {
         pub fn subnet_assignment(&self) -> SubnetAssignment {
             *self.subnet_assignment.read().unwrap()
         }
+
+        pub fn is_replica_running(&self) -> bool {
+            self.processes_manager.read().unwrap().is_replica_running()
+        }
+
+        pub fn is_ic_gateway_running(&self) -> bool {
+            self.processes_manager
+                .read()
+                .unwrap()
+                .is_ic_gateway_running()
+        }
     }
 
-    pub(crate) struct FakeProcessManager {
+    /// Fake runner that tracks running state without spawning a real process.
+    /// Used as a drop-in for `SingleProcessRunner<P>` inside process managers.
+    pub(crate) struct FakeProcessRunner {
         running: bool,
     }
-    impl FakeProcessManager {
+    impl FakeProcessRunner {
         pub(crate) fn new() -> Self {
             Self { running: false }
         }
     }
-    impl<P: Process> ProcessManager<P> for FakeProcessManager {
+    impl<P: Process> ProcessRunner<P> for FakeProcessRunner {
         fn start(&mut self, _process: P) -> std::io::Result<()> {
             self.running = true;
             Ok(())
@@ -1557,12 +1520,14 @@ mod tests {
         data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         subnet_id: SubnetId,
+        subnet_type: SubnetType,
         membership: impl AsRef<[NodeId]>,
         replica_version: &ReplicaVersion,
         recalled_replica_versions: impl AsRef<[String]>,
     ) {
         let subnet_record = SubnetRecordBuilder::new()
             .with_membership(membership.as_ref())
+            .with_subnet_type(subnet_type.try_into().unwrap())
             .with_replica_version(replica_version.as_ref())
             .with_recalled_replica_version_ids(recalled_replica_versions.as_ref())
             .build();
@@ -1603,6 +1568,7 @@ mod tests {
     ) -> Upgrade {
         let UpgradeTestScenario {
             node_id,
+            subnet_type,
             current_replica_version,
             has_local_cup,
             initial_subnet_assignment,
@@ -1619,26 +1585,8 @@ mod tests {
 
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
 
-        let ic_binary_dir = dir.join("ic_binary");
-        std::fs::create_dir_all(&ic_binary_dir).unwrap();
-
-        let replica_process = Arc::new(Mutex::new(FakeProcessManager::new()));
-        // Start the replica process if the test scenario indicates so
-        if test_scenario.was_replica_process_started_previously() {
-            replica_process
-                .lock()
-                .unwrap()
-                .start(ReplicaProcess {
-                    version: current_replica_version.clone(),
-                    binary: ic_binary_dir.join("replica"),
-                    args: vec![],
-                })
-                .unwrap();
-        }
-
-        let manageboot_runner = Box::new(FakeManagebootRunner);
-
         let cup_dir = dir.join("cups");
+        let cup_path = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
         std::fs::create_dir_all(&cup_dir).unwrap();
         if let Some(local_cup) = has_local_cup {
             let cup = make_local_cup(
@@ -1647,8 +1595,7 @@ mod tests {
                 local_cup.registry_version,
             );
             let cup_proto = pb::CatchUpPackage::from(cup);
-            let cup_file = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
-            std::fs::write(&cup_file, cup_proto.encode_to_vec()).unwrap();
+            std::fs::write(&cup_path, cup_proto.encode_to_vec()).unwrap();
         }
         let cup_provider = CatchUpPackageProvider::new(
             registry.clone(),
@@ -1660,9 +1607,66 @@ mod tests {
             node_id,
         );
 
-        let subnet_assignment = Arc::new(RwLock::new(initial_subnet_assignment));
-
         let replica_config_file = dir.join("ic.json5");
+        let ic_binary_dir = dir.join("ic_binary");
+        std::fs::create_dir_all(&ic_binary_dir).unwrap();
+        let ic_gateway_env_file = dir.join("ic-gateway.env");
+        std::fs::write(&ic_gateway_env_file, b"TEST_KEY=TEST_VALUE").unwrap();
+
+        let mut replica_runner = Box::new(FakeProcessRunner::new());
+        let replica_process_config = ReplicaProcessConfig {
+            ic_binary_dir: ic_binary_dir.clone(),
+            cup_path,
+            replica_config_file: replica_config_file.clone(),
+        };
+        let mut ic_gateway_runner = Box::new(FakeProcessRunner::new());
+        let ic_gateway_process_config = IcGatewayProcessConfig {
+            ic_binary_dir,
+            ic_gateway_env_file,
+        };
+        // Start the child processes if the test scenario indicates so
+        if test_scenario.were_child_processes_started_previously() {
+            replica_runner
+                .start(
+                    ReplicaProcess::build(
+                        &replica_process_config,
+                        (current_replica_version.clone(), SUBNET_1),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            if matches!(subnet_type, SubnetType::CloudEngine) {
+                ic_gateway_runner
+                    .start(
+                        IcGatewayProcess::build(
+                            &ic_gateway_process_config,
+                            current_replica_version.clone(),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+            }
+        }
+        let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new_for_test(
+            ProcessManager::new_for_test(
+                replica_runner,
+                replica_process_config,
+                Arc::clone(&metrics),
+                logger.clone(),
+            ),
+            ProcessManager::new_for_test(
+                ic_gateway_runner,
+                ic_gateway_process_config,
+                Arc::clone(&metrics),
+                logger.clone(),
+            ),
+            Arc::clone(&registry),
+            /* ic_gateway_launch_enabled */ true,
+        )));
+
+        let manageboot_runner = Box::new(FakeManagebootRunner);
+
+        let subnet_assignment = Arc::new(RwLock::new(initial_subnet_assignment));
 
         let mut registry_replicator = MockRegistryReplicatorForUpgrade::new();
         registry_replicator
@@ -1691,14 +1695,13 @@ mod tests {
         let mut upgrade_loop = Upgrade::new(
             registry,
             metrics,
-            replica_process,
+            processes_manager,
             manageboot_runner,
             cup_provider,
             subnet_assignment,
-            current_replica_version.clone(),
+            current_replica_version,
             replica_config_file,
             node_id,
-            ic_binary_dir,
             Arc::new(registry_replicator),
             release_content_dir,
             logger,
@@ -1780,6 +1783,8 @@ mod tests {
     struct UpgradeTestScenario {
         // Node id of the node under test
         node_id: NodeId,
+        // Subnet type of the node under test
+        subnet_type: SubnetType,
         // Current replica version of the running orchestrator
         current_replica_version: ReplicaVersion,
         // Whether the node is assigned to a subnet (<=> presence of local CUP)
@@ -1823,20 +1828,13 @@ mod tests {
         }
 
         // Starting with an `Assigned` subnet assignment *and* successfully persisting a local CUP
-        // should mean that the replica process was started by a previous iteration of the upgrade
+        // should mean that the child processes were started by a previous iteration of the upgrade
         // loop.
-        fn was_replica_process_started_previously(&self) -> bool {
+        fn were_child_processes_started_previously(&self) -> bool {
             matches!(
                 self.initial_subnet_assignment,
                 SubnetAssignment::Assigned(_)
-            )
-            && self.has_local_cup.is_some()
-            // TODO(CON-1630): After mocking the process management, we can remove the condition below.
-            // For now, we should not start the replica if a recovery CUP exists (with higher height)
-            // since that would try to stop the replica process, which fails in the test
-            // environment.
-            && self.has_registry_cup.as_ref().map(|(cup, _)| cup.height)
-                <= self.has_local_cup.as_ref().map(|cup| cup.height)
+            ) && self.has_local_cup.is_some()
         }
 
         // Returns whether the upgrade loop should call
@@ -1934,6 +1932,7 @@ mod tests {
                     &data_provider,
                     RegistryVersion::from(1),
                     local_cup.subnet_id,
+                    self.subnet_type,
                     vec![self.node_id, other_node_id],
                     &self.current_replica_version,
                     &recalled_replica_versions,
@@ -1949,6 +1948,7 @@ mod tests {
                             &data_provider,
                             upgrade.registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -1961,6 +1961,7 @@ mod tests {
                             &data_provider,
                             *leaving_registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![other_node_id],
                             &self.current_replica_version,
                             &recalled_replica_versions,
@@ -1974,6 +1975,7 @@ mod tests {
                             &data_provider,
                             *leaving_registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![other_node_id],
                             &self.current_replica_version,
                             &recalled_replica_versions,
@@ -1983,6 +1985,7 @@ mod tests {
                             &data_provider,
                             upgrade.registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -1997,6 +2000,7 @@ mod tests {
                             &data_provider,
                             *leaving_registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -2008,6 +2012,7 @@ mod tests {
                             &data_provider,
                             upgrade.registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -2017,6 +2022,7 @@ mod tests {
                             &data_provider,
                             *leaving_registry_version,
                             local_cup.subnet_id,
+                            self.subnet_type,
                             vec![other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -2050,6 +2056,7 @@ mod tests {
                             &data_provider,
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
                             &recalled_replica_versions,
@@ -2063,6 +2070,7 @@ mod tests {
                             &data_provider,
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &self.current_replica_version,
                             &recalled_replica_versions,
@@ -2072,6 +2080,7 @@ mod tests {
                             &data_provider,
                             upgrade.registry_version,
                             registry_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -2084,6 +2093,7 @@ mod tests {
                             &data_provider,
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -2101,6 +2111,7 @@ mod tests {
                             &data_provider,
                             *registry_cup_registry_version,
                             registry_cup.subnet_id,
+                            self.subnet_type,
                             vec![self.node_id, other_node_id],
                             &upgrade.replica_version,
                             &recalled_replica_versions,
@@ -2478,42 +2489,63 @@ mod tests {
         }
 
         // Returns whether the replica process should be running after the upgrade loop.
-        // Additionally asserts whether the orchestrator has started a *new* replica process
+        // Additionally asserts whether the orchestrator has started *new* child processes
         fn should_replica_process_be_running(&self, logs: Vec<LogEntry>) -> bool {
-            let needle_has_started_new_process = "Starting new replica process";
             let logs_assert = LogEntriesAssert::assert_that(logs);
-            let assert_has_started_new_process = || {
-                logs_assert
-                    .has_only_one_message_containing(&Level::Info, needle_has_started_new_process);
+            let assert_has_started = |process_name: &str| {
+                logs_assert.has_only_one_message_containing(
+                    &Level::Info,
+                    &format!("Starting new {} process", process_name),
+                );
             };
-            let assert_has_not_started_new_process = || {
+            let assert_has_not_started = |process_name: &str| {
                 logs_assert.has_exactly_n_messages_containing(
                     0,
                     &Level::Info,
-                    needle_has_started_new_process,
+                    &format!("Starting new {} process", process_name),
                 );
+            };
+            let assert_has_started_new_processes = || {
+                assert_has_started(ReplicaProcess::NAME);
+                if matches!(self.subnet_type, SubnetType::CloudEngine) {
+                    assert_has_started(IcGatewayProcess::NAME);
+                }
+            };
+            let assert_has_not_started_new_processes = || {
+                assert_has_not_started(ReplicaProcess::NAME);
+                assert_has_not_started(IcGatewayProcess::NAME);
             };
             match &self.has_local_cup {
                 Some(local_cup) => {
-                    // If the initial subnet assignment was already `Assigned`, then the replica
-                    // process should have been started by the previous iteration of the upgrade
-                    // loop and should not be started again.
+                    // If the child processes were started by the previous iteration of the upgrade
+                    // loop, they should not be started again.
                     // Though, if there is a recovery CUP of a higher height than the local CUP,
-                    // then the replica process should be started again to pick up the new CUP.
-                    let assert_has_started_new_process_if_necessary =
-                        || match (&self.has_registry_cup, &self.initial_subnet_assignment) {
-                            (Some((registry_cup, _)), _)
-                                if registry_cup.height >= local_cup.height =>
-                            {
-                                assert_has_started_new_process();
-                            }
-                            (_, SubnetAssignment::Assigned(_)) => {
-                                assert_has_not_started_new_process();
-                            }
-                            (_, SubnetAssignment::Unassigned | SubnetAssignment::Unknown) => {
-                                assert_has_started_new_process();
-                            }
-                        };
+                    // then the *replica* process (not all children) should be started again to pick
+                    // up the new CUP.
+                    let assert_has_started_new_processes_if_necessary = || match (
+                        &self.has_registry_cup,
+                        self.were_child_processes_started_previously(),
+                        &self.subnet_type,
+                    ) {
+                        (Some((registry_cup, _)), false, SubnetType::CloudEngine)
+                            if registry_cup.height >= local_cup.height =>
+                        {
+                            assert_has_started(ReplicaProcess::NAME);
+                            assert_has_started(IcGatewayProcess::NAME);
+                        }
+                        (Some((registry_cup, _)), _, _)
+                            if registry_cup.height >= local_cup.height =>
+                        {
+                            assert_has_started(ReplicaProcess::NAME);
+                            assert_has_not_started(IcGatewayProcess::NAME);
+                        }
+                        (_, true, _) => {
+                            assert_has_not_started_new_processes();
+                        }
+                        (_, false, _) => {
+                            assert_has_started_new_processes();
+                        }
+                    };
 
                     let highest_height_cup =
                         local_cup.max_height(self.has_registry_cup.as_ref().map(|(cup, _)| cup));
@@ -2522,43 +2554,43 @@ mod tests {
                         (None, None) => {
                             // Not leaving, so the replica process should be started only if
                             // necessary
-                            assert_has_started_new_process_if_necessary();
+                            assert_has_started_new_processes_if_necessary();
                             true
                         }
                         (None, Some(upgrade))
                             if highest_height_cup.registry_version < upgrade.registry_version =>
                         {
                             // An upgrade is scheduled but the CUP's registry version has not
-                            // reached the upgrade registry version yet, so the replica process
+                            // reached the upgrade registry version yet, so the child processes
                             // should be started only if not already running
-                            assert_has_started_new_process_if_necessary();
+                            assert_has_started_new_processes_if_necessary();
                             true
                         }
                         (None, Some(_upgrade)) => {
                             // An upgrade is scheduled and the CUP's registry version has reached
                             // the upgrade registry version.
                             // Regardless of whether the upgrade version was recalled or not, note
-                            // that the implementation does not stop the replica process, it either
+                            // that the implementation does not stop the child processes, it either
                             // returns an error (if recalled) or just issues a reboot. Thus, in this
-                            // unit test, we will assert that the replica process is in the same
+                            // unit test, we will assert that the child processes are in the same
                             // state as before.
-                            assert_has_not_started_new_process();
-                            self.was_replica_process_started_previously()
+                            assert_has_not_started_new_processes();
+                            self.were_child_processes_started_previously()
                         }
                         (Some(leaving_registry_version), None)
                             if &highest_height_cup.registry_version < leaving_registry_version =>
                         {
                             // The node is leaving the subnet, but the CUP's registry version has
-                            // not reached the leaving registry version yet, so the replica process
+                            // not reached the leaving registry version yet, so the child processes
                             // should be started only if not already running
-                            assert_has_started_new_process_if_necessary();
+                            assert_has_started_new_processes_if_necessary();
                             true
                         }
                         (Some(_leaving_registry_version), None) => {
                             // The node is leaving the subnet and the CUP's registry version has
                             // reached the leaving registry version, so we are expected to stop the
-                            // replica process
-                            assert_has_not_started_new_process();
+                            // child processes
+                            assert_has_not_started_new_processes();
                             false
                         }
                         (Some(leaving_registry_version), Some(upgrade))
@@ -2567,9 +2599,9 @@ mod tests {
                                     < upgrade.registry_version =>
                         {
                             // Both leaving and upgrade are scheduled, but the CUP's registry version
-                            // has not reached either of them yet, so the replica process should be
+                            // has not reached either of them yet, so the child processes should be
                             // started only if not already running
-                            assert_has_started_new_process_if_necessary();
+                            assert_has_started_new_processes_if_necessary();
                             true
                         }
                         (Some(leaving_registry_version), Some(_upgrade))
@@ -2578,20 +2610,20 @@ mod tests {
                             // An upgrade is scheduled and the CUP's registry version has reached
                             // the upgrade registry version.
                             // Regardless of whether the upgrade version was recalled or not, note
-                            // that the implementation does not stop the replica process, it either
+                            // that the implementation does not stop the child processes, it either
                             // returns an error (if recalled) or just issues a reboot. Thus, in this
-                            // unit test, we will assert that the replica process is in the same
+                            // unit test, we will assert that the child processes is in the same
                             // state as before.
-                            assert_has_not_started_new_process();
-                            self.was_replica_process_started_previously()
+                            assert_has_not_started_new_processes();
+                            self.were_child_processes_started_previously()
                         }
                         (Some(_leaving_registry_version), Some(_upgrade)) => {
                             // Both leaving and upgrade are scheduled, and the CUP's registry
                             // version has reached the leaving registry version. Regardless of
                             // whether the upgrade registry version has been reached, leaving the
-                            // subnet takes precedence, and we are expected to stop the replica
-                            // process
-                            assert_has_not_started_new_process();
+                            // subnet takes precedence, and we are expected to stop the child
+                            // processes
+                            assert_has_not_started_new_processes();
                             false
                         }
                     }
@@ -2599,8 +2631,8 @@ mod tests {
                 None => {
                     match &self.has_registry_cup {
                         None => {
-                            // Being unassigned, the replica process should not be running
-                            assert_has_not_started_new_process();
+                            // Being unassigned, the child processes should not be running
+                            assert_has_not_started_new_processes();
                             false
                         }
                         Some((registry_cup, _)) => {
@@ -2609,26 +2641,26 @@ mod tests {
                             // But there could be an upgrade scheduled in the meantime
                             match &self.upgrade_to {
                                 None => {
-                                    // No upgrade is scheduled, so the replica process should be
+                                    // No upgrade is scheduled, so the child processes should be
                                     // *started*
-                                    assert_has_started_new_process();
+                                    assert_has_started_new_processes();
                                     true
                                 }
                                 Some(upgrade)
                                     if registry_cup.registry_version < upgrade.registry_version =>
                                 {
                                     // An upgrade is scheduled but the CUP's registry version has
-                                    // not reached the upgrade registry version yet, so the replica
-                                    // process should be *started*
-                                    assert_has_started_new_process();
+                                    // not reached the upgrade registry version yet, so the child
+                                    // processes should be *started*
+                                    assert_has_started_new_processes();
                                     true
                                 }
                                 Some(_upgrade) => {
                                     // This scenario can be interpreted as the unassigned node
                                     // having a different replica version than the subnet's
-                                    // We should upgrade before actually starting the replica
-                                    // process (or return early if the version was recalled).
-                                    assert_has_not_started_new_process();
+                                    // We should upgrade before actually starting the child
+                                    // processes (or return early if the version was recalled).
+                                    assert_has_not_started_new_processes();
                                     false
                                 }
                             }
@@ -2671,8 +2703,8 @@ mod tests {
                 // TODO(CON-1631): introduce distinct enum variants to better compare errors
                 assert!(actual_error.contains(expected_error));
             }
-            _ => {
-                panic!("Upgrade loop flow result does not match expected flow");
+            (actual, expected) => {
+                panic!("Expected flow result {expected:?}, but got {actual:?}. Logs: {logs:#?}");
             }
         }
 
@@ -2686,8 +2718,8 @@ mod tests {
         // Check presence/absence of local CUP, including its height, which
         // tests the recovery case where the recovery CUP would overwrite the
         // local CUP
-        let cup_file = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
-        let local_cup_height = std::fs::read(cup_file)
+        let cup_path = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
+        let local_cup_height = std::fs::read(cup_path)
             .map(|bytes| {
                 CatchUpPackage::try_from(&pb::CatchUpPackage::decode(&bytes[..]).unwrap())
                     .unwrap()
@@ -2704,9 +2736,19 @@ mod tests {
 
         // Check whether the replica process is running or not
         assert_eq!(
-            upgrade_loop.replica_process.lock().unwrap().is_running(),
+            upgrade_loop.is_replica_running(),
             test_scenario.should_replica_process_be_running(logs),
         );
+        if matches!(test_scenario.subnet_type, SubnetType::CloudEngine) {
+            // For Cloud Engine subnets, ic-gateway should always be running when the replica is
+            assert_eq!(
+                upgrade_loop.is_ic_gateway_running(),
+                upgrade_loop.is_replica_running()
+            );
+        } else {
+            // For other subnets, ic-gateway should never be running
+            assert!(!upgrade_loop.is_ic_gateway_running());
+        }
 
         // Asserting further invariants:
         // - Consistent flow/subnet assignment:
@@ -2742,13 +2784,13 @@ mod tests {
         // `Assigned` AND (EITHER we are not upgrading OR the replica was
         // already started beforehand)
         assert_eq!(
-            upgrade_loop.replica_process.lock().unwrap().is_running(),
+            upgrade_loop.is_replica_running(),
             matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
                 && (matches!(
                     flow_result,
                     Ok(OrchestratorControlFlow::Assigned(_))
                         | Ok(OrchestratorControlFlow::Leaving(_))
-                ) || test_scenario.was_replica_process_started_previously())
+                ) || test_scenario.were_child_processes_started_previously())
         );
         // - As an assigned node:
         if new_subnet_assignment != SubnetAssignment::Unassigned {
@@ -2778,6 +2820,7 @@ mod tests {
     #[tokio::test]
     async fn test_upgrade_scenarios(
         #[values(NODE_1)] node_id: NodeId,
+        #[values(SubnetType::Application, SubnetType::CloudEngine)] subnet_type: SubnetType,
         #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
         #[values(
             None,
@@ -2828,10 +2871,8 @@ mod tests {
         #[values(
             None,
             Some(RegistryVersion::from(5)),
-            Some(RegistryVersion::from(10)),
             Some(RegistryVersion::from(50)),
-            Some(RegistryVersion::from(100)),
-            Some(RegistryVersion::from(150))
+            Some(RegistryVersion::from(100))
         )]
         is_leaving: Option<RegistryVersion>,
         #[values(false, true)] does_upgrade: bool,
@@ -2840,10 +2881,8 @@ mod tests {
             RegistryVersion::from(3),
             RegistryVersion::from(5),
             RegistryVersion::from(10),
-            RegistryVersion::from(75),
             RegistryVersion::from(100),
-            RegistryVersion::from(150),
-            RegistryVersion::from(175)
+            RegistryVersion::from(150)
         )]
         upgrade_registry_version: RegistryVersion,
         #[values(false, true)] upgrade_is_recalled: bool,
@@ -2858,6 +2897,7 @@ mod tests {
 
         let test_scenario = UpgradeTestScenario {
             node_id,
+            subnet_type,
             current_replica_version,
             has_local_cup,
             has_registry_cup,
@@ -2904,6 +2944,7 @@ mod tests {
     async fn test_ignore_recalled_versions_if_nns() {
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
+            subnet_type: SubnetType::System,
             current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),
@@ -2946,6 +2987,7 @@ mod tests {
     async fn test_ignore_up_to_date_replicator_after_timeout() {
         let test_scenario = UpgradeTestScenario {
             node_id: NODE_1,
+            subnet_type: SubnetType::Application,
             current_replica_version: ReplicaVersion::try_from("replica_version_0.1").unwrap(),
             has_local_cup: Some(CUPScenario {
                 height: Height::from(100),

@@ -575,8 +575,6 @@ pub struct CanisterHttpResponseMetadata {
     pub id: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub content_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "4")]
-    pub registry_version: u64,
     #[prost(string, tag = "5")]
     pub replica_version: ::prost::alloc::string::String,
     #[prost(uint32, tag = "6")]
@@ -621,8 +619,6 @@ pub struct CanisterHttpResponseWithConsensus {
     pub response: ::core::option::Option<CanisterHttpResponse>,
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "3")]
-    pub registry_version: u64,
     #[prost(string, tag = "8")]
     pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]

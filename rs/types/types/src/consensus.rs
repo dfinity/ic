@@ -1267,8 +1267,6 @@ pub enum Committee {
     /// Notarization indicates the committee that creates notarization and
     /// finalization artifacts by using multi-signatures.
     Notarization,
-    /// CanisterHttp indicates the committee for canister http.
-    CanisterHttp,
 }
 
 /// Threshold indicates how many replicas of a committee need to create a

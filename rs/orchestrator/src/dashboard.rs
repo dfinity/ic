@@ -1,7 +1,7 @@
 use crate::{
     catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
-    process_manager::ProcessManager, registry_helper::RegistryHelper,
-    ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
+    processes::MultipleProcessesManager, registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessParameters,
 };
 pub use ic_dashboard::Dashboard;
 use ic_logger::{ReplicaLogger, info, warn};
@@ -11,7 +11,7 @@ use ic_types::{
 };
 use std::{
     process::Command,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
 };
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;
@@ -24,7 +24,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     last_poll_certified_time: Arc<RwLock<Time>>,
-    replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+    processes_manager: Arc<RwLock<MultipleProcessesManager>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
@@ -45,6 +45,7 @@ impl Dashboard for OrchestratorDashboard {
              last poll's certified time: {}\n\
              subnet id: {}\n\
              replica process id: {}\n\
+             ic-gateway process id: {}\n\
              replica version: {}\n\
              host os version: {}\n\
              scheduled upgrade: {}\n\
@@ -60,7 +61,8 @@ impl Dashboard for OrchestratorDashboard {
             self.registry.get_latest_version().get(),
             self.get_last_poll_certified_time(),
             self.get_subnet_id(),
-            self.get_pid(),
+            self.get_replica_pid(),
+            self.get_ic_gateway_pid(),
             self.replica_version,
             self.hostos_version
                 .as_ref()
@@ -90,7 +92,7 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         last_poll_certified_time: Arc<RwLock<Time>>,
-        replica_process: Arc<Mutex<dyn ProcessManager<ReplicaProcess>>>,
+        processes_manager: Arc<RwLock<MultipleProcessesManager>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
@@ -104,7 +106,7 @@ impl OrchestratorDashboard {
             last_applied_firewall_version,
             last_applied_ipv4_config_version,
             last_poll_certified_time,
-            replica_process,
+            processes_manager,
             subnet_assignment,
             replica_version,
             hostos_version,
@@ -134,8 +136,15 @@ impl OrchestratorDashboard {
         )
     }
 
-    fn get_pid(&self) -> String {
-        match self.replica_process.lock().unwrap().get_pid() {
+    fn get_replica_pid(&self) -> String {
+        match self.processes_manager.read().unwrap().get_replica_pid() {
+            Some(pid) => pid.to_string(),
+            None => "None".to_string(),
+        }
+    }
+
+    fn get_ic_gateway_pid(&self) -> String {
+        match self.processes_manager.read().unwrap().get_ic_gateway_pid() {
             Some(pid) => pid.to_string(),
             None => "None".to_string(),
         }

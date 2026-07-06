@@ -319,11 +319,25 @@ impl RoutingTable {
     }
 
     pub fn assign_canister(&mut self, canister_id: CanisterId, destination: SubnetId) {
-        let range = CanisterIdRange {
+        self.unassign_canister(canister_id);
+        self.0.insert(
+            CanisterIdRange {
+                start: canister_id,
+                end: canister_id,
+            },
+            destination,
+        );
+    }
+
+    /// Removes the assignment of `canister_id` to any subnet, splitting the
+    /// enclosing range if necessary.
+    ///
+    /// Complexity: O(log N)
+    pub fn unassign_canister(&mut self, canister_id: CanisterId) {
+        self.unassign_range(CanisterIdRange {
             start: canister_id,
             end: canister_id,
-        };
-        self.assign_range(range, destination);
+        });
     }
 
     /// Assigns a canister ID range to the destination subnet.
@@ -336,6 +350,15 @@ impl RoutingTable {
     ///
     /// Complexity: O(log N)
     fn assign_range(&mut self, range: CanisterIdRange, destination: SubnetId) {
+        self.unassign_range(range);
+        self.0.insert(range, destination);
+    }
+
+    /// Removes the assignment of a canister ID range from any subnet, splitting
+    /// ranges at the boundaries if necessary.
+    ///
+    /// Complexity: O(log N)
+    fn unassign_range(&mut self, range: CanisterIdRange) {
         fn make_range(start: u64, end: u64) -> CanisterIdRange {
             CanisterIdRange {
                 start: CanisterId::from(start),
@@ -413,7 +436,6 @@ impl RoutingTable {
         for (k, v) in to_add {
             self.0.insert(k, v);
         }
-        self.0.insert(range, destination);
     }
 
     /// Assigns canister ID ranges to the destination subnet.

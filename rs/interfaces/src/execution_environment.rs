@@ -104,6 +104,9 @@ pub struct InstanceStats {
 
     /// Total time spent in SIGSEGV handler for stable memory.
     pub stable_sigsegv_handler_duration: Duration,
+
+    /// The cost of the message when the DMT charges for all page accesses.
+    pub dmt_projected_message_cost: usize,
 }
 
 impl InstanceStats {

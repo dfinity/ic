@@ -225,6 +225,16 @@ impl RegistryHelper {
             .map_err(OrchestratorError::RegistryClientError)
     }
 
+    pub(crate) fn get_subnet_type(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<SubnetType>> {
+        self.registry_client
+            .get_subnet_type(subnet_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
     /// Get the replica version of the given subnet in the given registry
     /// version
     pub(crate) fn get_replica_version(
@@ -386,11 +396,11 @@ impl RegistryHelper {
     pub(crate) fn get_node_domain_name(
         &self,
         version: RegistryVersion,
-    ) -> OrchestratorResult<Option<String>> {
+    ) -> OrchestratorResult<String> {
         let result = self
             .registry_client
             .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
-        Ok(result)
+        result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
     }
 }

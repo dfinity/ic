@@ -158,7 +158,7 @@ pub struct CanisterSettings {
     ///
     /// If the remaining wasm memory size of the canister is below the threshold, execution of the "on low wasm memory" hook is scheduled.
     ///
-    /// Must be a number between 0 and 2<sup>64</sup>-1, inclusively.
+    /// Must be a number between 0 and 2<sup>48</sup> (i.e 256TB), inclusively.
     ///
     /// Default value: `0` (i.e., the "on low wasm memory" hook is never scheduled).
     pub wasm_memory_threshold: Option<Nat>,

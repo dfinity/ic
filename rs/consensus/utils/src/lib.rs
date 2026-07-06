@@ -481,10 +481,20 @@ pub fn get_oldest_state_registry_version(state: &ReplicatedState) -> Option<Regi
         .map(|context| context.registry_version)
         .min();
 
-    [oldest_chain_key_version, oldest_setup_initial_dkg_version]
-        .into_iter()
-        .flatten()
-        .min()
+    let oldest_canister_http_version = call_context_manager
+        .canister_http_request_contexts
+        .values()
+        .map(|context| context.registry_version)
+        .min();
+
+    [
+        oldest_chain_key_version,
+        oldest_setup_initial_dkg_version,
+        oldest_canister_http_version,
+    ]
+    .into_iter()
+    .flatten()
+    .min()
 }
 
 /// Calculate the number of heights in the given range (inclusive)
@@ -515,6 +525,10 @@ mod tests {
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
     use ic_types::{
+        canister_http::{
+            CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus,
+            Replication,
+        },
         consensus::{Rank, get_faults_tolerated, idkg::PreSigId},
         crypto::{ThresholdSigShare, ThresholdSigShareOf, threshold_sig::ni_dkg::NiDkgTargetId},
         messages::CallbackId,
@@ -594,6 +608,7 @@ mod tests {
     fn fake_state_with_contexts(
         sign_with_threshold: Vec<SignWithThresholdContext>,
         setup_initial_dkg: Vec<SetupInitialDkgContext>,
+        canister_http: Vec<CanisterHttpRequestContext>,
     ) -> ReplicatedState {
         let mut state = ReplicatedStateBuilder::default().build();
         state
@@ -615,12 +630,21 @@ mod tests {
                 .map(|(i, c)| (CallbackId::from(i as u64), c)),
         );
         state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts = BTreeMap::from_iter(
+            canister_http
+                .into_iter()
+                .enumerate()
+                .map(|(i, c)| (CallbackId::from(i as u64), c)),
+        );
+        state
     }
 
     fn fake_state_with_signature_contexts(
         contexts: Vec<SignWithThresholdContext>,
     ) -> ReplicatedState {
-        fake_state_with_contexts(contexts, vec![])
+        fake_state_with_contexts(contexts, vec![], vec![])
     }
 
     fn fake_setup_initial_dkg_context(registry_version: RegistryVersion) -> SetupInitialDkgContext {
@@ -636,7 +660,7 @@ mod tests {
     fn fake_state_with_setup_initial_dkg_contexts(
         contexts: Vec<SetupInitialDkgContext>,
     ) -> ReplicatedState {
-        fake_state_with_contexts(vec![], contexts)
+        fake_state_with_contexts(vec![], contexts, vec![])
     }
 
     fn fake_key_ids() -> Vec<MasterPublicKeyId> {
@@ -724,6 +748,60 @@ mod tests {
         );
     }
 
+    fn fake_canister_http_context(registry_version: RegistryVersion) -> CanisterHttpRequestContext {
+        CanisterHttpRequestContext {
+            request: RequestBuilder::new().build(),
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
+            registry_version,
+        }
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_canister_http_only() {
+        let state = fake_state_with_contexts(
+            vec![],
+            vec![],
+            vec![
+                fake_canister_http_context(RegistryVersion::from(8)),
+                fake_canister_http_context(RegistryVersion::from(4)),
+                fake_canister_http_context(RegistryVersion::from(6)),
+            ],
+        );
+        assert_eq!(
+            Some(RegistryVersion::from(4)),
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
+    #[test]
+    fn test_get_oldest_state_registry_version_canister_http_younger_than_others() {
+        // Sign and setup-dkg contexts at v5, canister http at v2: the canister
+        // http version must be reflected as the oldest.
+        let key_id = fake_key_ids().into_iter().next().unwrap();
+        let state = fake_state_with_contexts(
+            vec![fake_signature_request_context_with_registry_version(
+                Some(PreSigId(0)),
+                &key_id,
+                RegistryVersion::from(5),
+            )],
+            vec![fake_setup_initial_dkg_context(RegistryVersion::from(5))],
+            vec![fake_canister_http_context(RegistryVersion::from(2))],
+        );
+        assert_eq!(
+            Some(RegistryVersion::from(2)),
+            get_oldest_state_registry_version(&state)
+        );
+    }
+
     #[test]
     fn test_get_oldest_state_registry_version_setup_initial_dkg_younger_than_sign() {
         let signature_contexts = fake_key_ids()
@@ -740,6 +818,7 @@ mod tests {
         let state = fake_state_with_contexts(
             signature_contexts,
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(2))],
+            vec![],
         );
         assert_eq!(
             Some(RegistryVersion::from(2)),
@@ -763,6 +842,7 @@ mod tests {
         let state = fake_state_with_contexts(
             signature_contexts,
             vec![fake_setup_initial_dkg_context(RegistryVersion::from(11))],
+            vec![],
         );
         assert_eq!(
             Some(RegistryVersion::from(2)),

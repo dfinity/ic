@@ -816,7 +816,7 @@ mod tests {
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
         let paths = vec![vec![].into()];
         let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
         let partial_tree = materialize_partial(&lazy_tree, &labeled_tree, None);
