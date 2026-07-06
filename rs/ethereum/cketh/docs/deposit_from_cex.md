@@ -155,7 +155,8 @@ The design is delivered in two phases:
   (ckUSDC, ckUSDT, …). Converting that revenue into ckETH to keep the fee account
   funded is a treasury/market operation outside this design; the design only
   requires that sweeping halts safely when the fee account is empty. (The
-  caller-paid sweeps of step 6 reduce how much this path is exercised at all.)
+  caller-paid sweeps of step 6 provide an organic ckETH inflow into the fee
+  account, shrinking the conversion need.)
 * Accepted residual limitations:
   * A deposit arriving *after* the scanning window has expired is credited only once
     the address is re-armed (`R15`) — e.g. the user re-opens the frontend. Funds sit
@@ -555,19 +556,24 @@ mirroring how withdrawals already pay for gas (burn ckETH, spend ETH):
   can never exceed what was withheld from minting. Fee-refund dust left at the
   address rolls into the next sweep.
 
-The bullets above describe the default, *minter-fronted* path. A second path can
-coexist with it — **caller-paid sweeps**, mirroring how `withdraw_erc20` already
-charges withdrawal gas today:
+Two separate things are at play in funding the transaction fees, and they compose:
 
-**Variants — who pays the sweep gas:**
+1. **The funding pipeline** (the bullets above): ckETH fee account → `R14` burn at
+   sweeper-address funding → sweeper balance → gas. This is the *only* way ETH is
+   ever spent on sweeps — one burn path, one choke-point invariant to audit.
+2. **What fills the fee account.** Three inflows: `deposit_fee` revenue (accrues
+   per ckToken and needs treasury conversion, see Non-goals), direct treasury
+   top-ups, and — the variant below — **sponsored gas transferred in by callers**.
+
+**Variants — who fills the fee account for a given sweep:**
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **Minter-fronted** (default): ckETH fee account + burn-first (`R14`), recovered via the `deposit_fee` deducted from the mint | Works for the primary persona — a CEX-only user owns no ckETH; preserves the single-step UX (`R15`) | The ckETH fee account must stay funded (treasury replenishment, see Non-goals); `deposit_fee` is a flat overestimate, not market-priced |
-| **Caller-paid (sponsored)**: endpoint `deposit_erc20(beneficiary_account, fee_from_subaccount, max_fee)` callable by *any* third party — a frontend, a relayer, or the beneficiary themselves. The minter burns the transaction fee in ckETH from the **caller's** account (owner = caller's principal, with the given subaccount), exactly like `withdraw_erc20` charges withdrawal gas, then performs the sweep; the beneficiary — not necessarily the caller — is credited the **full** deposited amount, no `deposit_fee` deducted | No minter-fronted capital and no fee-account replenishment on this path; `R14` holds per transaction by construction (burn the caller's ckETH before spending ETH — the battle-tested withdrawal pattern); enables fee *sponsorship* (e.g. OISY paying for its users) and self-sponsoring by repeat users who hold ckETH from earlier deposits; doubles as an on-demand consolidation trigger — synergy with `R16`: a user whose withdrawal waits for liquidity can sponsor the very sweep that unblocks it | The caller must own ckETH, so it cannot be the *only* path (bootstrap: the first-ever CEX deposit of a fresh user has none); one more endpoint with fee estimation and insufficient-fee rejection; overcharged fees are not reimbursed (consistent with withdrawals today) |
+| **Minter-fronted** (default): the fee account fronts the gas, recovered via the `deposit_fee` deducted from the mint | Works for the primary persona — a CEX-only user owns no ckETH; preserves the single-step UX (`R15`) | The ckETH fee account must stay funded (treasury conversion of per-ckToken fee revenue, see Non-goals); `deposit_fee` is a flat overestimate, not market-priced |
+| **Caller-paid (sponsored)**: endpoint `deposit_erc20(beneficiary_account, fee_from_subaccount, max_fee)` callable by *any* third party — a frontend, a relayer, or the beneficiary themselves. The minter **transfers the fee in ckETH from the caller's account (owner = caller's principal, with the given subaccount) into its fee account** (via `icrc2_transfer_from`, mirroring how `withdraw_erc20` charges the caller for withdrawal gas), then schedules the sweep through the single pipeline above; the beneficiary — not necessarily the caller — is credited the **full** deposited amount, no `deposit_fee` deducted | An *organic* ckETH inflow into the fee account, shrinking the treasury-replenishment need; `R14` remains one single burn path (the sponsor's payment and the burn are decoupled in time — pay at call time, burn at batched funding time — with the fee account absorbing the difference); enables fee *sponsorship* (e.g. OISY paying for its users) and self-sponsoring by repeat users holding ckETH from earlier deposits; doubles as an on-demand consolidation trigger — synergy with `R16`: a user whose withdrawal waits for liquidity can sponsor the very sweep that unblocks it | The caller must own ckETH, so it cannot be the *only* path (bootstrap: the first-ever CEX deposit of a fresh user has none); one more endpoint with fee estimation and insufficient-fee rejection; overpaid sponsorship is not reimbursed (consistent with withdrawals today) |
 
-Both paths coexist: sponsored when a caller offers to pay (and then the deposit is
-credited in full), minter-fronted otherwise.
+Both coexist: sponsored when a caller offers to pay (and then the deposit is
+credited in full), minter-fronted otherwise — same pipeline either way.
 
 ## Implementation
 
