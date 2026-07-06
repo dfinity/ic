@@ -14,6 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tempfile::NamedTempFile;
+use tracing::{error, info, warn};
 
 mod firmware;
 pub mod testing;
@@ -144,12 +145,12 @@ impl HostSevCertificateProviderImpl {
 
         // Return VCEK from file cache if available.
         if cache_path.exists() {
-            match fs::read(&cache_path) {
+            match fs::read(&cache_path).context("Failed to read cached VCEK") {
                 Ok(vcek_der) => {
                     return Ok(vcek_der);
                 }
                 Err(err) => {
-                    eprintln!("Failed to read cached VCEK: {err}");
+                    warn!("{err:?}");
                 }
             }
         }
@@ -158,8 +159,11 @@ impl HostSevCertificateProviderImpl {
             .load_vcek_from_amd_key_server_with_retry(&chip_id, &status)
             .await?;
 
-        if let Err(err) = self.save_to_cache(&cache_path, &vcek_der) {
-            eprintln!("Failed to save VCEK to cache: {err}");
+        if let Err(err) = self
+            .save_to_cache(&cache_path, &vcek_der)
+            .context("Failed to save VCEK to cache")
+        {
+            error!("{err:?}");
         }
 
         Ok(vcek_der)
@@ -204,10 +208,13 @@ impl HostSevCertificateProviderImpl {
     ) -> Result<Vec<u8>> {
         const MAX_ATTEMPTS: usize = 5;
         for attempt in 1..=MAX_ATTEMPTS {
-            println!("Fetching VCEK from AMD key server, attempt {attempt} / {MAX_ATTEMPTS}");
-            let result = self.load_vcek_from_amd_key_server(chip_id, status).await;
+            info!("Fetching VCEK from AMD key server, attempt {attempt} / {MAX_ATTEMPTS}");
+            let result = self
+                .load_vcek_from_amd_key_server(chip_id, status)
+                .await
+                .context("Failed to fetch VCEK from AMD key server, will retry");
             if let Err(err) = result {
-                eprintln!("Failed to fetch VCEK from AMD key server, will retry: {err}");
+                error!("{err:?}");
                 tokio::time::sleep(Duration::from_secs(2 * attempt as u64)).await;
             } else {
                 return result;

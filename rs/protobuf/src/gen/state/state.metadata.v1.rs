@@ -76,6 +76,8 @@ pub struct NetworkTopology {
     #[prost(message, optional, tag = "10")]
     pub default_initial_dkg_subnet_id:
         ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(message, repeated, tag = "11")]
+    pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FullTopology {
