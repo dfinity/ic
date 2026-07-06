@@ -5,6 +5,9 @@
 # lockfile for MODULE.bazel
 common --lockfile_mode=off
 
+# If the download via the Remote Asset API on the bazel-remote cache failed, try it again locally.
+common --remote_downloader_local_fallback
+
 # Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
 # See https://github.com/protocolbuffers/protobuf/issues/19558
 # (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
