@@ -1,8 +1,9 @@
 use super::super::ring_buffer::RESULT_MAX_SIZE;
 use super::super::*;
 use ic_management_canister_types_private::{
-    DataSize, FetchCanisterLogsFilter, FetchCanisterLogsRange,
+    DataSize, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsResponse, Payload,
 };
+use ic_types::canister_log::{MAX_DELTA_LOG_MEMORY_LIMIT, MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES};
 use more_asserts::{assert_gt, assert_le, assert_lt};
 
 const KIB: usize = 1024;
@@ -377,6 +378,52 @@ fn max_response_size_respected_with_filtering_by_timestamp() {
     assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
     // Oldest records (head) must be present.
     assert_eq!(result.first().unwrap().timestamp_nanos, partial_start_ts);
+}
+
+#[test]
+fn fetch_canister_logs_response_within_limit() {
+    // The `fetch_canister_logs` fee is prepaid based on
+    // `MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES`, so the Candid-encoded response must
+    // never exceed it. `records()` trims the returned set to `RESULT_MAX_SIZE` by
+    // stored data size (`CanisterLogRecord::data_size()` = 40 B + content per
+    // record), while Candid encodes each record's fixed fields in fewer bytes (two
+    // `nat64` = 16 B). The worst case is therefore the fewest/largest records, so we
+    // sweep record sizes from empty up to a single near-maximal record and assert the
+    // encoded response fits within the constant (with margin for Candid framing).
+    let aggregate_capacity = 3 * RESULT_MAX_SIZE.get() as usize;
+    for content_len in [
+        0,
+        100,
+        4 * KIB,
+        100 * KIB,
+        RESULT_MAX_SIZE.get() as usize - CanisterLogRecord::default().data_size(),
+    ] {
+        let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+        s.resize_for_testing(aggregate_capacity);
+        // Fill well past `RESULT_MAX_SIZE` so the response is trimmed to the cap.
+        append_deltas(
+            &mut s,
+            0,
+            2 * RESULT_MAX_SIZE.get() as usize,
+            MAX_DELTA_LOG_MEMORY_LIMIT,
+            content_len,
+        );
+
+        let records = s.records(None);
+        // The returned records are trimmed to `RESULT_MAX_SIZE` by stored data size.
+        assert_le!(total_size(&records), RESULT_MAX_SIZE.get() as usize);
+
+        let response = FetchCanisterLogsResponse {
+            canister_log_records: records,
+        };
+        let encoded_len = response.encode().len();
+        assert_le!(
+            encoded_len,
+            MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+            "content_len={content_len}: encoded response of {encoded_len} bytes exceeds \
+             MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES ({MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES})"
+        );
+    }
 }
 
 #[test]

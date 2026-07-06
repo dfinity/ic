@@ -18,8 +18,25 @@ pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
 /// The maximum size of a delta (per message) canister log buffer.
 pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 
+/// Maximum stored data size (in bytes) of the log records returned by a single
+/// `fetch_canister_logs` request.
+///
+/// The log memory store's ring buffer trims its result to this limit, measured by
+/// `CanisterLogRecord::data_size()`. This is the single source of truth for that
+/// limit: `RESULT_MAX_SIZE` in `ic-replicated-state` is defined from it.
+pub const MAX_FETCH_CANISTER_LOGS_RESULT_BYTES: usize = 2_000_000;
+
 /// Maximum number of response bytes for a fetch canister logs request.
-pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
+///
+/// The `fetch_canister_logs` fee is prepaid based on this value, so it must be an
+/// upper bound on the size of a Candid-encoded `FetchCanisterLogsResponse`. The
+/// returned records are trimmed to `MAX_FETCH_CANISTER_LOGS_RESULT_BYTES` by their
+/// stored data size; this adds a page for the fixed Candid framing (magic bytes and
+/// type table) that is not counted towards the record data size. The
+/// `fetch_canister_logs_response_within_limit` test in `ic-replicated-state` verifies
+/// that the worst-case encoded response fits within this bound.
+pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize =
+    MAX_FETCH_CANISTER_LOGS_RESULT_BYTES + 4 * KIB;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
