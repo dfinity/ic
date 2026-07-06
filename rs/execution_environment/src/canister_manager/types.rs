@@ -1214,7 +1214,12 @@ impl From<CanisterManagerError> for UserError {
                 caller,
                 method_name,
             } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
+                // `CanisterStatusAccessDenied` is a dedicated error code that is
+                // mapped to the same reject code (`CanisterError`) as the
+                // `CanisterInvalidController` error code that governed access to
+                // `canister_status` before the status visibility feature was
+                // introduced.
+                ErrorCode::CanisterStatusAccessDenied,
                 format!("Caller {caller} is not allowed to call {method_name}"),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(

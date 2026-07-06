@@ -151,7 +151,7 @@ fn test_status_visibility_of_canister_status() {
                 ));
                 assert_eq!(
                     err.code(),
-                    ErrorCode::CanisterRejectedMessage,
+                    ErrorCode::CanisterStatusAccessDenied,
                     "unexpected error for status_visibility: {status_visibility:?}, \
                      sender: {sender_label}, call path: {call_path:?}"
                 );
