@@ -102,7 +102,8 @@ The design is delivered in two phases:
   least the maximum fee of that transaction; at all times, cumulative ckETH burned
   for sweeping ≥ cumulative ETH spent on sweeping. Burned-but-unspent amounts are
   tracked and offset against subsequent burns; they are never re-minted. If the fee
-  account cannot cover a sweep, no sweep is submitted.
+  account cannot cover a sweep, no sweep is submitted. (The burn may happen ahead of
+  time, at sweeper-address funding, covering many sweeps at once — see step 6.)
 * `R15`: A single user-visible step suffices: after one `retrieve_deposit_address`
   call, a deposit arriving at that address within its *scanning window* is credited
   with no further canister call by the user or frontend. Re-calling
@@ -114,6 +115,11 @@ The design is delivered in two phases:
   count as *unavailable* liquidity. A withdrawal that cannot be covered yet is
   queued (never failed on-chain for insufficient balance) and served once sweeps
   have consolidated enough funds.
+* `R17`: A stuck (submitted but unmined) sweep transaction never delays a
+  withdrawal. Sweeps are issued from a **dedicated sweeper address** with its own
+  nonce sequence — never from the main address, whose nonce sequence serves
+  withdrawals exclusively — so sweep and withdrawal transactions cannot
+  head-of-line-block each other.
 
 ### Phase 2 (ckETH)
 
@@ -477,10 +483,14 @@ quarantine-on-panic machinery as in today's `mint()` path.
 Shared mechanics (both variants): each ERC-20 deposit EOA signs (threshold ECDSA)
 **one** EIP-7702 authorization — lazily, together with its first sweep, never at
 registration (`R13`) — delegating its code to a single immutable, storage-less
-sweeper delegate. Sweep transactions are type-`0x04` transactions sent from the
-minter's funded main address (sharing its existing nonce sequence, `R10`); many
-deposit addresses are swept in one transaction, the deployed delegate instance
-doubling as the batcher. No deposit address ever needs an ETH balance for gas. A
+sweeper delegate. Sweep transactions are type-`0x04` transactions sent from a
+**dedicated sweeper address** (tECDSA-derived with its own schema tag, e.g.
+`[3u8]`), whose nonce sequence is independent of the main address' so that a stuck
+sweep can never delay a withdrawal (`R17`); the sweeper address holds only gas
+money (funded from the main address, see step 6) while swept funds always land at
+the main address (`R6`). Many deposit addresses are swept in one transaction, the
+deployed delegate instance doubling as the batcher. No deposit address ever needs
+an ETH balance for gas. A
 periodic task selects addresses with observed-but-unswept balances where
 `unswept_value ≥ sweep_gas_cost × margin` or `age > max_age` — or, under variant A,
 **as soon as a queued withdrawal waits for liquidity** (`R16`): withdrawal demand
@@ -503,7 +513,7 @@ balance itself — see step 6 for the fee cap this requires.
 
 | Sub-variant | Pros | Cons |
 |---|---|---|
-| **Caller-gating**: `require(msg.sender ∈ {MINTER, SELF})` via two immutables (`SELF` = the deployed instance's address, captured at construction, so the batch entry point still works) | Simplest delegate, zero extra signatures; as a side effect preserves the best-effort sweep exclusion of `R3` (nobody but the minter can sweep a tainted address) | Only the minter can sweep; Multicall3 unusable as batcher (inner `msg.sender` would be Multicall3) |
+| **Caller-gating**: `require(msg.sender ∈ {SWEEPER, SELF})` via immutables (`SWEEPER` = the dedicated sweeper address of `R17`, `SELF` = the deployed instance's address captured at construction, so the batch entry point still works; funds still go to the main address per `R6`) | Simplest delegate, zero extra signatures; as a side effect preserves the best-effort sweep exclusion of `R3` (nobody but the minter can sweep a tainted address) | Only the minter can sweep; Multicall3 unusable as batcher (inner `msg.sender` would be Multicall3) |
 | **One-time self-attestation**: the minter signs, with the *deposit address' own derived key*, a domain-separated message `keccak("ck-deposit-owner" ‖ chain_id ‖ helper ‖ principal ‖ subaccount)`; the delegate checks `ecrecover(message, sig) == address(this)` (≈ 3k gas), the attestation riding in the sweep calldata | Sweeping is permissionless again with the address↔principal binding *cryptographically enforced* — the attestation is a public fact, replayable harmlessly (funds still only move through `depositErc20` with the attested principal); one extra tECDSA signature per address, one-time, consuming no account nonce | Forfeits the best-effort `R3` sweep exclusion (a third party can sweep a tainted address — status quo, no new risk); slightly larger delegate and calldata |
 | **On-chain re-derivation**: the delegate recomputes `derive(master_pubkey, principal, subaccount)` and compares with `address(this)` | No extra signature at all — the binding is verified from first principles | Uneconomical: the IC's generalized BIP-32 derivation needs one HMAC-SHA512 per path element, and the EVM has no SHA-512 precompile — several hundred thousand gas per sweep in pure Solidity (only the elliptic-curve step is cheap: `ecrecover(−t·rₓ mod n, v, rₓ, rₓ)` returns `address(P + t·G)` for ≈ 3k gas). Rejected |
 
@@ -514,16 +524,20 @@ without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefo
 funded exclusively through the minter's **fee account on the ckETH ledger**,
 mirroring how withdrawals already pay for gas (burn ckETH, spend ETH):
 
-* **Burn first** (`R14`): before submitting a sweep, burn
-  `max(0, gas_limit × max_fee_per_gas - prepaid_sweep_gas)` from the ckETH fee
-  account (the transaction's maximum fee — an overestimate by construction) and add
-  it to `prepaid_sweep_gas`; abort the sweep (and retry later) if the burn fails.
-* On the receipt, subtract the effective transaction fee from `prepaid_sweep_gas` —
-  the surplus of the overestimate is **not re-minted** but carried as credit for the
-  next burn, so "cumulative burned ≥ cumulative spent" holds at every instant. Both
-  movements are audit events; `prepaid_sweep_gas` and the effective fee/cost ratio
-  are exposed on the dashboard (`R8`, `R9`) to recalibrate `deposit_fee` via
-  proposal.
+* **Burn first** (`R14`): with the dedicated sweeper address (`R17`), the burn
+  happens at **funding time** — before transferring ETH from the main address to
+  the sweeper address, burn from the ckETH fee account at least the transferred
+  amount plus the funding transaction's maximum fee; abort the funding (and halt
+  sweeping) if the burn fails. ETH sitting at the sweeper address is already
+  paid-for: the sweeper address' balance *is* the `prepaid_sweep_gas` counter,
+  reconcilable on-chain with one `eth_getBalance`.
+* Fundings are infrequent (one funding covers many sweeps) and are ordinary
+  transfers on the main address' nonce sequence, like withdrawals. Sweep gas then
+  simply draws down the sweeper balance; the burn surplus is **never re-minted**,
+  so "cumulative burned ≥ cumulative spent" holds at every instant. Fundings and
+  per-sweep effective fees are audit events; the sweeper balance and the effective
+  fee/cost ratio are exposed on the dashboard (`R8`, `R9`) to recalibrate
+  `deposit_fee` via proposal.
 * An empty ckETH fee account halts sweeping safely: under variant A, credited
   balances are unaffected and deposits keep accumulating at key-controlled
   addresses; under variant B, crediting pauses with sweeping. Replenishing the fee
@@ -550,8 +564,9 @@ the fee-account outage behavior).
 * The minter's main address uses the *empty* ECDSA derivation path
   (`MAIN_DERIVATION_PATH` in `src/lib.rs`); any per-account path must be non-empty and
   collision-free with it. Withdrawals assume a single sequential nonce for the main
-  address (`src/state/transactions`); sweep transactions originate from the main
-  address and therefore share that nonce sequence.
+  address (`src/state/transactions`); a stuck transaction in that sequence blocks
+  everything behind it, which is why sweeps must not share it (`R17`) and are issued
+  from a dedicated sweeper address instead.
 * All Ethereum interaction goes through the EVM-RPC canister with multi-provider
   threshold consensus (`src/eth_rpc_client/`); every new call (`eth_getLogs` per
   deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
@@ -764,7 +779,8 @@ mocked EVM-RPC canister, extending the existing fixtures):
 * Concurrent scans/notifies produce a single mint (`R2`); blocked sender: no mint,
   no sweep (`R3`); below-minimum and unsupported token (`R4`); sweep failure then
   retry with fee bump, mint unaffected (`R5`); empty fee account halts sweeping only
-  (`R14`); withdrawal flow regression (`R10`); dashboard rendering (`R9`).
+  (`R14`); a stuck sweep transaction delays no withdrawal (`R17`); withdrawal flow
+  regression (`R10`); dashboard rendering (`R9`).
 * Solidity: Foundry tests for the delegate(s) (permissionless sweep only reaches
   minter / minter-only sweep for variant B, USDT-style token, delegated-EOA
   execution against a Prague-enabled local node) (`R6`, `R12`).
@@ -784,9 +800,9 @@ the delegate.
 3. **ckERC20 deposit detection and crediting** (background scans, log queries, fees,
    minimums, blocklist incl. sweep exclusion). AC: `R2`, `R3`, `R4`, `R7`, `R8`,
    `R15`.
-4. **Sweeper delegate contract** (Solidity, audited) + **sweeping task** (delegation,
-   batching, receipts, `R14` burn accounting, metrics). AC: `R5`, `R6`, `R7`, `R9`,
-   `R10`, `R14`.
+4. **Sweeper delegate contract** (Solidity, audited) + **sweeping task** (dedicated
+   sweeper address, delegation, batching, receipts, `R14` burn accounting, metrics).
+   AC: `R5`, `R6`, `R7`, `R9`, `R10`, `R14`, `R17`.
 5. **Phase 1 launch on Sepolia**, then mainnet via NNS upgrade proposal; frontend
    (OISY) integration of `retrieve_deposit_address` (single call — no polling
    required, `R15`).
