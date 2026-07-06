@@ -431,20 +431,47 @@ frontend (the browser may close between the steps), and today's helper-based
 deposits are single-step too.
 
 Detection runs as a **minter background task over "active" addresses**:
-registration (or re-registration) arms a per-address *scanning window*; while the
-window is open, the address belongs to the active set that a periodic task scans in
-bounded batches. The window (e.g. days, configurable) bounds the DoS surface
-(`R13`): spam registrations inflate the active set only temporarily, the per-tick
-scan budget is fixed, and dormant addresses cost nothing until re-armed.
 
-For ERC-20, a single `eth_getLogs` filter covers **many deposit addresses across
-all supported tokens at once**: both the `address` field (the emitting contracts,
-i.e. the token contracts) and each topic position accept OR-lists:
+* When `deposit_erc20` is called, the minter records the address together with the
+  then-current **last observed block number** (the latest finalized block) — the
+  scan floor: history before registration is never scanned.
+* The number of addresses tracked in parallel is **capped** (configurable). When
+  the active set is full, an unsponsored call still registers and returns the
+  address but signals that scanning is saturated; a *sponsored* call bypasses the
+  cap (the caller pays).
+* Each active address carries a **cycles budget**, decremented by its share of
+  every scan tick's outcalls. When the budget is exhausted the minter gives up:
+  the address goes dormant and costs nothing until re-armed by another
+  `deposit_erc20` call (which resets the budget). This is the *scanning window* of
+  `R15`, bounded by cost rather than wall time. Cap and budget together bound the
+  DoS surface (`R13`): the cap bounds per-tick cost, the budget bounds any
+  address' lifetime cost.
+* The **minimum deposit amount per token** is a configurable list (`R4`, `R7`).
+
+Scanning itself is a two-filter funnel, cheap-first:
+
+**Filter 1 — balances.** One [Multicall3](https://www.multicall3.com/)
+`aggregate3` `eth_call` reads `balanceOf(addr)` for every active address ×
+supported token (one HTTPS outcall per provider; later a plain JSON-RPC batch once
+the EVM-RPC canister supports `eth_batch`,
+[dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561)).
+Addresses with a balance at or above the per-token minimum proceed to filter 2; the
+rest cost nothing further this tick. A balance is only ever a trigger, never a
+source of truth (see the screening discussion below). For native ETH (Phase 2),
+`getEthBalance` rides in the same call and the finalized balance delta *is* the
+observation (`R11`) — there are no logs to confirm against.
+
+**Filter 2 — logs.** For the filter-1 candidates, one batched `eth_getLogs` from
+the **minimum of the candidates' last observed block numbers** over at most 500
+blocks; each address' last observed block advances to the range end. A single
+filter covers many deposit addresses across all supported tokens at once, because
+both the `address` field (the emitting contracts, i.e. the token contracts) and
+each topic position accept OR-lists:
 
 ```json
 {
-  "fromBlock": "<last_scanned + 1>",
-  "toBlock": "<finalized>",
+  "fromBlock": "<min(last observed of candidates) + 1>",
+  "toBlock": "<min(fromBlock + 500, finalized)>",
   "address": ["<USDC>", "<USDT>", "<LINK>", "..."],
   "topics": [
     "<keccak256(Transfer(address,address,uint256))>",
@@ -464,26 +491,12 @@ used for the token-address position of the helper event); this adds the recipien
 position. Practical limits:
 
 * Block ranges are chunked by the existing 500-block spread / halve-on-too-large
-  logic. All addresses in one query share a range, so the query starts at the
-  minimum `last_checked_block` of the batch — re-fetched logs are harmless since
-  crediting dedups by `(tx hash, log index)`.
-* Providers cap topic OR-list sizes and response log counts: chunk the active set
-  beyond a few hundred addresses.
+  logic; re-fetched logs are harmless since crediting dedups by
+  `(tx hash, log index)`.
+* Providers cap topic OR-list sizes and response log counts: chunk the candidate
+  set beyond a few hundred addresses.
 * Each padded address adds ≈ 70 bytes of JSON to the request, and outcall request
   bytes cost cycles too — another reason to chunk.
-
-**Balance scans** complement the log query in the two roles where logs cannot
-serve: native ETH (no logs — the finalized balance delta *is* the observation,
-`R11`), and cheap O(1)-per-address re-checks of large or long-dormant sets (a log
-scan pays per elapsed block range whether or not anything happened; a balance read
-pays per address and is range-free). Bulk balance reads take one HTTPS outcall per
-provider for a whole batch via **JSON-RPC batch support in the EVM-RPC canister**
-(`eth_batch`,
-[dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
-in progress), or one [Multicall3](https://www.multicall3.com/) `aggregate3`
-`eth_call` (including native ETH via `getEthBalance`) meanwhile. A balance
-observation is only ever a trigger, never a source of truth (see the screening
-discussion below).
 
 **Blocklist screening** happens here, against the same compiled-in blocklist used
 for helper deposits today (`src/blocklist.rs`, checked like
@@ -536,7 +549,7 @@ optional sender-screening enrichment for native ETH.
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **Registration-armed scanning window** (chosen): background bulk scans of the active set while the window is open | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (fixed per-tick budget, windows expire); re-armed for free by `deposit_erc20`; the ERC-20 log query batches natively (one filter for all active addresses × supported tokens) | Deposits after window expiry wait for re-arming; the ETH balance reads need `eth_batch` (#561) or Multicall3 |
+| **Registration-armed scanning** (chosen): two-filter background scan (Multicall3 balances, then batched `eth_getLogs`) over a capped active set with per-address cycles budgets | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (capped set, per-address budget); re-armed for free by `deposit_erc20`; both filters batch natively | Deposits after budget exhaustion wait for re-arming; filter 1 depends on Multicall3 (or `eth_batch`, #561) |
 | **Claim endpoint only** (`notify_deposit`, ckBTC's `update_balance` model) | Cheapest possible: minter does nothing unprompted; precise targeting | Two-step flow breaks the target UX — a frontend cannot reliably guarantee the second call (browser closed after the CEX withdrawal); kept only as optional accelerator |
 | **User supplies the transaction ID** (`claim_deposit(account, tx_hash)`: the minter fetches the receipt, verifies a finalized `Transfer` to the caller's deposit address, credits from its logs) | Cheapest and most precise of all: one targeted receipt query per claim, O(1) in the registered-set size, no scanning state, no `eth_batch` dependency; no window expiry; sender screening comes directly from the receipt logs | Worst UX of all: the tx hash is only known to the CEX/user (not derivable by a frontend, unlike `notify_deposit`), so the second step is genuinely *manual* — many users cannot find the hash in their exchange UI; does not even fully work for native ETH (a contract-batched CEX withdrawal moves ETH in an *internal* transaction: the receipt shows no value transfer and no log — verification would need trace APIs) |
 | **Continuous scraping of all registered addresses forever** | Best possible UX, no windows | Same batched-`eth_getLogs` mechanism as the chosen variant — the rejection is about the *unbounded* set, not the mechanism: cost grows without bound with the (attacker-inflatable, free) registered set, a standing cycles drain (`R13`); still misses native ETH |
