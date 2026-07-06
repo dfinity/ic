@@ -6,7 +6,6 @@ use hickory_resolver::{Resolver, config::LookupIpStrategy};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
-use ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
@@ -137,15 +136,20 @@ struct DelegationManager {
 }
 
 impl DelegationManager {
-    fn has_public_key_changed(
+    /// Checks if the delegation is valid with respect to the current certified state.
+    /// Returns `None` if the check could not be performed (e.g. because the certified state is not
+    /// available).
+    fn is_delegation_valid_with_respect_to_state(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
     ) -> Option<bool> {
         let Some(old_delegation) = old_delegation else {
-            return Some(false);
+            // No delegation: Initialization or on the NNS subnet: return true to proactively fetch
+            // a new one (which is a no-op on the NNS).
+            return Some(true);
         };
 
-        is_delegation_valid_with_respect_to_state(
+        ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state(
             &old_delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
             CertificateDelegationFormat::Flat,
             self.state_reader.get_latest_certified_state()?.get_ref(),
@@ -157,7 +161,6 @@ impl DelegationManager {
             );
         })
         .ok()
-        .map(|matches| !matches)
     }
 
     async fn fetch(&self) -> Option<NNSDelegationBuilder> {
@@ -181,32 +184,35 @@ impl DelegationManager {
         delegation
     }
 
+    /// Fetches a delegation from the NNS subnet proactively, i.e. without checking if the current
+    /// delegation is still valid with respect to the certified state. If the new delegation is
+    /// incompatible with the current certified state, it will be held back until the state has
+    /// caught up (i.e. returns `None`).
     async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
         let new_delegation = self.fetch().await;
-        if self
-            .has_public_key_changed(new_delegation.as_ref())
-            .unwrap_or(false)
-        {
-            // If the new delegation has a new public key but our state has not reached it yet,
-            // hold it back. Once the state will have caught up, `reactive_fetch` will fetch the
-            // new delegation.
+        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_ref()) == Some(false) {
+            // If the new delegation is incompatible with our state, hold it back. Once the state
+            // will have caught up, `reactive_fetch` will fetch the new delegation.
+            // When not being able to determine this (e.g. the call returned `None`, still accept it)
             return None;
         }
 
         Some(new_delegation)
     }
 
+    /// Fetches a delegation from the NNS subnet reactively, i.e. only if the current delegation is
+    /// incompatible with the certified state. If the delegation is still valid, it will not be
+    /// fetched again (i.e. returns `None`).
     async fn reactive_fetch(
         &self,
         old_delegation: Option<&NNSDelegationBuilder>,
     ) -> Option<Option<NNSDelegationBuilder>> {
-        if !self.has_public_key_changed(old_delegation).unwrap_or(false) {
-            // If the public key in the state is the same as the previous delegation, then do not
-            // fetch a new delegation: `proactive_fetch` will take care of that.
-            return None;
+        if self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false) {
+            // If the old delegation is incompatible with our state, reactively fetch a new one.
+            return Some(self.fetch().await);
         }
 
-        Some(self.fetch().await)
+        None
     }
 
     async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
@@ -696,8 +702,9 @@ mod tests {
         CertificateBuilder, CertificateData, encoded_time, generate_root_of_trust,
     };
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-    use ic_crypto_tree_hash::{Label, LabeledTree, MixedHashTree, flatmap, lookup_path};
+    use ic_crypto_tree_hash::{Label, LabeledTree, flatmap, lookup_path};
     use ic_crypto_utils_threshold_sig_der::public_key_to_der;
+    use ic_interfaces_state_manager::Labeled;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -706,16 +713,16 @@ mod tests {
     use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
     use ic_replicated_state::SubnetTopology;
     use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
-    use ic_test_utilities_consensus::FakeCertifiedStateSnapshot;
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record,
         add_subnet_list_record,
     };
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
-    use ic_types::Height;
+    use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::messages::{Certificate, CertificateDelegation};
+    use ic_types::{CanisterId, Height};
     use ic_types::{
         NodeId,
         messages::{Blob, HttpReadStateResponse},
@@ -967,10 +974,10 @@ mod tests {
             (VERIFIED_APP_SUBNET_ID, verified_app_subnet_public_key),
             (CLOUD_ENGINE_SUBNET_ID, cloud_engine_public_key),
         ]
-        .iter()
+        .into_iter()
         .map(|(subnet_id, public_key)| {
             (
-                *subnet_id,
+                subnet_id,
                 SubnetTopology {
                     public_key: public_key_to_der(&public_key.into_bytes()).unwrap(),
                     ..Default::default()
@@ -978,26 +985,67 @@ mod tests {
             )
         })
         .collect::<BTreeMap<_, _>>();
-        let (state_reader, mutable_state) = fake_state_with_subnets(subnet_id, subnet_topologies);
+        let routing_table = [
+            (
+                APP_SUBNET_ID,
+                vec![(canister_test_id(1).get(), canister_test_id(10).get())],
+            ),
+            (
+                SYSTEM_SUBNET_ID,
+                vec![(canister_test_id(11).get(), canister_test_id(20).get())],
+            ),
+            (
+                VERIFIED_APP_SUBNET_ID,
+                vec![(canister_test_id(21).get(), canister_test_id(30).get())],
+            ),
+            (
+                CLOUD_ENGINE_SUBNET_ID,
+                vec![(canister_test_id(31).get(), canister_test_id(40).get())],
+            ),
+        ]
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+        let (state_reader, mutable_state) = fake_state_with_subnets_and_routing_table(
+            subnet_id,
+            subnet_topologies,
+            routing_table
+                .iter()
+                .map(|(subnet_id, canister_ranges)| {
+                    (
+                        *subnet_id,
+                        CanisterIdRanges::try_from(
+                            canister_ranges
+                                .iter()
+                                .map(|(start, end)| CanisterIdRange {
+                                    start: CanisterId::unchecked_from_principal(*start),
+                                    end: CanisterId::unchecked_from_principal(*end),
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>(),
+        );
 
         let create_certificate = move |time| {
             let (_certificate, _root_pk, cbor) =
                 CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
                     Label::from("subnet") => LabeledTree::SubTree(flatmap![
                         Label::from(APP_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(0), canister_test_id(10))])),
+                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(routing_table.get(&APP_SUBNET_ID).unwrap())),
                             Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&app_subnet_public_key.into_bytes()).unwrap()),
                         ]),
                         Label::from(SYSTEM_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(10), canister_test_id(20))])),
+                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(routing_table.get(&SYSTEM_SUBNET_ID).unwrap())),
                             Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&system_subnet_public_key.into_bytes()).unwrap()),
                         ]),
                         Label::from(VERIFIED_APP_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(20), canister_test_id(30))])),
+                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(routing_table.get(&VERIFIED_APP_SUBNET_ID).unwrap())),
                             Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&verified_app_subnet_public_key.into_bytes()).unwrap()),
                         ]),
                         Label::from(CLOUD_ENGINE_SUBNET_ID.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&vec![(canister_test_id(30), canister_test_id(40))])),
+                            Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(routing_table.get(&CLOUD_ENGINE_SUBNET_ID).unwrap())),
                             Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&cloud_engine_public_key.into_bytes()).unwrap()),
                         ]),
                     ]),
@@ -1487,9 +1535,10 @@ mod tests {
         assert_matches!(response, Err(err) if err.to_string().contains("Timed out while receiving"));
     }
 
-    fn fake_state_with_subnets(
+    fn fake_state_with_subnets_and_routing_table(
         subnet_id: SubnetId,
         subnets: BTreeMap<SubnetId, SubnetTopology>,
+        routing_table: BTreeMap<SubnetId, CanisterIdRanges>,
     ) -> (
         Arc<dyn StateReader<State = ReplicatedState>>,
         Arc<RwLock<ReplicatedState>>,
@@ -1497,16 +1546,21 @@ mod tests {
         let mut state_manager = MockStateManager::new();
         let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
         state.metadata.network_topology.set_subnets(subnets);
+        for (subnet_id, canister_ranges) in routing_table {
+            state
+                .metadata
+                .network_topology
+                .routing_table_mut()
+                .assign_ranges(canister_ranges, subnet_id)
+                .unwrap();
+        }
         let mutable_handle = Arc::new(RwLock::new(state));
         let handle_clone = Arc::clone(&mutable_handle);
         state_manager
-            .expect_get_certified_state_snapshot()
+            .expect_get_latest_certified_state()
             .returning(move || {
                 let state = handle_clone.read().unwrap();
-                Some(Box::new(FakeCertifiedStateSnapshot {
-                    height: Height::from(0),
-                    state: Arc::new(state.clone()),
-                }))
+                Some(Labeled::new(Height::from(0), Arc::new(state.clone())))
             });
         (Arc::new(state_manager), mutable_handle)
     }
@@ -1585,8 +1639,8 @@ mod tests {
         };
 
         assert_eq!(
-            manager.has_public_key_changed(Some(&old_delegation)),
-            Some(true)
+            manager.is_delegation_valid_with_respect_to_state(Some(&old_delegation)),
+            Some(false)
         );
         // Since the public key changed, `proactive_fetch` should not fetch a new delegation...
         assert!(manager.proactive_fetch().await.is_none());
@@ -1626,8 +1680,8 @@ mod tests {
         };
 
         assert_eq!(
-            manager.has_public_key_changed(Some(&old_delegation)),
-            Some(false)
+            manager.is_delegation_valid_with_respect_to_state(Some(&old_delegation)),
+            Some(true)
         );
         // Since the public key is unchanged, `proactive_fetch` should fetch a new delegation...
         assert!(manager.proactive_fetch().await.is_some());
