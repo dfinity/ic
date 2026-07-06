@@ -36,8 +36,8 @@ by the minter through threshold ECDSA (the ckBTC model), and uses **EIP-7702**
 (live on Ethereum mainnet since the Pectra upgrade, May 2025) to sweep funds from these
 addresses to the minter's main address **without pre-funding them with ETH for gas**:
 the deposit EOA signs a one-time authorization delegating its code to a minimal sweeper
-contract, and the minter's main (funded) address submits the sweep transaction and pays
-for gas.
+contract, and a minter-controlled, funded address submits the sweep transaction and
+pays for gas.
 
 Target UX: *"I have USDT on a CEX and I want ckUSDT: I paste my deposit address into
 the exchange withdrawal form and the tokens automagically appear as ckUSDT."*
@@ -88,7 +88,8 @@ The design is delivered in two phases:
   delegation, sweep sent/confirmed) are recorded as audit events, replayable on
   upgrade, consistent with the minter's event-sourcing architecture.
 * `R9`: The minter dashboard and metrics expose: registered deposit addresses,
-  credited-but-unswept balances per token, delegation status, and sweep activity.
+  credited-but-unswept balances per token, delegation status, sweep activity, and the
+  sweeper address' gas balance (`R17`).
 * `R10`: Withdrawals (ckERC20 → ERC-20 and ckETH → ETH) are unaffected: they continue
   to be served from the minter's main address and its existing nonce sequence.
 * `R13`: Registering a deposit address (`retrieve_deposit_address`) triggers no
@@ -171,7 +172,7 @@ The design is delivered in two phases:
 
 ## Design
 
-The flow is five steps: **(1)** retrieve the deposit address, **(2)** withdraw from
+The flow is six steps: **(1)** retrieve the deposit address, **(2)** withdraw from
 the CEX to it, **(3)** detect the deposit, **(4)** credit (mint) the ckToken,
 **(5)** sweep the funds to the minter, paying the fees **(6)** without touching the
 ckETH backing. One section per step below; where a step has design variants, a table
@@ -220,10 +221,10 @@ sequenceDiagram
     Minter->>CkUsdtLedger: mint 250 - fee to p
     Minter->>CkUsdtLedger: mint fee to minter fee account
     Note over Minter: user is credited - sweeping is asynchronous<br/>treasury consolidation (R5)
-    Minter->>CkEthLedger: burn max_tx_fee - prepaid_sweep_gas<br/>from the ckETH fee account (R14)
+    Note over Minter,CkEthLedger: sweeper address already funded:<br/>ckETH burned from the fee account at funding time (R14)
     Note over Minter: sign EIP-7702 authorization for addr(p)<br/>(tECDSA, only before the first sweep)
-    Minter->>Eth: type-0x04 tx: sweepErc20 on addr(p)<br/>USDT: addr(p) -> minter address
-    Eth-->>Minter: receipt: prepaid_sweep_gas -= effective fee
+    Minter->>Eth: type-0x04 tx from the sweeper address (R17):<br/>sweepErc20 on addr(p), USDT: addr(p) -> minter address
+    Eth-->>Minter: receipt: sweeper balance -= effective fee
 ```
 
 Deposit of USDT from a CEX under **variant B** (sweep through the existing helper
@@ -245,9 +246,9 @@ sequenceDiagram
     CEX->>Eth: USDT.transfer(addr(p), 250)
     Minter->>Eth: bulk balance scan of active addresses (latest block)
     Note over Minter: scheduling hint only, no finality needed:<br/>a reorged deposit just wastes the sweep's gas
-    Minter->>CkEthLedger: burn max_tx_fee - prepaid_sweep_gas (R14)
-    Minter->>Eth: type-0x04 tx: sweepErc20(tokens, p, s) on addr(p)<br/>= approve + helper.depositErc20:<br/>USDT: addr(p) -> minter address, and the helper emits<br/>ReceivedEthOrErc20(USDT, addr(p), 250, p, s)
-    Eth-->>Minter: receipt: prepaid_sweep_gas -= effective fee
+    Note over Minter,CkEthLedger: sweeper address already funded:<br/>ckETH burned from the fee account at funding time (R14)
+    Minter->>Eth: type-0x04 tx from the sweeper address (R17):<br/>sweepErc20(tokens, p, s) on addr(p)<br/>= approve + helper.depositErc20:<br/>USDT: addr(p) -> minter address, and the helper emits<br/>ReceivedEthOrErc20(USDT, addr(p), 250, p, s)
+    Eth-->>Minter: receipt: sweeper balance -= effective fee
     Note over Minter,Eth: from here the EXISTING deposit pipeline runs unchanged
     Minter->>Eth: eth_getLogs(helper contract, up to finalized)
     Note over Minter: cross-check owner addr(p) vs p against own map,<br/>dedup by (tx hash, log index)
@@ -471,7 +472,9 @@ enrichment for native ETH mentioned above.
 The deposited amount is minted in full: `amount - deposit_fee` to the depositor's
 account, and `deposit_fee` to a minter-controlled fee account **on the same ckToken
 ledger** — the full deposited amount is swept, so minting it in full keeps supply
-exactly equal to backing and makes fee revenue explicit and auditable (`R7`). Fees
+exactly equal to backing and makes fee revenue explicit and auditable (`R7`). When a
+sweep is *sponsored* (a caller pays the gas in ckETH, see step 6), no `deposit_fee`
+is deducted: the full amount goes to the beneficiary. Fees
 are flat and proposal-configurable rather than oracle-priced, for simplicity and
 predictability. Deduplication is by `(transaction hash, log index)` (`R2`), memo and
 quarantine-on-panic machinery as in today's `mint()` path.
@@ -489,8 +492,8 @@ Shared mechanics (both variants): each ERC-20 deposit EOA signs (threshold ECDSA
 **one** EIP-7702 authorization — lazily, together with its first sweep, never at
 registration (`R13`) — delegating its code to a single immutable, storage-less
 sweeper delegate. Sweep transactions are type-`0x04` transactions sent from a
-**dedicated sweeper address** (tECDSA-derived with its own schema tag, e.g.
-`[3u8]`), whose nonce sequence is independent of the main address' so that a stuck
+**dedicated sweeper address** (tECDSA-derived with derivation path `[3u8]` — its
+own schema tag, no account components), whose nonce sequence is independent of the main address' so that a stuck
 sweep can never delay a withdrawal (`R17`); the sweeper address holds only gas
 money (funded from the main address, see step 6) while swept funds always land at
 the main address (`R6`). Many deposit addresses are swept in one transaction, the
@@ -543,7 +546,8 @@ mirroring how withdrawals already pay for gas (burn ckETH, spend ETH):
   per-sweep effective fees are audit events; the sweeper balance and the effective
   fee/cost ratio are exposed on the dashboard (`R8`, `R9`) to recalibrate
   `deposit_fee` via proposal.
-* An empty ckETH fee account halts sweeping safely: under variant A, credited
+* An empty ckETH fee account halts the (re)funding of the sweeper address and
+  hence, once the sweeper balance is drained, sweeping — safely: under variant A, credited
   balances are unaffected and deposits keep accumulating at key-controlled
   addresses; under variant B, crediting pauses with sweeping. Replenishing the fee
   account (converting per-ckToken fee revenue into ckETH) is out of scope (see
@@ -616,7 +620,9 @@ as the authority's code (the `0xef` prefix cannot collide with deployable code p
 EIP-3541) and increments the authority's nonce. The walkthrough below uses the
 minter `M`, a deposit EOA `D` (tECDSA-derived, so `M` holds its key), the deployed
 `CkSweeper` instance `S` and a USDT-like token `T`; gas numbers are measured by the
-runnable demo.
+runnable demo. `M` is "the minter's sending EOA": in the production design this is
+the dedicated sweeper address of `R17` (funded per step 6), while the demo uses a
+single funded EOA for simplicity — the mechanics are identical.
 
 **State 0.** `D` is computed by pure key derivation and does not exist on chain: no
 nonce, no balance, no code, no state-trie entry (`R13`).
@@ -679,7 +685,7 @@ with the delegate, whereas storage reads at `Dᵢ` would hit `Dᵢ`'s (empty) st
 a `MINTER` kept in storage would make the delegate sweep to `address(0)`. Variant
 B's access control builds on the same fact: `SELF = address(this)` captured at
 construction still equals the deployed instance when running as a delegate, so the
-inner batch calls pass `msg.sender ∈ {MINTER, SELF}` while any other caller fails
+inner batch calls pass `msg.sender ∈ {SWEEPER, SELF}` while any other caller fails
 it (this is also why Multicall3 cannot batch variant B: the inner `msg.sender`
 would be Multicall3).
 
@@ -787,16 +793,17 @@ Unit tests (in `tests.rs` files per module, helpers in `test_fixtures.rs`):
 * Scanning-window state machine: arming, expiry, re-arming, bounded active set
   (`R13`, `R15`).
 * Balance-delta crediting monotonicity across sweep interleavings (`R11`).
-* `prepaid_sweep_gas` accounting: burn-first, surplus carry-over, never re-minted
-  (`R14`).
+* `R14` funding accounting: the burn at sweeper funding covers the transferred
+  amount plus the funding fee, the sweeper balance reconciles on-chain, and the
+  surplus is never re-minted.
 * Event replay: state reconstructed from audit events equals live state (`R8`).
 
 Integration tests (state-machine tests in `rs/ethereum/cketh/minter/tests` with the
 mocked EVM-RPC canister, extending the existing fixtures):
 
 * End-to-end Phase 1 happy path: retrieve address → mock `Transfer` log → background
-  scan → mint − fee → `R14` burn → sweep tx submitted with expected `0x04` payload →
-  receipt → swept (`R2`, `R5`, `R7`, `R14`, `R15`).
+  scan → mint − fee → sweeper funding (`R14` burn) → sweep tx submitted with expected
+  `0x04` payload → receipt → swept (`R2`, `R5`, `R7`, `R14`, `R15`).
 * Concurrent scans/notifies produce a single mint (`R2`); blocked sender: no mint,
   no sweep (`R3`); below-minimum and unsupported token (`R4`); sweep failure then
   retry with fee bump, mint unaffected (`R5`); empty fee account halts sweeping only
@@ -822,8 +829,9 @@ the delegate.
    minimums, blocklist incl. sweep exclusion). AC: `R2`, `R3`, `R4`, `R7`, `R8`,
    `R15`.
 4. **Sweeper delegate contract** (Solidity, audited) + **sweeping task** (dedicated
-   sweeper address, delegation, batching, receipts, `R14` burn accounting, metrics).
-   AC: `R5`, `R6`, `R7`, `R9`, `R10`, `R14`, `R17`.
+   sweeper address, delegation, batching, receipts, `R14` burn accounting,
+   withdrawal-liquidity gating, optional caller-paid `deposit_erc20`, metrics).
+   AC: `R5`, `R6`, `R7`, `R9`, `R10`, `R14`, `R16`, `R17`.
 5. **Phase 1 launch on Sepolia**, then mainnet via NNS upgrade proposal; frontend
    (OISY) integration of `retrieve_deposit_address` (single call — no polling
    required, `R15`).
