@@ -55,7 +55,7 @@ impl DarkLaunchTracker {
         real: &Result<(), PricingError>,
         shadow: &Result<(), PricingError>,
     ) {
-        if shadow.is_ok() {
+        if real.is_err() || shadow.is_ok() {
             return;
         }
         if self.error_reported {
