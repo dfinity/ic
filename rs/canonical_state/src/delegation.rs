@@ -98,9 +98,8 @@ pub fn is_delegation_valid_with_respect_to_state(
     format: CertificateDelegationFormat,
     state: &ReplicatedState,
 ) -> Result<bool, DelegationValidationError> {
-    let subnet_id_bytes = delegation.subnet_id.0.as_slice();
     let subnet_id = SubnetId::from(
-        PrincipalId::try_from(subnet_id_bytes)
+        PrincipalId::try_from(delegation.subnet_id.0.as_slice())
             .map_err(|err| DelegationValidationError::InvalidSubnetId(err.to_string()))?,
     );
 
@@ -116,15 +115,17 @@ pub fn is_delegation_valid_with_respect_to_state(
         .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?;
 
     // 1. The certified public key must match the one recorded in the state.
-    let certified_public_key =
-        match lookup_path(&tree, &[b"subnet", subnet_id_bytes, b"public_key"]) {
-            Some(LabeledTree::Leaf(public_key)) => public_key,
-            _ => {
-                return Err(DelegationValidationError::UnexpectedTreeShape(format!(
-                    "missing /subnet/{subnet_id}/public_key leaf"
-                )));
-            }
-        };
+    let certified_public_key = match lookup_path(
+        &tree,
+        &[b"subnet", subnet_id.get_ref().as_slice(), b"public_key"],
+    ) {
+        Some(LabeledTree::Leaf(public_key)) => public_key,
+        _ => {
+            return Err(DelegationValidationError::UnexpectedTreeShape(format!(
+                "missing /subnet/{subnet_id}/public_key leaf"
+            )));
+        }
+    };
     if certified_public_key.as_slice() != subnet_topology.public_key.as_slice() {
         return Ok(false);
     }
@@ -132,14 +133,13 @@ pub fn is_delegation_valid_with_respect_to_state(
     // 2. The certified canister ranges must match the ranges the state assigns
     //    to the subnet. Pruned delegations carry no ranges, so there is nothing
     //    left to compare once the public key matches.
-    let certified_ranges =
-        match certified_canister_ranges(&tree, format, subnet_id_bytes, subnet_id)? {
-            Some(mut ranges) => {
-                ranges.sort();
-                ranges
-            }
-            None => return Ok(true),
-        };
+    let certified_ranges = match certified_canister_ranges(&tree, format, subnet_id)? {
+        Some(mut ranges) => {
+            ranges.sort();
+            ranges
+        }
+        None => return Ok(true),
+    };
 
     let expected_ranges: Vec<(PrincipalId, PrincipalId)> = network_topology
         .routing_table_for_certification()
@@ -160,9 +160,9 @@ pub fn is_delegation_valid_with_respect_to_state(
 fn certified_canister_ranges(
     tree: &LabeledTree<Vec<u8>>,
     format: CertificateDelegationFormat,
-    subnet_id_bytes: &[u8],
     subnet_id: SubnetId,
 ) -> Result<Option<Vec<(PrincipalId, PrincipalId)>>, DelegationValidationError> {
+    let subnet_id_bytes = subnet_id.get_ref().as_slice();
     // Canister ranges are stored as self-describing CBOR of `(start, end)`
     // principal pairs (see `encoding::encode_subnet_canister_ranges`).
     let decode = |bytes: &[u8]| {
