@@ -29,7 +29,7 @@ use crate::driver::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
         SshSession, TopologySnapshot, scp_recv_from, try_scp_send_to,
     },
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
     universal_vm::{UniversalVm, UniversalVms},
 };
 use crate::util::block_on;
@@ -126,7 +126,7 @@ impl PrometheusVm {
     pub fn new(name: String) -> Self {
         PrometheusVm {
             universal_vm: UniversalVm::new(name)
-                .with_primary_image(DiskImage {
+                .with_primary_image(DiskImage::Url {
                     image_type: ImageType::PrometheusImage,
                     url: Url::parse(&get_default_prometheus_vm_img_url())
                         .expect("should not fail!"),
@@ -311,8 +311,8 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             .with_config_dir(config_dir)
             .start(env)?;
 
-        let p8s_urls = match InfraProvider::read_attribute(env) {
-            InfraProvider::Farm => {
+        let p8s_urls = match SystemTestBackend::read_attribute(env) {
+            SystemTestBackend::Farm => {
                 // Log the Prometheus URL so users can browse to it while the test is running.
                 let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
                 let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
@@ -349,6 +349,22 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 let p8s_urls = PrometheusUrls {
                     prometheus_url: prometheus_url.clone(),
                     grafana_url: grafana_url.clone(),
+                };
+                p8s_urls.write_attribute(env);
+                p8s_urls
+            }
+            SystemTestBackend::Local => {
+                // No playnet DNS on Local; expose Prometheus/Grafana via raw
+                // IPv6 inside the local backend's network.
+                // TODO: this won't actually work since the nginx on the PrometheusVm is configured using virtualHosts.
+                let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
+                let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
+                let ipv6 = prometheus_vm.ipv6.to_string();
+                let prometheus_url = format!("http://[{ipv6}]:9090");
+                let grafana_url = format!("http://[{ipv6}]:3000");
+                let p8s_urls = PrometheusUrls {
+                    prometheus_url,
+                    grafana_url,
                 };
                 p8s_urls.write_attribute(env);
                 p8s_urls

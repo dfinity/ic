@@ -27,7 +27,7 @@ llvm
 # IC-OS
 clang
 cryptsetup-bin
-dosfstools # provides mkfs.vfat
+dosfstools # provides FAT tools
 faketime
 fdisk
 iasl # to build OVMF
@@ -44,6 +44,16 @@ podman
 rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
+
+# Local system-test backend (see rs/tests/driver/src/driver/local_backend.rs),
+# which launches KVM-accelerated QEMU VMs. `ovmf` provides the guests' UEFI
+# firmware.
+qemu-system-x86
+qemu-utils
+ovmf
+# Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
+# plus `setcap`/`getcap`; see ci/container/Dockerfile.
+libcap2-bin
 
 # For ci/githubstats/query.py
 libpq-dev

@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/dfinity/ic-dev@sha256:0b0e1cf7202f83a29c645a84e984aea8fc2f18c3ff61869b4fd80f30949d7aa0",
+  "image": "ghcr.io/dfinity/ic-dev@sha256:5b05362c9cfe6838603c8b9315dd5d78934b7631f76508e008258cb723fee6cd",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -15,6 +15,7 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/cargo ~/.cache/zig-cache ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history",
+  "postStartCommand": "/ic/ci/container/init.sh",
   "containerEnv": {
     "CARGO_TARGET_DIR": "/home/ubuntu/.cache/cargo",
     "USER": "${localEnv:USER}"
@@ -58,11 +59,6 @@
     {
       "source": "${localEnv:HOME}/.local/share/fish",
       "target": "/home/ubuntu/.local/share/fish",
-      "type": "bind"
-    },
-    {
-      "source": "/tmp/ict_testnets",
-      "target": "/tmp/ict_testnets",
       "type": "bind"
     }
   ],

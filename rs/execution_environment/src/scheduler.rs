@@ -525,7 +525,7 @@ impl SchedulerImpl {
                 active_canisters_partitioned_by_cores,
                 current_round,
                 state.time(),
-                Arc::new(state.metadata.network_topology.clone()),
+                Arc::clone(&state.metadata.network_topology),
                 subnet_cycles_config,
                 &mut round_limits,
                 state.resource_limits(),

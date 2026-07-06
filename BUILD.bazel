@@ -211,39 +211,18 @@ alias(
 
 # mke2fs is the underlying binary; mkfs.ext4 is upstream's symlink name for it.
 alias(
-    name = "mkfs.ext4",
+    name = "mke2fs",
     actual = select({
         "@bazel_tools//src/conditions:linux_x86_64": "@e2fsprogs//:mke2fs",
         "//conditions:default": "@platforms//:incompatible",
     }),
 )
 
-### dosfstools, used to build (mkfs.fat) and label (fatlabel) FAT filesystem images
-
-# Both aliases resolve to the dosfstools package, which builds the mkfs.fat and
-# fatlabel binaries; consumers pick the binary they need by basename.
+### fuse2fs, used to mount ext filesystems in userspace
 alias(
-    name = "mkfs.fat",
+    name = "fuse2fs",
     actual = select({
-        "@bazel_tools//src/conditions:linux_x86_64": "@dosfstools//:dosfstools",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
-alias(
-    name = "fatlabel",
-    actual = select({
-        "@bazel_tools//src/conditions:linux_x86_64": "@dosfstools//:dosfstools",
-        "//conditions:default": "@platforms//:incompatible",
-    }),
-)
-
-### mtools, used to populate FAT filesystem images (invoked as `mtools -c mcopy/mmd`)
-
-alias(
-    name = "mtools",
-    actual = select({
-        "@bazel_tools//src/conditions:linux_x86_64": "@mtools//:mtools_build",
+        "@bazel_tools//src/conditions:linux_x86_64": "@e2fsprogs//:fuse2fs",
         "//conditions:default": "@platforms//:incompatible",
     }),
 )

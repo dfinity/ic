@@ -2422,6 +2422,7 @@ fn call_request(
         canister_id,
         method_name: "whoami".to_string(),
         arg: Encode!(&()).unwrap(),
+        sender_info: None,
     };
     let envelope = Envelope {
         content: std::borrow::Cow::Borrowed(&content),
@@ -3634,14 +3635,35 @@ fn cloud_engine_default_effective_canister_id() {
 
 #[test]
 fn test_delete_subnet() {
-    // Create a PocketIC instance with two application subnets.
+    // Create a PocketIC instance with an NNS subnet, two application subnets,
+    // and the `registry` ICP feature enabled. The `registry` ICP feature is
+    // important here: after every operation the server syncs its local registry
+    // from the registry canister, and deleting a subnet writes registry records
+    // directly to the local registry. Without keeping the registry canister in
+    // sync, this sync would loop forever (regression test).
     let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_icp_features(IcpFeatures {
+            registry: Some(IcpFeaturesConfig::DefaultConfig),
+            ..Default::default()
+        })
         .with_application_subnet()
         .with_application_subnet()
         .build();
 
-    let subnet_id_1 = pic.topology().get_app_subnets()[0];
-    let subnet_id_2 = pic.topology().get_app_subnets()[1];
+    // The subnet hosting the default effective canister ID cannot be deleted, so
+    // we keep it (as `subnet_id_1`) and delete the other application subnet.
+    let topology = pic.topology();
+    let default_effective_canister_id: Principal =
+        topology.default_effective_canister_id.clone().into();
+    let subnet_id_1 = topology
+        .get_subnet(default_effective_canister_id)
+        .expect("default effective canister ID must belong to a subnet");
+    let subnet_id_2 = topology
+        .get_app_subnets()
+        .into_iter()
+        .find(|subnet_id| *subnet_id != subnet_id_1)
+        .expect("there must be a second application subnet");
     assert_ne!(subnet_id_1, subnet_id_2);
 
     // Deploy test canisters on both subnets.

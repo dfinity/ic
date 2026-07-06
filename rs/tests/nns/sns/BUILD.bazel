@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "sns_sale_load_test_1",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (sns_setup_fast): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],
@@ -19,6 +20,7 @@ system_test(
 
 system_test(
     name = "sns_sale_load_test_2",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (sns_setup): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],
@@ -33,6 +35,7 @@ system_test(
 
 system_test(
     name = "sns_sale_load_test_3",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (sns_setup_with_many_sale_participants): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],
@@ -47,6 +50,7 @@ system_test(
 
 system_test(
     name = "aggregation_canister_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # setup (config_fast): 2 fast single-node IC subnets * 6 vCPUs.
     # TODO[NNS1-2658]: re-enable this test
     tags = [
         "manual",
@@ -63,6 +67,7 @@ system_test(
 
 system_test(
     name = "workload_static_testnet",
+    cpus = MIN_LOCAL_CPUS,  # setup (setup_static_testnet) connects to an existing static testnet; deploys no Farm VMs.
     tags = [
         "manual",
     ],
@@ -78,6 +83,7 @@ system_test(
 
 system_test(
     name = "launchpad_direct_load_test",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (benchmark_config -> sns_setup): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],
@@ -94,6 +100,7 @@ system_test(
 
 system_test(
     name = "launchpad_direct_auth_load_test",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (benchmark_config_with_auth -> sns_setup_with_many_sale_participants): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],
@@ -110,6 +117,7 @@ system_test(
 
 system_test(
     name = "launchpad_aggregator_load_test",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (benchmark_config_with_aggregator -> sns_setup): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],
@@ -126,6 +134,7 @@ system_test(
 
 system_test(
     name = "payment_flow_load_test",
+    cpus = MIN_LOCAL_CPUS + 3 * 4 * 2,  # setup (sns_setup_with_many_icp_users): 3 IC subnets * 4 nodes (SUBNET_SIZE) * 2 vCPUs (IC-level resource override).
     tags = [
         "manual",
     ],

@@ -72,7 +72,7 @@ fn test_wasmtime_system_api() {
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
