@@ -386,7 +386,11 @@ review with compliance before Phase 2 ships (see Non-goals).
 
 An optional `notify_deposit(account)` endpoint (guarded per account, like ckBTC's
 `update_balance`) remains useful as an accelerator and as the re-arming mechanism
-for dormant addresses, but nothing in the flow *requires* it.
+for dormant addresses, but nothing in the flow *requires* it. A tx-hash-based
+`claim_deposit(account, tx_hash)` (see the table below) can complement it as a
+manual recovery path — e.g. crediting a deposit that arrived on a dormant address
+without waiting for a re-armed scan — and doubles as the optional sender-screening
+enrichment for native ETH mentioned above.
 
 **Variants — what triggers detection:**
 
@@ -394,6 +398,7 @@ for dormant addresses, but nothing in the flow *requires* it.
 |---|---|---|
 | **Registration-armed scanning window** (chosen): background bulk scans of the active set while the window is open | Single-step UX (`R15`) — no second call to lose; bounded, attacker-resistant cost (fixed per-tick budget, windows expire); re-armed for free by `retrieve_deposit_address` | Deposits after window expiry wait for re-arming; needs `eth_batch` (#561) or Multicall3 for bulk reads |
 | **Claim endpoint only** (`notify_deposit`, ckBTC's `update_balance` model) | Cheapest possible: minter does nothing unprompted; precise targeting | Two-step flow breaks the target UX — a frontend cannot reliably guarantee the second call (browser closed after the CEX withdrawal); kept only as optional accelerator |
+| **User supplies the transaction ID** (`claim_deposit(account, tx_hash)`: the minter fetches the receipt, verifies a finalized `Transfer` to the caller's deposit address, credits from its logs) | Cheapest and most precise of all: one targeted receipt query per claim, O(1) in the registered-set size, no scanning state, no `eth_batch` dependency; no window expiry; sender screening comes directly from the receipt logs | Worst UX of all: the tx hash is only known to the CEX/user (not derivable by a frontend, unlike `notify_deposit`), so the second step is genuinely *manual* — many users cannot find the hash in their exchange UI; does not even fully work for native ETH (a contract-batched CEX withdrawal moves ETH in an *internal* transaction: the receipt shows no value transfer and no log — verification would need trace APIs) |
 | **Continuous scraping of all registered addresses forever** (`eth_getLogs` topic disjunctions / standing balance scans) | Best possible UX, no windows | Unbounded cost growth with the (attacker-inflatable, free) registered set — a standing cycles drain (`R13`); topic-disjunction limits across providers; still misses native ETH |
 
 ### Step 4: Credit the deposit (mint)
