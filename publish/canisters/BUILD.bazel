@@ -124,6 +124,16 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTER_NAME_TO_MAX_COMPRESSE
         name = "copy_" + compressed_file_name,
         src = target,
         out = compressed_file_name,
+        # Force a hard copy instead of a symlink. `copy_file` defaults
+        # `allow_symlink` to True (when not executable), which makes `out` a
+        # symlink to `src`. `artifact_bundle` resolves inputs with `realpath` and
+        # the uploader (ci/src/artifacts/upload.sh) names the uploaded object
+        # after the *resolved* basename. A symlink therefore resolves to the
+        # underlying target's filename (e.g. `governance-canister-test.wasm.gz`)
+        # instead of the intended CDN name (e.g. `governance-canister_test.wasm.gz`).
+        # A hard copy keeps the `out` name so the object is uploaded under the
+        # correct filename. See also the `.did` copy below.
+        allow_symlink = False,
     )
     for (compressed_file_name, target) in CANISTERS.items() + COMPRESSED_CANISTERS.items()
     if compressed_file_name.endswith(".wasm.gz")
