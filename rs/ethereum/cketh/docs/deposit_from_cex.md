@@ -461,7 +461,7 @@ source of truth (see the screening discussion below). For native ETH (Phase 2),
 `getEthBalance` rides in the same call and the finalized balance delta *is* the
 observation (`R11`) — there are no logs to confirm against.
 
-**Filter 2 — logs.** For the filter-1 candidates, one batched `eth_getLogs` from
+**Filter 2 — logs and screening.** For the filter-1 candidates, one batched `eth_getLogs` from
 the **minimum of the candidates' last observed block numbers** over at most 500
 blocks; each address' last observed block advances to the range end. A single
 filter covers many deposit addresses across all supported tokens at once, because
@@ -484,8 +484,9 @@ each topic position accept OR-lists:
 `topics[2]` is the recipient (`to`) position of the `Transfer` event, holding the
 active deposit addresses left-padded to 32 bytes; `null` at `topics[1]` matches any
 sender. One such request per scan tick returns every transfer of any supported
-token to any active deposit address, each log carrying the amount, the sender (for
-screening) and `(tx hash, log index)` (for exactly-once crediting). The minter
+token to any active deposit address, and every check runs per log: the amount
+against the per-token minimum (`R4`), the sender against the blocklist (`R3`, see
+below) and `(tx hash, log index)` against already-processed deposits (`R2`). The minter
 already builds such disjunctions (`Topic::Multiple` in `src/eth_logs/scraping.rs`,
 used for the token-address position of the helper event); this adds the recipient
 position. Practical limits:
