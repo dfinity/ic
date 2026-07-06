@@ -469,6 +469,8 @@ pub(crate) fn list_canisters(
 ///     (`list_canisters` iterates over all of them to build the ID ranges).
 ///     The variable cost reflects the worst case where the canister IDs form
 ///     gaps so that each canister becomes its own ID range.
+// Keep in sync with `list_canisters_respects_round_instruction_limit` in
+// `execution_test.rs`.
 pub(crate) fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
     const BASE_INSTRUCTIONS: u64 = 20_000_000;
     const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
