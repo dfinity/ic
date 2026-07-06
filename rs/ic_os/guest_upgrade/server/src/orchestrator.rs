@@ -75,7 +75,6 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
         registry_client,
         STORE_DEVICE.into(),
         DEFAULT_STORE_LUKS_HEADER_PATH.into(),
-        /*send_luks_header=*/ true,
         DEFAULT_SERVER_PORT,
         DEFAULT_SUCCESS_TIMEOUT,
     ))

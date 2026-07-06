@@ -449,6 +449,7 @@ pub fn handle_construction_payloads(
             nonce: Some(nonce.to_ne_bytes().to_vec()),
             sender: caller,
             ingress_expiry: *ingress_expiry,
+            sender_info: None,
         };
 
         // For every operation we create a call envelope

@@ -103,7 +103,14 @@ rust_test(
     name = "guest_vm_runner_test",
     crate = ":guest_vm_runner_dev",
     crate_features = ["dev"],
-    data = glob(["golden/*"]),
+    data = glob(["golden/*"]) + [
+        "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
+    ],
+    env = {
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:goldenfile",
@@ -121,8 +128,16 @@ rust_test(
         "dev",
         "integration_tests",
     ],
-    data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
-    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
+    data = glob(["golden/*"]) + [
+        "//ic-os/guestos/envs/prod:disk-img-for-tests.tar",
+        "@dosfstools//:mkfs.fat",
+        "@mtools//:mcopy",
+    ],
+    env = {
+        "ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)",
+        "MKFS_FAT": "$(rootpath @dosfstools//:mkfs.fat)",
+        "MCOPY": "$(rootpath @mtools//:mcopy)",
+    },
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = [

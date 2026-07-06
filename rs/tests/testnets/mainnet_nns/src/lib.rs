@@ -80,13 +80,12 @@ const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 // made on top of the current mainnet version and not including the incompatible changes.
 // After switching to `Head`/`Commit` it is then advised to switch back to `Mainnet` when the
 // changes reach mainnet NNS to avoid compatibility bugs.
-const IC_REPLAY_VERSION: BinaryVersion = BinaryVersion::Mainnet;
+const IC_REPLAY_VERSION: BinaryVersion = BinaryVersion::Head;
 const IC_RECOVERY_VERSION: BinaryVersion = BinaryVersion::Mainnet;
+#[allow(dead_code)]
 enum BinaryVersion {
     Mainnet,
-    #[allow(dead_code)]
     Head,
-    #[allow(dead_code)]
     Commit(&'static str),
 }
 
