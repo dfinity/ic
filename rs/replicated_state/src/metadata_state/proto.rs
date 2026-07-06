@@ -69,6 +69,19 @@ impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
             default_initial_dkg_subnet_id: item
                 .default_initial_dkg_subnet_id
                 .map(subnet_id_into_protobuf),
+            api_boundary_nodes: item
+                .api_boundary_nodes
+                .iter()
+                .map(
+                    |(node_id, api_boundary_node_entry)| pb_metadata::ApiBoundaryNodeEntry {
+                        node_id: Some(node_id_into_protobuf(*node_id)),
+                        domain: api_boundary_node_entry.domain.clone(),
+                        ipv4_address: api_boundary_node_entry.ipv4_address.clone(),
+                        ipv6_address: api_boundary_node_entry.ipv6_address.clone(),
+                        pubkey: api_boundary_node_entry.pubkey.clone(),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -114,6 +127,19 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
             .map(subnet_id_try_from_protobuf)
             .transpose()?;
 
+        let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
+        for entry in item.api_boundary_nodes {
+            api_boundary_nodes.insert(
+                node_id_try_from_option(entry.node_id)?,
+                ApiBoundaryNodeEntry {
+                    domain: entry.domain,
+                    ipv4_address: entry.ipv4_address,
+                    ipv6_address: entry.ipv6_address,
+                    pubkey: entry.pubkey,
+                },
+            );
+        }
+
         Ok(Self {
             subnets,
             routing_table: try_from_option_field(
@@ -155,6 +181,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
                 }
             },
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         })
     }
 }
@@ -391,6 +418,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 })
                 .collect(),
             api_boundary_nodes: item
+                .network_topology
                 .api_boundary_nodes
                 .iter()
                 .map(
@@ -501,17 +529,23 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
         }
 
-        let mut api_boundary_nodes = BTreeMap::<NodeId, ApiBoundaryNodeEntry>::new();
-        for entry in item.api_boundary_nodes {
-            api_boundary_nodes.insert(
-                node_id_try_from_option(entry.node_id)?,
-                ApiBoundaryNodeEntry {
-                    domain: entry.domain,
-                    ipv4_address: entry.ipv4_address,
-                    ipv6_address: entry.ipv6_address,
-                    pubkey: entry.pubkey,
-                },
-            );
+        let mut network_topology: NetworkTopology =
+            try_from_option_field(item.network_topology, "SystemMetadata::network_topology")?;
+        // Backward compatibility: checkpoints written before `api_boundary_nodes`
+        // was moved into `NetworkTopology` stored it directly in `SystemMetadata`.
+        // Fall back to the old location when the new one is empty.
+        if network_topology.api_boundary_nodes.is_empty() {
+            for entry in item.api_boundary_nodes {
+                network_topology.api_boundary_nodes.insert(
+                    node_id_try_from_option(entry.node_id)?,
+                    ApiBoundaryNodeEntry {
+                        domain: entry.domain,
+                        ipv4_address: entry.ipv4_address,
+                        ipv6_address: entry.ipv6_address,
+                        pubkey: entry.pubkey,
+                    },
+                );
+            }
         }
 
         Ok(Self {
@@ -526,7 +560,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
             own_resource_limits: item.own_resource_limits.unwrap_or_default().into(),
             node_public_keys,
-            api_boundary_nodes,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -543,10 +576,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             ingress_history: Default::default(),
             streams: Arc::new(streams),
             subnet_schedule,
-            network_topology: Arc::new(try_from_option_field(
-                item.network_topology,
-                "SystemMetadata::network_topology",
-            )?),
+            network_topology: Arc::new(network_topology),
             state_sync_version: item
                 .state_sync_version
                 .try_into()

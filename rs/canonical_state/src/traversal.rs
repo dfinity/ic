@@ -1282,7 +1282,7 @@ mod tests {
     #[test]
     fn test_traverse_api_boundary_nodes() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
-        state.metadata.api_boundary_nodes = btreemap! {
+        std::sync::Arc::make_mut(&mut state.metadata.network_topology).api_boundary_nodes = btreemap! {
             node_test_id(11) => ApiBoundaryNodeEntry {
                 domain: "api-bn11-example.com".to_string(),
                 ipv4_address: Some("127.0.0.1".to_string()),
