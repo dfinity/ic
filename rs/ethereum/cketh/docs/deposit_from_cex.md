@@ -105,6 +105,11 @@ The design is delivered in two phases:
   `retrieve_deposit_address` (idempotent, free of per-address spending per `R13`)
   re-arms the window; a deposit arriving on a dormant address is credited once the
   address is re-armed and is never lost in the meantime.
+* `R16`: A withdrawal transaction is only submitted when the minter's main address
+  holds a sufficient balance of the withdrawn asset: credited-but-unswept deposits
+  count as *unavailable* liquidity. A withdrawal that cannot be covered yet is
+  queued (never failed on-chain for insufficient balance) and served once sweeps
+  have consolidated enough funds.
 
 ### Phase 2 (ckETH)
 
@@ -455,8 +460,8 @@ quarantine-on-panic machinery as in today's `mint()` path.
 
 | Variant | Pros | Cons |
 |---|---|---|
-| **A — mint on the finalized deposit** (new detection→mint path) | Lowest, sweep-independent crediting latency; crediting keeps working even when sweeping halts (e.g. empty `R14` fee account); permissionless-safe sweeps (step 5) | A second correctness-critical crediting path in the minter: new event types, dedup, audit trail — the highest-risk part of the whole feature |
-| **B — mint via the existing pipeline, on the sweep's own finalized helper event** | The battle-tested scrape→parse→dedup→mint pipeline is reused **unchanged** — detection (step 3) is demoted from correctness-critical to a mere scheduling hint; massively smaller minter change | Mint follows the sweep: crediting halts if sweeping halts (empty fee account); latency tied to sweep scheduling — mitigated by sweeping on `latest`-block observations without waiting for deposit finality (a reorged deposit only wastes the sweep's gas: the delegate sweeps a zero balance, and a reorged sweep tx is absorbed by the existing nonce-tracking/resubmission machinery), making end-to-end latency comparable to today's helper flow |
+| **A — mint on the finalized deposit** (new detection→mint path) | Lowest, sweep-independent crediting latency; crediting keeps working even when sweeping halts (e.g. empty `R14` fee account); permissionless-safe sweeps (step 5) | A second correctness-critical crediting path in the minter: new event types, dedup, audit trail — the highest-risk part of the whole feature. Opens a **liquidity window**: supply is minted while the backing still sits at deposit addresses, so a withdrawal in that window could exceed the main address' balance — not a solvency issue (backing is minter-controlled throughout) but withdrawals must treat credited-but-unswept amounts as unavailable and queue accordingly (`R16`), and sweeps should be prioritized by withdrawal demand |
+| **B — mint via the existing pipeline, on the sweep's own finalized helper event** | The battle-tested scrape→parse→dedup→mint pipeline is reused **unchanged** — detection (step 3) is demoted from correctness-critical to a mere scheduling hint; massively smaller minter change. No liquidity window: the mint is triggered by the consolidation itself, so minted supply is always covered by the main address — today's helper-flow invariant, and `R16` is satisfied trivially | Mint follows the sweep: crediting halts if sweeping halts (empty fee account); latency tied to sweep scheduling — mitigated by sweeping on `latest`-block observations without waiting for deposit finality (a reorged deposit only wastes the sweep's gas: the delegate sweeps a zero balance, and a reorged sweep tx is absorbed by the existing nonce-tracking/resubmission machinery), making end-to-end latency comparable to today's helper flow |
 
 ### Step 5: Sweep the funds to the minter
 
@@ -468,8 +473,11 @@ minter's funded main address (sharing its existing nonce sequence, `R10`); many
 deposit addresses are swept in one transaction, the deployed delegate instance
 doubling as the batcher. No deposit address ever needs an ETH balance for gas. A
 periodic task selects addresses with observed-but-unswept balances where
-`unswept_value ≥ sweep_gas_cost × margin` or `age > max_age`, up to `N ≈ 20` per
-batch (gas-limit bound); confirmation is via transaction receipt, like withdrawals,
+`unswept_value ≥ sweep_gas_cost × margin` or `age > max_age` — or, under variant A,
+**as soon as a queued withdrawal waits for liquidity** (`R16`): withdrawal demand
+overrides the economic thresholds, so consolidation never keeps a withdrawal
+waiting longer than one sweep round-trip. Up to `N ≈ 20` addresses per batch
+(gas-limit bound); confirmation is via transaction receipt, like withdrawals,
 emitting `SweepConfirmed` audit events (`R5`, `R8`).
 
 For Phase 2 ETH addresses no delegation is involved at all: the sweep is a plain
