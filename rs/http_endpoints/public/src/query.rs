@@ -100,7 +100,6 @@ impl QueryService {
 }
 
 impl QueryServiceBuilder {
-    #[allow(clippy::too_many_arguments)]
     pub fn builder(
         log: ReplicaLogger,
         node_id: NodeId,
