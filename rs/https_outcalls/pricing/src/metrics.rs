@@ -11,7 +11,7 @@ pub const LABEL_REPLICATION: &str = "replication";
 #[derive(Clone)]
 pub struct PricingMetrics {
     /// Number of requests for which the shadow tracker ran out of cycles before the
-    /// real tracker, by the accounting step at which the divergence was first
+    /// real tracker, by the accounting step at which the incompatibility was first
     /// observed and by replication kind.
     pub shadow_incompatible_total: IntCounterVec,
 }
@@ -21,8 +21,8 @@ impl PricingMetrics {
         Self {
             shadow_incompatible_total: metrics_registry.int_counter_vec(
                 "canister_http_pricing_shadow_incompatible_total",
-                "Canister http requests for which the shadow tracker disagreed with the real \
-                 tracker, by accounting step and replication kind.",
+                "Canister http requests that attached enough cycles to be compatible with the
+                real tracker, but not for the shadow tracker.",
                 &[LABEL_STEP, LABEL_REPLICATION],
             ),
         }

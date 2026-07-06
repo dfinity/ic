@@ -11,9 +11,9 @@ use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError, metrics::P
 /// ones that affect observable behaviour), and a `shadow` tracker whose results
 /// are merely compared against the real one.
 ///
-/// Whenever the shadow tracker disagrees with the real tracker (e.g. it returns
-/// a pricing error where the real tracker succeeded), the divergence is counted
-/// in a metric.
+/// A counter metric is increased whenever the shadow tracker computes a different
+/// result than the real tracker. This could happen if the shadow tracker returns
+/// a pricing error where the real tracker succeeded, meaning it ran out of cycles.
 pub struct DarkLaunchTracker {
     real: Box<dyn BudgetTracker>,
     shadow: Box<dyn BudgetTracker>,
@@ -47,7 +47,8 @@ impl DarkLaunchTracker {
     }
 
     /// Compares the results of the real and shadow trackers for a given
-    /// accounting `step` and records a divergence if they disagree.
+    /// accounting `step` and increment the shadow_incompatible_total metric
+    /// if they differ.
     fn compare(
         &mut self,
         step: &str,
@@ -201,7 +202,7 @@ mod tests {
     }
 
     #[test]
-    fn returns_real_result_and_counts_divergence() {
+    fn returns_real_result_and_increments_counter() {
         let metrics = PricingMetrics::new(&MetricsRegistry::new());
         let shadow = FakeTracker {
             network: Err(PricingError::InsufficientCycles),
@@ -226,7 +227,7 @@ mod tests {
     }
 
     #[test]
-    fn counts_divergence_at_most_once_per_request() {
+    fn counts_incompatible_requests_at_most_once_per_request() {
         let metrics = PricingMetrics::new(&MetricsRegistry::new());
         let shadow = FakeTracker {
             network: Err(PricingError::InsufficientCycles),
@@ -247,12 +248,12 @@ mod tests {
         );
         assert_eq!(tracker.subtract_gossip_usage(NumBytes::from(0)), Ok(()));
 
-        // Only the first divergence is recorded for the request.
+        // Only the first occurance is recorded for the request.
         assert_eq!(incompatible_count(&metrics), 1);
     }
 
     #[test]
-    fn no_divergence_when_results_agree() {
+    fn do_not_increase_counter_when_results_agree() {
         let metrics = PricingMetrics::new(&MetricsRegistry::new());
         let mut tracker = dark_launch(
             FakeTracker::ok(),
@@ -270,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn labels_divergence_by_replication_type() {
+    fn labels_incompatibility_by_replication_type() {
         let metrics = PricingMetrics::new(&MetricsRegistry::new());
         let shadow = FakeTracker {
             network: Err(PricingError::InsufficientCycles),
@@ -285,7 +286,7 @@ mod tests {
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
 
-        // The divergence is attributed to the non_replicated label.
+        // The incompatibility is attributed to the non_replicated label.
         assert_eq!(
             metrics
                 .shadow_incompatible_total
