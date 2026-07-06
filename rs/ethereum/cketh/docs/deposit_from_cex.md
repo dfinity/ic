@@ -104,7 +104,7 @@ The design is delivered in two phases:
   for sweeping ≥ cumulative ETH spent on sweeping. Burned-but-unspent amounts are
   tracked and offset against subsequent burns; they are never re-minted. If the fee
   account cannot cover a sweep, no sweep is submitted. (The burn may happen ahead of
-  time, at sweeper-address funding, covering many sweeps at once — see step 6.)
+  time, at sweeper-address funding, covering many sweeps at once — see step 0.)
 * `R15`: A single user-visible step suffices: after one `retrieve_deposit_address`
   call, a deposit arriving at that address within its *scanning window* is credited
   with no further canister call by the user or frontend. Re-calling
@@ -156,7 +156,7 @@ The design is delivered in two phases:
   (ckUSDC, ckUSDT, …). Converting that revenue into ckETH to keep the fee account
   funded is a treasury/market operation outside this design; the design only
   requires that sweeping halts safely when the fee account is empty. (The
-  caller-paid sweeps of step 6 provide an organic ckETH inflow into the fee
+  caller-paid sweeps of step 0 provide an organic ckETH inflow into the fee
   account, shrinking the conversion need.)
 * Accepted residual limitations:
   * A deposit arriving *after* the scanning window has expired is credited only once
@@ -172,13 +172,13 @@ The design is delivered in two phases:
 
 ## Design
 
-The flow is six steps: **(1)** retrieve the deposit address, **(2)** withdraw from
-the CEX to it, **(3)** detect the deposit, **(4)** credit (mint) the ckToken,
-**(5)** sweep the funds to the minter, paying the fees **(6)** without touching the
-ckETH backing. One section per step below; where a step has design variants, a table
-weighs them.
+The flow starts with a standing precondition — **(0)** fund the transaction fees
+without touching the ckETH backing — followed, per deposit, by **(1)** retrieve the
+deposit address, **(2)** withdraw from the CEX to it, **(3)** detect the deposit,
+**(4)** credit (mint) the ckToken and **(5)** sweep the funds to the minter. One
+section per step below; where a step has design variants, a table weighs them.
 
-Two variants cut across steps 3–6 and the decision between them is **not yet taken**:
+Two variants cut across steps 0 and 3–5 and the decision between them is **not yet taken**:
 
 * **Variant A — direct sweep**: the sweeper delegate transfers funds straight to the
   minter's main address; crediting happens through a *new* detection→mint path,
@@ -283,6 +283,65 @@ sequenceDiagram
         Minter->>CkEthLedger: mint to p (existing pipeline, unchanged)
     end
 ```
+
+### Step 0: Fund the transaction fees without touching the ckETH backing
+
+Funding is a standing *precondition* of the whole flow, not an afterthought of
+sweeping — the sweeper address must hold prepaid gas before any sweep can be
+submitted, which is exactly the burn-**first** property of `R14`. It runs as a
+background activity, independent of any individual deposit.
+
+The ETH at the minter's main address backs ckETH 1:1, so spending it on sweep gas
+without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefore
+funded exclusively through the minter's **fee account on the ckETH ledger**,
+mirroring how withdrawals already pay for gas (burn ckETH, spend ETH):
+
+* **Burn first** (`R14`): with the dedicated sweeper address (`R17`), the burn
+  happens at **funding time** — before transferring ETH from the main address to
+  the sweeper address, burn from the ckETH fee account at least the transferred
+  amount plus the funding transaction's maximum fee; abort the funding (and halt
+  sweeping) if the burn fails. ETH sitting at the sweeper address is already
+  paid-for: the sweeper address' balance *is* the `prepaid_sweep_gas` counter,
+  reconcilable on-chain with one `eth_getBalance`.
+* Fundings are infrequent (one funding covers many sweeps) and are ordinary
+  transfers on the main address' nonce sequence, like withdrawals. Sweep gas then
+  simply draws down the sweeper balance; the burn surplus is **never re-minted**,
+  so "cumulative burned ≥ cumulative spent" holds at every instant. Fundings and
+  per-sweep effective fees are audit events; the sweeper balance and the effective
+  fee/cost ratio are exposed on the dashboard (`R8`, `R9`) to recalibrate
+  `deposit_fee` via proposal.
+* An empty ckETH fee account halts the (re)funding of the sweeper address and
+  hence, once the sweeper balance is drained, sweeping — safely: under variant A, credited
+  balances are unaffected and deposits keep accumulating at key-controlled
+  addresses; under variant B, crediting pauses with sweeping. Replenishing the fee
+  account (converting per-ckToken fee revenue into ckETH) is out of scope (see
+  Non-goals).
+* **Phase 2 ETH sweeps involve no `R14` burn**: their gas is paid from the deposit
+  itself, before the ETH ever reaches the (counted) backing at the main address.
+  However, since under variant A the account is credited `balance - fee` *before*
+  the sweep executes, the sweep's `gas_limit × max_fee_per_gas` must be capped by
+  the charged deposit fee — waiting out gas spikes if necessary — so the gas spent
+  can never exceed what was withheld from minting. Fee-refund dust left at the
+  address rolls into the next sweep.
+
+Two separate things are at play in funding the transaction fees, and they compose:
+
+1. **The funding pipeline** (the bullets above): ckETH fee account → `R14` burn at
+   sweeper-address funding → sweeper balance → gas. This is the *only* way ETH is
+   ever spent on sweeps — one burn path, one choke-point invariant to audit.
+2. **What fills the fee account.** Three inflows: `deposit_fee` revenue (accrues
+   per ckToken and needs treasury conversion, see Non-goals), direct treasury
+   top-ups, and — the variant below — **sponsored gas transferred in by callers**.
+
+**Variants — who fills the fee account for a given sweep:**
+
+| Variant | Pros | Cons |
+|---|---|---|
+| **Minter-fronted** (default): the fee account fronts the gas, recovered via the `deposit_fee` deducted from the mint | Works for the primary persona — a CEX-only user owns no ckETH; preserves the single-step UX (`R15`) | The ckETH fee account must stay funded (treasury conversion of per-ckToken fee revenue, see Non-goals); `deposit_fee` is a flat overestimate, not market-priced |
+| **Caller-paid (sponsored)**: endpoint `deposit_erc20(beneficiary_account, fee_from_subaccount, max_fee)` callable by *any* third party — a frontend, a relayer, or the beneficiary themselves. The minter **transfers the fee in ckETH from the caller's account (owner = caller's principal, with the given subaccount) into its fee account** (via `icrc2_transfer_from`, mirroring how `withdraw_erc20` charges the caller for withdrawal gas), then schedules the sweep through the single pipeline above; the beneficiary — not necessarily the caller — is credited the **full** deposited amount, no `deposit_fee` deducted | An *organic* ckETH inflow into the fee account, shrinking the treasury-replenishment need; `R14` remains one single burn path (the sponsor's payment and the burn are decoupled in time — pay at call time, burn at batched funding time — with the fee account absorbing the difference); enables fee *sponsorship* (e.g. OISY paying for its users) and self-sponsoring by repeat users holding ckETH from earlier deposits; doubles as an on-demand consolidation trigger — synergy with `R16`: a user whose withdrawal waits for liquidity can sponsor the very sweep that unblocks it | The caller must own ckETH, so it cannot be the *only* path (bootstrap: the first-ever CEX deposit of a fresh user has none); one more endpoint with fee estimation and insufficient-fee rejection; overpaid sponsorship is not reimbursed (consistent with withdrawals today) |
+
+Both coexist: sponsored when a caller offers to pay (and then the deposit is
+credited in full), minter-fronted otherwise — same pipeline either way.
 
 ### Step 1: Retrieve the deposit address
 
@@ -450,7 +509,7 @@ transaction with a tracer to display them).
 An optional `notify_deposit(account)` endpoint (guarded per account, like ckBTC's
 `update_balance`) remains useful as an accelerator and as the re-arming mechanism
 for dormant addresses, but nothing in the flow *requires* it. The caller-paid
-`deposit_erc20` endpoint of step 6 subsumes it with a stronger guarantee: the
+`deposit_erc20` endpoint of step 0 subsumes it with a stronger guarantee: the
 caller pays the sweep fee in ckETH, so detection, sweep and crediting happen
 on demand. A tx-hash-based
 `claim_deposit(account, tx_hash)` (see the table below) can complement it as a
@@ -473,7 +532,7 @@ The deposited amount is minted in full: `amount - deposit_fee` to the depositor'
 account, and `deposit_fee` to a minter-controlled fee account **on the same ckToken
 ledger** — the full deposited amount is swept, so minting it in full keeps supply
 exactly equal to backing and makes fee revenue explicit and auditable (`R7`). When a
-sweep is *sponsored* (a caller pays the gas in ckETH, see step 6), no `deposit_fee`
+sweep is *sponsored* (a caller pays the gas in ckETH, see step 0), no `deposit_fee`
 is deducted: the full amount goes to the beneficiary. Fees
 are flat and proposal-configurable rather than oracle-priced, for simplicity and
 predictability. Deduplication is by `(transaction hash, log index)` (`R2`), memo and
@@ -495,7 +554,7 @@ sweeper delegate. Sweep transactions are type-`0x04` transactions sent from a
 **dedicated sweeper address** (tECDSA-derived with derivation path `[3u8]` — its
 own schema tag, no account components), whose nonce sequence is independent of the main address' so that a stuck
 sweep can never delay a withdrawal (`R17`); the sweeper address holds only gas
-money (funded from the main address, see step 6) while swept funds always land at
+money (funded from the main address, see step 0) while swept funds always land at
 the main address (`R6`). Many deposit addresses are swept in one transaction, the
 deployed delegate instance doubling as the batcher. No deposit address ever needs
 an ETH balance for gas. A
@@ -510,7 +569,7 @@ emitting `SweepConfirmed` audit events (`R5`, `R8`).
 For Phase 2 ETH addresses no delegation is involved at all: the sweep is a plain
 EIP-1559 transfer (variant A) or a `depositEth{value}` helper call (variant B) of
 `balance - fee`, signed with the address' own derived key, gas paid from the swept
-balance itself — see step 6 for the fee cap this requires.
+balance itself — see step 0 for the fee cap this requires.
 
 | Variant | Pros | Cons |
 |---|---|---|
@@ -524,60 +583,6 @@ balance itself — see step 6 for the fee cap this requires.
 | **Caller-gating**: `require(msg.sender ∈ {SWEEPER, SELF})` via immutables (`SWEEPER` = the dedicated sweeper address of `R17`, `SELF` = the deployed instance's address captured at construction, so the batch entry point still works; funds still go to the main address per `R6`) | Simplest delegate, zero extra signatures; as a side effect preserves the best-effort sweep exclusion of `R3` (nobody but the minter can sweep a tainted address) | Only the minter can sweep; Multicall3 unusable as batcher (inner `msg.sender` would be Multicall3) |
 | **One-time self-attestation**: the minter signs, with the *deposit address' own derived key*, a domain-separated message `keccak("ck-deposit-owner" ‖ chain_id ‖ helper ‖ principal ‖ subaccount)`; the delegate checks `ecrecover(message, sig) == address(this)` (≈ 3k gas), the attestation riding in the sweep calldata | Sweeping is permissionless again with the address↔principal binding *cryptographically enforced* — the attestation is a public fact, replayable harmlessly (funds still only move through `depositErc20` with the attested principal); one extra tECDSA signature per address, one-time, consuming no account nonce | Forfeits the best-effort `R3` sweep exclusion (a third party can sweep a tainted address — status quo, no new risk); slightly larger delegate and calldata |
 | **On-chain re-derivation**: the delegate recomputes `derive(master_pubkey, principal, subaccount)` and compares with `address(this)` | No extra signature at all — the binding is verified from first principles | Uneconomical: the IC's generalized BIP-32 derivation needs one HMAC-SHA512 per path element, and the EVM has no SHA-512 precompile — several hundred thousand gas per sweep in pure Solidity (only the elliptic-curve step is cheap: `ecrecover(−t·rₓ mod n, v, rₓ, rₓ)` returns `address(P + t·G)` for ≈ 3k gas). Rejected |
-
-### Step 6: Pay the transaction fees without touching the ckETH backing
-
-The ETH at the minter's main address backs ckETH 1:1, so spending it on sweep gas
-without a matching ckETH burn would leave ckETH under-backed. Sweeps are therefore
-funded exclusively through the minter's **fee account on the ckETH ledger**,
-mirroring how withdrawals already pay for gas (burn ckETH, spend ETH):
-
-* **Burn first** (`R14`): with the dedicated sweeper address (`R17`), the burn
-  happens at **funding time** — before transferring ETH from the main address to
-  the sweeper address, burn from the ckETH fee account at least the transferred
-  amount plus the funding transaction's maximum fee; abort the funding (and halt
-  sweeping) if the burn fails. ETH sitting at the sweeper address is already
-  paid-for: the sweeper address' balance *is* the `prepaid_sweep_gas` counter,
-  reconcilable on-chain with one `eth_getBalance`.
-* Fundings are infrequent (one funding covers many sweeps) and are ordinary
-  transfers on the main address' nonce sequence, like withdrawals. Sweep gas then
-  simply draws down the sweeper balance; the burn surplus is **never re-minted**,
-  so "cumulative burned ≥ cumulative spent" holds at every instant. Fundings and
-  per-sweep effective fees are audit events; the sweeper balance and the effective
-  fee/cost ratio are exposed on the dashboard (`R8`, `R9`) to recalibrate
-  `deposit_fee` via proposal.
-* An empty ckETH fee account halts the (re)funding of the sweeper address and
-  hence, once the sweeper balance is drained, sweeping — safely: under variant A, credited
-  balances are unaffected and deposits keep accumulating at key-controlled
-  addresses; under variant B, crediting pauses with sweeping. Replenishing the fee
-  account (converting per-ckToken fee revenue into ckETH) is out of scope (see
-  Non-goals).
-* **Phase 2 ETH sweeps involve no `R14` burn**: their gas is paid from the deposit
-  itself, before the ETH ever reaches the (counted) backing at the main address.
-  However, since under variant A the account is credited `balance - fee` *before*
-  the sweep executes, the sweep's `gas_limit × max_fee_per_gas` must be capped by
-  the charged deposit fee — waiting out gas spikes if necessary — so the gas spent
-  can never exceed what was withheld from minting. Fee-refund dust left at the
-  address rolls into the next sweep.
-
-Two separate things are at play in funding the transaction fees, and they compose:
-
-1. **The funding pipeline** (the bullets above): ckETH fee account → `R14` burn at
-   sweeper-address funding → sweeper balance → gas. This is the *only* way ETH is
-   ever spent on sweeps — one burn path, one choke-point invariant to audit.
-2. **What fills the fee account.** Three inflows: `deposit_fee` revenue (accrues
-   per ckToken and needs treasury conversion, see Non-goals), direct treasury
-   top-ups, and — the variant below — **sponsored gas transferred in by callers**.
-
-**Variants — who fills the fee account for a given sweep:**
-
-| Variant | Pros | Cons |
-|---|---|---|
-| **Minter-fronted** (default): the fee account fronts the gas, recovered via the `deposit_fee` deducted from the mint | Works for the primary persona — a CEX-only user owns no ckETH; preserves the single-step UX (`R15`) | The ckETH fee account must stay funded (treasury conversion of per-ckToken fee revenue, see Non-goals); `deposit_fee` is a flat overestimate, not market-priced |
-| **Caller-paid (sponsored)**: endpoint `deposit_erc20(beneficiary_account, fee_from_subaccount, max_fee)` callable by *any* third party — a frontend, a relayer, or the beneficiary themselves. The minter **transfers the fee in ckETH from the caller's account (owner = caller's principal, with the given subaccount) into its fee account** (via `icrc2_transfer_from`, mirroring how `withdraw_erc20` charges the caller for withdrawal gas), then schedules the sweep through the single pipeline above; the beneficiary — not necessarily the caller — is credited the **full** deposited amount, no `deposit_fee` deducted | An *organic* ckETH inflow into the fee account, shrinking the treasury-replenishment need; `R14` remains one single burn path (the sponsor's payment and the burn are decoupled in time — pay at call time, burn at batched funding time — with the fee account absorbing the difference); enables fee *sponsorship* (e.g. OISY paying for its users) and self-sponsoring by repeat users holding ckETH from earlier deposits; doubles as an on-demand consolidation trigger — synergy with `R16`: a user whose withdrawal waits for liquidity can sponsor the very sweep that unblocks it | The caller must own ckETH, so it cannot be the *only* path (bootstrap: the first-ever CEX deposit of a fresh user has none); one more endpoint with fee estimation and insufficient-fee rejection; overpaid sponsorship is not reimbursed (consistent with withdrawals today) |
-
-Both coexist: sponsored when a caller offers to pay (and then the deposit is
-credited in full), minter-fronted otherwise — same pipeline either way.
 
 ## Implementation
 
@@ -621,7 +626,7 @@ EIP-3541) and increments the authority's nonce. The walkthrough below uses the
 minter `M`, a deposit EOA `D` (tECDSA-derived, so `M` holds its key), the deployed
 `CkSweeper` instance `S` and a USDT-like token `T`; gas numbers are measured by the
 runnable demo. `M` is "the minter's sending EOA": in the production design this is
-the dedicated sweeper address of `R17` (funded per step 6), while the demo uses a
+the dedicated sweeper address of `R17` (funded per step 0), while the demo uses a
 single funded EOA for simplicity — the mechanics are identical.
 
 **State 0.** `D` is computed by pure key derivation and does not exist on chain: no
