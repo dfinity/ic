@@ -59,10 +59,15 @@ const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
 const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 
-#[cfg(not(test))]
+// Unlike the send/receive timeouts below (which we deliberately lower in test mode), the
+// connection timeout uses the same value in production and in tests. Establishing the TLS
+// connection to the in-process mock server can take a while under load, and a low connection
+// timeout would spuriously fire before the connection is established and mask the
+// send/receive/DNS-resolution errors that the tests assert on. To keep this timeout meaningful in
+// tests, the concurrency of the test binary is limited (see `RUST_TEST_THREADS` and the `cpu:4`
+// tag in `BUILD.bazel`), and the test that specifically exercises the connection timeout passes
+// its own short timeout instead.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(test)]
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(not(test))]
 const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -211,6 +216,7 @@ async fn load_root_delegation(
 
         match try_fetch_delegation_from_nns(
             config,
+            CONNECTION_TIMEOUT,
             log,
             rt_handle,
             subnet_id,
@@ -245,6 +251,7 @@ async fn load_root_delegation(
 /// Returns a BoxError if any step of the process fails.
 async fn try_fetch_delegation_from_nns(
     config: &Config,
+    connection_timeout: Duration,
     log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
     subnet_id: SubnetId,
@@ -292,7 +299,7 @@ async fn try_fetch_delegation_from_nns(
     let registry_version = registry_client.get_latest_version();
 
     let mut request_sender = timeout(
-        CONNECTION_TIMEOUT,
+        connection_timeout,
         connect(
             log.clone(),
             rt_handle,
@@ -304,7 +311,7 @@ async fn try_fetch_delegation_from_nns(
     )
     .await
     .map_err(|_| {
-        format!("Timed out while connecting to the node after {CONNECTION_TIMEOUT:?}")
+        format!("Timed out while connecting to the node after {connection_timeout:?}")
     })??;
 
     let uri = format!("/api/v2/subnet/{nns_subnet_id}/read_state");
@@ -1262,6 +1269,7 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
+            CONNECTION_TIMEOUT,
             &no_op_logger(),
             &rt_handle,
             CLOUD_ENGINE_SUBNET_ID,
@@ -1275,8 +1283,17 @@ mod tests {
 
         // Since the API BN is configured with a domain that does not resolve, we expect the
         // connection to fail with a name resolution error, which indicates that we indeed tried to
-        // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
+        // connect to the API BN instead of an NNS node. Depending on the environment the resolver
+        // either reports `NoRecordsFound` (a DNS server answered that the domain does not exist) or
+        // `Timeout` (no DNS server answered within the resolver timeout); both prove that we went
+        // through the API BN DNS-resolution path rather than connecting to an NNS node by IP.
+        assert_matches!(
+            response,
+            Err(err) if {
+                let err = format!("{err:?}");
+                err.contains("NoRecordsFound") || err.contains("Timeout")
+            }
+        );
     }
 
     #[tokio::test]
@@ -1290,6 +1307,10 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
+            // Use a short connection timeout here: this test deliberately makes the mock server
+            // hang before accepting the connection, so we want the connection timeout to fire
+            // quickly instead of waiting for the full `CONNECTION_TIMEOUT`.
+            Duration::from_secs(1),
             &no_op_logger(),
             &rt_handle,
             APP_SUBNET_ID,
@@ -1315,6 +1336,7 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
+            CONNECTION_TIMEOUT,
             &no_op_logger(),
             &rt_handle,
             APP_SUBNET_ID,
@@ -1340,6 +1362,7 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
+            CONNECTION_TIMEOUT,
             &no_op_logger(),
             &rt_handle,
             APP_SUBNET_ID,
