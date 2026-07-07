@@ -18,7 +18,7 @@ const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
 /// Immutable signed EIP-7702 transaction.
 /// Use [`sign`](super::sign) to create a newly signed transaction or
 /// `SignedEip7702TransactionRequest::from()` if the signature is already known.
-// TODO(S2): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
+// TODO(DEFI-2926): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
 // once EIP-7702 transactions are wired into the resubmission path.
 pub type SignedEip7702TransactionRequest = Signed<Eip7702TransactionRequest>;
 
