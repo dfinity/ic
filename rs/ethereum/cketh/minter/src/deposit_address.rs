@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::eth_logs::LedgerSubaccount;
+use crate::eth_logs::{LedgerSubaccount, principal_to_bytes32};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
@@ -86,16 +86,6 @@ fn derive_address(
     let (derived_public_key, _derived_chain_code) =
         master_public_key.derive_subkey_with_chain_code(&derivation_path, chain_code);
     ecdsa_public_key_to_address(&derived_public_key)
-}
-
-fn principal_to_bytes32(principal: &Principal) -> [u8; 32] {
-    let bytes = principal.as_slice();
-    let n = bytes.len();
-    assert!(n <= 29, "BUG: principal is longer than 29 bytes: {n}");
-    let mut fixed = [0_u8; 32];
-    fixed[0] = n as u8;
-    fixed[1..=n].copy_from_slice(bytes);
-    fixed
 }
 
 fn subaccount_to_bytes32(subaccount: Option<&LedgerSubaccount>) -> [u8; 32] {

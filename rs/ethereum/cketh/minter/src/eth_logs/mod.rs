@@ -244,6 +244,22 @@ pub enum EventSourceError {
     InvalidEvent(String),
 }
 
+/// Encode a [`Principal`] into 32 bytes as follows
+/// - the first byte is the number of bytes in the principal
+/// - the next N bytes are the principal
+/// - the remaining bytes are zero
+///
+/// This is the inverse of [`parse_principal_from_slice`].
+pub fn principal_to_bytes32(principal: &Principal) -> [u8; 32] {
+    let bytes = principal.as_slice();
+    let n = bytes.len();
+    assert!(n <= 29, "BUG: principal is longer than 29 bytes: {n}");
+    let mut fixed = [0_u8; 32];
+    fixed[0] = n as u8;
+    fixed[1..=n].copy_from_slice(bytes);
+    fixed
+}
+
 /// Decode a candid::Principal from a slice of at most 32 bytes
 /// encoded as follows
 /// - the first byte is the number of bytes in the principal

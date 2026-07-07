@@ -343,7 +343,7 @@ mod scraping {
 }
 
 mod parse_principal_from_slice {
-    use crate::eth_logs::parse_principal_from_slice;
+    use crate::eth_logs::{parse_principal_from_slice, principal_to_bytes32};
     use assert_matches::assert_matches;
     use candid::Principal;
     use evm_rpc_types::Hex32;
@@ -428,10 +428,7 @@ mod parse_principal_from_slice {
     #[test]
     fn should_encode_to_and_decode_from_eth_hex_string() {
         let principal = Principal::from_str(PRINCIPAL).unwrap();
-        let encoded_principal = format!(
-            "0x{}",
-            hex::encode(to_32_bytes_with_size_prefix(&principal))
-        );
+        let encoded_principal = format!("0x{}", hex::encode(principal_to_bytes32(&principal)));
         assert_eq!(
             encoded_principal,
             "0x09efcdab00000000000100000000000000000000000000000000000000000000"
@@ -447,14 +444,6 @@ mod parse_principal_from_slice {
         let mut principal_bytes = principal.as_slice().to_vec();
         let size = principal_bytes.len() as u8;
         principal_bytes.insert(0, size);
-        principal_bytes
-    }
-
-    fn to_32_bytes_with_size_prefix(principal: &Principal) -> [u8; 32] {
-        let mut principal_bytes = [0_u8; 32];
-        for (index, byte) in to_bytes_with_size_prefix(principal).iter().enumerate() {
-            principal_bytes[index] = *byte;
-        }
         principal_bytes
     }
 }
