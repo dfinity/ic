@@ -429,6 +429,64 @@ fn timeouts_bypass_max_responses_per_block() {
     );
 }
 
+#[test]
+fn flexible_timeouts_bypass_max_responses_per_block() {
+    let subnet_size = 4;
+    let num_contexts = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK + 50;
+
+    test_config_with_http_feature(
+        true,
+        subnet_size,
+        |mut payload_builder, _canister_http_pool| {
+            let committee: BTreeSet<_> = (0..subnet_size as u64).map(node_test_id).collect();
+
+            // `num_contexts` flexible request contexts, all at time = UNIX_EPOCH.
+            let contexts: Vec<_> = (0..num_contexts as u64)
+                .map(|id| {
+                    (
+                        CallbackId::new(id),
+                        flexible_request_context(committee.clone(), 1, subnet_size as u32),
+                    )
+                })
+                .collect();
+            inject_request_contexts(&mut payload_builder, contexts);
+
+            // Validation time past the timeout interval so every context times out.
+            let validation_context = ValidationContext {
+                registry_version: RegistryVersion::new(1),
+                certified_height: Height::new(0),
+                time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            };
+
+            let payload = payload_builder.build_payload(
+                Height::new(1),
+                TEST_MAX_PAYLOAD_BYTES,
+                &[],
+                &validation_context,
+            );
+
+            let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
+
+            // The builder emits all timed-out flexible requests, ungated by the cap.
+            assert_eq!(parsed.flexible_errors.len(), num_contexts);
+            assert!(parsed.responses.is_empty());
+            assert!(parsed.timeouts.is_empty());
+            // Flexible timeouts must not count against the per-block response cap.
+            assert_eq!(parsed.num_non_timeout_responses(), 0);
+
+            // The builder's own honest payload must pass validation.
+            payload_builder
+                .validate_payload(
+                    Height::new(1),
+                    &test_proposal_context(&validation_context),
+                    &payload,
+                    &[],
+                )
+                .unwrap();
+        },
+    );
+}
+
 /// Divergence responses must be counted by num_non_timeout_responses() and
 /// therefore be subject to the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit
 /// during validation.
