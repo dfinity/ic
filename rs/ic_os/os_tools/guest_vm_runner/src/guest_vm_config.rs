@@ -3,10 +3,10 @@ use crate::metrics::GuestVmMetrics;
 use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config_tool::hostos::guestos_config::generate_guestos_config_w_slot;
+use config_tool::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, calculate_deterministic_mac_w_slot};
+use deterministic_ips::{calculate_deterministic_mac, calculate_multi_deterministic_mac};
 use std::path::{Path, PathBuf};
 use tracing::info;
 
@@ -68,7 +68,7 @@ pub fn assemble_config_media(
     sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
-    let guestos_config = generate_guestos_config_w_slot(
+    let guestos_config = generate_guestos_config(
         hostos_config,
         guest_vm_slot,
         guest_vm_type.to_config_type(),
@@ -127,7 +127,7 @@ pub fn generate_vm_config(
         GuestVMType::Upgrade => NodeType::UpgradeGuestOS,
     };
     let mac_address = if let Some(slot) = guest_vm_slot {
-        calculate_deterministic_mac_w_slot(
+        calculate_multi_deterministic_mac(
             &config.icos_settings.mgmt_mac,
             config.icos_settings.deployment_environment,
             slot,
@@ -295,7 +295,8 @@ mod tests {
         config.icos_settings.use_ssh_authorized_keys = true;
 
         let guestos_config =
-            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+            generate_guestos_config(&config, None, config_types::GuestVMType::Default, None)
+                .unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -318,7 +319,8 @@ mod tests {
         config.icos_settings.use_ssh_authorized_keys = true;
 
         let guestos_config =
-            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+            generate_guestos_config(&config, None, config_types::GuestVMType::Default, None)
+                .unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 

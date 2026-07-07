@@ -81,7 +81,7 @@ pub fn calculate_deterministic_mac(
     [0x6a, index, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
-pub fn calculate_deterministic_mac_w_slot(
+pub fn calculate_multi_deterministic_mac(
     mgmt_mac: &MacAddr6,
     deployment_environment: DeploymentEnvironment,
     slot: u8,
