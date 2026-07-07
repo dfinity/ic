@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_test(
+    name = "anvil_smoke_test",
+    srcs = ["tests/anvil_smoke.rs"],
+    size = "small",
+    data = ["@foundry_bin//:anvil"],
+    edition = "2021",
+    env = {
+        "ANVIL_BIN": "$(rootpath @foundry_bin//:anvil)",
+    },
+    deps = [
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_json",
+    ],
+)
