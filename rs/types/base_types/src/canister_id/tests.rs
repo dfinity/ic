@@ -17,7 +17,7 @@ fn hash_of(id: &CanisterId) -> u64 {
 /// a `u64` canister ID).
 fn test_canister_ids() -> Vec<CanisterId> {
     let mut ids: Vec<CanisterId> = [
-        0u64,
+        0,
         1,
         2,
         42,
@@ -107,7 +107,7 @@ fn u64_fast_path_is_construction_independent() {
 /// `as_u64` round-trips `from_u64` and returns `None` for opaque IDs.
 #[test]
 fn as_u64_round_trips() {
-    for n in [0u64, 1, 42, 0xFF, 0x0123_4567_89ab_cdef, u64::MAX] {
+    for n in [0, 1, 42, 0xFF, 0x0123_4567_89ab_cdef, u64::MAX] {
         let id = CanisterId::from_u64(n);
         assert_eq!(id.as_u64(), Some(n));
         // Reconstructing from the reported `u64` yields an equal ID.
