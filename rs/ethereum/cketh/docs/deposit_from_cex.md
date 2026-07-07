@@ -24,6 +24,7 @@ tags: [cketh, ckerc20, minter, deposit, eip-7702]
   - [Sweeper delegate contract](#sweeper-delegate-contract)
   - [Test plan](#test-plan)
   - [Delivery / PR sequence](#delivery--pr-sequence)
+- [Cost estimation](#cost-estimation)
 - [Discussed Alternatives](#discussed-alternatives)
 
 ## Motivation
@@ -1006,6 +1007,77 @@ the delegate.
    required, `R15`).
 6. **Phase 2: ckETH** (schema-2 addresses, balance-delta crediting, key-signed
    sweeps with fee cap, compliance sign-off). AC: `R11`, `R12`.
+
+## Cost estimation
+
+Each credited deposit costs the minter along three axes: threshold-ECDSA signatures
+and HTTPS outcalls (both paid in cycles on the IC) and Ethereum gas (paid in ETH from
+the sweeper address, backed by the fee account per `R14`). The scenarios below size a
+**single ERC-20 deposit to a fresh address, first sweep, under decided variant B with
+caller-gating**, for the two batch extremes and two latencies.
+
+**Unit costs** — from the
+[IC cycle-cost reference](https://docs.internetcomputer.org/references/cycle-costs/),
+34-node fiduciary subnet; `1T cycles = 1 XDR = $1.3664` (May 2026):
+
+| Resource | Cost | ≈ USD |
+|---|---|---|
+| Threshold-ECDSA signature (`sign_with_ecdsa`) | 26'153'846'153 cycles | **$0.0357** |
+| HTTPS outcall, base | 171'360'000 cycles | $0.000234 |
+| HTTPS outcall, per request byte / reserved response byte | 13'600 / 27'200 cycles | — |
+
+Assumptions: each logical EVM-RPC call fans out to **≈ 3 providers** (raw outcalls =
+logical × 3, each charged fully); reserved `max_response_bytes` ≈ 2 KB for small calls,
+≈ 8 KB for a 20-address Multicall3, ≈ 16 KB for `eth_getLogs` — so a small logical call
+≈ $0.00084 and an `eth_getLogs` ≈ $0.0027 (the base dominates until responses grow). ETH
+at $2'500 and the sweep-gas figures from the
+[demo](deposit_from_cex_demo/README.md) (variant B: 82'207 gas for a single sweep,
+≈ 42'000 gas per address in a batch of 20).
+
+**Detection schedule** — per armed address, backing off over the 24h scanning window of
+`R15`; the basis for the outcall counts below:
+
+| Phase | Cadence | Ticks |
+|---|---|---|
+| Burst | 30s, 30s, 1m, 2m, 2m, 4m (→ 10 min) | 6 |
+| Ramp | every 5 min (10 → 30 min) | 4 |
+| Tail | hourly (30 min → 24h) | 24 |
+| **Total** | | **34** |
+
+Each tick is one **shared** Multicall3 `eth_call` over the whole active set (filter 1),
+so its cost divides across the batch; a deposit landing in the first 10 min is seen
+within 30s–4 min, and after 30 min within the hour.
+
+**Scenarios** (`B` = number of addresses sharing this address' scan and sweep):
+
+| Scenario | tECDSA sigs | Outcalls | IC subtotal (gas-independent) | Eth gas @1 gwei | Total @1 gwei |
+|---|---|---|---|---|---|
+| **B=1, swept ≤5 min** | 2 → $0.071 | ≈ $0.011 | **$0.082** | $0.21 | **$0.29** |
+| **B=1, swept ≤24h** | 2 → $0.071 | ≈ $0.037 | **$0.108** | $0.21 | **$0.31** |
+| **B=20, swept ≤5 min** | 1.05 → $0.037 | ≈ $0.0016 | **$0.039** | $0.11 | **$0.15** |
+| **B=20, swept ≤24h** | 1.05 → $0.037 | ≈ $0.0042 | **$0.042** | $0.11 | **$0.15** |
+
+Signatures: one EIP-7702 authorization (the deposit key) plus one outer
+sweep-transaction signature (the sweeper key, shared ÷`B`). The `≤24h` rows assume the
+address is scanned across the full 34-tick window before detection; a deposit detected
+early but held below the economic margin until `age > max_age` costs the same as the
+`≤5 min` row for outcalls and only defers the sweep. Ethereum gas is unchanged by
+latency and scales linearly with the gas price (B=1: $0.021 / $0.206 / $2.06 at
+0.1 / 1 / 10 gwei; B=20 roughly half).
+
+**Takeaways:**
+
+* The IC-side cost is dominated by the **single tECDSA signature** (≈ $0.036); outcalls
+  stay sub-cent even for a full-day solo scan. The one-time self-attestation sub-variant
+  (step 5) would add one signature (≈ $0.036) to each address' first sweep.
+* **Ethereum gas is the swing factor**, with a crossover near **≈ 1–2 gwei**: below it
+  the signature sets the floor, above it gas dominates.
+* **Batching roughly halves both gas and signatures** and collapses outcalls ≈ 7×.
+* **Fee floor (`R7`):** to break even excluding gas, `deposit_fee` must cover ≈ $0.04
+  (batched) to ≈ $0.11 (solo, full-window scan) of IC resources plus the prevailing
+  sweep gas — so at low gas the signature, not the gas, sets the floor. The estimate is
+  sensitive to the reserved `max_response_bytes` for `eth_getLogs`/Multicall3 and to the
+  XDR→USD and ETH/gas market inputs.
 
 ## Discussed Alternatives
 
