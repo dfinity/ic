@@ -3655,7 +3655,7 @@ async fn query_call_with_effective_subnet_id() {
     );
 }
 
-/// Make a `read_state` call with an effective subnet ID (instead of an effective canister ID)
+/// Make a `read_state` request with an effective subnet ID (instead of an effective canister ID)
 /// using `ic-agent`: the request is routed to the subnet-scoped `/api/v3/subnet/<id>/read_state`
 /// endpoint. Here we exercise `Agent::fetch_subnet_by_id`, which reads the subnet state tree.
 #[tokio::test]
@@ -3677,7 +3677,7 @@ async fn read_state_with_effective_subnet_id() {
     let agent = Agent::builder().with_url(url).build().unwrap();
     agent.fetch_root_key().await.unwrap();
 
-    // Fetch the subnet information via a `read_state` call routed to the subnet-scoped endpoint.
+    // Fetch the subnet information via a `read_state` request routed to the subnet-scoped endpoint.
     let subnet = agent.fetch_subnet_by_id(&app_subnet).await.unwrap();
 
     // The subnet's certified canister ID ranges contain the created canister.
