@@ -74,8 +74,8 @@ jobs:
 
             test
 
-            --spawn_strategy=remote,local
-            --strategy=Genrule=remote,local
+            --spawn_strategy=remote,sandboxed,local
+            --strategy=Genrule=remote,sandboxed,local
 
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
