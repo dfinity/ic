@@ -99,7 +99,7 @@ pub fn calculate_multi_deterministic_mac(
     // NOTE: We extend to 7a and use the space of the index to store the
     // slot.
     // 0x7a: locally administered, unicast MAC prefix chosen for IPv6 deterministic addressing.
-    [0x7a, slot as u8, hash[0], hash[1], hash[2], hash[3]].into()
+    [0x7a, slot, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
 #[cfg(test)]
