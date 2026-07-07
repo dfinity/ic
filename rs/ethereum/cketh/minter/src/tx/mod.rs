@@ -2,17 +2,17 @@
 mod tests;
 
 mod eip_1559;
-mod eip_2718;
 mod eip_7702;
+mod signed;
 
 pub use eip_1559::{
     Eip1559Signature, Eip1559TransactionRequest, FinalizedEip1559Transaction,
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
 };
-pub use eip_2718::{Eip2718TransactionRequest, Signed};
 pub use eip_7702::{
     Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
 };
+pub use signed::{SignableTransaction, Signed};
 
 use crate::{
     eth_rpc::Hash,

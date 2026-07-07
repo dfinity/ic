@@ -1,5 +1,5 @@
 use super::{
-    AccessList, Eip2718TransactionRequest, Signed, TransactionPrice, compute_recovery_id,
+    AccessList, SignableTransaction, Signed, TransactionPrice, compute_recovery_id,
     eip_1559::Eip1559Signature, encode_u256, split_in_two,
 };
 use crate::{
@@ -153,7 +153,7 @@ impl rlp::Encodable for Eip7702TransactionRequest {
     }
 }
 
-impl Eip2718TransactionRequest for Eip7702TransactionRequest {
+impl SignableTransaction for Eip7702TransactionRequest {
     fn transaction_type(&self) -> u8 {
         SET_CODE_TX_ID
     }

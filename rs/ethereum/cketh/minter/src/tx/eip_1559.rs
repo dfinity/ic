@@ -1,7 +1,6 @@
 use super::{
-    AccessList, Eip2718TransactionRequest, GasFeeEstimate, ResubmissionStrategy,
-    ResubmitTransactionError, Resubmittable, Signed, TransactionPrice, compute_recovery_id,
-    encode_u256, split_in_two,
+    AccessList, GasFeeEstimate, ResubmissionStrategy, ResubmitTransactionError, Resubmittable,
+    SignableTransaction, Signed, TransactionPrice, compute_recovery_id, encode_u256, split_in_two,
 };
 use crate::{
     eth_rpc::Hash,
@@ -204,7 +203,7 @@ impl SignedEip1559TransactionRequest {
     }
 }
 
-impl Eip2718TransactionRequest for Eip1559TransactionRequest {
+impl SignableTransaction for Eip1559TransactionRequest {
     fn transaction_type(&self) -> u8 {
         EIP1559_TX_ID
     }

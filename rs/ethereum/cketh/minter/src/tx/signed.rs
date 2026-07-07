@@ -3,10 +3,10 @@ use crate::{eth_rpc::Hash, numeric::TransactionNonce};
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 
-/// Behavior shared by all [EIP-2718](https://eips.ethereum.org/EIPS/eip-2718) typed
-/// transaction requests, used to sign them and wrap them into a [`Signed`] transaction.
-pub trait Eip2718TransactionRequest {
-    /// The EIP-2718 transaction type identifier, e.g. `0x02` for EIP-1559.
+/// A transaction request that can be signed and wrapped into a [`Signed`] transaction.
+pub trait SignableTransaction {
+    /// The [EIP-2718](https://eips.ethereum.org/EIPS/eip-2718) transaction type identifier,
+    /// e.g. `0x02` for EIP-1559.
     fn transaction_type(&self) -> u8;
 
     /// RLP-encode the transaction payload, i.e. without the type prefix nor the signature.
@@ -15,7 +15,7 @@ pub trait Eip2718TransactionRequest {
     fn nonce(&self) -> TransactionNonce;
 }
 
-/// Immutable signed EIP-2718 transaction.
+/// Immutable signed transaction.
 /// Use `<request>.sign()` to create a newly signed transaction or
 /// `Signed::from((transaction, signature))` if the signature is already known.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -37,7 +37,7 @@ struct InnerSigned<T> {
     signature: Eip1559Signature,
 }
 
-impl<T: Eip2718TransactionRequest> InnerSigned<T> {
+impl<T: SignableTransaction> InnerSigned<T> {
     /// An EIP-2718 transaction is encoded as
     /// `transaction_type || rlp([..transaction fields.., signature_y_parity, signature_r, signature_s])`,
     /// where `||` denotes string concatenation.
@@ -49,7 +49,7 @@ impl<T: Eip2718TransactionRequest> InnerSigned<T> {
     }
 }
 
-impl<T: Eip2718TransactionRequest> rlp::Encodable for InnerSigned<T> {
+impl<T: SignableTransaction> rlp::Encodable for InnerSigned<T> {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_unbounded_list();
         self.transaction.rlp_inner(s);
@@ -65,13 +65,13 @@ impl<T> AsRef<T> for Signed<T> {
     }
 }
 
-impl<T: Eip2718TransactionRequest> From<(T, Eip1559Signature)> for Signed<T> {
+impl<T: SignableTransaction> From<(T, Eip1559Signature)> for Signed<T> {
     fn from((transaction, signature): (T, Eip1559Signature)) -> Self {
         Self::new(transaction, signature)
     }
 }
 
-impl<T: Eip2718TransactionRequest> rlp::Encodable for Signed<T> {
+impl<T: SignableTransaction> rlp::Encodable for Signed<T> {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.append(&self.inner);
     }
@@ -93,7 +93,7 @@ where
 
 impl<'b, T, C> minicbor::Decode<'b, C> for Signed<T>
 where
-    T: Eip2718TransactionRequest + minicbor::Decode<'b, C>,
+    T: SignableTransaction + minicbor::Decode<'b, C>,
 {
     fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
         d.decode_with(ctx)
@@ -101,7 +101,7 @@ where
     }
 }
 
-impl<T: Eip2718TransactionRequest> Signed<T> {
+impl<T: SignableTransaction> Signed<T> {
     pub fn new(transaction: T, signature: Eip1559Signature) -> Self {
         let inner = InnerSigned {
             transaction,
