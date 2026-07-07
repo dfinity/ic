@@ -268,3 +268,30 @@ controller is `1 * number_of_nns_neurons`.
 Prints colored pass/fail lines using ANSI true color:
 - Green checkmark for passing checks.
 - Red X for failing checks.
+
+---
+
+## dfx-core-vendored
+
+**Path:** `rs/sns/dfx-core-vendored/`
+
+### Purpose
+
+A trimmed, in-tree copy of a subset of the (deprecated) `dfx-core` crate, covering only what SNS
+tooling needs: resolving a dfx identity + network into an `ic_agent::Agent`, and resolving a dfx
+identity name to its principal. Exists to drop the external `dfx-core` dependency while keeping
+`dfx`-compatible identity and network resolution; no new dependents are expected.
+
+### Public API
+
+- `get_agent(network_name, identity) -> Result<Agent, GetAgentError>` -- resolves the named dfx
+  network and identity (or the currently selected dfx identity if `None`) into an `ic_agent::Agent`,
+  fetching the root key when the resolved network is not the mainnet IC.
+- `get_identity_principal(identity_name) -> Result<Principal, GetIdentityPrincipalError>` --
+  resolves a dfx identity name to its `Principal` without building an agent.
+
+### Structure
+
+Most modules (`config`, `error`, `foundation`, `fs`, `identity`, `json`) are copied from `dfx-core
+0.4.0` at the same relative path, to allow diffing against upstream; `network` and the crate root
+are compact reimplementations rather than trimmed copies.
