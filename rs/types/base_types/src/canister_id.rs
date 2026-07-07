@@ -51,14 +51,14 @@ impl PartialOrd for CanisterId {
 
 impl Hash for CanisterId {
     #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
         if self.is_u64 {
             // Fast path: a `u64`-based canister ID is fully determined by its
             // leading `u64`, so hashing just those 8 bytes is both sufficient
             // and consistent with `PartialEq` (which compares the same `u64`).
-            as_u64(self.id).hash(state);
+            as_u64(self.id).hash(hasher);
         } else {
-            self.id.hash(state);
+            self.id.hash(hasher);
         }
     }
 }
@@ -76,9 +76,11 @@ impl CandidType for CanisterId {
     fn id() -> candid::types::TypeId {
         candid::types::TypeId::of::<CanisterId>()
     }
+
     fn _ty() -> candid::types::Type {
         PrincipalId::_ty()
     }
+
     fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
     where
         S: candid::types::Serializer,
