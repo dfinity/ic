@@ -75,6 +75,8 @@ The design is delivered in two phases:
 
 ### Phase 1 (ckERC20)
 
+_Requirements are grouped by phase, not numbered sequentially: `R11` and `R12` are defined under Phase 2 below._
+
 * `R1`: For every IC account `(principal, subaccount)`, the minter returns a unique,
   deterministic Ethereum deposit address. Repeated calls return the same address. Two
   distinct accounts never share an address, and no deposit address ever equals the
@@ -103,7 +105,9 @@ The design is delivered in two phases:
 * `R6`: A sweep transaction moves funds only to the minter's main address, regardless
   of who triggers it. No other destination is reachable through the sweeper delegate.
 * `R7`: The per-token `deposit_fee` and minimum deposit amount are configurable
-  (upgrade argument / NNS proposal) such that fees cover the amortized sweep gas cost.
+  (upgrade argument / NNS proposal) such that fees cover the amortized per-deposit cost
+  the minter bears: detection cycles (balance scans and log queries, spent on every armed
+  address whether or not a deposit arrives) as well as sweep gas, not sweep gas alone.
 * `R8`: All new state transitions (address registration, accepted/invalid deposit,
   delegation, sweep sent/confirmed) are recorded as audit events, replayable on
   upgrade, consistent with the minter's event-sourcing architecture.
@@ -335,7 +339,11 @@ with an `icrc1_balance_of` of `1_762_128_000_000_000_000` wei ≈ 1.76 ckETH as 
    address** — an ordinary ckETH withdrawal through the existing pipeline (burn
    from the fee account, then send the ETH on the main address' nonce sequence).
    `R14` holds by construction, with no new burn path to audit; this pipeline is
-   the *only* way ETH is spent on sweeps.
+   the *only* way ETH is spent on sweeps. Unlike sweeps (`R17`), this funding
+   transaction rides the main address' nonce sequence — the withdrawal lane — so a
+   stuck funding transaction can head-of-line-block withdrawals; acceptable because
+   funding is infrequent (batched to cover many sweeps) and uses the same
+   resubmission machinery as withdrawals.
 
 * The sweeper address' balance *is* the `prepaid_sweep_gas` counter, reconcilable
   on-chain with one `eth_getBalance`. Sweep gas draws it down; burned ckETH is
@@ -597,7 +605,10 @@ observed-but-unswept balances where `unswept_value ≥ sweep_gas_cost × margin`
 liquidity** (`R16`): withdrawal demand overrides the economic thresholds. Up to
 `N ≈ 20` addresses per batch
 (gas-limit bound); confirmation is via transaction receipt, like withdrawals,
-emitting `SweepConfirmed` audit events (`R5`, `R8`).
+emitting `SweepConfirmed` audit events (`R5`, `R8`). Under decided variant B the mint
+follows the sweep, so `max_age` doubles as the worst-case crediting latency for a
+below-margin deposit: it is credited only once age forces its sweep, chiefly during gas
+spikes that keep `unswept_value` under `sweep_gas_cost × margin`.
 
 For Phase 2 ETH addresses no delegation is involved at all: the sweep is a plain
 EIP-1559 transfer (variant A) or a `depositEth{value}` helper call (variant B) of
@@ -921,6 +932,9 @@ Notes:
   `depositEth` call (step 5).
 * Reentrancy is moot: no storage, and funds can only move through the helper
   toward the minter's main address.
+* Supported tokens are assumed standard: non-fee-on-transfer and non-rebasing, so
+  `balanceOf(address(this))` equals the amount `depositErc20` transfers. This is the
+  same assumption as today's helper-contract deposit flow.
 * The demo's [`CkSweeperViaHelper.sol`](deposit_from_cex_demo/contracts/CkSweeperViaHelper.sol)
   is this contract with the sweeper address approximated by a single minter EOA.
 
