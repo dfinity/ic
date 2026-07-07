@@ -4,20 +4,109 @@ use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE};
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, FetchCanisterLogsRequest,
-    LogVisibilityV2, Payload,
+    CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgsBuilder,
+    FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest, LogVisibilityV2,
+    Payload,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_test_utilities_execution_environment::{wat_canister, wat_fn};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_test_utilities_execution_environment::{
+    ExecutionTest, ExecutionTestBuilder, wat_canister, wat_fn,
+};
 use ic_types_cycles::Cycles;
-use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
+
+/// A by-index filter spanning the whole index space, so it matches every live
+/// record. Used to exercise the filtered read path (index-table lookup + scan)
+/// at the same data volume as the unfiltered cases.
+const FETCH_FILTER_BY_IDX: Option<FetchCanisterLogsFilter> =
+    Some(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+        start: 0,
+        end: u64::MAX,
+    }));
+
+/// Number of log records to write per `fill_logs` message: at most one
+/// per-message delta's worth. The delta log holds records measured at
+/// `size_of::<CanisterLogRecord>() + content` bytes and is capped at the
+/// canister's log memory limit. Writing more than that per message makes the
+/// delta evict its oldest records, which opens an index gap that clears the
+/// store on append (so the buffer never grows past one delta). Staying at/below
+/// the delta capacity keeps indices contiguous, so repeated fills accumulate in
+/// the store's ring buffer until it reaches capacity.
+fn records_per_fill(log_memory_limit: u64, log_message_size: usize) -> u32 {
+    let delta_record_size =
+        std::mem::size_of::<CanisterLogRecord>() as u64 + log_message_size as u64;
+    (log_memory_limit / delta_record_size).max(1) as u32
+}
+
+/// Builds a WAT canister exporting a `fill_logs` update that writes
+/// `records_to_fill` log records of the given content.
+fn fill_logs_canister_wasm(records_to_fill: u32, log_message: &[u8]) -> Vec<u8> {
+    wat_canister()
+        .update(
+            "fill_logs",
+            wat_fn().repeat(records_to_fill, wat_fn().debug_print(log_message)),
+        )
+        .build_wasm()
+}
+
+/// A benchmark harness that can run a canister's `fill_logs` method and read its
+/// log ring-buffer usage, letting `fill_log_buffer_to_capacity` be shared across
+/// the `StateMachine` and `ExecutionTest` based setups.
+trait LogFillHarness {
+    fn run_fill_logs(&mut self, canister_id: CanisterId);
+    fn log_bytes_used(&self, canister_id: CanisterId) -> usize;
+}
+
+impl LogFillHarness for StateMachine {
+    fn run_fill_logs(&mut self, canister_id: CanisterId) {
+        // `fill_logs` does not reply; ignore the resulting `CanisterDidNotReply`.
+        let _ = self.execute_ingress(canister_id, "fill_logs", vec![]);
+    }
+
+    fn log_bytes_used(&self, canister_id: CanisterId) -> usize {
+        self.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store
+            .bytes_used()
+    }
+}
+
+impl LogFillHarness for ExecutionTest {
+    fn run_fill_logs(&mut self, canister_id: CanisterId) {
+        // `fill_logs` does not reply; ignore the resulting `CanisterDidNotReply`.
+        let _ = self.ingress(canister_id, "fill_logs", vec![]);
+    }
+
+    fn log_bytes_used(&self, canister_id: CanisterId) -> usize {
+        self.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .bytes_used()
+    }
+}
+
+/// Repeatedly runs `fill_logs` until the log ring buffer is saturated. Each call
+/// appends at most a delta's worth of records (see `records_per_fill`), so the
+/// used bytes grow until the buffer is full, after which the ring buffer evicts
+/// its oldest records and `bytes_used` plateaus at the buffer capacity.
+fn fill_log_buffer_to_capacity(harness: &mut impl LogFillHarness, canister_id: CanisterId) {
+    let mut prev_used = 0;
+    loop {
+        harness.run_fill_logs(canister_id);
+        let used = harness.log_bytes_used(canister_id);
+        if used <= prev_used {
+            break;
+        }
+        prev_used = used;
+    }
+}
 
 /// Creates a StateMachine with a canister whose log buffer is filled to capacity.
 fn setup_canister_with_full_log(
@@ -25,10 +114,9 @@ fn setup_canister_with_full_log(
     log_message_size: usize,
 ) -> (StateMachine, CanisterId) {
     let log_message = vec![b'a'; log_message_size];
-    let record_size = LogMemoryStore::estimate_record_size(log_message_size) as u64;
-    let records_to_fill = (log_memory_limit / record_size + 1) as u32;
+    let records_to_fill = records_per_fill(log_memory_limit, log_message_size);
 
-    let env = StateMachineBuilder::new()
+    let mut env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .with_checkpoints_enabled(false)
         .build();
@@ -42,79 +130,68 @@ fn setup_canister_with_full_log(
     env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
-        wat_canister()
-            .update(
-                "fill_logs",
-                wat_fn().repeat(records_to_fill, wat_fn().debug_print(&log_message)),
-            )
-            .build_wasm(),
+        fill_logs_canister_wasm(records_to_fill, &log_message),
         vec![],
     )
     .unwrap();
-    let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+    fill_log_buffer_to_capacity(&mut env, canister_id);
     (env, canister_id)
 }
 
-/// Creates a StateMachine with two canisters:
-/// - `caller`: universal canister that will call fetch_canister_logs
-/// - `target`: canister with log buffer filled to capacity
+/// Creates an `ExecutionTest` whose subnet input queue already holds a single
+/// inter-canister call (from the caller canister to the management canister) so
+/// that the next `execute_subnet_message` executes exactly that call.
 ///
-/// Returns (env, caller, target).
-fn setup_fetch_bench(
+/// The `target` canister has its log buffer filled to capacity and its logs
+/// readable by the caller canister, so the fetch exercises the real read path.
+/// `make_payload` builds the management-canister method payload from the target
+/// canister id (e.g. `FetchCanisterLogsRequest` or `CanisterIdRecord`).
+fn setup_fetch_bench<F: FnOnce(CanisterId) -> Vec<u8>>(
+    method: &str,
+    make_payload: F,
     log_memory_limit: u64,
     log_message_size: usize,
-) -> (StateMachine, CanisterId, CanisterId) {
+) -> ExecutionTest {
     let log_message = vec![b'a'; log_message_size];
-    let record_size = LogMemoryStore::estimate_record_size(log_message_size) as u64;
-    let records_to_fill = (log_memory_limit / record_size + 1) as u32;
+    let records_to_fill = records_per_fill(log_memory_limit, log_message_size);
 
-    let subnet_type = SubnetType::Application;
-    let config = StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            replicated_inter_canister_log_fetch: FlagStatus::Enabled,
-            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
-            ..Default::default()
-        },
-    );
-    let env = StateMachineBuilder::new()
-        .with_config(Some(config))
-        .with_subnet_type(subnet_type)
-        .with_checkpoints_enabled(false)
+    // The caller lives on a remote subnet so that the injected call arrives via
+    // the subnet input queue as an inter-canister request.
+    let caller = canister_test_id(1);
+    let config = ExecutionConfig {
+        replicated_inter_canister_log_fetch: FlagStatus::Enabled,
+        log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
+        ..ExecutionConfig::default()
+    };
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_execution_config(config)
+        .with_caller(subnet_test_id(2), caller)
         .build();
 
-    // Create the caller (universal canister).
-    let caller = env
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
+    // Create the target canister, controlled by both the test user (so it can be
+    // installed and configured) and the caller (so the caller may read its logs).
+    let target = test
+        .create_canister_with_settings(
             Cycles::new(u128::MAX / 2),
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![test.user_id().get(), caller.get()])
+                .with_log_memory_limit(log_memory_limit)
+                .with_log_visibility(LogVisibilityV2::Controllers)
+                .build(),
         )
         .unwrap();
-
-    // Create the target canister controlled by the caller.
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_controllers(vec![caller.get()])
-        .with_log_memory_limit(log_memory_limit)
-        .with_log_visibility(LogVisibilityV2::Controllers)
-        .build();
-    let target = env.create_canister_with_cycles(None, Cycles::new(u128::MAX / 2), Some(settings));
-    env.install_wasm_in_mode(
+    test.install_canister(
         target,
-        CanisterInstallMode::Install,
-        wat_canister()
-            .update(
-                "fill_logs",
-                wat_fn().repeat(records_to_fill, wat_fn().debug_print(&log_message)),
-            )
-            .build_wasm(),
-        vec![],
+        fill_logs_canister_wasm(records_to_fill, &log_message),
     )
     .unwrap();
-    let _ = env.execute_ingress(target, "fill_logs", vec![]);
+    fill_log_buffer_to_capacity(&mut test, target);
 
-    (env, caller, target)
+    // Enqueue the inter-canister call. It is the only pending subnet message, so
+    // the next `execute_subnet_message` executes exactly this call.
+    test.inject_call_to_ic00(method, make_payload(target), Cycles::new(5_000_000_000));
+    test
 }
 
 fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
@@ -145,28 +222,56 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
     bench_name: &str,
     log_memory_limit: u64,
     log_message_size: usize,
+    filter: Option<FetchCanisterLogsFilter>,
 ) {
     group.bench_function(bench_name, |b| {
         b.iter_batched(
-            || setup_fetch_bench(log_memory_limit, log_message_size),
-            |(env, caller, target)| {
-                let result = env.execute_ingress(
-                    caller,
-                    "update",
-                    wasm()
-                        .call_with_cycles(
-                            CanisterId::ic_00(),
-                            "fetch_canister_logs",
-                            call_args().other_side(FetchCanisterLogsRequest::new(target).encode()),
-                            Cycles::new(5_000_000_000),
-                        )
-                        .build(),
-                );
-                assert!(result.is_ok());
+            || {
+                setup_fetch_bench(
+                    "fetch_canister_logs",
+                    |target| {
+                        let mut request = FetchCanisterLogsRequest::new(target);
+                        request.filter = filter;
+                        request.encode()
+                    },
+                    log_memory_limit,
+                    log_message_size,
+                )
+            },
+            |mut test| {
+                // Measure only the execution of the `fetch_canister_logs` subnet
+                // message, not the surrounding inter-canister call machinery.
+                assert!(test.execute_subnet_message());
             },
             BatchSize::LargeInput,
         );
     });
+}
+
+/// Executes a single `fetch_canister_logs` subnet message against a target whose
+/// log buffer is filled to capacity and returns the size of the reply payload.
+/// Panics if the call was rejected. Used for one-off sanity checks.
+fn fetch_reply_len(
+    filter: Option<FetchCanisterLogsFilter>,
+    log_memory_limit: u64,
+    log_message_size: usize,
+) -> usize {
+    let mut test = setup_fetch_bench(
+        "fetch_canister_logs",
+        |target| {
+            let mut request = FetchCanisterLogsRequest::new(target);
+            request.filter = filter;
+            request.encode()
+        },
+        log_memory_limit,
+        log_message_size,
+    );
+    assert!(test.execute_subnet_message());
+    test.induct_messages();
+    match &test.get_xnet_response(0).response_payload {
+        ic_types::messages::Payload::Data(data) => data.len(),
+        other => panic!("fetch_canister_logs was rejected: {other:?}"),
+    }
 }
 
 pub fn canister_logging_benchmark(c: &mut Criterion) {
@@ -212,42 +317,82 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
     }
 
     {
+        // Sanity checks (run once, outside the timed loop) so the benchmarks
+        // measure the real read/encode path rather than an error or empty result.
+        // Unfiltered worst case must return a full ~2 MiB response of log data
+        // (the response is trimmed to `RESULT_MAX_SIZE`, i.e. 2 MB).
+        assert!(fetch_reply_len(None, 2 * MIB, (32 * KIB) as usize) > 1_800_000);
+        // Filtered (by index) path must return the matching records.
+        assert!(fetch_reply_len(FETCH_FILTER_BY_IDX, 128 * KIB, 0) > 0);
+    }
+
+    {
         let mut group = c.benchmark_group("fetch_canister_log");
         group.sample_size(60);
         group.warm_up_time(Duration::from_secs(1));
 
-        // Baseline: inter-canister call to canister_status (same call overhead,
-        // no log reading). Subtract this from fetch results to isolate fetch cost.
+        // Baseline: canister_status subnet message (same subnet-message
+        // machinery, no log reading). Subtract this from fetch results to
+        // isolate the fetch cost.
         group.bench_function("baseline", |b| {
             b.iter_batched(
-                || setup_fetch_bench(128 * KIB, 0),
-                |(env, caller, target)| {
-                    let result = env.execute_ingress(
-                        caller,
-                        "update",
-                        wasm()
-                            .call_with_cycles(
-                                CanisterId::ic_00(),
-                                "canister_status",
-                                call_args().other_side(CanisterIdRecord::from(target).encode()),
-                                Cycles::new(0),
-                            )
-                            .build(),
-                    );
-                    assert!(result.is_ok());
+                || {
+                    setup_fetch_bench(
+                        "canister_status",
+                        |target| CanisterIdRecord::from(target).encode(),
+                        128 * KIB,
+                        0,
+                    )
+                },
+                |mut test| {
+                    assert!(test.execute_subnet_message());
                 },
                 BatchSize::LargeInput,
             );
         });
 
         // Worst case: 0-byte messages maximize records per buffer.
-        run_bench_fetch_canister_log(&mut group, "fetch:128KiB/msg:0B", 128 * KIB, 0);
-        run_bench_fetch_canister_log(&mut group, "fetch:1MiB/msg:0B", MIB, 0);
-        run_bench_fetch_canister_log(&mut group, "fetch:2MiB/msg:0B", 2 * MIB, 0);
+        run_bench_fetch_canister_log(&mut group, "fetch:128KiB/msg:0B", 128 * KIB, 0, None);
+        run_bench_fetch_canister_log(&mut group, "fetch:1MiB/msg:0B", MIB, 0, None);
+        run_bench_fetch_canister_log(&mut group, "fetch:2MiB/msg:0B", 2 * MIB, 0, None);
+        // Same 0-byte-message cases, but with a by-index filter, to measure the
+        // extra cost of the filtered read path (index-table lookup + scan).
+        run_bench_fetch_canister_log(
+            &mut group,
+            "fetch:128KiB/msg:0B/filter:by_idx",
+            128 * KIB,
+            0,
+            FETCH_FILTER_BY_IDX,
+        );
+        run_bench_fetch_canister_log(
+            &mut group,
+            "fetch:1MiB/msg:0B/filter:by_idx",
+            MIB,
+            0,
+            FETCH_FILTER_BY_IDX,
+        );
+        run_bench_fetch_canister_log(
+            &mut group,
+            "fetch:2MiB/msg:0B/filter:by_idx",
+            2 * MIB,
+            0,
+            FETCH_FILTER_BY_IDX,
+        );
         // Realistic: 100-byte messages.
-        run_bench_fetch_canister_log(&mut group, "fetch:128KiB/msg:100B", 128 * KIB, 100);
-        run_bench_fetch_canister_log(&mut group, "fetch:1MiB/msg:100B", MIB, 100);
-        run_bench_fetch_canister_log(&mut group, "fetch:2MiB/msg:100B", 2 * MIB, 100);
+        run_bench_fetch_canister_log(&mut group, "fetch:128KiB/msg:100B", 128 * KIB, 100, None);
+        run_bench_fetch_canister_log(&mut group, "fetch:1MiB/msg:100B", MIB, 100, None);
+        run_bench_fetch_canister_log(&mut group, "fetch:2MiB/msg:100B", 2 * MIB, 100, None);
+        // Worst case for the returned payload size: large (32 KiB, the maximum
+        // `debug_print` size) messages so a single fetch returns a full ~2 MiB
+        // response (`RESULT_MAX_SIZE`) of actual log data rather than mostly
+        // per-record overhead.
+        run_bench_fetch_canister_log(
+            &mut group,
+            "fetch:2MiB/msg:32KiB",
+            2 * MIB,
+            (32 * KIB) as usize,
+            None,
+        );
     }
 }
 
