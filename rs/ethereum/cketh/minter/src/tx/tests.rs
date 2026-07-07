@@ -218,6 +218,174 @@ fn should_cbor_encoding_be_stable() {
     assert_eq!(decoded_signed_tx, signed_tx);
 }
 
+mod eip7702 {
+    use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
+    use crate::tx::{
+        AccessList, Authorization, AuthorizationTuple, Eip1559Signature, Eip7702TransactionRequest,
+        SignedEip7702TransactionRequest,
+    };
+    use ethnum::u256;
+    use ic_ethereum_types::Address;
+    use std::str::FromStr;
+
+    // Published test vector from the trust-wallet/wallet-core EIP-7702 test suite:
+    // https://github.com/trustwallet/wallet-core/blob/master/rust/tw_evm/src/transaction/transaction_eip7702.rs
+    #[test]
+    fn should_encode_type_0x04_transaction() {
+        let authorization = AuthorizationTuple {
+            chain_id: 6,
+            delegate: Address::from_str("0x0202020202020202020202020202020202020202").unwrap(),
+            nonce: TransactionNonce::from(2_u8),
+            y_parity: false,
+            r: u256::from_str_hex(
+                "0x42556c4f2a3f4e4e639cca524d1da70e60881417d4643e5382ed110a52719eaf",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0x172f591a2a763d0bd6b13d042d8c5eb66e87f129c9dc77ada66b6041012db2b3",
+            )
+            .unwrap(),
+        };
+        let transaction = Eip7702TransactionRequest {
+            chain_id: 56,
+            nonce: TransactionNonce::from(1_u8),
+            max_priority_fee_per_gas: WeiPerGas::new(2),
+            max_fee_per_gas: WeiPerGas::new(3),
+            gas_limit: GasAmount::new(4),
+            destination: Address::from_str("0x0101010101010101010101010101010101010101").unwrap(),
+            amount: Wei::new(5),
+            data: hex::decode("1234").unwrap(),
+            access_list: AccessList::new(),
+            authorization_list: vec![authorization],
+        };
+        let signature = Eip1559Signature {
+            signature_y_parity: false,
+            r: u256::from_str_hex(
+                "0xd93fc9ae934d4f72db91cb149e7e84b50ca83b5a8a7b873b0fdb009546e3af47",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0x786bfaf31af61eea6471dbb1bec7d94f73fb90887e4f04d0e9b85676c47ab02a",
+            )
+            .unwrap(),
+        };
+
+        let signed_tx = SignedEip7702TransactionRequest::from((transaction, signature));
+
+        assert_eq!(
+            signed_tx.raw_transaction_hex_string(),
+            "0x04f8c0380102030494010101010101010101010101010101010101010105821234c0f85cf85a069402020202020202020202020202020202020202020280a042556c4f2a3f4e4e639cca524d1da70e60881417d4643e5382ed110a52719eafa0172f591a2a763d0bd6b13d042d8c5eb66e87f129c9dc77ada66b6041012db2b380a0d93fc9ae934d4f72db91cb149e7e84b50ca83b5a8a7b873b0fdb009546e3af47a0786bfaf31af61eea6471dbb1bec7d94f73fb90887e4f04d0e9b85676c47ab02a"
+        );
+    }
+
+    // Published test vector from the alloy-rs EIP-7702 test suite:
+    // https://github.com/alloy-rs/alloy/blob/main/crates/eips/src/eip7702.rs (alloy-eip7702 auth_list.rs)
+    #[test]
+    fn should_encode_signed_authorization_tuple() {
+        use rlp::Encodable;
+
+        let authorization = AuthorizationTuple {
+            chain_id: 1,
+            delegate: Address::from_str("0x0000000000000000000000000000000000000006").unwrap(),
+            nonce: TransactionNonce::from(1_u8),
+            y_parity: false,
+            r: u256::from_str_hex(
+                "0x48b55bfa915ac795c431978d8a6a992b628d557da5ff759b307d495a36649353",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0xefffd310ac743f371de3b9f7f9cb56c0b28ad43601b4ab949f53faa07bd2c804",
+            )
+            .unwrap(),
+        };
+
+        assert_eq!(
+            hex::encode(authorization.rlp_bytes()),
+            "f85a019400000000000000000000000000000000000000060180a048b55bfa915ac795c431978d8a6a992b628d557da5ff759b307d495a36649353a0efffd310ac743f371de3b9f7f9cb56c0b28ad43601b4ab949f53faa07bd2c804"
+        );
+    }
+
+    // The signature hash of an authorization is keccak256(0x05 || rlp([chain_id, delegate, nonce])).
+    // Expected values are cross-checked against an independent RLP + Keccak256 reference that
+    // reproduces the published alloy-rs and trust-wallet authorization tuples above.
+    #[test]
+    fn should_compute_authorization_signature_hash() {
+        let alloy = Authorization {
+            chain_id: 1,
+            delegate: Address::from_str("0x0000000000000000000000000000000000000006").unwrap(),
+            nonce: TransactionNonce::from(1_u8),
+        };
+        assert_eq!(
+            hex::encode(alloy.signature_hash().0),
+            "16559694155c9c6e69d5c2c665f9118beae5baaded2f2466926f4900a36b12de"
+        );
+
+        let trust_wallet = Authorization {
+            chain_id: 6,
+            delegate: Address::from_str("0x0202020202020202020202020202020202020202").unwrap(),
+            nonce: TransactionNonce::from(2_u8),
+        };
+        assert_eq!(
+            hex::encode(trust_wallet.signature_hash().0),
+            "92e45641ec1a2c72deca9dbbf759fe6831b9edd8a500f530bc1039a9e5d78a3c"
+        );
+    }
+
+    // Round-trip: sign the authorization signature hash with a known key, determine the recovery
+    // id (y_parity) with the same recovery machinery used for EIP-1559 signatures, then recover the
+    // authority address from the resulting `[y_parity, r, s]` and check it matches the signer.
+    // The key pair is the published EIP-155 example key:
+    // private key 0x4646...46 -> address 0x9d8A62f656a8d1615C1294fd71e9CFb3E4855A4F.
+    #[test]
+    fn should_recover_authority_from_signed_authorization() {
+        use crate::address::ecdsa_public_key_to_address;
+        use ethers_core::types::{
+            H256, RecoveryMessage, Signature as EthSignature, U256 as EthU256,
+        };
+        use ic_secp256k1::PrivateKey;
+
+        let private_key = PrivateKey::deserialize_sec1(&[0x46_u8; 32]).unwrap();
+        let public_key = private_key.public_key();
+        let authority = ecdsa_public_key_to_address(&public_key);
+        assert_eq!(
+            authority,
+            Address::from_str("0x9d8A62f656a8d1615C1294fd71e9CFb3E4855A4F").unwrap()
+        );
+
+        let authorization = Authorization {
+            chain_id: 1,
+            delegate: Address::from_str("0x0000000000000000000000000000000000000006").unwrap(),
+            nonce: TransactionNonce::from(1_u8),
+        };
+        let hash = authorization.signature_hash();
+        let signature = private_key.sign_digest_with_ecdsa(&hash.0);
+        let recovery_id = public_key
+            .try_recovery_from_digest(&hash.0, &signature)
+            .unwrap();
+        assert!(!recovery_id.is_x_reduced());
+
+        let (r_bytes, s_bytes) = super::super::split_in_two(signature);
+        let tuple = AuthorizationTuple {
+            chain_id: authorization.chain_id,
+            delegate: authorization.delegate,
+            nonce: authorization.nonce,
+            y_parity: recovery_id.is_y_odd(),
+            r: u256::from_be_bytes(r_bytes),
+            s: u256::from_be_bytes(s_bytes),
+        };
+
+        let recovered = EthSignature {
+            r: EthU256::from_big_endian(&r_bytes),
+            s: EthU256::from_big_endian(&s_bytes),
+            v: 27 + tuple.y_parity as u64,
+        }
+        .recover(RecoveryMessage::Hash(H256(hash.0)))
+        .unwrap();
+
+        assert_eq!(recovered.as_bytes(), authority.as_ref());
+    }
+}
+
 fn arb_transaction_price() -> impl Strategy<Value = TransactionPrice> {
     use crate::numeric::WeiPerGas;
     use crate::test_fixtures::arb::arb_checked_amount_of;
