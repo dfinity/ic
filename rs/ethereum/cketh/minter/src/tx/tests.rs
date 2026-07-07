@@ -221,8 +221,8 @@ fn should_cbor_encoding_be_stable() {
 mod eip7702 {
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
-        AccessList, Authorization, SignedAuthorization, Eip1559Signature, Eip7702TransactionRequest,
-        SignedEip7702TransactionRequest,
+        AccessList, Authorization, Eip1559Signature, Eip7702TransactionRequest,
+        SignedAuthorization, SignedEip7702TransactionRequest,
     };
     use ethnum::u256;
     use ic_ethereum_types::Address;

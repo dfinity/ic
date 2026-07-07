@@ -1,6 +1,6 @@
 use super::{
-    AccessList, TransactionPrice, compute_recovery_id, eip_1559::Eip1559Signature, encode_u256,
-    split_in_two,
+    AccessList, Eip2718TransactionRequest, Signed, TransactionPrice, compute_recovery_id,
+    eip_1559::Eip1559Signature, encode_u256, split_in_two,
 };
 use crate::{
     eth_rpc::Hash,
@@ -15,6 +15,13 @@ use rlp::RlpStream;
 
 const SET_CODE_TX_ID: u8 = 4;
 const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
+
+/// Immutable signed EIP-7702 transaction.
+/// Use `Eip7702TransactionRequest::sign()` to create a newly signed transaction or
+/// `SignedEip7702TransactionRequest::from()` if the signature is already known.
+// TODO(S2): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
+// once EIP-7702 transactions are wired into the resubmission path.
+pub type SignedEip7702TransactionRequest = Signed<Eip7702TransactionRequest>;
 
 /// <https://eips.ethereum.org/EIPS/eip-7702>
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -146,12 +153,12 @@ impl rlp::Encodable for Eip7702TransactionRequest {
     }
 }
 
-impl Eip7702TransactionRequest {
-    pub fn transaction_type(&self) -> u8 {
+impl Eip2718TransactionRequest for Eip7702TransactionRequest {
+    fn transaction_type(&self) -> u8 {
         SET_CODE_TX_ID
     }
 
-    pub fn rlp_inner(&self, rlp: &mut RlpStream) {
+    fn rlp_inner(&self, rlp: &mut RlpStream) {
         rlp.append(&self.chain_id);
         rlp.append(&self.nonce);
         rlp.append(&self.max_priority_fee_per_gas);
@@ -164,6 +171,12 @@ impl Eip7702TransactionRequest {
         rlp.append_list(&self.authorization_list);
     }
 
+    fn nonce(&self) -> TransactionNonce {
+        self.nonce
+    }
+}
+
+impl Eip7702TransactionRequest {
     /// Hash of an EIP-7702 transaction is computed as
     /// keccak256(0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, authorization_list])),
     /// where `||` denotes string concatenation.
@@ -204,119 +217,5 @@ impl Eip7702TransactionRequest {
         };
 
         Ok(SignedEip7702TransactionRequest::new(self, sig))
-    }
-}
-
-/// Immutable signed EIP-7702 transaction.
-/// Use `Eip7702TransactionRequest::sign()` to create a newly signed transaction or
-/// `SignedEip7702TransactionRequest::from()` if the signature is already known.
-// TODO(S2): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
-// once EIP-7702 transactions are wired into the resubmission path.
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct SignedEip7702TransactionRequest {
-    inner: InnerSignedEip7702TransactionRequest,
-    memoized_hash: Hash,
-}
-
-impl AsRef<Eip7702TransactionRequest> for SignedEip7702TransactionRequest {
-    fn as_ref(&self) -> &Eip7702TransactionRequest {
-        &self.inner.transaction
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-struct InnerSignedEip7702TransactionRequest {
-    #[n(0)]
-    transaction: Eip7702TransactionRequest,
-    #[n(1)]
-    signature: Eip1559Signature,
-}
-
-impl rlp::Encodable for InnerSignedEip7702TransactionRequest {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_unbounded_list();
-        self.transaction.rlp_inner(s);
-        s.append(&self.signature);
-        //ignore memoized_hash
-        s.finalize_unbounded_list();
-    }
-}
-
-impl InnerSignedEip7702TransactionRequest {
-    /// An EIP-7702 transaction is encoded as follows
-    /// 0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, authorization_list, signature_y_parity, signature_r, signature_s]),
-    /// where `||` denotes string concatenation.
-    pub fn raw_bytes(&self) -> Vec<u8> {
-        use rlp::Encodable;
-        let mut rlp = self.rlp_bytes().to_vec();
-        rlp.insert(0, self.transaction.transaction_type());
-        rlp
-    }
-}
-
-impl<C> minicbor::Encode<C> for SignedEip7702TransactionRequest {
-    fn encode<W: minicbor::encode::Write>(
-        &self,
-        e: &mut minicbor::Encoder<W>,
-        ctx: &mut C,
-    ) -> Result<(), minicbor::encode::Error<W::Error>> {
-        e.encode_with(&self.inner, ctx)?;
-        Ok(())
-    }
-}
-
-impl<'b, C> minicbor::Decode<'b, C> for SignedEip7702TransactionRequest {
-    fn decode(d: &mut minicbor::Decoder<'b>, ctx: &mut C) -> Result<Self, minicbor::decode::Error> {
-        d.decode_with(ctx)
-            .map(|inner: InnerSignedEip7702TransactionRequest| {
-                Self::new(inner.transaction, inner.signature)
-            })
-    }
-}
-
-impl From<(Eip7702TransactionRequest, Eip1559Signature)> for SignedEip7702TransactionRequest {
-    fn from((transaction, signature): (Eip7702TransactionRequest, Eip1559Signature)) -> Self {
-        Self::new(transaction, signature)
-    }
-}
-
-impl rlp::Encodable for SignedEip7702TransactionRequest {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.append(&self.inner);
-    }
-}
-
-impl SignedEip7702TransactionRequest {
-    pub fn new(transaction: Eip7702TransactionRequest, signature: Eip1559Signature) -> Self {
-        let inner = InnerSignedEip7702TransactionRequest {
-            transaction,
-            signature,
-        };
-        let hash = Hash(ic_sha3::Keccak256::hash(inner.raw_bytes()));
-        Self {
-            inner,
-            memoized_hash: hash,
-        }
-    }
-
-    pub fn raw_transaction_hex(&self) -> Vec<u8> {
-        self.inner.raw_bytes()
-    }
-
-    pub fn raw_transaction_hex_string(&self) -> String {
-        format!("0x{}", hex::encode(self.raw_transaction_hex()))
-    }
-
-    /// If included in a block, this hash value is used as reference to this transaction.
-    pub fn hash(&self) -> Hash {
-        self.memoized_hash
-    }
-
-    pub fn transaction(&self) -> &Eip7702TransactionRequest {
-        &self.inner.transaction
-    }
-
-    pub fn nonce(&self) -> TransactionNonce {
-        self.transaction().nonce
     }
 }
