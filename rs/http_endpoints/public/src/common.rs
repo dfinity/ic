@@ -1,4 +1,4 @@
-use crate::HttpError;
+use crate::{HttpError, metrics::HttpHandlerMetrics};
 use axum::{body::Body, extract::FromRequest, response::IntoResponse};
 use bytes::Bytes;
 use http::{
@@ -338,7 +338,13 @@ pub(crate) fn verify_delegation_matches_certified_state(
     delegation: &CertificateDelegation,
     metadata: &CertificateDelegationMetadata,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+    metrics: &HttpHandlerMetrics,
 ) -> Result<(), HttpError> {
+    let _timer = metrics
+        .verify_delegation_duration
+        .with_label_values(&[metadata.format.to_string()])
+        .start_timer();
+
     match is_delegation_valid_with_respect_to_state(
         delegation,
         metadata.format,

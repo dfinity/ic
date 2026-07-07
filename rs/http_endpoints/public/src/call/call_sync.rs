@@ -243,6 +243,7 @@ async fn call_sync(
         (&nns_delegation_reader, delegation_filter),
         state_reader.clone(),
         message_id.clone(),
+        &metrics,
     )
     .await
     {
@@ -344,6 +345,7 @@ async fn call_sync(
         (&nns_delegation_reader, delegation_filter),
         state_reader,
         message_id.clone(),
+        &metrics,
     )
     .await
     {
@@ -416,6 +418,7 @@ async fn tree_cert_deleg_for_message(
     (nns_delegation_reader, delegation_filter): (&NNSDelegationReader, CanisterRangesFilter),
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: MessageId,
+    metrics: &HttpHandlerMetrics,
 ) -> Result<Option<(MixedHashTree, Certification, Option<CertificateDelegation>)>, HttpError> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
         state_reader.get_certified_state_snapshot()
@@ -431,6 +434,7 @@ async fn tree_cert_deleg_for_message(
             delegation,
             metadata,
             certified_state_reader.as_ref(),
+            metrics,
         )?
     }
 

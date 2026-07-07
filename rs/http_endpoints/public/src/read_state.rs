@@ -301,6 +301,7 @@ pub(crate) async fn read_state(
             nns_delegation_reader.get_delegation_with_metadata(canister_ranges_filter),
             certified_state_reader.as_ref(),
             maybe_nns_subnet_filter,
+            &metrics,
         )
     })
     .await;
@@ -358,6 +359,7 @@ fn get_certificate_and_create_response(
     delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     deprecated_canister_ranges_filter: DeprecatedCanisterRangesFilter,
+    metrics: &HttpHandlerMetrics,
 ) -> axum::response::Response {
     // Create labeled tree. This may be an expensive operation and by
     // creating the labeled tree after verifying the paths we know that
@@ -397,8 +399,12 @@ fn get_certificate_and_create_response(
     // Make sure the public key in the NNS delegation matches the one in the certified state we are
     // about to serve. Otherwise the client would not be able to verify the certificate.
     if let Some((delegation, metadata)) = &delegation_from_nns
-        && let Err(HttpError { status, message }) =
-            verify_delegation_matches_certified_state(delegation, metadata, certified_state_reader)
+        && let Err(HttpError { status, message }) = verify_delegation_matches_certified_state(
+            delegation,
+            metadata,
+            certified_state_reader,
+            metrics,
+        )
     {
         return (status, message).into_response();
     }
@@ -731,6 +737,7 @@ mod test {
             /*delegation_from_nns=*/ None,
             &reader,
             DeprecatedCanisterRangesFilter::KeepAll,
+            &HttpHandlerMetrics::new(&MetricsRegistry::new()),
         );
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -745,6 +752,7 @@ mod test {
             /*delegation_from_nns=*/ None,
             &reader,
             DeprecatedCanisterRangesFilter::KeepOnlyNNS(NNS_SUBNET_ID),
+            &HttpHandlerMetrics::new(&MetricsRegistry::new()),
         );
         assert_eq!(response.status(), StatusCode::OK);
     }
