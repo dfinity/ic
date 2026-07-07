@@ -1,6 +1,4 @@
-use crate::message_routing::{
-    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
-};
+use crate::message_routing::{CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics};
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::{
     StreamBuilder, generate_reject_responses_for_deleted_subnets,
@@ -12,9 +10,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
-use ic_registry_resource_limits::ResourceLimits;
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
 use ic_types::{ExecutionRound, NumBytes, SubnetId};
 use std::sync::Arc;
@@ -33,12 +29,10 @@ pub(crate) trait StateMachine: Send {
     fn execute_round(
         &self,
         state: ReplicatedState,
-        network_topology: NetworkTopology,
         batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
+        network_topology: NetworkTopology,
+        own_subnet_info: OwnSubnetInfo,
         registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -106,12 +100,10 @@ impl StateMachine for StateMachineImpl {
     fn execute_round(
         &self,
         mut state: ReplicatedState,
-        network_topology: NetworkTopology,
         batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
+        network_topology: NetworkTopology,
+        own_subnet_info: OwnSubnetInfo,
         registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         let time_out_messages_timer = self.metrics.start_phase_timer(PHASE_TIME_OUT_MESSAGES);
 
@@ -128,9 +120,7 @@ impl StateMachine for StateMachineImpl {
         }
 
         state.metadata.network_topology = Arc::new(network_topology);
-        state.metadata.own_subnet_features = subnet_features;
-        state.metadata.own_resource_limits = resource_limits;
-        state.metadata.node_public_keys = node_public_keys;
+        state.metadata.own_subnet_info = Arc::new(own_subnet_info);
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);

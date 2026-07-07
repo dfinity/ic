@@ -1268,7 +1268,7 @@ impl ExecutionEnvironment {
                 },
             },
 
-            Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
+            Ok(Ic00Method::HttpRequest) => match state.subnet_features().http_requests {
                 true => match &msg {
                     CanisterCall::Request(request) => {
                         match CanisterHttpRequestArgs::decode(payload) {

@@ -480,7 +480,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 subnets_as_tree(
                     state.metadata.network_topology.subnets_for_certification(),
                     own_subnet_id,
-                    &state.metadata.node_public_keys,
+                    &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
                     certification_version,
