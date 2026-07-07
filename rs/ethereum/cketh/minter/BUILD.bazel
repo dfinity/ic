@@ -203,7 +203,7 @@ rust_ic_test_suite(
         exclude = [
             "tests/dump_stable_memory.rs",
             # Runs against a local foundry anvil node, not the IC test suite.
-            "tests/anvil_smoke.rs",
+            "tests/deposit_from_cex_demo.rs",
         ],
     ),
     data = [
@@ -284,9 +284,9 @@ alias(
 )
 
 rust_test(
-    name = "anvil_smoke_test",
+    name = "deposit_from_cex_demo_test",
     size = "small",
-    srcs = ["tests/anvil_smoke.rs"],
+    srcs = ["tests/deposit_from_cex_demo.rs"],
     data = [":anvil"],
     edition = "2021",
     env = {
