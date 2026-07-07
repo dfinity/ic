@@ -1,11 +1,13 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::deposit_address::{
     DepositAddressSchema, deposit_address, deposit_derivation_path, sweeper_address,
+    sweeper_derivation_path,
 };
 use crate::eth_logs::LedgerSubaccount;
 use candid::Principal;
 use ic_ethereum_types::Address;
-use ic_secp256k1::{PrivateKey, PublicKey};
+use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey, PublicKey};
+use serde_bytes::ByteBuf;
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
@@ -32,6 +34,40 @@ fn should_derive_deterministically() {
 
     assert_eq!(first, second);
     assert_eq!(sweeper_address(&pk, &cc), sweeper_address(&pk, &cc));
+}
+
+#[test]
+fn should_derive_address_matching_its_signing_subkey() {
+    let (master_private_key, cc) = master_private_key();
+    let master_public_key = master_private_key.public_key();
+    let owner = principal(1);
+    let subaccount = subaccount(1);
+
+    let ckerc20_path = to_derivation_path(deposit_derivation_path(
+        DepositAddressSchema::CkErc20,
+        &owner,
+        Some(&subaccount),
+    ));
+    let (ckerc20_subkey, _cc) =
+        master_private_key.derive_subkey_with_chain_code(&ckerc20_path, &cc);
+    assert_eq!(
+        ecdsa_public_key_to_address(&ckerc20_subkey.public_key()),
+        deposit_address(
+            &master_public_key,
+            &cc,
+            DepositAddressSchema::CkErc20,
+            &owner,
+            Some(&subaccount),
+        ),
+    );
+
+    let sweeper_path = to_derivation_path(sweeper_derivation_path());
+    let (sweeper_subkey, _cc) =
+        master_private_key.derive_subkey_with_chain_code(&sweeper_path, &cc);
+    assert_eq!(
+        ecdsa_public_key_to_address(&sweeper_subkey.public_key()),
+        sweeper_address(&master_public_key, &cc),
+    );
 }
 
 #[test]
@@ -150,8 +186,21 @@ fn should_match_eip55_reference_vectors() {
 }
 
 fn master_key() -> (PublicKey, [u8; 32]) {
+    let (private_key, chain_code) = master_private_key();
+    (private_key.public_key(), chain_code)
+}
+
+fn master_private_key() -> (PrivateKey, [u8; 32]) {
     let private_key = PrivateKey::generate_from_seed(b"ic-cketh-minter-deposit-address-test-seed");
-    (private_key.public_key(), [7_u8; 32])
+    (private_key, [7_u8; 32])
+}
+
+fn to_derivation_path(path: Vec<ByteBuf>) -> DerivationPath {
+    DerivationPath::new(
+        path.into_iter()
+            .map(|index| DerivationIndex(index.into_vec()))
+            .collect(),
+    )
 }
 
 fn principal(i: u8) -> Principal {
