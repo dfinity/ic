@@ -283,12 +283,12 @@ mod tests {
                 |_| {},
             );
 
-            state.metadata.node_public_keys = btreemap! {
+            std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],
                 node_test_id(2) => vec![2; 44],
             };
 
-            state.metadata.api_boundary_nodes = btreemap! {
+            std::sync::Arc::make_mut(&mut state.metadata.network_topology).api_boundary_nodes = btreemap! {
                 node_test_id(11) => ApiBoundaryNodeEntry {
                     domain: "api-bn11-example.com".to_string(),
                     ipv4_address: Some("127.0.0.1".to_string()),

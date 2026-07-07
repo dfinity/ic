@@ -347,6 +347,14 @@ fn system_metadata_roundtrip_encoding() {
         routing_table,
         canister_migrations,
         nns_subnet_id: other_subnet_id,
+        api_boundary_nodes: btreemap! {
+            node_test_id(1) => ApiBoundaryNodeEntry {
+                domain: "api-example.com".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            },
+        },
         ..Default::default()
     };
     system_metadata.network_topology = Arc::new(network_topology);
@@ -356,16 +364,8 @@ fn system_metadata_roundtrip_encoding() {
         .unwrap()
         .serialize_rfc8410_der();
 
-    system_metadata.node_public_keys = btreemap! {
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
-    };
-    system_metadata.api_boundary_nodes = btreemap! {
-        node_test_id(1) => ApiBoundaryNodeEntry {
-            domain: "api-example.com".to_string(),
-            ipv4_address: Some("127.0.0.1".to_string()),
-            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-            pubkey: None,
-        },
     };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
@@ -496,6 +496,7 @@ fn network_topology_roundtrip_encoding() {
         bitcoin_mainnet_canister_id,
         None,
         Some(app_subnet_id),
+        Default::default(),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology);
@@ -519,6 +520,7 @@ fn network_topology_roundtrip_encoding() {
             routing_table: full_routing_table,
         }),
         Some(app_subnet_id),
+        Default::default(),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology_with_full);
