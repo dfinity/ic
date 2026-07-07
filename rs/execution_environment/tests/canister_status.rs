@@ -138,11 +138,14 @@ fn test_status_visibility_of_canister_status() {
         for call_path in [CallPath::Update, CallPath::Query] {
             let result = canister_status(&env, call_path, sender, canister_id);
             if expected_allowed {
-                assert!(
-                    matches!(result, Ok(Ok(_))),
-                    "expected access to be granted for status_visibility: \
-                     {status_visibility:?}, sender: {sender_label}, call path: {call_path:?}, \
-                     but got: {result:?}"
+                let status = result
+                    .expect("expected a successful response")
+                    .expect("expected access to be granted");
+                assert_eq!(
+                    status.settings().status_visibility(),
+                    &status_visibility,
+                    "unexpected status_visibility for status_visibility: \
+                     {status_visibility:?}, sender: {sender_label}, call path: {call_path:?}"
                 );
             } else {
                 let err = result.expect_err(&format!(
@@ -157,7 +160,7 @@ fn test_status_visibility_of_canister_status() {
                 );
                 assert!(
                     err.description().contains(&format!(
-                        "Caller {sender} is not allowed to call canister_status"
+                        "Caller {sender} is not allowed to read the canister status"
                     )),
                     "unexpected error description for status_visibility: {status_visibility:?}, \
                      sender: {sender_label}, call path: {call_path:?}, description: {}",

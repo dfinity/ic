@@ -503,7 +503,6 @@ pub(crate) enum CanisterManagerError {
     },
     CanisterStatusAccessDenied {
         caller: PrincipalId,
-        method_name: String,
     },
     FetchCanisterLogsNotEnoughCycles {
         sent: Cycles,
@@ -1210,17 +1209,14 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!("Caller {caller} is not allowed to call {method_name}"),
             ),
-            CanisterStatusAccessDenied {
-                caller,
-                method_name,
-            } => Self::new(
+            CanisterStatusAccessDenied { caller } => Self::new(
                 // `CanisterStatusAccessDenied` is a dedicated error code that is
                 // mapped to the same reject code (`CanisterError`) as the
                 // `CanisterInvalidController` error code that governed access to
                 // `canister_status` before the status visibility feature was
                 // introduced.
                 ErrorCode::CanisterStatusAccessDenied,
-                format!("Caller {caller} is not allowed to call {method_name}"),
+                format!("Caller {caller} is not allowed to read the canister status"),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,

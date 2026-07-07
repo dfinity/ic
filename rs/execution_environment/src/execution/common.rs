@@ -382,7 +382,6 @@ pub(crate) fn validate_status_visibility(
     canister: &CanisterState,
     subnet_admins: Option<BTreeSet<PrincipalId>>,
     caller: &PrincipalId,
-    method_name: &str,
 ) -> Result<(), CanisterManagerError> {
     // Subnet admins always retain access to the canister status.
     if let Some(subnet_admins) = &subnet_admins
@@ -396,10 +395,7 @@ pub(crate) fn validate_status_visibility(
     {
         return Ok(());
     }
-    Err(CanisterManagerError::CanisterStatusAccessDenied {
-        caller: *caller,
-        method_name: method_name.to_string(),
-    })
+    Err(CanisterManagerError::CanisterStatusAccessDenied { caller: *caller })
 }
 
 pub(crate) fn validate_subnet_admin(

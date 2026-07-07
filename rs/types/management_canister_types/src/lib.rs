@@ -1444,9 +1444,9 @@ impl TryFrom<pb_canister_state_bits::StatusVisibility> for StatusVisibility {
             pb_canister_state_bits::status_visibility::StatusVisibility::AllowedViewers(data) => {
                 let principals = data
                     .principals
-                    .iter()
+                    .into_iter()
                     .map(|p| {
-                        PrincipalId::try_from(p.raw.clone()).map_err(|e| {
+                        PrincipalId::try_from(p.raw).map_err(|e| {
                             ProxyDecodeError::ValueOutOfRange {
                                 typ: "PrincipalId",
                                 err: e.to_string(),

@@ -1393,7 +1393,7 @@ fn get_canister_status_with_incorrect_controller_fails() {
 
     assert_eq!(err.code(), ErrorCode::CanisterStatusAccessDenied);
     assert!(err.description().contains(&format!(
-        "Caller {test_user} is not allowed to call canister_status"
+        "Caller {test_user} is not allowed to read the canister status"
     )));
 }
 
@@ -8605,7 +8605,7 @@ fn non_controller_and_non_subnet_admin_cannot_perform_subnet_admin_actions_on_ca
     let err = test.canister_status(canister_id).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterStatusAccessDenied);
     assert!(err.description().contains(&format!(
-        "Caller {test_user} is not allowed to call canister_status"
+        "Caller {test_user} is not allowed to read the canister status"
     )));
     // ...or canister metrics cannot be retrieved...
     let err = test.canister_metrics(canister_id).unwrap_err();
