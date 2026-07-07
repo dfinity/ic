@@ -1,14 +1,15 @@
 use crate::common::frontend_canister;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 use ic_agent::Agent;
+use ic_agent::agent::EffectiveId;
 use ic_certification::Label;
 use ic_management_canister_types::{
     Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
     HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
-use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
+use ic_transport_types::{CallResponse, Envelope};
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::SubnetMetrics;
 use pocket_ic::{
@@ -3532,6 +3533,155 @@ async fn rental_subnet_with_subnet_admins() {
 #[tokio::test]
 async fn cloud_engine_with_subnet_admins() {
     test_subnet_admins(FreeSubnet::CloudEngine).await;
+}
+
+/// Make an update call with an effective subnet ID (instead of an effective canister ID)
+/// using `ic-agent`: the request is routed to the subnet-scoped `/api/v4/subnet/<id>/call`
+/// endpoint. Per the IC interface spec, subnet-scoped update calls are only valid for
+/// canister creation calls to the management canister.
+#[tokio::test]
+async fn update_call_with_effective_subnet_id() {
+    // Create a PocketIC instance with an NNS subnet (providing an NNS delegation)
+    // and an application subnet to be targeted by the effective subnet ID.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let app_subnet = pic.topology().await.get_app_subnets()[0];
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Sign an update call to the management canister's `provisional_create_canister_with_cycles`
+    // method and submit it routed via the effective subnet ID of the application subnet.
+    let arg = Encode!(&ProvisionalCreateCanisterWithCyclesArgs {
+        amount: Some(INIT_CYCLES.into()),
+        settings: None,
+        specified_id: None,
+        sender_canister_version: None,
+    })
+    .unwrap();
+    let signed_update = agent
+        .update(
+            &Principal::management_canister(),
+            "provisional_create_canister_with_cycles",
+        )
+        .with_arg(arg)
+        .sign()
+        .unwrap();
+    let reply = match agent
+        .update_signed(EffectiveId::Subnet(app_subnet), signed_update.signed_update)
+        .await
+        .unwrap()
+    {
+        CallResponse::Response(reply) => reply,
+        CallResponse::Poll(request_id) => {
+            agent
+                .wait(&request_id, EffectiveId::Subnet(app_subnet))
+                .await
+                .unwrap()
+                .0
+        }
+    };
+    let canister_id = Decode!(&reply, CanisterIdRecord).unwrap().canister_id;
+
+    // The canister has been created on the targeted application subnet.
+    assert_eq!(pic.get_subnet(canister_id).await.unwrap(), app_subnet);
+}
+
+/// Response type for the management canister's `list_canisters` query method.
+#[derive(CandidType, Deserialize)]
+struct ListCanistersResult {
+    canisters: Vec<ListCanistersRange>,
+}
+
+/// A closed range of canister IDs returned by `list_canisters`.
+#[derive(CandidType, Deserialize)]
+struct ListCanistersRange {
+    start: Principal,
+    end: Principal,
+}
+
+/// Make a query call with an effective subnet ID (instead of an effective canister ID)
+/// using `ic-agent`: the request is routed to the subnet-scoped `/api/v3/subnet/<id>/query`
+/// endpoint. Per the IC interface spec, subnet-scoped queries are only valid for the
+/// `list_canisters` method of the management canister, which in turn is only available on
+/// subnets with subnet admins.
+#[tokio::test]
+async fn query_call_with_effective_subnet_id() {
+    // Create a PocketIC instance with a single application subnet on the "free" cost schedule
+    // and the anonymous principal (the agent's default identity) as a subnet admin.
+    let admin = Principal::anonymous();
+    let config = ExtendedSubnetConfigSet {
+        application: vec![
+            SubnetSpec::default()
+                .with_subnet_admins(vec![admin])
+                .with_cost_schedule(CanisterCyclesCostSchedule::Free),
+        ],
+        ..Default::default()
+    };
+    let mut pic = PocketIcBuilder::new_with_config(config).build_async().await;
+    let app_subnet = pic.topology().await.get_app_subnets()[0];
+
+    // Create a canister on the application subnet so that `list_canisters` returns a non-empty range.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet).await;
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Sign a query call to the management canister's `list_canisters` method and submit it
+    // routed via the effective subnet ID of the application subnet.
+    let signed_query = agent
+        .query(&Principal::management_canister(), "list_canisters")
+        .with_arg(Encode!(&()).unwrap())
+        .sign()
+        .unwrap();
+    let reply = agent
+        .query_signed(EffectiveId::Subnet(app_subnet), signed_query.signed_query)
+        .await
+        .unwrap();
+    let ranges = Decode!(&reply, ListCanistersResult).unwrap().canisters;
+
+    // The created canister is contained in one of the returned canister ID ranges.
+    assert!(
+        ranges
+            .iter()
+            .any(|range| range.start <= canister_id && canister_id <= range.end)
+    );
+}
+
+/// Make a `read_state` call with an effective subnet ID (instead of an effective canister ID)
+/// using `ic-agent`: the request is routed to the subnet-scoped `/api/v3/subnet/<id>/read_state`
+/// endpoint. Here we exercise `Agent::fetch_subnet_by_id`, which reads the subnet state tree.
+#[tokio::test]
+async fn read_state_with_effective_subnet_id() {
+    // Create a PocketIC instance with an NNS subnet (providing an NNS delegation)
+    // and an application subnet to be targeted by the effective subnet ID.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let app_subnet = pic.topology().await.get_app_subnets()[0];
+
+    // Create a canister on the application subnet.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet).await;
+
+    // Create an IC agent to interact with the (live) PocketIC instance.
+    let url = pic.make_live(None).await;
+    let agent = Agent::builder().with_url(url).build().unwrap();
+    agent.fetch_root_key().await.unwrap();
+
+    // Fetch the subnet information via a `read_state` call routed to the subnet-scoped endpoint.
+    let subnet = agent.fetch_subnet_by_id(&app_subnet).await.unwrap();
+
+    // The subnet's certified canister ID ranges contain the created canister.
+    assert!(subnet.contains_canister(&canister_id));
 }
 
 #[test]
