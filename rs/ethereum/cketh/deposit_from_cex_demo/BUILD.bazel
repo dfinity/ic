@@ -4,8 +4,8 @@ package(default_visibility = ["//visibility:private"])
 
 rust_test(
     name = "anvil_smoke_test",
-    srcs = ["tests/anvil_smoke.rs"],
     size = "small",
+    srcs = ["tests/anvil_smoke.rs"],
     data = ["@foundry_bin//:anvil"],
     edition = "2021",
     env = {
