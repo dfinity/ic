@@ -23,6 +23,7 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-nns-delegation-manager = { path = "../../http_endpoints/nns_delegation_manager" }
+ic-canonical-state = { path = "../../canonical_state" }
 ic-config = { path = "../../config" }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
@@ -63,7 +64,6 @@ tracing-subscriber = { workspace = true }
 [dev-dependencies]
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-canonical-state = { path = "../../canonical_state" }
 ic-canonical-state-tree-hash = { path = "../../canonical_state/tree_hash" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }

@@ -181,6 +181,7 @@ pub fn validate_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
+    last_summary_block: &Block,
     payload: &BlockPayload,
     metrics: HistogramVec,
 ) -> ValidationResult<IDkgValidationError> {
@@ -194,6 +195,7 @@ pub fn validate_payload(
                     pool_reader,
                     context,
                     parent_block,
+                    last_summary_block,
                     payload.as_summary().idkg.as_ref(),
                 )
             },
@@ -212,6 +214,7 @@ pub fn validate_payload(
                     state_reader,
                     context,
                     parent_block,
+                    last_summary_block,
                     payload.as_data().idkg.as_ref(),
                     &metrics,
                 )
@@ -230,6 +233,7 @@ fn validate_summary_payload(
     pool_reader: &PoolReader<'_>,
     context: &ValidationContext,
     parent_block: &Block,
+    last_summary_block: &Block,
     summary_payload: Option<&idkg::IDkgPayload>,
 ) -> ValidationResult<IDkgValidationError> {
     let height = parent_block.height().increment();
@@ -252,6 +256,7 @@ fn validate_summary_payload(
         pool_reader,
         context,
         parent_block,
+        last_summary_block,
         None,
         &ic_logger::replica_logger::no_op_logger(),
     ) {
@@ -283,6 +288,7 @@ fn validate_data_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
+    summary_block: &Block,
     data_payload: Option<&idkg::IDkgPayload>,
     metrics: &HistogramVec,
 ) -> ValidationResult<IDkgValidationError> {
@@ -329,14 +335,6 @@ fn validate_data_payload(
         }
     };
 
-    let summary_block = pool_reader
-        .dkg_summary_block(parent_block)
-        .unwrap_or_else(|| {
-            panic!(
-                "Impossible: fail to the summary block that governs height {}",
-                parent_block.height()
-            )
-        });
     // In case the certified height is below the summary height, add the heights in
     // between to the blockchain. This is needed to calculate the total number of pre-
     // signatures in the certified state and every block since then.
@@ -383,7 +381,7 @@ fn validate_data_payload(
         subnet_id,
         context,
         parent_block,
-        &summary_block,
+        summary_block,
         &block_reader,
         &builder,
         state_reader,

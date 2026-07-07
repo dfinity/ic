@@ -4,6 +4,7 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
+    consensus::backwards_compatibility::BackwardsCompatibleOption,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -215,6 +216,27 @@ impl std::hash::Hash for RemoteDkgAttempts {
     }
 }
 
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct SplittingArgs {
+    pub destination_subnet_id: SubnetId,
+    pub source_subnet_id: SubnetId,
+}
+
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug, Default)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+/// Represents the status of subnet splitting at the given summary height.
+pub enum SubnetSplittingStatus {
+    /// The subnet hasn't been requested to be split.
+    #[default]
+    NotScheduled,
+    /// The subnet is requested to be split at the height of the summary block.
+    /// Contains all the information necessary to determine the new subnet of the replica
+    Scheduled(SplittingArgs),
+    /// The subnet was split at the previous summary block.
+    PostSplit { new_subnet_id: SubnetId },
+}
+
 /// The DKG summary will be present as the DKG payload at every block,
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
@@ -247,6 +269,8 @@ pub struct DkgSummary {
     pub height: Height,
     /// The number of intervals a DKG for the given remote target was attempted.
     pub remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+    /// Status of the subnet splitting.
+    pub subnet_splitting_status: BackwardsCompatibleOption<SubnetSplittingStatus, false>,
 }
 
 impl DkgSummary {
@@ -260,6 +284,7 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+        subnet_splitting_status: SubnetSplittingStatus,
     ) -> Self {
         Self {
             configs: configs
@@ -274,6 +299,10 @@ impl DkgSummary {
             next_interval_length,
             height,
             remote_dkg_attempts,
+            // subnet_splitting_status: BackwardsCompatibleOption::default(),
+            subnet_splitting_status: BackwardsCompatibleOption::new_for_test_only(Some(
+                subnet_splitting_status,
+            )),
         }
     }
 
@@ -356,6 +385,13 @@ impl DkgSummary {
             .min()
             .expect("No current transcripts available")
     }
+
+    pub fn subnet_splitting_status(&self) -> SubnetSplittingStatus {
+        self.subnet_splitting_status
+            .as_ref()
+            .copied()
+            .unwrap_or_default()
+    }
 }
 
 fn build_transcripts_vec(
@@ -409,23 +445,35 @@ fn build_remote_dkg_attempts_vec(
 }
 
 impl From<&DkgSummary> for pb::Summary {
-    fn from(summary: &DkgSummary) -> Self {
+    fn from(
+        DkgSummary {
+            registry_version,
+            configs,
+            current_transcripts,
+            next_transcripts,
+            transcripts_for_remote_subnets,
+            interval_length,
+            next_interval_length,
+            height,
+            remote_dkg_attempts,
+            subnet_splitting_status,
+        }: &DkgSummary,
+    ) -> Self {
         Self {
-            registry_version: summary.registry_version.get(),
-            configs: summary
-                .configs
-                .values()
-                .map(pb::NiDkgConfig::from)
-                .collect(),
-            current_transcripts: build_transcripts_vec(&summary.current_transcripts),
-            next_transcripts: build_transcripts_vec(&summary.next_transcripts),
-            interval_length: summary.interval_length.get(),
-            next_interval_length: summary.next_interval_length.get(),
-            height: summary.height.get(),
+            registry_version: registry_version.get(),
+            configs: configs.values().map(pb::NiDkgConfig::from).collect(),
+            current_transcripts: build_transcripts_vec(current_transcripts),
+            next_transcripts: build_transcripts_vec(next_transcripts),
+            interval_length: interval_length.get(),
+            next_interval_length: next_interval_length.get(),
+            height: height.get(),
             transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
-                summary.transcripts_for_remote_subnets.as_slice(),
+                transcripts_for_remote_subnets,
             ),
-            remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
+            remote_dkg_attempts: build_remote_dkg_attempts_vec(remote_dkg_attempts),
+            subnet_splitting_status: subnet_splitting_status
+                .as_ref()
+                .map(pb::summary::SubnetSplittingStatus::from),
         }
     }
 }
@@ -506,6 +554,72 @@ fn build_transcript_result(
     }
 }
 
+impl From<SplittingArgs> for pb::SplittingArgs {
+    fn from(args: SplittingArgs) -> Self {
+        Self {
+            destination_subnet_id: Some(subnet_id_into_protobuf(args.destination_subnet_id)),
+            source_subnet_id: Some(subnet_id_into_protobuf(args.source_subnet_id)),
+        }
+    }
+}
+
+impl TryFrom<pb::SplittingArgs> for SplittingArgs {
+    type Error = ProxyDecodeError;
+
+    fn try_from(args: pb::SplittingArgs) -> Result<Self, Self::Error> {
+        Ok(Self {
+            destination_subnet_id: subnet_id_try_from_option(
+                args.destination_subnet_id,
+                "SplittingArgs::destination_subnet_id",
+            )?,
+            source_subnet_id: subnet_id_try_from_option(
+                args.source_subnet_id,
+                "SplittingArgs::source_subnet_id",
+            )?,
+        })
+    }
+}
+
+impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
+    fn from(status: &SubnetSplittingStatus) -> Self {
+        match status {
+            SubnetSplittingStatus::NotScheduled => {
+                pb::summary::SubnetSplittingStatus::NotScheduled(())
+            }
+            SubnetSplittingStatus::Scheduled(splitting_args) => {
+                pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs::from(
+                    *splitting_args,
+                ))
+            }
+            SubnetSplittingStatus::PostSplit { new_subnet_id } => {
+                pb::summary::SubnetSplittingStatus::PostSplit(subnet_id_into_protobuf(
+                    *new_subnet_id,
+                ))
+            }
+        }
+    }
+}
+
+impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
+    type Error = ProxyDecodeError;
+
+    fn try_from(status: pb::summary::SubnetSplittingStatus) -> Result<Self, Self::Error> {
+        match status {
+            pb::summary::SubnetSplittingStatus::NotScheduled(()) => {
+                Ok(SubnetSplittingStatus::NotScheduled)
+            }
+            pb::summary::SubnetSplittingStatus::Scheduled(splitting_args) => {
+                Ok(SubnetSplittingStatus::Scheduled(splitting_args.try_into()?))
+            }
+            pb::summary::SubnetSplittingStatus::PostSplit(subnet_id) => {
+                Ok(SubnetSplittingStatus::PostSplit {
+                    new_subnet_id: subnet_id_try_from_protobuf(subnet_id)?,
+                })
+            }
+        }
+    }
+}
+
 impl TryFrom<pb::Summary> for DkgSummary {
     type Error = ProxyDecodeError;
 
@@ -527,6 +641,9 @@ impl TryFrom<pb::Summary> for DkgSummary {
             )
             .map_err(ProxyDecodeError::Other)?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
+            subnet_splitting_status: BackwardsCompatibleOption::try_from_proto(
+                summary.subnet_splitting_status,
+            )?,
         })
     }
 }
@@ -682,10 +799,11 @@ pub enum DkgPayloadCreationError {
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
-    MissingDkgStartBlock,
+    SubnetSplittingStatusError(String),
 }
 
 /// Reasons for why a dkg payload might be invalid.
+#[allow(clippy::large_enum_variant)]
 #[derive(PartialEq, Debug)]
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),

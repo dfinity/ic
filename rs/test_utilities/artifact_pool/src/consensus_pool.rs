@@ -152,13 +152,16 @@ fn dkg_payload_builder_fn(
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
 ) -> Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> DkgPayload> {
     Box::new(move |cons_pool, parent, validation_context| {
+        let pool = PoolReader::new(cons_pool);
+        let last_summary_block = pool.dkg_summary_block(&parent).expect("No dkg summary");
         ic_consensus_dkg::create_payload(
             subnet_id,
             &*registry_client,
             &*crypto,
-            &PoolReader::new(cons_pool),
+            &pool,
             dkg_pool.clone(),
             &parent,
+            &last_summary_block,
             &*state_manager,
             validation_context,
             no_op_logger(),

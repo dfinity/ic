@@ -18,6 +18,7 @@ pub fn new_bouncer(
     let finalized_height = pool_reader.get_finalized_height();
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
+    let next_summary_height = pool_reader.get_next_summary_height();
 
     Box::new(move |id: &'_ ConsensusMessageId| {
         compute_bouncer(
@@ -27,6 +28,7 @@ pub fn new_bouncer(
             finalized_height,
             notarized_height,
             beacon_height,
+            next_summary_height,
             id,
         )
     })
@@ -44,6 +46,7 @@ fn compute_bouncer(
     finalized_height: Height,
     notarized_height: Height,
     beacon_height: Height,
+    next_summary_height: Height,
     id: &ConsensusMessageId,
 ) -> BouncerValue {
     let height = id.height;
@@ -53,8 +56,10 @@ fn compute_bouncer(
     }
     // Stash non-CUP artifacts, as long as they're too far ahead of the next pending CUP height.
     // This prevents nodes that have fallen behind from exceeding their validated pool bounds.
-    if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
-        && height > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
+    if !matches!(
+        id.hash,
+        ConsensusMessageHash::CatchUpPackage(_) | ConsensusMessageHash::CatchUpPackageShare(_)
+    ) && height > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
     {
         return MaybeWantsLater;
     }
@@ -107,7 +112,7 @@ fn compute_bouncer(
         ConsensusMessageHash::CatchUpPackageShare(_) => {
             if height <= cup_height {
                 Unwanted
-            } else if height <= finalized_height {
+            } else if height <= next_summary_height {
                 Wants
             } else {
                 MaybeWantsLater

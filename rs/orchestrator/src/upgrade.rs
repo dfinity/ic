@@ -24,7 +24,7 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{CatchUpPackage, HasHeight, dkg::SubnetSplittingStatus},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
@@ -267,6 +267,7 @@ impl Upgrade {
         *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(subnet_id);
 
         let old_cup_height = maybe_local_cup.as_ref().map(HasHeight::height);
+        let old_subnet_id = subnet_id;
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
@@ -274,6 +275,29 @@ impl Upgrade {
             .cup_provider
             .get_latest_cup(maybe_local_cup_proto, subnet_id)
             .await?;
+        // Replace the subnet ID of the local CUP with the subnet ID of the latest CUP
+        // In the vast majority of cases, they will be identical. In case of a subnet split,
+        // this is not necessary the case, and we want the remainder of this function to
+        // consider the new subnet ID.
+        let new_subnet_id = get_subnet_id(&self.registry, &latest_cup).map_err(|err| {
+            OrchestratorError::UpgradeError(format!(
+                "Couldn't determine the subnet id of the latest CUP: {err:?}"
+            ))
+        })?;
+
+        if subnet_id != new_subnet_id {
+            info!(
+                self.logger,
+                "The latest CUP (registry version={}, height={}) is for a different subnet (subnet_id={}) \
+                than the local CUP (subnet_id={}), indicating that the node has been reassigned to a
+                different subnet. This is normal in case of subnet splitting.",
+                latest_cup.content.registry_version(),
+                latest_cup.height(),
+                new_subnet_id,
+                subnet_id,
+            );
+        }
+        let subnet_id = new_subnet_id;
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
@@ -296,7 +320,7 @@ impl Upgrade {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is unsigned: \
-                a subnet genesis/recovery is in progress",
+                a subnet genesis/recovery/split is in progress",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
             );
@@ -316,7 +340,10 @@ impl Upgrade {
             self.node_id,
             subnet_id,
             &latest_cup,
-        ) {
+        )
+        .map_err(|err| {
+            OrchestratorError::UpgradeError(format!("Failed to determine unassignment: {err}"))
+        })? {
             UnassignmentDecision::StayInSubnet => OrchestratorControlFlow::Assigned(subnet_id),
             UnassignmentDecision::Later => OrchestratorControlFlow::Leaving(subnet_id),
             UnassignmentDecision::Now => {
@@ -364,9 +391,13 @@ impl Upgrade {
         }
 
         // If we arrive here, we are on the newest replica version.
-        // Now we check if a subnet recovery is in progress.
-        // If it is, we restart to pass the unsigned CUP to consensus.
-        self.stop_replica_if_new_recovery_cup(&latest_cup, old_cup_height);
+        // Now we check if a subnet recovery or a subnet split is in progress.
+        // If it is, we restart to pass the new DKG material to consensus.
+        self.stop_replica_if_new_recovery_or_post_splitting_cup(
+            &latest_cup,
+            old_cup_height,
+            old_subnet_id,
+        );
 
         // This will start new child processes if any of them is not running
         self.ensure_children_are_running(
@@ -576,26 +607,82 @@ impl Upgrade {
         Ok(())
     }
 
-    /// Stop the replica if the given CUP is unsigned and higher than the given height.
-    /// Without restart, consensus would reject the unsigned artifact.
+    /// Stop the replica if the given CUP is a recovery CUP (unsigned) or a post-split CUP.
+    /// This is necessary as they both change the public key of the subnet, meaning that the
+    /// replicas' HTTP handlers would otherwise serve outdated delegations compared to the subnet's
+    /// new key material.
+    /// Also for recovery CUPs, consensus would otherwise reject the unsigned artifact.
+    ///
+    /// In any case, we do so only when the new CUP has a higher height than the previous one, in
+    /// order to stop the replica only once.
     /// If stopping the replica fails, restart the current process instead.
-    fn stop_replica_if_new_recovery_cup(
+    fn stop_replica_if_new_recovery_or_post_splitting_cup(
         &self,
         cup: &CatchUpPackage,
         old_cup_height: Option<Height>,
+        old_subnet_id: SubnetId,
     ) {
-        let new_height = cup.content.height();
-        if !cup.is_signed() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
-            info!(
-                self.logger,
-                "Found higher unsigned CUP, restarting replica for subnet recovery..."
-            );
-            // Restarting the replica is enough to pass the unsigned CUP forward.
-            // If we fail, restart the current process instead.
-            if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
-                warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                reexec_current_process(&self.logger);
+        let Some(old_cup_height) = old_cup_height else {
+            return;
+        };
+        if cup.content.height() <= old_cup_height {
+            return;
+        }
+
+        let cup_type_str = match cup.subnet_splitting_status() {
+            SubnetSplittingStatus::NotScheduled => {
+                if cup.is_signed() {
+                    // Regular subnet CUP
+                    return;
+                }
+
+                "recovery"
             }
+            SubnetSplittingStatus::Scheduled { .. } => {
+                let error_message = "The orchestrator should never see a scheduled splitting CUP: the CUP put in the \
+                    registry with that status deliberately has a height of 0, meaning it should never have been \
+                    picked up. On the actual height of the split, Consensus does not create a CUP, but instead \
+                    directly creates a post-split one.";
+                if cfg!(debug_assertions) {
+                    panic!("{}", error_message);
+                }
+
+                error!(self.logger, "{}", error_message);
+                self.metrics
+                    .critical_error_observed_scheduled_splitting_cup
+                    .inc();
+
+                return;
+            }
+            SubnetSplittingStatus::PostSplit { new_subnet_id } => {
+                debug_assert!(
+                    cup.is_signed(),
+                    "A post-split CUP should have always been created by the subnet"
+                );
+
+                if new_subnet_id == old_subnet_id {
+                    // This is a post-split CUP for the same subnet, so we do not need to restart
+                    // the replica.
+                    return;
+                }
+
+                &format!("post-split (=> {})", new_subnet_id)
+            }
+        };
+
+        info!(
+            self.logger,
+            "Found higher {} CUP (registry version={}, height={}), restarting replica...",
+            cup_type_str,
+            cup.content.registry_version(),
+            cup.height(),
+        );
+
+        // Restarting the replica is enough to pass the CUP forward.
+        // If we fail, restart the current process instead.
+        if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
+            warn!(self.logger, "Failed to stop replica with error {:?}", e);
+            reexec_current_process(&self.logger);
         }
     }
 
@@ -697,6 +784,15 @@ fn get_subnet_id(registry: &RegistryHelper, cup: &CatchUpPackage) -> Result<Subn
         .as_ref()
         .as_summary()
         .dkg;
+
+    // If this is the first CUP created right after the subnet was split, infer the subnet id from
+    // the subnet splitting status in the dkg summary.
+    if let SubnetSplittingStatus::PostSplit { new_subnet_id } =
+        dkg_summary.subnet_splitting_status()
+    {
+        return Ok(new_subnet_id);
+    }
+
     // Note that although sometimes CUPs have no signatures (e.g. genesis and
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
@@ -762,34 +858,34 @@ fn should_node_become_unassigned(
     node_id: NodeId,
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
-) -> UnassignmentDecision {
+) -> Result<UnassignmentDecision, String> {
     let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
     let latest_registry_version = latest_registry_version.get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
     // system, we still do not remove the subnet state by a mistake.
     if latest_registry_version < oldest_relevant_version {
-        return UnassignmentDecision::StayInSubnet;
+        return Ok(UnassignmentDecision::StayInSubnet);
     }
 
     if let Ok(true) =
         registry.is_subnet_deleted(subnet_id, RegistryVersion::from(latest_registry_version))
     {
-        return UnassignmentDecision::Now;
+        return Ok(UnassignmentDecision::Now);
     }
 
     // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
     if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
-        return UnassignmentDecision::StayInSubnet;
+        return Ok(UnassignmentDecision::StayInSubnet);
     }
 
     for version in oldest_relevant_version..latest_registry_version {
         if node_is_in_subnet_at_version(registry, node_id, subnet_id, version) {
-            return UnassignmentDecision::Later;
+            return Ok(UnassignmentDecision::Later);
         }
     }
 
-    UnassignmentDecision::Now
+    Ok(UnassignmentDecision::Now)
 }
 
 /// Checks if the given node belongs to the given subnet at the given registry version, by looking
@@ -1504,6 +1600,7 @@ mod tests {
         }
         let cup_provider = CatchUpPackageProvider::new(
             registry.clone(),
+            metrics.clone(),
             LocalCUPReader::new(cup_dir, logger.clone()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),
@@ -3335,7 +3432,9 @@ mod tests {
 
             let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
             let key_transcript = setup.generate_key_transcript(&key_id);
-            let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+            let mut cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
+            cup.signature.signer.target_subnet = NiDkgTargetSubnet::Local;
+            cup.signature.signer.dealer_subnet = subnet_id;
 
             println!(
                 "Use-case: {oldest_relevant_version}, {node_in_subnet:?}, {expected_decision:?}"
@@ -3365,7 +3464,8 @@ mod tests {
                 node_id,
                 subnet_id,
                 &cup,
-            );
+            )
+            .expect("Shouldn succeed");
 
             assert!(
                 response == expected_decision,
@@ -3404,7 +3504,8 @@ mod tests {
             node_id,
             subnet_id,
             &cup,
-        );
+        )
+        .expect("Should succeed");
 
         assert_eq!(response, UnassignmentDecision::Now);
     }

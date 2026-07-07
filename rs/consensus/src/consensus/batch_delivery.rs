@@ -9,7 +9,7 @@ use crate::consensus::{
 use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_consensus_idkg::utils::get_idkg_subnet_public_keys_and_pre_signatures;
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader, subnet_splitting};
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_interfaces::{
@@ -24,20 +24,18 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    Height, PrincipalId, SubnetId,
+    Height, NodeId, PrincipalId, SubnetId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
         ConsensusResponse,
     },
-    consensus::{
-        Block, BlockPayload, HasVersion,
-        dkg::RemoteTranscriptResult,
-        idkg::{self},
-    },
-    crypto::randomness_from_crypto_hashable,
-    crypto::threshold_sig::{
-        ThresholdSigPublicKey,
-        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    consensus::{Block, BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
+    crypto::{
+        randomness_from_crypto_hashable,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+        },
     },
     messages::{CallbackId, Payload, RejectContext},
 };
@@ -64,6 +62,7 @@ pub fn deliver_batches(
         pool,
         registry_client,
         subnet_id,
+        /*maybe_node_id=*/ None,
         log,
         max_batch_height_to_deliver,
         /*result_processor=*/ None,
@@ -80,6 +79,7 @@ pub(crate) fn deliver_batches_with_result_processor(
     pool: &PoolReader<'_>,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
+    maybe_node_id: Option<NodeId>,
     log: &ReplicaLogger,
     // This argument should only be used by the ic-replay tool. If it is set to `None`, we will
     // deliver all batches until the finalized height. If it is set to `Some(h)`, we will
@@ -104,11 +104,9 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {} because no finalized block was found. \
+                "Do not deliver height {height} because no finalized block was found. \
                 This should indicate we are waiting for state sync. \
-                Finalized height: {}",
-                height,
-                finalized_height
+                Finalized height: {finalized_height}"
             );
             break;
         };
@@ -117,8 +115,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 30,
                 log,
-                "Do not deliver height {} because RandomTape is not ready. Will re-try later",
-                height
+                "Do not deliver height {height} because RandomTape is not ready. Will re-try later"
             );
             break;
         };
@@ -135,21 +132,36 @@ pub(crate) fn deliver_batches_with_result_processor(
             }
         );
 
-        if block.payload.is_summary() {
-            info!(
+        // Retrieve the dkg summary block
+        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            warn!(
+                every_n_seconds => 30,
                 log,
-                "Delivering finalized batch at CUP height of {}", height
+                "Do not deliver height {height} because no summary block was found. \
+                Finalized height: {finalized_height}"
             );
+            break;
+        };
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+
+        if block.payload.is_summary() {
+            info!(log, "Delivering finalized batch at CUP height of {height}");
         }
         // When we are not delivering CUP block, we must check if the subnet is halted.
         else {
-            match status::get_status(height, registry_client, subnet_id, pool, log) {
+            match status::get_status(
+                height,
+                &summary_block,
+                registry_client,
+                subnet_id,
+                pool,
+                log,
+            ) {
                 Some(Status::Halting | Status::Halted) => {
-                    debug!(
-                        every_n_seconds => 5,
+                    info!(
+                        every_n_seconds => 30,
                         log,
-                        "Batch of height {} is not delivered because replica is halted",
-                        height,
+                        "Batch of height {height} is not delivered because replica is halted"
                     );
                     return Ok(last_delivered_batch_height);
                 }
@@ -165,20 +177,6 @@ pub(crate) fn deliver_batches_with_result_processor(
         }
 
         let randomness = randomness_from_crypto_hashable(&tape);
-
-        // Retrieve the dkg summary block
-        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
-            warn!(
-                every_n_seconds => 30,
-                log,
-                "Do not deliver height {} because no summary block was found. \
-                Finalized height: {}",
-                height,
-                finalized_height
-            );
-            break;
-        };
-        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
 
         let mut chain_key_subnet_public_keys = BTreeMap::new();
         let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
@@ -199,7 +197,7 @@ pub(crate) fn deliver_batches_with_result_processor(
         if !chain_key_subnet_public_keys.is_empty() && block.payload.is_summary() {
             info!(
                 log,
-                "Subnet {} contains chain keys: {:?}", subnet_id, chain_key_subnet_public_keys
+                "Subnet {subnet_id} contains chain keys: {chain_key_subnet_public_keys:?}"
             );
         }
 
@@ -216,12 +214,48 @@ pub(crate) fn deliver_batches_with_result_processor(
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(_summary_payload) => BatchContent::Data {
-                batch_messages: BatchMessages::default(),
-                chain_key_data,
-                consensus_responses,
-                requires_full_state_hash,
-            },
+            BlockPayload::Summary(_summary_payload) => {
+                if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
+                    let node_id =
+                        maybe_node_id.expect("Subnet splitting not yet enabled in ic-replay");
+                    let subnet_splitting::PostSplitAssignment {
+                        new_subnet_id,
+                        other_subnet_id,
+                    } = match subnet_splitting::get_post_split_subnet_assignment(
+                        node_id,
+                        &block,
+                        registry_client,
+                        scheduled,
+                    ) {
+                        Ok(assignment) => assignment,
+                        Err(err) => {
+                            warn!(
+                                every_n_seconds => 30,
+                                log,
+                                "Error getting new subnet assignment: {err}"
+                            );
+                            break;
+                        }
+                    };
+
+                    info!(
+                        log,
+                        "Delivering splitting block. New subnet assignment: {new_subnet_id}"
+                    );
+
+                    BatchContent::Splitting {
+                        new_subnet_id,
+                        other_subnet_id,
+                    }
+                } else {
+                    BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data,
+                        consensus_responses,
+                        requires_full_state_hash,
+                    }
+                }
+            }
             BlockPayload::Data(data_payload) => {
                 batch_stats.add_from_payload(&data_payload.batch);
                 BatchContent::Data {
@@ -229,9 +263,8 @@ pub(crate) fn deliver_batches_with_result_processor(
                         .batch
                         .clone()
                         .into_messages()
-                        .map_err(|err| {
-                            error!(log, "batch payload deserialization failed: {:?}", err);
-                            err
+                        .inspect_err(|err| {
+                            error!(log, "batch payload deserialization failed: {err:?}");
                         })
                         .unwrap_or_default(),
                     chain_key_data,
@@ -245,8 +278,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             warn!(
                 every_n_seconds => 5,
                 log,
-                "No batch delivery at height {}: no random beacon found.",
-                height
+                "No batch delivery at height {height}: no random beacon found."
             );
             return Ok(last_delivered_batch_height);
         };
@@ -260,9 +292,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 warn!(
                     every_n_seconds => 5,
                     log,
-                    "No batch delivery at height {}: membership error: {:?}",
-                    height,
-                    e
+                    "No batch delivery at height {height}: membership error: {e:?}"
                 );
                 return Ok(last_delivered_batch_height);
             }
@@ -294,7 +324,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             f(&result, block_stats, batch_stats);
         }
         if let Err(err) = result {
-            warn!(every_n_seconds => 5, log, "Batch delivery failed: {:?}", err);
+            warn!(every_n_seconds => 5, log, "Batch delivery failed: {err:?}");
             return Err(err);
         }
         last_delivered_batch_height = height;
@@ -565,16 +595,20 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_remote_dkgs;
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         PrincipalId, RegistryVersion, SubnetId,
         batch::{BatchPayload, ValidationContext},
         consensus::{
-            DataPayload, Payload as ConsensusPayload, Rank,
-            dkg::{DkgDataPayload, RemoteTranscriptResult},
+            DataPayload, HashedBlock, Payload as ConsensusPayload, Rank,
+            backwards_compatibility::BackwardsCompatibleOption,
+            dkg::{DkgDataPayload, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus},
         },
         crypto::{
             CryptoHash, CryptoHashOf,
@@ -583,9 +617,14 @@ mod tests {
             },
         },
         messages::{CallbackId, Payload},
+        replica_config::ReplicaConfig,
         time::UNIX_EPOCH,
     };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1, SUBNET_2};
     use std::str::FromStr;
+
+    const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
 
     const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
 
@@ -768,5 +807,113 @@ mod tests {
             initial_response.fresh_subnet_id,
             SubnetId::from(PrincipalId::from_str(EXPECTED_FRESH_SUBNET_ID_STR).unwrap())
         );
+    }
+
+    fn deliver_splitting_batch(node_id: NodeId) -> (SubnetId, SubnetId) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+            const INTERVAL_LENGTH: u64 = 9;
+            let summary_height = Height::from(INTERVAL_LENGTH + 1);
+
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                ..
+            } = DependenciesBuilder::new(
+                pool_config,
+                vec![
+                    (
+                        1,
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_1, NODE_3])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                    (
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::from(&[NODE_2, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH)
+                            .build(),
+                    ),
+                ],
+            )
+            .with_replica_config(ReplicaConfig {
+                node_id: NODE_1,
+                subnet_id: SOURCE_SUBNET_ID,
+            })
+            .with_mocked_state_manager()
+            .build();
+
+            pool.advance_round_normal_operation_n(INTERVAL_LENGTH);
+
+            let mut proposal = pool.make_next_block();
+            let block = proposal.content.as_mut();
+            block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+            let mut payload = block.payload.as_ref().as_summary().clone();
+            payload.dkg.subnet_splitting_status = BackwardsCompatibleOption::new_for_test_only(
+                Some(SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    source_subnet_id: SOURCE_SUBNET_ID,
+                    destination_subnet_id: DESTINATION_SUBNET_ID,
+                })),
+            );
+            block.payload = ConsensusPayload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(payload),
+            );
+            proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+            pool.insert_validated(proposal.clone());
+            pool.notarize(&proposal);
+            pool.finalize(&proposal);
+            pool.insert_random_tape(summary_height);
+
+            let message_routing = FakeMessageRouting::new();
+            *message_routing.next_batch_height.write().unwrap() = summary_height;
+
+            let result = deliver_batches_with_result_processor(
+                &message_routing,
+                &membership,
+                &PoolReader::new(&pool),
+                registry.as_ref(),
+                SOURCE_SUBNET_ID,
+                Some(node_id),
+                &no_op_logger(),
+                None,
+                None,
+            );
+
+            assert_eq!(result, Ok(summary_height));
+            let batches = message_routing.batches.read().unwrap();
+            assert_eq!(batches.len(), 1);
+            match &batches[0].content {
+                BatchContent::Splitting {
+                    new_subnet_id,
+                    other_subnet_id,
+                } => (*new_subnet_id, *other_subnet_id),
+                other => panic!("Expected BatchContent::Splitting, got: {other:?}"),
+            }
+        })
+    }
+
+    #[test]
+    fn test_deliver_splitting_batch_node_on_source_subnet() {
+        let (new_subnet_id, other_subnet_id) = deliver_splitting_batch(NODE_1);
+        assert_eq!(new_subnet_id, SOURCE_SUBNET_ID);
+        assert_eq!(other_subnet_id, DESTINATION_SUBNET_ID);
+    }
+
+    #[test]
+    fn test_deliver_splitting_batch_node_on_destination_subnet() {
+        let (new_subnet_id, other_subnet_id) = deliver_splitting_batch(NODE_4);
+        assert_eq!(new_subnet_id, DESTINATION_SUBNET_ID);
+        assert_eq!(other_subnet_id, SOURCE_SUBNET_ID);
     }
 }

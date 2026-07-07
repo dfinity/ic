@@ -4,7 +4,7 @@ use crate::{
     ReplicaHealthStatus,
     common::{
         Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
-        validation_error_to_http_error,
+        invalid_delegation_error, outdated_delegation_error, validation_error_to_http_error,
     },
 };
 
@@ -100,6 +100,7 @@ impl QueryService {
 }
 
 impl QueryServiceBuilder {
+    #[allow(clippy::too_many_arguments)]
     pub fn builder(
         log: ReplicaLogger,
         node_id: NodeId,
@@ -320,6 +321,12 @@ pub(crate) async fn query(
     let (response, timestamp) = match query_execution_response {
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             return certified_state_unavailable_error().into_response();
+        }
+        Err(QueryExecutionError::InvalidDelegation(_)) => {
+            return invalid_delegation_error().into_response();
+        }
+        Err(QueryExecutionError::OutdatedDelegation) => {
+            return outdated_delegation_error().into_response();
         }
         Ok((response, time)) => (response, time),
     };

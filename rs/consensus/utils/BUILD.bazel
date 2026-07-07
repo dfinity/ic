@@ -29,6 +29,7 @@ rust_library(
         "@crate_index//:rand",
         "@crate_index//:rayon",
         "@crate_index//:slog",
+        "@crate_index//:thiserror",
     ],
 )
 
@@ -50,6 +51,7 @@ rust_test(
         "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/helpers",
+        "//rs/registry/keys",
         "//rs/replicated_state",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
@@ -63,6 +65,8 @@ rust_test(
         "@crate_index//:prometheus",
         "@crate_index//:rand",
         "@crate_index//:rayon",
+        "@crate_index//:rstest",
         "@crate_index//:slog",
+        "@crate_index//:thiserror",
     ],
 )

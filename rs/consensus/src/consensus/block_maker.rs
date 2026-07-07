@@ -13,13 +13,14 @@ use ic_consensus_utils::{
     get_subnet_record,
     membership::Membership,
     pool_reader::{PoolReader, UnexpectedChainLength},
+    subnet_splitting,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, debug, error, trace, warn};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -29,7 +30,7 @@ use ic_types::{
         Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
         HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
         block_maker::SubnetRecords,
-        dkg::{DkgDataPayload, DkgPayload},
+        dkg::{DkgDataPayload, DkgPayload, SubnetSplittingStatus},
         hashed,
     },
     replica_config::ReplicaConfig,
@@ -190,6 +191,11 @@ impl BlockMaker {
         let height = parent.height().increment();
         let certified_height = self.state_reader.latest_certified_height();
 
+        let Some(last_summary_block) = pool.dkg_summary_block(parent.get_value()) else {
+            warn!(self.log, "Couldn't find the summary block");
+            return None;
+        };
+
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
         //
@@ -207,7 +213,16 @@ impl BlockMaker {
 
         // The stable registry version to be agreed on in this block. If this is a summary
         // block, this version will be the new membership version of the next dkg interval.
-        let stable_registry_version = self.get_stable_registry_version(parent.as_ref())?;
+        let stable_registry_version = self.get_stable_registry_version(
+            parent.as_ref(),
+            last_summary_block.context.registry_version,
+            last_summary_block
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .get_next_start_height(),
+        )?;
         // Get the subnet records that are relevant to making a block
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
@@ -276,6 +291,7 @@ impl BlockMaker {
             pool,
             context,
             parent,
+            &last_summary_block,
             height,
             rank,
             registry_version,
@@ -291,6 +307,7 @@ impl BlockMaker {
         pool: &PoolReader<'_>,
         context: ValidationContext,
         parent: HashedBlock,
+        last_summary_block: &Block,
         height: Height,
         rank: Rank,
         registry_version: RegistryVersion,
@@ -306,6 +323,7 @@ impl BlockMaker {
             pool,
             Arc::clone(&self.dkg_pool),
             parent.as_ref(),
+            last_summary_block,
             &*self.state_reader,
             &context,
             self.log.clone(),
@@ -331,6 +349,7 @@ impl BlockMaker {
                         pool,
                         &context,
                         parent.as_ref(),
+                        last_summary_block,
                         Some(&self.idkg_payload_metrics),
                         &self.log,
                     )
@@ -341,6 +360,13 @@ impl BlockMaker {
                     })
                     .ok()?;
 
+                    if matches!(
+                        summary.subnet_splitting_status(),
+                        SubnetSplittingStatus::Scheduled(..)
+                    ) {
+                        info!(self.log, "Proposing a Splitting block at height {height}.");
+                    }
+
                     BlockPayload::Summary(SummaryPayload {
                         dkg: summary,
                         idkg: idkg_summary,
@@ -349,21 +375,34 @@ impl BlockMaker {
                 DkgPayload::Data(dkg) => {
                     let (batch_payload, dkg, idkg_data) = match status::get_status(
                         height,
+                        last_summary_block,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
                         &self.log,
                     )? {
-                        // Don't propose any block if the replica is halted.
                         Status::Halted => {
+                            info!(
+                              every_n_seconds => 30,
+                              self.log,
+                              "Not proposing any block at height {height} \
+                              because the replica is halted"
+                            );
                             return None;
                         }
-                        // Use empty payload and empty DKG dealings if the replica is halting.
-                        Status::Halting => (
-                            BatchPayload::default(),
-                            DkgDataPayload::new_empty(dkg.start_height),
-                            /*idkg_data=*/ None,
-                        ),
+                        Status::Halting => {
+                            info!(
+                              every_n_seconds => 30,
+                              self.log,
+                              "Proposing an empty block at height {height} \
+                              because the replica is halting"
+                            );
+                            (
+                                BatchPayload::default(),
+                                DkgDataPayload::new_empty(dkg.start_height),
+                                /*idkg_data=*/ None,
+                            )
+                        }
                         Status::Running => {
                             let batch_payload = self.build_batch_payload(
                                 pool,
@@ -381,6 +420,7 @@ impl BlockMaker {
                                 &*self.state_reader,
                                 &context,
                                 parent.as_ref(),
+                                last_summary_block,
                                 &self.idkg_payload_metrics,
                                 &self.log,
                             )
@@ -495,20 +535,59 @@ impl BlockMaker {
         }
     }
 
-    // Returns the registry version received from the NNS some specified amount of
-    // time ago. If the parent's context references higher version which is already
-    // available locally, we use that version.
-    pub(crate) fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
+    /// Returns the registry version received from the NNS some specified amount of
+    /// time ago. If the parent's context references higher version which is already
+    /// available locally, we use that version.
+    pub(crate) fn get_stable_registry_version(
+        &self,
+        parent: &Block,
+        last_summary_block_registry_version: RegistryVersion,
+        next_summary_block_height: Height,
+    ) -> Option<RegistryVersion> {
         let parents_version = parent.context.registry_version;
+        let parents_height = parent.height();
         let latest_version = self.registry_client.get_latest_version();
         // Check if there is a stable version that we can bump up to.
         for v in (parents_version.get()..=latest_version.get()).rev() {
             let version = RegistryVersion::from(v);
+
+            // Don't consider a registry version if it's too fresh.
             let version_timestamp = self.registry_client.get_version_timestamp(version)?;
-            if version_timestamp + self.stable_registry_version_age <= current_time() {
-                return Some(version);
+            if version_timestamp + self.stable_registry_version_age > current_time() {
+                continue;
+            }
+
+            let subnet_splitting_status = subnet_splitting::get_status(
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                last_summary_block_registry_version,
+                version,
+            )
+            .inspect_err(|err| {
+                warn!(
+                    self.log,
+                    "Failed to get subnet splitting status at registry version {version}: {err}"
+                )
+            })
+            .ok()?;
+
+            match subnet_splitting_status {
+                subnet_splitting::Status::NotScheduled => return Some(version),
+                subnet_splitting::Status::Scheduled { scheduled_at, .. } => {
+                    info!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "Subnet splitting scheduled at registry version {scheduled_at} \
+                        and height {next_summary_block_height}. Freezing registry version."
+                    );
+
+                    if parents_height.increment() == next_summary_block_height {
+                        return Some(scheduled_at);
+                    }
+                }
             }
         }
+
         // If parent's version is locally available, return that.
         if parents_version <= latest_version {
             return Some(parents_version);
@@ -643,6 +722,10 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, SubnetSplittingArgs, catch_up_package_contents::CupType,
+    };
+    use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::FromParent;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
@@ -654,6 +737,8 @@ mod tests {
         signature::ThresholdSignature,
         *,
     };
+    use ic_types_test_utils::ids::NODE_1;
+    use ic_types_test_utils::ids::{SUBNET_0, SUBNET_1};
     use rstest::rstest;
     use std::sync::Arc;
 
@@ -1204,25 +1289,33 @@ mod tests {
             block_maker.stable_registry_version_age =
                 current_time().saturating_duration_since(v3_timestamp);
             assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
+                block_maker
+                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .unwrap(),
                 RegistryVersion::from(3)
             );
             block_maker.stable_registry_version_age =
                 current_time().saturating_duration_since(v2_timestamp);
             assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
+                block_maker
+                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .unwrap(),
                 RegistryVersion::from(2)
             );
             block_maker.stable_registry_version_age =
                 current_time().saturating_duration_since(v1_timestamp);
             assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
+                block_maker
+                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .unwrap(),
                 RegistryVersion::from(1)
             );
             // Now let's test if parent's version is used
             parent.context.registry_version = RegistryVersion::from(2);
             assert_eq!(
-                block_maker.get_stable_registry_version(&parent).unwrap(),
+                block_maker
+                    .get_stable_registry_version(&parent, RegistryVersion::new(1), Height::new(100))
+                    .unwrap(),
                 RegistryVersion::from(2)
             );
         })
@@ -1339,5 +1432,142 @@ mod tests {
                 /*metrics=*/ None,
             )
         })
+    }
+
+    mod subnet_splitting {
+        use super::*;
+
+        const MAX_REGISTRY_VERSION: u64 = 4;
+
+        #[derive(Debug)]
+        struct TestCase {
+            splitting_registry_version: Option<RegistryVersion>,
+            last_summary_block_registry_version: RegistryVersion,
+            next_summary_block_height: Height,
+            parent_height: Height,
+            expected_stable_registry_version: RegistryVersion,
+        }
+
+        #[rstest]
+        #[case::no_splitting(TestCase {
+            splitting_registry_version: None,
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            next_summary_block_height: Height::new(4),
+            parent_height: Height::new(1),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION),
+        })]
+        #[case::version_frozen_before_splitting(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 1)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            next_summary_block_height: Height::new(4),
+            parent_height: Height::new(1),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 2),
+        })]
+        #[case::version_frozen_before_splitting(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 2)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            next_summary_block_height: Height::new(4),
+            parent_height: Height::new(1),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 3),
+        })]
+        #[case::exact_version_during_splitting(TestCase {
+            splitting_registry_version: Some(RegistryVersion::new(MAX_REGISTRY_VERSION - 1)),
+            last_summary_block_registry_version: RegistryVersion::new(1),
+            next_summary_block_height: Height::new(4),
+            parent_height: Height::new(3),
+            expected_stable_registry_version: RegistryVersion::new(MAX_REGISTRY_VERSION - 1),
+        })]
+        fn test_stable_registry_version_with_subnet_splitting(#[case] test_case: TestCase) {
+            const SOURCE_SUBNET_ID: SubnetId = SUBNET_0;
+            const DESTINATION_SUBNET_ID: SubnetId = SUBNET_1;
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let record = SubnetRecordBuilder::from(&[NODE_1])
+                    .with_dkg_interval_length(4)
+                    .build();
+                let Dependencies {
+                    registry,
+                    crypto,
+                    pool,
+                    time_source,
+                    replica_config,
+                    state_manager,
+                    registry_data_provider,
+                    dkg_pool,
+                    idkg_pool,
+                    ..
+                } = dependencies_with_subnet_params(
+                    pool_config,
+                    SOURCE_SUBNET_ID,
+                    vec![(1, record.clone())],
+                );
+
+                let mut payload_builder = MockPayloadBuilder::new();
+                payload_builder
+                    .expect_get_payload()
+                    .return_const(BatchPayload::default());
+                let membership = Arc::new(Membership::new(
+                    pool.get_cache(),
+                    registry.clone(),
+                    replica_config.subnet_id,
+                ));
+
+                let block_maker = BlockMaker::new(
+                    Arc::clone(&time_source) as Arc<_>,
+                    replica_config,
+                    Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                    membership,
+                    crypto,
+                    Arc::new(payload_builder),
+                    dkg_pool,
+                    idkg_pool,
+                    state_manager,
+                    Duration::from_millis(0),
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                );
+
+                for version in 2..=MAX_REGISTRY_VERSION {
+                    add_subnet_record(
+                        &registry_data_provider,
+                        version,
+                        SOURCE_SUBNET_ID,
+                        record.clone(),
+                    );
+                }
+                if let Some(splitting_registry_version) = test_case.splitting_registry_version {
+                    registry_data_provider
+                        .add(
+                            &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                            splitting_registry_version,
+                            Some(CatchUpPackageContents {
+                                cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+                                    destination_subnet_id: Some(subnet_id_into_protobuf(
+                                        DESTINATION_SUBNET_ID,
+                                    )),
+                                })),
+                                ..Default::default()
+                            }),
+                        )
+                        .unwrap();
+                }
+
+                registry.update_to_latest_version();
+                let mut parent = pool.get_cache().finalized_block();
+                parent.height = test_case.parent_height;
+                parent.context.registry_version = RegistryVersion::from(1);
+
+                std::thread::sleep(Duration::from_secs(1));
+                assert_eq!(
+                    block_maker
+                        .get_stable_registry_version(
+                            &parent,
+                            test_case.last_summary_block_registry_version,
+                            test_case.next_summary_block_height,
+                        )
+                        .unwrap(),
+                    test_case.expected_stable_registry_version,
+                );
+            })
+        }
     }
 }

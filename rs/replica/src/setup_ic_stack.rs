@@ -108,7 +108,8 @@ pub fn construct_ic_stack(
             None => {
                 let registry_cup =
                     ic_consensus_cup_utils::make_registry_cup(&*registry, subnet_id, log)
-                        .expect("Couldn't create a registry CUP");
+                        .expect("Couldn't create a registry CUP")
+                        .cup;
 
                 info!(
                     log,
@@ -289,6 +290,7 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_type,
         root_subnet_id,
+        state_manager.clone(),
         registry.clone(),
         Arc::clone(&crypto) as Arc<_>,
         cancellation_token.child_token(),

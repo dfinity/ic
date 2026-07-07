@@ -167,6 +167,7 @@ pub fn create_summary_payload(
     pool_reader: &PoolReader<'_>,
     context: &ValidationContext,
     parent_block: &Block,
+    prev_summary_block: &Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<idkg::Summary, IDkgPayloadError> {
@@ -178,9 +179,6 @@ pub fn create_summary_payload(
     });
 
     let height = parent_block.height().increment();
-    let prev_summary_block = pool_reader
-        .dkg_summary_block(parent_block)
-        .ok_or_else(|| IDkgPayloadError::ConsensusSummaryBlockNotFound(parent_block.height()))?;
 
     // For this interval: context.registry_version from prev summary block
     // which is the same as calling pool_reader.registry_version(height).
@@ -483,6 +481,7 @@ pub fn create_data_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
+    summary_block: &Block,
     idkg_payload_metrics: &IDkgPayloadMetrics,
     log: &ReplicaLogger,
 ) -> Result<idkg::Payload, IDkgPayloadError> {
@@ -495,9 +494,6 @@ pub fn create_data_payload(
     if parent_block.payload.as_ref().as_idkg().is_none() {
         return Ok(None);
     };
-    let summary_block = pool_reader
-        .dkg_summary_block(parent_block)
-        .ok_or_else(|| IDkgPayloadError::ConsensusSummaryBlockNotFound(parent_block.height()))?;
 
     // In case the certified height is below the summary height, add the heights in
     // between to the blockchain. This is needed to calculate the total number of pre-
@@ -529,7 +525,7 @@ pub fn create_data_payload(
         subnet_id,
         context,
         parent_block,
-        &summary_block,
+        summary_block,
         &block_reader,
         &transcript_builder,
         state_reader,
@@ -786,6 +782,7 @@ mod tests {
                 Height::from(100),
                 height,
                 BTreeMap::new(),
+                Default::default(),
             ),
             idkg: Some(idkg_summary),
         })

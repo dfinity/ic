@@ -1,3 +1,4 @@
+use ic_consensus_cup_utils::RegistryCupCreationError;
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_types::{
@@ -36,7 +37,10 @@ pub(crate) enum OrchestratorError {
     RegistryClientError(RegistryClientError),
 
     /// The genesis or recovery CUP failed to be constructed
-    MakeRegistryCupError(SubnetId, RegistryVersion),
+    MakeRegistryCupError(SubnetId, RegistryVersion, RegistryCupCreationError),
+
+    /// No CUP found at the registry version
+    CupMissing(SubnetId, RegistryVersion),
 
     /// The CUP at the given height failed to be deserialized
     DeserializeCupError(Option<Height>, String),
@@ -112,7 +116,8 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::ReplicaVersionMissingError(replica_version, registry_version) => {
                 write!(
                     f,
-                    "Replica version {replica_version} was not found in the Registry at registry version {registry_version}"
+                    "Replica version {replica_version} was not found in the \
+                    Registry at registry version {registry_version}"
                 )
             }
             OrchestratorError::IoError(msg, e) => {
@@ -137,15 +142,18 @@ impl fmt::Display for OrchestratorError {
             }
             OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
-                "Subnet ID {subnet_id} does not exist in the Registry at registry version {registry_version}"
+                "Subnet ID {subnet_id} does not exist in the \
+                Registry at registry version {registry_version}"
             ),
             OrchestratorError::ApiBoundaryNodeMissingError(node_id, registry_version) => write!(
                 f,
-                "Api Boundary Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
+                "Api Boundary Node ID {node_id} does not exist in the \
+                Registry at registry version {registry_version}"
             ),
             OrchestratorError::NodeRecordMissingError(node_id, registry_version) => write!(
                 f,
-                "Node ID {node_id} does not exist in the Registry at registry version {registry_version}"
+                "Node ID {node_id} does not exist in the \
+                Registry at registry version {registry_version}"
             ),
             OrchestratorError::ReplicaVersionParseError(e) => {
                 write!(f, "Failed to parse replica version: {e}")
@@ -153,9 +161,14 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::SerializeCryptoConfigError(e) => {
                 write!(f, "Failed to serialize crypto-config: {e}")
             }
-            OrchestratorError::MakeRegistryCupError(subnet_id, registry_version) => write!(
+            OrchestratorError::MakeRegistryCupError(subnet_id, registry_version, err) => write!(
                 f,
-                "Failed to construct the genesis/recovery CUP, subnet_id: {subnet_id}, registry_version: {registry_version}",
+                "Failed to construct the genesis/recovery CUP, \
+                subnet_id: {subnet_id}, registry_version: {registry_version}. Error: {err}",
+            ),
+            OrchestratorError::CupMissing(subnet_id, registry_version) => write!(
+                f,
+                "CUP is missing subnet_id: {subnet_id}, registry_version: {registry_version}.",
             ),
             OrchestratorError::DeserializeCupError(height, error) => write!(
                 f,
@@ -168,7 +181,8 @@ impl fmt::Display for OrchestratorError {
             OrchestratorError::RoleError(msg, registry_version) => {
                 write!(
                     f,
-                    "Failed to get the role of the node at the registry version {registry_version}: {msg}"
+                    "Failed to get the role of the node at the \
+                    registry version {registry_version}: {msg}"
                 )
             }
             OrchestratorError::DomainNameMissingError(node_id, registry_version) => {

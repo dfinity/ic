@@ -585,6 +585,10 @@ pub type IngressFilterService =
 pub enum QueryExecutionError {
     #[error("Certified state is not available yet")]
     CertifiedStateUnavailable,
+    #[error("Invalid delegation: {0}")]
+    InvalidDelegation(String),
+    #[error("Outdated delegation with respect to the current certified state")]
+    OutdatedDelegation,
 }
 
 /// The response type to a `call()` request in [`QueryExecutionService`].

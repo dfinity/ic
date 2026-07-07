@@ -917,6 +917,10 @@ impl Player {
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
             }
+            Err(QueryExecutionError::InvalidDelegation(_))
+            | Err(QueryExecutionError::OutdatedDelegation) => {
+                unreachable!("QueryExecutionErrors above only found when a delegation is given")
+            }
         }
     }
 
@@ -1270,6 +1274,10 @@ async fn get_changes_since(
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             Err("Certified state unavailable for query call.".to_string())
         }
+        Err(QueryExecutionError::InvalidDelegation(_))
+        | Err(QueryExecutionError::OutdatedDelegation) => {
+            unreachable!("QueryExecutionErrors above only found when a delegation is given")
+        }
     }
 }
 
@@ -1314,6 +1322,10 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
                      call with key={:?}.",
                     String::from_utf8_lossy(chunk_content_sha256),
                 ));
+            }
+            Err(QueryExecutionError::InvalidDelegation(_))
+            | Err(QueryExecutionError::OutdatedDelegation) => {
+                unreachable!("QueryExecutionErrors above only found when a delegation is given")
             }
         };
 

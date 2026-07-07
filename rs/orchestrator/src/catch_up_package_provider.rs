@@ -32,6 +32,7 @@
 
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
     utils::https_endpoint_to_url,
 };
@@ -41,18 +42,21 @@ use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-use ic_logger::{ReplicaLogger, info, warn};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
+use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
         HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
+        dkg::SubnetSplittingStatus,
     },
     crypto::*,
 };
 use prost::Message;
+use rand::seq::SliceRandom;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
 use tokio::time::timeout;
 
@@ -107,12 +111,16 @@ impl LocalCUPReader {
 /// and hence which version of the IC this node should be starting.
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
+    metrics: Arc<OrchestratorMetrics>,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
     crypto_tls_config: Arc<dyn TlsConfig>,
     logger: ReplicaLogger,
     node_id: NodeId,
     backoff: Duration,
     initial_backoff: Duration,
+    // If the orchestrator detects that a subnet split is in progress, this field will be set to
+    // our subnet ID post-split. This slightly modifies the logic when selecting peers.
+    split_in_progress_subnet_id: Option<SubnetId>,
     local_cup_reader: LocalCUPReader,
 }
 
@@ -120,6 +128,7 @@ impl CatchUpPackageProvider {
     /// Instantiate a new `CatchUpPackageProvider`
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
+        metrics: Arc<OrchestratorMetrics>,
         local_cup_reader: LocalCUPReader,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         crypto_tls_config: Arc<dyn TlsConfig>,
@@ -128,6 +137,7 @@ impl CatchUpPackageProvider {
     ) -> Self {
         Self::new_with_initial_backoff(
             registry,
+            metrics,
             local_cup_reader,
             crypto,
             crypto_tls_config,
@@ -139,6 +149,7 @@ impl CatchUpPackageProvider {
 
     fn new_with_initial_backoff(
         registry: Arc<RegistryHelper>,
+        metrics: Arc<OrchestratorMetrics>,
         local_cup_reader: LocalCUPReader,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         crypto_tls_config: Arc<dyn TlsConfig>,
@@ -149,11 +160,13 @@ impl CatchUpPackageProvider {
         Self {
             node_id,
             registry,
+            metrics,
             crypto,
             crypto_tls_config,
             logger,
             backoff: initial_backoff,
             initial_backoff,
+            split_in_progress_subnet_id: None,
             local_cup_reader,
         }
     }
@@ -164,9 +177,6 @@ impl CatchUpPackageProvider {
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
     ) -> Vec<(NodeId, NodeRecord)> {
-        use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-        use rand::seq::SliceRandom;
-
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
             .get_registry_client()
@@ -214,6 +224,12 @@ impl CatchUpPackageProvider {
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
     ) -> Option<pb::CatchUpPackage> {
+        // `split_in_progress_subnet_id` will be populated with our exepcted subnet ID if we detect
+        // a post-split CUP. In that case, we want to fetch the CUP from the new peers and new
+        // public key instead of what we know of so far (which would be a previous CUP from the
+        // previous source subnet).
+        let subnet_id = self.split_in_progress_subnet_id.unwrap_or(subnet_id);
+
         let peers = self.select_peers(subnet_id, registry_version, current_cup);
 
         if peers.is_empty() {
@@ -233,13 +249,21 @@ impl CatchUpPackageProvider {
                 .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
-                Ok(Some((proto, cup))) => {
-                    // Note: None is < Some(_)
-                    if Some(CatchUpPackageParam::from(&cup)) > param {
+                // Note: None is < Some(_)
+                Ok(Some((proto, cup))) if Some(CatchUpPackageParam::from(&cup)) > param => {
+                    if !self.is_splitting_cup_for_other_subnet(&cup) {
                         return Some(proto);
                     }
+
+                    // This is expected to log shortly after a split. The next call to
+                    // `get_peer_cup` should select the new subnet's peers and fecth CUPs from
+                    // there.
+                    info!(
+                        self.logger,
+                        "Ignoring CUP from node {} because it is for the other subnet", node_id,
+                    );
                 }
-                Ok(None) => {}
+                Ok(Some(_)) | Ok(None) => {}
                 Err(err) => {
                     warn!(
                         self.logger,
@@ -384,6 +408,60 @@ impl CatchUpPackageProvider {
         }
     }
 
+    /// Returns true if the given CUP is a post-split CUP for the subnet other than ours.
+    /// Keeps track of our subnet ID such that the next call to `select_peers` can select the new
+    /// subnet's peers instead of the previous ones.
+    ///
+    /// Trusts the given CUP, so assumes its signature has been checked.
+    fn is_splitting_cup_for_other_subnet(&mut self, cup: &CatchUpPackage) -> bool {
+        let peer_subnet_id = match cup.subnet_splitting_status() {
+            SubnetSplittingStatus::NotScheduled => {
+                self.split_in_progress_subnet_id = None;
+                return false;
+            }
+            SubnetSplittingStatus::Scheduled { .. } => {
+                let error_message = "Received a signed CUP with scheduled subnet splitting from a peer, even though Consensus \
+                should skip the scheduled height and directly produce a post-split CUP. Trusting the subnet's threshold \
+                signature anyways. This is a bug.";
+                if cfg!(debug_assertions) {
+                    panic!("{}", error_message);
+                }
+
+                error!(self.logger, "{}", error_message);
+                self.split_in_progress_subnet_id = None;
+                self.metrics
+                    .critical_error_observed_scheduled_splitting_cup
+                    .inc();
+
+                return false;
+            }
+            SubnetSplittingStatus::PostSplit { new_subnet_id } => new_subnet_id,
+        };
+
+        // A post-split CUP's registry version is the version at which the split was set in the
+        // registry.
+        let split_in_progress_reg_ver = cup.content.registry_version();
+        let Some(expected_subnet_id) = self
+            .registry
+            .get_subnet_id_from_node_id(self.node_id, split_in_progress_reg_ver)
+            .ok()
+            .flatten()
+        else {
+            warn!(
+                self.logger,
+                "Failed to get subnet id for node {} at registry version {}",
+                self.node_id,
+                split_in_progress_reg_ver
+            );
+            // Default to rejecting the CUP and try again later
+            return true;
+        };
+
+        self.split_in_progress_subnet_id = Some(expected_subnet_id);
+
+        peer_subnet_id != expected_subnet_id
+    }
+
     /// Persist the given CUP to disk.
     ///
     /// This is necessary, as it allows the orchestrator to find a CUP
@@ -464,6 +542,7 @@ impl CatchUpPackageProvider {
         let registry_cup = self
             .registry
             .get_registry_cup(registry_version, subnet_id)
+            .inspect_err(|err| warn!(self.logger, "Failed to create a registry cup: {err}"))
             .map(pb::CatchUpPackage::from)
             .ok();
 
@@ -474,10 +553,7 @@ impl CatchUpPackageProvider {
             .into_iter()
             .flatten()
             .max_by_key(get_cup_proto_height)
-            .ok_or(OrchestratorError::MakeRegistryCupError(
-                subnet_id,
-                registry_version,
-            ))?;
+            .ok_or(OrchestratorError::CupMissing(subnet_id, registry_version))?;
         let latest_cup = CatchUpPackage::try_from(&latest_cup_proto).map_err(|err| {
             OrchestratorError::deserialize_cup_error(get_cup_proto_height(&latest_cup_proto), err)
         })?;
@@ -530,6 +606,7 @@ pub(crate) mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
     use ic_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -782,6 +859,7 @@ pub(crate) mod tests {
     ) -> CatchUpPackageProvider {
         CatchUpPackageProvider::new_with_initial_backoff(
             registry,
+            Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
             LocalCUPReader::new(cup_dir, no_op_logger()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),

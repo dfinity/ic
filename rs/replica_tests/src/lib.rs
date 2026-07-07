@@ -5,7 +5,7 @@ use ic_config::{Config, crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
-    IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
+    IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -612,8 +612,8 @@ impl LocalTestRuntime {
         };
         let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,
-            Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                panic!("Certified state unavailable for query call.")
+            Err(err) => {
+                panic!("Query failed with error: {:?}", err);
             }
         };
         if let Ok(WasmResult::Reply(result)) = result.clone() {
