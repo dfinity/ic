@@ -69,6 +69,11 @@ pub(crate) fn fetch_canister_logs(
 /// Derives the number of instructions to charge for executing a
 /// `fetch_canister_logs` call from the size of the response it produces.
 ///
+/// The cost is a function of the response size (rather than the log memory
+/// buffer size) because the log memory store's index lets a fetch read only
+/// about the records it returns, so the computational overhead is dependent on
+/// the response size.
+///
 /// This is a linear approximation of the measured `fetch_canister_logs`
 /// execution time (see the `fetch_canister_log` benchmark in
 /// `rs/execution_environment/benches/management_canister/canister_logging.rs`),
