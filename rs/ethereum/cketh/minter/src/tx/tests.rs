@@ -221,7 +221,7 @@ fn should_cbor_encoding_be_stable() {
 mod eip7702 {
     use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
     use crate::tx::{
-        AccessList, Authorization, AuthorizationTuple, Eip1559Signature, Eip7702TransactionRequest,
+        AccessList, Authorization, SignedAuthorization, Eip1559Signature, Eip7702TransactionRequest,
         SignedEip7702TransactionRequest,
     };
     use ethnum::u256;
@@ -232,7 +232,7 @@ mod eip7702 {
     // https://github.com/trustwallet/wallet-core/blob/master/rust/tw_evm/src/transaction/transaction_eip7702.rs
     #[test]
     fn should_encode_type_0x04_transaction() {
-        let authorization = AuthorizationTuple {
+        let authorization = SignedAuthorization {
             chain_id: 6,
             delegate: Address::from_str("0x0202020202020202020202020202020202020202").unwrap(),
             nonce: TransactionNonce::from(2_u8),
@@ -284,7 +284,7 @@ mod eip7702 {
     fn should_encode_signed_authorization_tuple() {
         use rlp::Encodable;
 
-        let authorization = AuthorizationTuple {
+        let authorization = SignedAuthorization {
             chain_id: 1,
             delegate: Address::from_str("0x0000000000000000000000000000000000000006").unwrap(),
             nonce: TransactionNonce::from(1_u8),
@@ -365,7 +365,7 @@ mod eip7702 {
         assert!(!recovery_id.is_x_reduced());
 
         let (r_bytes, s_bytes) = super::super::split_in_two(signature);
-        let tuple = AuthorizationTuple {
+        let tuple = SignedAuthorization {
             chain_id: authorization.chain_id,
             delegate: authorization.delegate,
             nonce: authorization.nonce,

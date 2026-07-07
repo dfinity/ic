@@ -9,7 +9,7 @@ pub use eip_1559::{
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
 };
 pub use eip_7702::{
-    Authorization, AuthorizationTuple, Eip7702TransactionRequest, SignedEip7702TransactionRequest,
+    Authorization, SignedAuthorization, Eip7702TransactionRequest, SignedEip7702TransactionRequest,
 };
 
 use crate::{

@@ -38,7 +38,7 @@ pub struct Eip7702TransactionRequest {
     #[n(8)]
     pub access_list: AccessList,
     #[n(9)]
-    pub authorization_list: Vec<AuthorizationTuple>,
+    pub authorization_list: Vec<SignedAuthorization>,
 }
 
 impl AsRef<Eip7702TransactionRequest> for Eip7702TransactionRequest {
@@ -76,7 +76,7 @@ impl Authorization {
         Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
-    pub async fn sign(self) -> Result<AuthorizationTuple, String> {
+    pub async fn sign(self) -> Result<SignedAuthorization, String> {
         if self.chain_id == 0 {
             return Err(
                 "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
@@ -97,7 +97,7 @@ impl Authorization {
             return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
         }
         let (r_bytes, s_bytes) = split_in_two(signature);
-        Ok(AuthorizationTuple {
+        Ok(SignedAuthorization {
             chain_id: self.chain_id,
             delegate: self.delegate,
             nonce: self.nonce,
@@ -110,7 +110,7 @@ impl Authorization {
 
 /// A signed EIP-7702 authorization tuple `[chain_id, delegate, nonce, y_parity, r, s]`.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
-pub struct AuthorizationTuple {
+pub struct SignedAuthorization {
     #[n(0)]
     pub chain_id: u64,
     #[n(1)]
@@ -125,7 +125,7 @@ pub struct AuthorizationTuple {
     pub s: u256,
 }
 
-impl rlp::Encodable for AuthorizationTuple {
+impl rlp::Encodable for SignedAuthorization {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_unbounded_list();
         s.append(&self.chain_id);
