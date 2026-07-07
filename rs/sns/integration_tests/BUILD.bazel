@@ -208,7 +208,10 @@ rust_ic_test_suite_with_extra_srcs(
         "@crate_index//:async-trait",
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = ["cpu:8"],
+    tags = [
+        "cpu:8",
+        "no-remote-exec",  # TODO: remove after RBE @ Namespace supports network sandboxing.
+    ],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
 
@@ -254,6 +257,7 @@ rust_ic_test(
     tags = [
         "cpu:8",
         "long_test",  # The P90 duration of this test is 6 minutes for the month starting on 2026-01-16.
+        "no-remote-exec",  # TODO: remove after RBE @ Namespace supports network sandboxing.
     ],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
