@@ -50,7 +50,7 @@ message Summary {
   oneof subnet_splitting_status {
     google.protobuf.Empty not_scheduled = 13;
     SplittingArgs scheduled = 14;
-    SubnetId done = 15;
+    SubnetId post_split = 15;
   }
 }
 
