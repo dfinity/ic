@@ -286,6 +286,66 @@ pub fn prepare_registry_with_cloud_engine_subnet(
     )
 }
 
+/// Prepares mutations adding an Application subnet on top of the
+/// invariant-compliant base (which already contains a single system subnet),
+/// mirroring [`prepare_registry_with_cloud_engine_subnet`]. Returns the subnet's
+/// ID so tests can target it with `delete_subnet`.
+pub fn prepare_registry_with_application_subnet(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (RegistryAtomicMutateRequest, SubnetId) {
+    let (nodes_request, node_ids_and_pks) =
+        prepare_registry_with_nodes_and_valid_pks(node_count, starting_mutation_id);
+    let mut mutations = nodes_request.mutations;
+
+    let node_ids_and_dkg_pks: BTreeMap<NodeId, PublicKey> = node_ids_and_pks
+        .iter()
+        .map(|(node_id, valid_pks)| (*node_id, valid_pks.dkg_dealing_encryption_key().clone()))
+        .collect();
+
+    let subnet_record = SubnetRecord {
+        membership: node_ids_and_pks
+            .keys()
+            .map(|node_id| node_id.get().to_vec())
+            .collect(),
+        subnet_type: i32::from(SubnetType::Application),
+        replica_version_id: ReplicaVersion::default().to_string(),
+        unit_delay_millis: 600,
+        ..Default::default()
+    };
+
+    let application_subnet_id = subnet_test_id(TEST_ID + 1);
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![
+            subnet_test_id(TEST_ID).get().to_vec(),
+            application_subnet_id.get().to_vec(),
+        ],
+    };
+
+    mutations.push(upsert(
+        make_subnet_list_record_key().as_bytes(),
+        subnet_list_record.encode_to_vec(),
+    ));
+    mutations.push(upsert(
+        make_subnet_record_key(application_subnet_id).as_bytes(),
+        subnet_record.encode_to_vec(),
+    ));
+    mutations.append(
+        &mut create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            application_subnet_id,
+            &node_ids_and_dkg_pks,
+        ),
+    );
+
+    (
+        RegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+        },
+        application_subnet_id,
+    )
+}
+
 fn get_added_subnets(
     former_subnet_list_record: &SubnetListRecord,
     current_subnet_list_record: &SubnetListRecord,
