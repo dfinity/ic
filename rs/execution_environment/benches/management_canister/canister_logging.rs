@@ -29,6 +29,15 @@ const FETCH_FILTER_BY_IDX: Option<FetchCanisterLogsFilter> =
         end: u64::MAX,
     }));
 
+/// A by-index filter whose range is above every stored record index, so it
+/// matches no records and yields an empty response even from a full buffer.
+/// Used to measure the cost of a fetch that returns nothing.
+const FETCH_FILTER_EMPTY: Option<FetchCanisterLogsFilter> =
+    Some(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+        start: u64::MAX - 1,
+        end: u64::MAX,
+    }));
+
 /// Number of log records to write per `fill_logs` message: at most one
 /// per-message delta's worth. The delta log holds records measured at
 /// `size_of::<CanisterLogRecord>() + content` bytes and is capped at the
@@ -324,6 +333,9 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         assert!(fetch_reply_len(None, 2 * MIB, (32 * KIB) as usize) > 1_800_000);
         // Filtered (by index) path must return the matching records.
         assert!(fetch_reply_len(FETCH_FILTER_BY_IDX, 128 * KIB, 0) > 0);
+        // The empty filter must return no records even from a full buffer, so
+        // its response is far smaller than any that carries records.
+        assert!(fetch_reply_len(FETCH_FILTER_EMPTY, 2 * MIB, 0) < 1_000);
     }
 
     {
@@ -377,6 +389,15 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
             2 * MIB,
             0,
             FETCH_FILTER_BY_IDX,
+        );
+        // Full buffer, but the filter matches no records so the response is
+        // empty: measures the cost of a fetch that returns nothing.
+        run_bench_fetch_canister_log(
+            &mut group,
+            "fetch:2MiB/msg:0B/filter:empty",
+            2 * MIB,
+            0,
+            FETCH_FILTER_EMPTY,
         );
         // Realistic: 100-byte messages.
         run_bench_fetch_canister_log(&mut group, "fetch:128KiB/msg:100B", 128 * KIB, 100, None);
