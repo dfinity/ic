@@ -1,17 +1,27 @@
+mod dark_launch;
 mod legacy;
+mod metrics;
+mod payg;
 
 use std::time::Duration;
 
+use ic_logger::ReplicaLogger;
+use ic_metrics::MetricsRegistry;
 use ic_types::{
-    NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext},
+    NumBytes, NumInstructions, NumberOfNodes,
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion},
 };
+pub use ic_types_cycles::CanisterCyclesCostSchedule;
+
+use dark_launch::DarkLaunchTracker;
 use legacy::LegacyTracker;
+use metrics::PricingMetrics;
+use payg::PayAsYouGoTracker;
 
 pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
-    /// Deducts the actual network resources consumed.
+    /// Deducts the cost of the network resources consumed by the request.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if `network_usage <= get_adapter_limits()`.
@@ -21,16 +31,32 @@ pub trait BudgetTracker: Send {
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
     /// Returns the maximum instructions allowed for the transformation function.
     fn get_transform_limit(&self) -> NumInstructions;
-    /// Deducts the actual instructions consumed by the transformation.
+    /// Deducts the cost of the instructions consumed by the transformation.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
+    /// Deducts the cost of the final (post-transform) response that this replica
+    /// produced and that will be gossiped to peers. This cost does not apply to fully-replicated
+    /// requests, which doesn't gossip responses.
+    ///
+    /// This is the last accounting step and is invoked once the size of the
+    /// response is known.
+    fn subtract_gossip_usage(
+        &mut self,
+        transformed_response_size: NumBytes,
+    ) -> Result<(), PricingError>;
     /// Produces the per-replica payment receipt that summarizes the cycles
     /// accounting outcome of the outcall, given the resources consumed so
     /// far via the `subtract_*` methods.
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt;
 }
+
+/// The maximum duration the adapter is allowed to take to fully receive a
+/// response, as measured by the client. The server already enforces a 30s
+/// timeout (see `DEFAULT_HTTP_REQUEST_TIMEOUT_SECS`), so this is a safety margin
+/// above it.
+pub(crate) const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
 
 pub struct AdapterLimits {
     /// The maximum size of the HTTP response, including the headers and the body.
@@ -39,6 +65,7 @@ pub struct AdapterLimits {
     pub max_response_time: Duration,
 }
 
+#[derive(Clone, Copy)]
 pub struct NetworkUsage {
     /// The size of the HTTP response, including the headers and the body.
     pub response_size: NumBytes,
@@ -46,16 +73,43 @@ pub struct NetworkUsage {
     pub response_time: Duration,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PricingError {
     InsufficientCycles,
 }
 
-pub struct PricingFactory;
+#[derive(Clone)]
+pub struct PricingFactory {
+    metrics: PricingMetrics,
+    log: ReplicaLogger,
+}
 
 impl PricingFactory {
-    pub fn new_tracker(context: &CanisterHttpRequestContext) -> Box<dyn BudgetTracker> {
-        // TODO(IC-1937): This should take into account context.pricing_version and a replica config.
-        // Currently, we only support the legacy pricing version.
-        Box::new(LegacyTracker::new(context.max_response_bytes))
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
+        Self {
+            metrics: PricingMetrics::new(metrics_registry),
+            log,
+        }
+    }
+
+    pub fn new_tracker(
+        &self,
+        context: &CanisterHttpRequestContext,
+        subnet_size: NumberOfNodes,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Box<dyn BudgetTracker> {
+        match context.pricing_version {
+            PricingVersion::Legacy => Box::new(DarkLaunchTracker::new(
+                Box::new(LegacyTracker::new(context.max_response_bytes)),
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
+                context.request.sender,
+                context.replication.kind(),
+                self.metrics.clone(),
+                self.log.clone(),
+            )),
+            PricingVersion::PayAsYouGo => {
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
+            }
+        }
     }
 }
