@@ -48,6 +48,9 @@ rust_library(
 rust_test(
     name = "nns_delegation_manager_test",
     crate = ":nns_delegation_manager",
+    tags = [
+        "requires-network",
+    ],
     deps = [
         "//rs/certification/test-utils",
         "//rs/crypto/tls_interfaces",
