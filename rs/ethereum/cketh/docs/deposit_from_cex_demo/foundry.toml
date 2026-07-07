@@ -1,0 +1,5 @@
+[profile.default]
+src = "contracts"
+out = "out"
+cache_path = "cache"
+evm_version = "prague"
