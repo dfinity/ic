@@ -23,27 +23,27 @@ pub(crate) fn fetch_canister_logs(
     cycles_account_manager: &CyclesAccountManager,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-    let max_fee = cycles_account_manager.max_fetch_canister_logs_fee(subnet_cycles_config);
+    // The cost of reading and encoding the logs is approximated from the
+    // canister's log memory limit (see `fetch_canister_logs_instructions`) and
+    // charged in cycles the same way as other management operations.
+    let instructions = fetch_canister_logs_instructions(canister.log_memory_limit());
+    let fee = cycles_account_manager
+        .management_canister_cost(instructions, subnet_cycles_config)
+        .real();
     let payment = msg.cycles();
-    if payment < max_fee {
+    if payment < fee {
         return Err(CanisterManagerError::FetchCanisterLogsNotEnoughCycles {
             sent: payment,
-            required: max_fee,
+            required: fee,
         });
     }
     let canister_id = canister.canister_id();
     let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
-    msg.deduct_cycles(
-        cycles_account_manager
-            .fetch_canister_logs_fee(NumBytes::new(reply.len() as u64), subnet_cycles_config),
-    );
     // The caller is authorized (the visibility check inside
-    // `fetch_canister_logs_response` passed), so charge for the work of reading
-    // and encoding the logs. The cost is approximated from the canister's log
-    // memory limit (see `fetch_canister_logs_instructions`).
-    round_limits.instructions -= as_round_instructions(fetch_canister_logs_instructions(
-        canister.log_memory_limit(),
-    ));
+    // `fetch_canister_logs_response` passed), so charge the cycles fee and the
+    // corresponding instructions against the round's instruction budget.
+    msg.deduct_cycles(fee);
+    round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
         canister_id,
         reply: Some(reply),
