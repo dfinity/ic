@@ -71,6 +71,30 @@ fn should_derive_distinct_addresses_for_distinct_principals() {
 }
 
 #[test]
+fn should_derive_distinct_addresses_for_edge_case_principals() {
+    let (pk, cc) = master_key();
+    let main_address = ecdsa_public_key_to_address(&pk);
+
+    let max_length_principal = Principal::self_authenticating(b"ic-cketh-minter-max-length-owner");
+    assert_eq!(max_length_principal.as_slice().len(), 29);
+
+    let owners = [
+        max_length_principal,
+        Principal::anonymous(),
+        Principal::management_canister(),
+    ];
+
+    let mut addresses = BTreeSet::new();
+    for owner in &owners {
+        let address = deposit_address(&pk, &cc, DepositAddressSchema::CkEth, owner, None);
+        assert_ne!(address, main_address);
+        addresses.insert(address);
+    }
+
+    assert_eq!(addresses.len(), owners.len());
+}
+
+#[test]
 fn should_derive_distinct_addresses_for_distinct_subaccounts() {
     let (pk, cc) = master_key();
     let owner = principal(1);
