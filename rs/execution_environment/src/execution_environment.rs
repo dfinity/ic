@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::validate_controller;
+use crate::execution::common::{list_canisters, validate_controller};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -1082,6 +1082,27 @@ impl ExecutionEnvironment {
                     refund: msg.take_cycles(),
                 }
             }
+
+            Ok(Ic00Method::ListCanisters) => match &msg {
+                CanisterCall::Request(_) => {
+                    // Only deduct round instructions for building the response
+                    // (i.e. the canister ID range computation) when access
+                    // control succeeds; a rejected call must not consume round
+                    // instructions.
+                    let res =
+                        list_canisters(&state, msg.sender(), payload).map(|(res, instructions)| {
+                            round_limits.instructions -= as_round_instructions(instructions);
+                            (res, None)
+                        });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::ListCanisters)
+                }
+            },
 
             Ok(Ic00Method::CanisterInfo) => match &msg {
                 CanisterCall::Request(_) => {
