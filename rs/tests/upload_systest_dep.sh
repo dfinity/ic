@@ -22,7 +22,13 @@ dep_in_cache() {
     local key="$1"
     local url="$BAZEL_REMOTE_URL/cas/$key"
     local code
-    if ! code=$(curl --silent --show-error --max-time 30 \
+    # --ignore-content-length: when a blob is present only in bazel-remote's
+    # proxy/upstream backend (and not yet in the local disk cache), bazel-remote
+    # answers HEAD with an invalid 'Content-Length: -1' (its Contains() reports
+    # the size as unknown). Without this flag curl rejects that header with exit
+    # code 8 ('Invalid Content-Length: value') before we can read the status
+    # code, making an already-cached dep look like an unreachable server.
+    if ! code=$(curl --silent --show-error --max-time 30 --ignore-content-length \
         -o /dev/null -w '%{http_code}' --head "$url"); then
         echo "Failed to reach bazel-remote at '$url'" >&2
         exit 1
