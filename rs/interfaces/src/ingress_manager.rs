@@ -63,6 +63,9 @@ pub enum InvalidIngressPayloadReason {
     IngressValidationError(MessageId, String),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
+    /// The cumulative in-memory size of the ingress payload (`.0`) exceeds the
+    /// per-block limit `max_ingress_bytes_per_block` (`.1`).
+    IngressPayloadTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
