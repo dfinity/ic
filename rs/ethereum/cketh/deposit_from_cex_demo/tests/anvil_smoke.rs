@@ -15,7 +15,7 @@ impl Anvil {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
             listener.local_addr().unwrap().port()
         };
-        let child = Command::new(&bin)
+        let mut child = Command::new(&bin)
             .arg("--host")
             .arg("127.0.0.1")
             .arg("--port")
@@ -24,38 +24,13 @@ impl Anvil {
             .stderr(Stdio::null())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn anvil at {bin}: {e}"));
-        let anvil = Self {
-            child,
-            url: format!("http://127.0.0.1:{port}"),
-        };
-        anvil.wait_until_ready();
-        anvil
-    }
-
-    fn wait_until_ready(&self) {
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while Instant::now() < deadline {
-            if let Ok(resp) = self.try_rpc("eth_blockNumber") {
-                if resp.status().is_success() {
-                    return;
-                }
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        panic!("anvil did not become ready within 30s at {}", self.url);
-    }
-
-    fn try_rpc(&self, method: &str) -> reqwest::Result<reqwest::blocking::Response> {
-        reqwest::blocking::Client::new()
-            .post(&self.url)
-            .json(&serde_json::json!({
-                "jsonrpc": "2.0", "id": 1, "method": method, "params": []
-            }))
-            .send()
+        let url = format!("http://127.0.0.1:{port}");
+        wait_until_ready(&mut child, &bin, &url);
+        Self { child, url }
     }
 
     fn rpc(&self, method: &str) -> serde_json::Value {
-        let body: serde_json::Value = self.try_rpc(method).unwrap().json().unwrap();
+        let body: serde_json::Value = post_rpc(&self.url, method).unwrap().json().unwrap();
         body["result"].clone()
     }
 }
@@ -65,6 +40,33 @@ impl Drop for Anvil {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+fn post_rpc(url: &str, method: &str) -> reqwest::Result<reqwest::blocking::Response> {
+    reqwest::blocking::Client::new()
+        .post(url)
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": method, "params": []
+        }))
+        .send()
+}
+
+fn wait_until_ready(child: &mut Child, bin: &str, url: &str) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < deadline {
+        // A wrong-arch or otherwise broken binary spawns but dies immediately;
+        // surface that instead of polling a dead process until the timeout.
+        if let Some(status) = child.try_wait().expect("failed to poll anvil") {
+            panic!("anvil ({bin}) exited early with {status} before serving {url}");
+        }
+        if let Ok(resp) = post_rpc(url, "eth_blockNumber") {
+            if resp.status().is_success() {
+                return;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    panic!("anvil did not become ready within 30s at {url}");
 }
 
 #[test]

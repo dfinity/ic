@@ -2,14 +2,38 @@ load("@rules_rust//rust:defs.bzl", "rust_test")
 
 package(default_visibility = ["//visibility:private"])
 
+# Pick the foundry archive matching the host platform the test runs on.
+[
+    config_setting(
+        name = platform,
+        constraint_values = constraints,
+    )
+    for platform, constraints in {
+        "linux_amd64": ["@platforms//os:linux", "@platforms//cpu:x86_64"],
+        "linux_arm64": ["@platforms//os:linux", "@platforms//cpu:arm64"],
+        "darwin_amd64": ["@platforms//os:osx", "@platforms//cpu:x86_64"],
+        "darwin_arm64": ["@platforms//os:osx", "@platforms//cpu:arm64"],
+    }.items()
+]
+
+alias(
+    name = "anvil",
+    actual = select({
+        ":linux_amd64": "@foundry_bin_linux_amd64//:anvil",
+        ":linux_arm64": "@foundry_bin_linux_arm64//:anvil",
+        ":darwin_amd64": "@foundry_bin_darwin_amd64//:anvil",
+        ":darwin_arm64": "@foundry_bin_darwin_arm64//:anvil",
+    }),
+)
+
 rust_test(
     name = "anvil_smoke_test",
     size = "small",
     srcs = ["tests/anvil_smoke.rs"],
-    data = ["@foundry_bin//:anvil"],
+    data = [":anvil"],
     edition = "2021",
     env = {
-        "ANVIL_BIN": "$(rootpath @foundry_bin//:anvil)",
+        "ANVIL_BIN": "$(rootpath :anvil)",
     },
     deps = [
         "@crate_index//:reqwest",

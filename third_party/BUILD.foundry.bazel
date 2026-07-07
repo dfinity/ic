@@ -1,9 +1,0 @@
-# foundry release binaries, extracted at the archive root.
-package(default_visibility = ["//visibility:public"])
-
-exports_files([
-    "anvil",
-    "cast",
-    "forge",
-    "chisel",
-])
