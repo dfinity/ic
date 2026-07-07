@@ -200,7 +200,11 @@ rust_ic_test_suite(
     timeout = "long",
     srcs = glob(
         ["tests/**/*.rs"],
-        exclude = ["tests/dump_stable_memory.rs"],
+        exclude = [
+            "tests/dump_stable_memory.rs",
+            # Runs against a local foundry anvil node, not the IC test suite.
+            "tests/anvil_smoke.rs",
+        ],
     ),
     data = [
         ":cketh_minter_debug.wasm.gz",
@@ -239,6 +243,57 @@ rust_ic_test_suite(
         "@crate_index//:num-traits",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
+)
+
+# Pick the foundry archive matching the host platform the test runs on.
+[
+    config_setting(
+        name = platform,
+        constraint_values = constraints,
+    )
+    for platform, constraints in {
+        "linux_amd64": [
+            "@platforms//os:linux",
+            "@platforms//cpu:x86_64",
+        ],
+        "linux_arm64": [
+            "@platforms//os:linux",
+            "@platforms//cpu:arm64",
+        ],
+        "darwin_amd64": [
+            "@platforms//os:osx",
+            "@platforms//cpu:x86_64",
+        ],
+        "darwin_arm64": [
+            "@platforms//os:osx",
+            "@platforms//cpu:arm64",
+        ],
+    }.items()
+]
+
+alias(
+    name = "anvil",
+    actual = select({
+        ":linux_amd64": "@foundry_bin_linux_amd64//:anvil",
+        ":linux_arm64": "@foundry_bin_linux_arm64//:anvil",
+        ":darwin_amd64": "@foundry_bin_darwin_amd64//:anvil",
+        ":darwin_arm64": "@foundry_bin_darwin_arm64//:anvil",
+    }),
+)
+
+rust_test(
+    name = "anvil_smoke_test",
+    size = "small",
+    srcs = ["tests/anvil_smoke.rs"],
+    data = [":anvil"],
+    edition = "2021",
+    env = {
+        "ANVIL_BIN": "$(rootpath :anvil)",
+    },
+    deps = [
+        "@crate_index//:reqwest",
         "@crate_index//:serde_json",
     ],
 )
