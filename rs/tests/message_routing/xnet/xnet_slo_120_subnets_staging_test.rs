@@ -14,9 +14,8 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(1400);
 
 fn main() -> Result<()> {
     let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE)
-        // Only best-effort calls with 30 seconds timeout, so the test doesn't hang for
-        // minutes in case we can't connect to some replica/subnet to pull.
-        .with_call_timeouts(&[Some(30)])
+        // Guaranteed-response calls and best-effort calls with 30 second timeout.
+        .with_call_timeouts(&[None, Some(30)])
         // With 120 single-node subnets colocated on shared performance hardware, the
         // per-subnet block production rate varies between runs. On loaded runs a few
         // "straggler" subnets dip just below the default 0.3 send rate threshold (down
