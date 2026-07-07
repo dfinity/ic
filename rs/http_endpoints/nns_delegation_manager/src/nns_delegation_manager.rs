@@ -804,6 +804,7 @@ mod tests {
     }
 
     /// Sets up all the dependencies.
+    #[allow(clippy::type_complexity)]
     fn set_up_nns_delegation_dependencies(
         rt_handle: tokio::runtime::Handle,
         // Optional certificate delegation returned by a mocked NNS node.
