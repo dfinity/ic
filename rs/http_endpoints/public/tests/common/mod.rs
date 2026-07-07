@@ -48,7 +48,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
