@@ -1,15 +1,19 @@
 //! `StateMachine` analogue of the system test
 //! `rs/tests/message_routing/xnet/cloud_engine_subnet_delete_test.rs`.
 //!
-//! It verifies that deleting a CloudEngine subnet correctly causes in-flight
-//! XNet messages to be rejected, and that messages from the deleted CloudEngine
-//! subnet that are still in the engine's stream are not pulled after subnet
-//! deletion.
+//! It verifies that deleting a subnet correctly causes in-flight XNet messages
+//! to be rejected, and that messages from the deleted subnet that are still in
+//! its stream are not pulled after subnet deletion. The scenario is run as a
+//! matrix over the type of the deleted subnet: it must behave the same whether
+//! the deleted subnet is a CloudEngine subnet or a regular application subnet
+//! (subnet deletion is handled by the routing/topology layer, which is
+//! subnet-type agnostic).
 //!
 //! The scenario wires together three `StateMachine`s sharing a single registry
 //! (see `rs/state_machine_tests/tests/multi_subnet.rs` for the basic wiring):
 //!   - two application subnets `S` and `T`, and
-//!   - one CloudEngine subnet `C`.
+//!   - one subnet `C` (the one being deleted), whose type is either
+//!     `CloudEngine` or `Application` depending on the matrix entry.
 //!
 //! A subnet is "halted" simply by not executing rounds on it (a halted subnet
 //! makes no progress), and `C` is "deleted" by removing it from the shared pool
@@ -36,6 +40,11 @@
 //!      open when `C` was deleted; `generate_reject_responses_for_deleted_subnets`
 //!      then synthesizes an immediate reject for it, rather than waiting for the
 //!      bounded-wait callback to time out).
+//!
+//! Bounded-wait (best-effort) calls with no cycles are used throughout because
+//! they are the only cross-subnet calls allowed to/from a CloudEngine subnet;
+//! they are equally valid for an application subnet, which keeps the scenario
+//! identical across both matrix entries.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
@@ -138,12 +147,20 @@ fn ingress_result(sm: &StateMachine, msg_id: &MessageId) -> Option<WasmResult> {
     }
 }
 
+/// Matrix-style test: run the subnet-deletion scenario once for each supported
+/// type of the deleted subnet `C`. The observable behavior must be identical.
 #[test]
-fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
+fn xnet_messages_rejected_after_subnet_deletion() {
+    for deleted_subnet_type in [SubnetType::CloudEngine, SubnetType::Application] {
+        xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type);
+    }
+}
+
+fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: SubnetType) {
     let user_id = PrincipalId::new_anonymous();
 
     // Set up a shared registry and three subnets: two application subnets S, T
-    // and one CloudEngine subnet C.
+    // and one subnet C (the one to be deleted), whose type is `deleted_subnet_type`.
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     let subnets = Arc::new(SubnetsImpl::new());
     let s = build_subnet(
@@ -161,7 +178,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
     let c = build_subnet(
         subnets.clone(),
         3,
-        SubnetType::CloudEngine,
+        deleted_subnet_type,
         registry_data_provider.clone(),
     );
 
@@ -319,7 +336,7 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
     t.reload_registry();
 
     // Step 6b: Unhalt subnet T and verify that it does not pull the messages from
-    // the deleted CloudEngine subnet C: UT's global data must stay empty.
+    // the deleted subnet C: UT's global data must stay empty.
     for _ in 0..5 {
         t.execute_round();
     }
@@ -384,10 +401,12 @@ fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
     }
     assert!(
         destination_invalid_count >= 1,
-        "expected at least one DestinationInvalid rejection, got {destination_invalid_count}"
+        "expected at least one DestinationInvalid rejection, got {destination_invalid_count} \
+         (deleted subnet type: {deleted_subnet_type:?})"
     );
     assert!(
         canister_reject_count >= 1,
-        "expected at least one CanisterReject rejection, got {canister_reject_count}"
+        "expected at least one CanisterReject rejection, got {canister_reject_count} \
+         (deleted subnet type: {deleted_subnet_type:?})"
     );
 }

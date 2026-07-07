@@ -108,12 +108,12 @@ rust_binary(
 rust_ic_test(
     name = "state_machine_integration_tests",
     srcs = [
-        "tests/cloud_engine_subnet_delete.rs",
         "tests/delegation.rs",
         "tests/dts.rs",
         "tests/mod.rs",
         "tests/multi_subnet.rs",
         "tests/reject_remote_callbacks.rs",
+        "tests/subnet_delete.rs",
     ],
     crate_root = "tests/mod.rs",
     data = ["//rs/universal_canister/impl:universal_canister.wasm.gz"],
