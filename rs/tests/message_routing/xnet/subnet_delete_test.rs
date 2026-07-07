@@ -1,14 +1,18 @@
 /* tag::catalog[]
-Title:: CloudEngine subnet deletion with in-flight XNet messages.
+Title:: Subnet deletion with in-flight XNet messages.
 
-Goal:: Verify that deleting a CloudEngine subnet correctly causes in-flight
-XNet messages to be rejected, and that messages from the deleted CloudEngine
-subnet that are still in the engine's stream are not pulled after subnet
-deletion.
+Goal:: Verify that deleting a subnet correctly causes in-flight XNet messages to
+be rejected, and that messages from the deleted subnet that are still in its
+stream are not pulled after subnet deletion. The scenario is run as a matrix
+over the type of the deleted subnet: it must behave the same whether the deleted
+subnet is a CloudEngine subnet or a regular Application subnet (subnet deletion
+is handled by the routing/topology layer, which is subnet-type agnostic).
 
 Runbook::
-0. Set up an IC with NNS subnet, two Application subnets S and T, one
-   CloudEngine subnet C.
+0. Set up an IC with an NNS subnet, three Application subnets S, T and C_app,
+   and one CloudEngine subnet C_cloud. Then, for each deleted-subnet type in
+   {CloudEngine, Application}, pick the corresponding subnet as the deleted
+   subnet C (C_cloud or C_app) and run the following scenario:
 1. Install universal canisters US on S, UT on T, UC on C.
 2. Halt T.  Wait until T makes no progress.
 3. From UC fire a bounded-wait call to UT that would set UT's global data to a
@@ -30,8 +34,13 @@ Runbook::
    immediate synthetic reject for it, rather than waiting for the bounded-wait
    callback to time out).
 
+Note:: Bounded-wait (best-effort) calls with no cycles are used throughout
+because they are the only cross-subnet calls allowed to/from a CloudEngine
+subnet; they are equally valid for an Application subnet, which keeps the
+scenario identical across both matrix entries.
+
 Success::
-All assertions pass.
+All assertions pass for both deleted-subnet types.
 
 end::catalog[] */
 
@@ -49,7 +58,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
-    RETRY_BACKOFF, install_registry_canister_with_testnet_topology,
+    RETRY_BACKOFF, SubnetSnapshot, install_registry_canister_with_testnet_topology,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
@@ -66,8 +75,10 @@ const NUM_ENGINE_NODES: usize = 4;
 const DKG_INTERVAL_LENGTH: u64 = 29;
 const CALL_TIMEOUT_SECS: u32 = 300;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(1200);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(1200);
+// The test runs the scenario twice (once per deleted-subnet type), so the
+// timeouts are roughly doubled compared to a single run.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2400);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(2400);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -75,8 +86,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         .with_timeout_per_test(PER_TEST_TIMEOUT)
         .with_overall_timeout(OVERALL_TIMEOUT)
-        // Nodes on the deleted CloudEngine subnet panic when consensus can no
-        // longer find their subnet record in the registry.
+        // Nodes on the deleted subnet panic when consensus can no longer find
+        // their subnet record in the registry.
         .add_unallowed_log_pattern_except(
             "panicked",
             "rs/consensus/src/consensus/allowed_panics.rs",
@@ -86,10 +97,16 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
+    // Three Application subnets (S, T and the Application deletion candidate) and
+    // one CloudEngine subnet (the CloudEngine deletion candidate), plus the NNS.
     InternetComputer::new()
         .with_api_boundary_nodes_playnet(1)
         .add_subnet(
             Subnet::fast(SubnetType::System, NUM_NODES)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
+        )
+        .add_subnet(
+            Subnet::fast(SubnetType::Application, NUM_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .add_subnet(
@@ -127,44 +144,89 @@ async fn test_async(env: TestEnv) {
 
     let nns_subnet = topology.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
+    let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
+
+    // Governance UC on the NNS subnet, used to submit registry changes. It is
+    // shared across both matrix entries.
+    let governance = UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
+    slog::info!(logger, "governance={}", governance.canister_id());
+
+    // Application subnets: S and T are reused across both matrix entries, while
+    // the third one is the Application deletion candidate.
     let app_subnets: Vec<_> = topology
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
         .collect();
-    let s_subnet = &app_subnets[0];
-    let t_subnet = &app_subnets[1];
-    let c_subnet = topology
+    assert!(
+        app_subnets.len() >= 3,
+        "expected at least 3 Application subnets, got {}",
+        app_subnets.len()
+    );
+    let s_subnet = app_subnets[0].clone();
+    let t_subnet = app_subnets[1].clone();
+    let c_app_subnet = app_subnets[2].clone();
+    let c_cloud_subnet = topology
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::CloudEngine)
         .unwrap();
+
+    // Matrix over the type of the deleted subnet C.
+    for (deleted_subnet_type, c_subnet) in [
+        (SubnetType::CloudEngine, &c_cloud_subnet),
+        (SubnetType::Application, &c_app_subnet),
+    ] {
+        run_scenario(
+            &env,
+            &governance,
+            &s_subnet,
+            &t_subnet,
+            c_subnet,
+            deleted_subnet_type,
+            &logger,
+        )
+        .await;
+    }
+}
+
+/// Runs the full subnet-deletion scenario, deleting subnet `c_subnet` (whose
+/// type is `deleted_subnet_type`). Subnets `s_subnet` and `t_subnet` play the
+/// roles of the sender subnet S and the halted receiver subnet T.
+#[allow(clippy::too_many_arguments)]
+async fn run_scenario(
+    env: &TestEnv,
+    governance: &UniversalCanister<'_>,
+    s_subnet: &SubnetSnapshot,
+    t_subnet: &SubnetSnapshot,
+    c_subnet: &SubnetSnapshot,
+    deleted_subnet_type: SubnetType,
+    logger: &slog::Logger,
+) {
+    slog::info!(
+        logger,
+        "=== Running scenario: deleting {:?} subnet C ({}) ===",
+        deleted_subnet_type,
+        c_subnet.subnet_id,
+    );
 
     let s_node = s_subnet.nodes().next().unwrap();
     let t_node = t_subnet.nodes().next().unwrap();
     let c_node = c_subnet.nodes().next().unwrap();
 
-    let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
     let s_agent = assert_create_agent(s_node.get_public_url().as_str()).await;
     let t_agent = assert_create_agent(t_node.get_public_url().as_str()).await;
     let c_agent = assert_create_agent(c_node.get_public_url().as_str()).await;
 
     // Step 1: Install universal canisters US on S, UT on T, UC on C.
-    // Also install a governance UC on the NNS subnet to submit registry proposals.
+    slog::info!(logger, "Step 1: Installing universal canisters on S, T, C");
+    let us =
+        UniversalCanister::new_with_retries(&s_agent, s_node.effective_canister_id(), logger).await;
+    let ut =
+        UniversalCanister::new_with_retries(&t_agent, t_node.effective_canister_id(), logger).await;
+    let uc =
+        UniversalCanister::new_with_retries(&c_agent, c_node.effective_canister_id(), logger).await;
     slog::info!(
         logger,
-        "Step 1: Installing universal canisters on NNS, S, T, C"
-    );
-    let governance = UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
-
-    let us = UniversalCanister::new_with_retries(&s_agent, s_node.effective_canister_id(), &logger)
-        .await;
-    let ut = UniversalCanister::new_with_retries(&t_agent, t_node.effective_canister_id(), &logger)
-        .await;
-    let uc = UniversalCanister::new_with_retries(&c_agent, c_node.effective_canister_id(), &logger)
-        .await;
-    slog::info!(
-        logger,
-        "Step 1 done: governance={}, US={}, UT={}, UC={}",
-        governance.canister_id(),
+        "Step 1 done: US={}, UT={}, UC={}",
         us.canister_id(),
         ut.canister_id(),
         uc.canister_id(),
@@ -172,11 +234,11 @@ async fn test_async(env: TestEnv) {
 
     // Step 2: Halt subnet T and wait until T makes no progress.
     slog::info!(logger, "Step 2: Halting subnet T ({})", t_subnet.subnet_id);
-    set_subnet_halted(&governance, t_subnet.subnet_id, true).await;
+    set_subnet_halted(governance, t_subnet.subnet_id, true).await;
     cert_state_makes_no_progress_with_retries(
         &t_node.get_public_url(),
         ut.canister_id().into(),
-        &logger,
+        logger,
         Duration::from_secs(120),
         Duration::from_secs(5),
     );
@@ -208,11 +270,11 @@ async fn test_async(env: TestEnv) {
 
     // Step 4: Halt subnet C and wait until C makes no progress.
     slog::info!(logger, "Step 4: Halting subnet C ({})", c_subnet.subnet_id);
-    set_subnet_halted(&governance, c_subnet.subnet_id, true).await;
+    set_subnet_halted(governance, c_subnet.subnet_id, true).await;
     cert_state_makes_no_progress_with_retries(
         &c_node.get_public_url(),
         uc.canister_id().into(),
-        &logger,
+        logger,
         Duration::from_secs(120),
         Duration::from_secs(5),
     );
@@ -270,12 +332,17 @@ async fn test_async(env: TestEnv) {
     .await;
     slog::info!(logger, "Step 5 done: {} pending", us_uc_request_ids.len());
 
-    // Step 6a: Delete subnet C.
+    // Step 6a: Delete subnet C. Snapshot the topology right before the deletion:
+    // `block_for_newer_registry_version` derives its target version from the
+    // snapshot's registry version + 1, so the baseline must be captured before
+    // the deletion, otherwise it could block forever waiting for a version that
+    // only appears after the (later) unhalting of T.
     slog::info!(
         logger,
         "Step 6a: Deleting subnet C ({})",
         c_subnet.subnet_id
     );
+    let topo_before_delete = env.topology_snapshot();
     let delete_arg = DeleteSubnetPayload {
         subnet_id: c_subnet.subnet_id.get().into(),
     };
@@ -289,7 +356,7 @@ async fn test_async(env: TestEnv) {
         .expect("delete_subnet should succeed");
 
     // Record the registry version at which C was deleted.
-    let topo_after_delete = topology
+    let topo_after_delete = topo_before_delete
         .block_for_newer_registry_version()
         .await
         .expect("registry should update after delete_subnet");
@@ -306,7 +373,7 @@ async fn test_async(env: TestEnv) {
         "Step 6b: Unhalting subnet T ({})",
         t_subnet.subnet_id
     );
-    set_subnet_halted(&governance, t_subnet.subnet_id, false).await;
+    set_subnet_halted(governance, t_subnet.subnet_id, false).await;
     slog::info!(logger, "Step 6b done: subnet T unhalted");
 
     // Step 6c: Wait for T to observe the registry version at which C was deleted.
@@ -315,7 +382,7 @@ async fn test_async(env: TestEnv) {
         "Step 6c: Waiting for subnet T to observe registry version {}",
         c_delete_registry_version,
     );
-    wait_for_subnet_registry_version(&ut, t_subnet.subnet_id, c_delete_registry_version, &logger)
+    wait_for_subnet_registry_version(&ut, t_subnet.subnet_id, c_delete_registry_version, logger)
         .await;
     slog::info!(
         logger,
@@ -388,13 +455,19 @@ async fn test_async(env: TestEnv) {
     );
     assert!(
         dest_invalid_count >= 1,
-        "Expected at least one DestinationInvalid rejection, got {dest_invalid_count}"
+        "Expected at least one DestinationInvalid rejection, got {dest_invalid_count} \
+         (deleted subnet type: {deleted_subnet_type:?})"
     );
     assert!(
         canister_reject_count >= 1,
-        "Expected at least one CanisterReject rejection, got {canister_reject_count}"
+        "Expected at least one CanisterReject rejection, got {canister_reject_count} \
+         (deleted subnet type: {deleted_subnet_type:?})"
     );
-    slog::info!(logger, "Test passed: all assertions satisfied");
+    slog::info!(
+        logger,
+        "Scenario passed for deleted subnet type {:?}",
+        deleted_subnet_type
+    );
 }
 
 async fn set_subnet_halted(

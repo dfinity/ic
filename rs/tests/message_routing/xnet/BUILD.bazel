@@ -139,7 +139,7 @@ system_test(
 )
 
 system_test(
-    name = "cloud_engine_subnet_delete_test",
+    name = "subnet_delete_test",
     tags = [
         "long_test",
     ],

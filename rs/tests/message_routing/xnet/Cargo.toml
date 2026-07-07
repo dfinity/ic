@@ -55,5 +55,5 @@ name = "xnet_cloud_engine_isolation_test"
 path = "xnet_cloud_engine_isolation_test.rs"
 
 [[bin]]
-name = "cloud_engine_subnet_delete_test"
-path = "cloud_engine_subnet_delete_test.rs"
+name = "subnet_delete_test"
+path = "subnet_delete_test.rs"
