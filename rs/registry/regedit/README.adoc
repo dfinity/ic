@@ -28,11 +28,6 @@ produced as follows:
 $ ic-regedit snapshot /path/to/ic_registry_local_store
 {
   "__version": 2,
-  "blessed_replica_versions": {
-    "blessed_version_ids": [
-      "0.8.0"
-    ]
-  },
   "catch_up_package_contents_bi6cn-uevgq-pnqwc-6bmx7-plgau-qezww-kqnwd-h7eqk-xejb5-fq2t4-eae": {
     "height": 0,
     "initial_ni_dkg_transcript_high_threshold": {
@@ -116,17 +111,28 @@ $ vim snapshot.json # or jq, etc.
 Before you apply the update, you might want to make sure you know what will
 change. You can do this by calling the `show-diff` command. Let's say e.g. we
 took the example registry from above and the only change that we applied is that
-we added a version `0.9.0` to the list of blessed replica versions. The output
-should look like this:
+we updated a node's reward type. The output should look like this:
 
 ----
 $ ic-regedit show-diff /path/to/ic_registry_local_store snapshot.json
 {
   "__version": 3,
-  "blessed_replica_versions": {
-    "blessed_version_ids": [
-      "0.8.0", "0.9.0"
-    ]
+  "node_record_635b7-ykceq-3uanz-33q36-5yf2v-l2yod-czr5t-pqyu7-vivl4-scd2f-zae": {
+    "chip_id": null,
+    "domain": null,
+    "hostos_version_id": null,
+    "http": {
+      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
+      "port": 8080
+    },
+    "node_operator_id": "(binary-data)",
+    "node_reward_type": 5,
+    "public_ipv4_config": null,
+    "ssh_node_state_write_access": "(binary-data)",
+    "xnet": {
+      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
+      "port": 2497
+    }
   }
 }
 ----
@@ -201,11 +207,22 @@ $ ic-regedit snapshot /path/to/ic_registry_local_store > latest.json
 $ ic-regedit show-diff --version -1 /path/to/ic_registry_local_store latest.json
 {
   "__version": 3,
-  "blessed_replica_versions": {
-    "blessed_version_ids": [
-      "0.8.0",
-      "0.9.0"
-    ]
+  "node_record_635b7-ykceq-3uanz-33q36-5yf2v-l2yod-czr5t-pqyu7-vivl4-scd2f-zae": {
+    "chip_id": null,
+    "domain": null,
+    "hostos_version_id": null,
+    "http": {
+      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
+      "port": 8080
+    },
+    "node_operator_id": "(binary-data)",
+    "node_reward_type": 5,
+    "public_ipv4_config": null,
+    "ssh_node_state_write_access": "(binary-data)",
+    "xnet": {
+      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
+      "port": 2497
+    }
   }
 }
 ----

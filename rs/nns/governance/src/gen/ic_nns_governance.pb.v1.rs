@@ -5230,9 +5230,8 @@ pub enum NnsFunction {
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
     /// A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-    /// the hash of the installation image) is added to the registry. Besides creating a record for
-    /// that version, the proposal also appends that version to the list of elected versions that can
-    /// be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+    /// the commit hash of the installation image) is added to the registry. This version can then be
+    /// used to upgrade nodes.
     ReviseElectedGuestosVersions = 38,
     BitcoinSetConfig = 39,
     /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
