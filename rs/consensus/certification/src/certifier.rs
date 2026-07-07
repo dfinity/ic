@@ -1813,7 +1813,8 @@ mod tests {
     }
 
     /// An incoming share at a height inside a `Scheduled` or `Done` with different subnet ID
-    /// splitting interval should be immediately invalidated rather than forwarded.
+    /// splitting interval should be ignored and not validated, as it could be from the other
+    /// subnet.
     /// In a `Done` interval with same subnet ID, shares should be validated as normal.
     #[test]
     fn test_validate_share_handles_invalid_during_scheduled_subnet_splitting() {
@@ -1859,25 +1860,14 @@ mod tests {
                     let result = certifier.validate_share(&cert_pool, &share);
                     match status {
                         SubnetSplittingStatus::Scheduled(..) => {
-                            assert_eq!(
-                                result,
-                                Some(ChangeAction::HandleInvalid(
-                                    CertificationMessage::CertificationShare(share),
-                                    "Subnet splitting in progress".to_string(),
-                                )),
-                                "Expected HandleInvalid during subnet splitting"
-                            );
+                            assert_eq!(result, None, "Expected None during subnet splitting");
                         }
                         SubnetSplittingStatus::PostSplit { new_subnet_id }
                             if new_subnet_id != subnet_test_id(0) =>
                         {
                             assert_eq!(
-                                result,
-                                Some(ChangeAction::HandleInvalid(
-                                    CertificationMessage::CertificationShare(share),
-                                    "Subnet splitting in progress".to_string(),
-                                )),
-                                "Expected HandleInvalid after Done splitting with different subnet ID"
+                                result, None,
+                                "Expected None after Done splitting with different subnet ID"
                             );
                         }
                         SubnetSplittingStatus::NotScheduled
@@ -1897,8 +1887,7 @@ mod tests {
     }
 
     /// Full certifications received during a `Scheduled` or `Done` with different subnet ID
-    /// splitting interval should still be validated: the subnet signature is trusted even though
-    /// we would not have produced the share ourselves.
+    /// splitting interval should be ignored and not validated, as they could be from the other
     #[test]
     fn test_validate_certification_validates_despite_scheduled_subnet_splitting() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1922,7 +1911,7 @@ mod tests {
                     log,
                 );
 
-                assert_for_all_subnet_splitting_statuses(&mut pool, |_status, test_height| {
+                assert_for_all_subnet_splitting_statuses(&mut pool, |status, test_height| {
                     let content = gen_content(test_height);
                     let cert = Certification {
                         height: test_height,
@@ -1934,13 +1923,29 @@ mod tests {
                     };
 
                     let result = certifier.validate_certification(&cert);
-                    assert_eq!(
-                        result,
-                        Some(ChangeAction::MoveToValidated(
-                            CertificationMessage::Certification(cert)
-                        )),
-                        "Expected MoveToValidated whether or not subnet splitting is in progress"
-                    );
+                    match status {
+                        SubnetSplittingStatus::Scheduled(..) => {
+                            assert_eq!(result, None, "Expected None during subnet splitting");
+                        }
+                        SubnetSplittingStatus::PostSplit { new_subnet_id }
+                            if new_subnet_id != subnet_test_id(0) =>
+                        {
+                            assert_eq!(
+                                result, None,
+                                "Expected None after Done splitting with different subnet ID"
+                            );
+                        }
+                        SubnetSplittingStatus::NotScheduled
+                        | SubnetSplittingStatus::PostSplit { .. } => {
+                            assert_eq!(
+                                result,
+                                Some(ChangeAction::MoveToValidated(
+                                    CertificationMessage::Certification(cert.clone())
+                                )),
+                                "Expected MoveToValidated when not splitting or splitting with same subnet ID"
+                            );
+                        }
+                    }
                 });
             })
         })
