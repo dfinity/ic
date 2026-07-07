@@ -1,6 +1,5 @@
 use super::{
-    AccessList, SignableTransaction, Signed, TransactionPrice, compute_recovery_id,
-    eip_1559::Eip1559Signature, encode_u256, split_in_two,
+    AccessList, SignableTransaction, Signed, compute_recovery_id, encode_u256, split_in_two,
 };
 use crate::{
     eth_rpc::Hash,
@@ -17,7 +16,7 @@ const SET_CODE_TX_ID: u8 = 4;
 const EIP7702_AUTHORIZATION_MAGIC: u8 = 5;
 
 /// Immutable signed EIP-7702 transaction.
-/// Use `Eip7702TransactionRequest::sign()` to create a newly signed transaction or
+/// Use [`sign`](super::sign) to create a newly signed transaction or
 /// `SignedEip7702TransactionRequest::from()` if the signature is already known.
 // TODO(S2): mirror the `Resubmittable`/fee-bump machinery used for EIP-1559 transactions
 // once EIP-7702 transactions are wired into the resubmission path.
@@ -174,48 +173,16 @@ impl SignableTransaction for Eip7702TransactionRequest {
     fn nonce(&self) -> TransactionNonce {
         self.nonce
     }
-}
 
-impl Eip7702TransactionRequest {
-    /// Hash of an EIP-7702 transaction is computed as
-    /// keccak256(0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, authorization_list])),
-    /// where `||` denotes string concatenation.
-    pub fn hash(&self) -> Hash {
-        use rlp::Encodable;
-        let mut bytes = self.rlp_bytes().to_vec();
-        bytes.insert(0, self.transaction_type());
-        Hash(ic_sha3::Keccak256::hash(bytes))
+    fn gas_limit(&self) -> GasAmount {
+        self.gas_limit
     }
 
-    pub fn transaction_price(&self) -> TransactionPrice {
-        TransactionPrice {
-            gas_limit: self.gas_limit,
-            max_fee_per_gas: self.max_fee_per_gas,
-            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
-        }
+    fn max_fee_per_gas(&self) -> WeiPerGas {
+        self.max_fee_per_gas
     }
 
-    pub async fn sign(self) -> Result<SignedEip7702TransactionRequest, String> {
-        let hash = self.hash();
-        let key_name = read_state(|s| s.ecdsa_key_name.clone());
-        let signature = crate::management::sign_with_ecdsa(
-            key_name,
-            DerivationPath::new(crate::MAIN_DERIVATION_PATH),
-            hash.0,
-        )
-        .await
-        .map_err(|e| format!("failed to sign tx: {e}"))?;
-        let recid = compute_recovery_id(&hash, &signature).await;
-        if recid.is_x_reduced() {
-            return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
-        }
-        let (r_bytes, s_bytes) = split_in_two(signature);
-        let sig = Eip1559Signature {
-            signature_y_parity: recid.is_y_odd(),
-            r: u256::from_be_bytes(r_bytes),
-            s: u256::from_be_bytes(s_bytes),
-        };
-
-        Ok(SignedEip7702TransactionRequest::new(self, sig))
+    fn max_priority_fee_per_gas(&self) -> WeiPerGas {
+        self.max_priority_fee_per_gas
     }
 }

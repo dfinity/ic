@@ -201,6 +201,7 @@ mod rlp_encoding {
             .unwrap(),
             access_list: AccessList::new(),
         };
+        use crate::tx::SignableTransaction;
         let tx_hash = transaction.hash();
         assert_eq!(
             tx_hash.to_string(),

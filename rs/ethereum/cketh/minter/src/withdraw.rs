@@ -309,7 +309,7 @@ async fn sign_transactions_batch() {
     let results = join_all(
         transactions_batch
             .into_iter()
-            .map(|(withdrawal_id, tx)| async move { (withdrawal_id, tx.sign().await) }),
+            .map(|(withdrawal_id, tx)| async move { (withdrawal_id, crate::tx::sign(tx).await) }),
     )
     .await;
     let mut errors = Vec::new();

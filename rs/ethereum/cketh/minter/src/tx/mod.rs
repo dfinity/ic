@@ -12,7 +12,7 @@ pub use eip_1559::{
 pub use eip_7702::{
     Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
 };
-pub use signed::{SignableTransaction, Signed};
+pub use signed::{SignableTransaction, Signed, sign};
 
 use crate::{
     eth_rpc::Hash,

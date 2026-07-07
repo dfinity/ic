@@ -2879,6 +2879,7 @@ fn resubmit_transaction_with_bumped_price(
     transactions: &mut EthTransactions,
     created_tx: Eip1559TransactionRequest,
 ) -> SignedEip1559TransactionRequest {
+    use crate::tx::SignableTransaction;
     let initial_price = created_tx.transaction_price();
     let new_tx = Eip1559TransactionRequest {
         max_fee_per_gas: increase_by_10_percent(initial_price.max_fee_per_gas),

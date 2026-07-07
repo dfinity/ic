@@ -1,10 +1,17 @@
 use super::eip_1559::Eip1559Signature;
-use crate::{eth_rpc::Hash, numeric::TransactionNonce};
+use super::{TransactionPrice, compute_recovery_id, split_in_two};
+use crate::{
+    eth_rpc::Hash,
+    numeric::{GasAmount, TransactionNonce, WeiPerGas},
+    state::read_state,
+};
+use ethnum::u256;
+use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 
 /// A transaction request that can be signed and wrapped into a [`Signed`] transaction.
-pub trait SignableTransaction {
+pub trait SignableTransaction: rlp::Encodable {
     /// The [EIP-2718](https://eips.ethereum.org/EIPS/eip-2718) transaction type identifier,
     /// e.g. `0x02` for EIP-1559.
     fn transaction_type(&self) -> u8;
@@ -13,6 +20,30 @@ pub trait SignableTransaction {
     fn rlp_inner(&self, rlp: &mut RlpStream);
 
     fn nonce(&self) -> TransactionNonce;
+
+    fn gas_limit(&self) -> GasAmount;
+
+    fn max_fee_per_gas(&self) -> WeiPerGas;
+
+    fn max_priority_fee_per_gas(&self) -> WeiPerGas;
+
+    /// The signing digest `keccak256(transaction_type || rlp([..payload fields..]))`,
+    /// i.e. the hash signed over to authorize the transaction, where `||` denotes string
+    /// concatenation. Note this differs from [`Signed::hash`], which additionally covers the
+    /// signature.
+    fn hash(&self) -> Hash {
+        let mut bytes = self.rlp_bytes().to_vec();
+        bytes.insert(0, self.transaction_type());
+        Hash(ic_sha3::Keccak256::hash(bytes))
+    }
+
+    fn transaction_price(&self) -> TransactionPrice {
+        TransactionPrice {
+            gas_limit: self.gas_limit(),
+            max_fee_per_gas: self.max_fee_per_gas(),
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas(),
+        }
+    }
 }
 
 /// Immutable signed transaction.
@@ -134,4 +165,28 @@ impl<T: SignableTransaction> Signed<T> {
     pub fn nonce(&self) -> TransactionNonce {
         self.inner.transaction.nonce()
     }
+}
+
+/// Sign `transaction` with the minter's ECDSA key and wrap it into a [`Signed`] transaction.
+pub async fn sign<T: SignableTransaction>(transaction: T) -> Result<Signed<T>, String> {
+    let hash = transaction.hash();
+    let key_name = read_state(|s| s.ecdsa_key_name.clone());
+    let signature = crate::management::sign_with_ecdsa(
+        key_name,
+        DerivationPath::new(crate::MAIN_DERIVATION_PATH),
+        hash.0,
+    )
+    .await
+    .map_err(|e| format!("failed to sign tx: {e}"))?;
+    let recid = compute_recovery_id(&hash, &signature).await;
+    if recid.is_x_reduced() {
+        return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
+    }
+    let (r_bytes, s_bytes) = split_in_two(signature);
+    let signature = Eip1559Signature {
+        signature_y_parity: recid.is_y_odd(),
+        r: u256::from_be_bytes(r_bytes),
+        s: u256::from_be_bytes(s_bytes),
+    };
+    Ok(Signed::new(transaction, signature))
 }
