@@ -465,12 +465,12 @@ source of truth (see the screening discussion below). For native ETH (Phase 2),
 `getEthBalance` rides in the same call and the finalized balance delta *is* the
 observation (`R11`) — there are no logs to confirm against.
 
-**Filter 2 — logs and screening.** For the filter-1 candidates, one batched `eth_getLogs` from
+**Filter 2 — logs and screening.** For the filter-1 candidates, a single `eth_getLogs` from
 the **minimum of the candidates' last observed block numbers** over at most 500
-blocks; each address' last observed block advances to the range end. A single
-filter covers many deposit addresses across all supported tokens at once, because
-both the `address` field (the emitting contracts, i.e. the token contracts) and
-each topic position accept OR-lists:
+blocks; each address' last observed block advances to the range end. One request
+(not a JSON-RPC batch) covers many deposit addresses across all supported tokens at
+once, because both the `address` field (the emitting contracts, i.e. the token
+contracts) and each topic position accept OR-lists:
 
 ```json
 {
@@ -692,10 +692,13 @@ function sweepErc20(
   deposit address, `eth_getBalance`, `eth_getTransactionCount` for deposit EOAs) must
   use the same reduction strategies.
 * Each EVM-RPC call today is one HTTPS outcall *per provider* and each outcall burns
-  cycles, so the bulk balance scans of step 3 depend on **JSON-RPC batch request
-  support in the EVM-RPC canister** (`eth_batch`,
+  cycles. The bulk balance scans of step 3 collapse to a single `eth_call` via
+  Multicall3 `aggregate3`, and the log scan is a single OR-list `eth_getLogs`, so no
+  JSON-RPC batching is required for correctness. **JSON-RPC batch support in the
+  EVM-RPC canister** (`eth_batch`,
   [dfinity/evm-rpc-canister#561](https://github.com/dfinity/evm-rpc-canister/pull/561),
-  in progress), with Multicall3 `aggregate3` as the interim alternative.
+  in progress) is a later cycles optimization — it would drop the Multicall3 hop and
+  bundle multi-window log chunks into one outcall.
 * The minter is event-sourced (`src/state/audit.rs`, `src/state/event.rs`): all new
   state must be reconstructible from persisted events (`R8`).
 * Deposits are only credited at *finalized* blocks, as today.
