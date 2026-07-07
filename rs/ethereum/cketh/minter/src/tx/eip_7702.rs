@@ -69,7 +69,7 @@ impl Authorization {
     /// The authority signs over
     /// keccak256(0x05 || rlp([chain_id, delegate, nonce])),
     /// where `||` denotes string concatenation.
-    pub fn signature_hash(&self) -> Hash {
+    pub fn hash(&self) -> Hash {
         use rlp::Encodable;
         let mut bytes = self.rlp_bytes().to_vec();
         bytes.insert(0, EIP7702_AUTHORIZATION_MAGIC);
@@ -83,7 +83,7 @@ impl Authorization {
                     .to_string(),
             );
         }
-        let hash = self.signature_hash();
+        let hash = self.hash();
         let key_name = read_state(|s| s.ecdsa_key_name.clone());
         let signature = crate::management::sign_with_ecdsa(
             key_name,

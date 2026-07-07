@@ -316,7 +316,7 @@ mod eip7702 {
             nonce: TransactionNonce::from(1_u8),
         };
         assert_eq!(
-            hex::encode(alloy.signature_hash().0),
+            hex::encode(alloy.hash().0),
             "16559694155c9c6e69d5c2c665f9118beae5baaded2f2466926f4900a36b12de"
         );
 
@@ -326,7 +326,7 @@ mod eip7702 {
             nonce: TransactionNonce::from(2_u8),
         };
         assert_eq!(
-            hex::encode(trust_wallet.signature_hash().0),
+            hex::encode(trust_wallet.hash().0),
             "92e45641ec1a2c72deca9dbbf759fe6831b9edd8a500f530bc1039a9e5d78a3c"
         );
     }
@@ -357,7 +357,7 @@ mod eip7702 {
             delegate: Address::from_str("0x0000000000000000000000000000000000000006").unwrap(),
             nonce: TransactionNonce::from(1_u8),
         };
-        let hash = authorization.signature_hash();
+        let hash = authorization.hash();
         let signature = private_key.sign_digest_with_ecdsa(&hash.0);
         let recovery_id = public_key
             .try_recovery_from_digest(&hash.0, &signature)
