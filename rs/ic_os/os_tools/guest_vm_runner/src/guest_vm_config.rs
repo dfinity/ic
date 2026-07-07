@@ -210,7 +210,7 @@ fn split_resources_for_type_4(
     vcpus: u32,
 ) -> (u32, u32, Topology) {
     let (memory, vcpus) = match &config.icos_settings.node_reward_type {
-        Some(val) if val == "type4.0" => (memory / 120, 2 /* Overcommit vCPUs */),
+        Some(val) if val == "type4.0" => (memory / 60, 2 /* Overcommit vCPUs */),
         Some(val) if val == "type4.1" => (memory / 32, vcpus / 32),
         Some(val) if val == "type4.2" => (memory / 8, vcpus / 8),
         Some(val) if val == "type4.3" => (memory / 4, vcpus / 4),

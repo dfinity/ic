@@ -9,7 +9,7 @@ source /opt/ic/bin/config.sh
 node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
 case "${node_reward_type}" in
-    type4.0) COUNT=120 ;;
+    type4.0) COUNT=60 ;;
     type4.1) COUNT=32 ;;
     type4.2) COUNT=8 ;;
     type4.3) COUNT=4 ;;
