@@ -27,7 +27,7 @@ use ic_types::{
     messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, SenderInfo},
     methods::{SystemMethod, WasmClosure},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_output_request};
@@ -1281,10 +1281,6 @@ impl SystemApiImpl {
             instructions_executed_before_current_slice: 0,
             call_counters: SystemApiCallCounters::default(),
         }
-    }
-
-    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.sandbox_safe_system_state.cost_schedule()
     }
 
     /// Note that this function is made public only for the tests

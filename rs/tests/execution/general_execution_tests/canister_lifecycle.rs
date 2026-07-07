@@ -46,10 +46,7 @@ use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, m
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{
     ManagementCanister,
-    management_canister::{
-        UpdateCanisterBuilder,
-        builders::{CanisterUpgradeOptions, InstallMode},
-    },
+    management_canister::builders::{CanisterUpgradeOptions, InstallMode},
 };
 use slog::info;
 
@@ -155,8 +152,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             // Update freezing threshold to a very high value to make the canister frozen.
             let high_freezing_threshold = 1_u64 << 62;
-            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
-                .with_optional_freezing_threshold(Some(high_freezing_threshold))
+            mgr.update_settings(&canister.canister_id())
+                .with_freezing_threshold(high_freezing_threshold)
                 .call_and_wait()
                 .await
                 .expect("setting freezing threshold on unfrozen canister failed");
@@ -179,8 +176,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             // Update freezing threshold on a frozen canister back to a low value.
             let low_freezing_threshold = 30 * 24 * 3600; // 30 days default
-            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
-                .with_optional_freezing_threshold(Some(low_freezing_threshold))
+            mgr.update_settings(&canister.canister_id())
+                .with_freezing_threshold(low_freezing_threshold)
                 .call_and_wait()
                 .await
                 .expect("setting freezing threshold on frozen canister failed");

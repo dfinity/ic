@@ -182,10 +182,10 @@ pub fn upgrade(
         let snapshot_args = TakeCanisterSnapshotArgs {
             canister_id: CanisterId::from(can_id),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         };
-        mgr.take_canister_snapshot(&can_id, &snapshot_args)
-            .await
-            .unwrap();
+        mgr.take_canister_snapshot(&snapshot_args).await.unwrap();
     });
 
     info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);
