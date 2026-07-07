@@ -120,8 +120,8 @@ function resize_partition() {
         }
 
         case "${node_reward_type}" in
-            type4.0) create_guestos_lvs 60 ;;
-            type4.1) create_guestos_lvs 32 ;;
+            type4.0) create_guestos_lvs 32 ;;
+            type4.1) create_guestos_lvs 60 ;;
             type4.2) create_guestos_lvs 8 ;;
             type4.3) create_guestos_lvs 4 ;;
             type4.4) create_guestos_lvs 2 ;;
