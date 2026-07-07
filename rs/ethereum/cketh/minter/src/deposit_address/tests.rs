@@ -17,22 +17,11 @@ fn should_derive_deterministically() {
     let owner = principal(1);
     let subaccount = subaccount(1);
 
-    let first = deposit_address(
-        &pk,
-        &cc,
-        DepositAddressSchema::CkErc20,
-        &owner,
-        Some(&subaccount),
-    );
-    let second = deposit_address(
-        &pk,
-        &cc,
-        DepositAddressSchema::CkErc20,
-        &owner,
-        Some(&subaccount),
-    );
-
-    assert_eq!(first, second);
+    for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
+        let first = deposit_address(&pk, &cc, schema, &owner, Some(&subaccount));
+        let second = deposit_address(&pk, &cc, schema, &owner, Some(&subaccount));
+        assert_eq!(first, second);
+    }
     assert_eq!(sweeper_address(&pk, &cc), sweeper_address(&pk, &cc));
 }
 
