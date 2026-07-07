@@ -225,7 +225,7 @@ impl CanisterId {
         }
 
         Ok(CanisterId {
-            is_u64: is_canister_id(principal_id),
+            is_u64: true,
             id: principal_id,
         })
     }

@@ -4177,7 +4177,7 @@ impl ExecutionEnvironment {
                         }
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
+                            "Finished executing install_code message on canister {} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
                             canister_id,
                             execution_duration,
                             result.old_wasm_hash,
@@ -4190,7 +4190,7 @@ impl ExecutionEnvironment {
                     Err(err) => {
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?} with error: {:?}, instructions consumed {}",
+                            "Finished executing install_code message on canister {} after {:?} with error: {:?}, instructions consumed {}",
                             canister_id,
                             execution_duration,
                             err,
