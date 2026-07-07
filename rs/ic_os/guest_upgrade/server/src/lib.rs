@@ -42,10 +42,6 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
     registry_client: Arc<dyn RegistryClient>,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
-    /// If true, the server will send the Store LUKS header to the client.
-    /// Only false in unit tests testing backwards compatibility.
-    // TODO: Remove when all deployed GuestOS versions support sending the Store LUKS header.
-    send_luks_header: bool,
     port: u16,
     success_timeout: Duration,
 }
@@ -60,7 +56,6 @@ impl DiskEncryptionKeyExchangeServerAgent {
         registry_client: Arc<dyn RegistryClient>,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
-        send_luks_header: bool,
         port: u16,
         success_timeout: Duration,
     ) -> Self {
@@ -73,7 +68,6 @@ impl DiskEncryptionKeyExchangeServerAgent {
             registry_client,
             store_device_path,
             store_luks_header_path,
-            send_luks_header,
             port,
             success_timeout,
         }
@@ -105,7 +99,6 @@ impl DiskEncryptionKeyExchangeServerAgent {
             self.trusted_execution_environment_config.clone(),
             self.store_device_path.clone(),
             self.store_luks_header_path.clone(),
-            self.send_luks_header,
             status_sender,
             expected_measurements,
         ));

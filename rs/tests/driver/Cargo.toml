@@ -112,7 +112,6 @@ time = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
-virt = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }
 zstd = { workspace = true }
