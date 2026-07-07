@@ -252,13 +252,13 @@ impl DkgKeyManager {
     }
 
     fn load_post_split_transcripts_if_necessary(&mut self, summary_block: &Block) {
-        let Some(scheduled) = subnet_splitting::is_split_scheduled(&summary_block) else {
+        let Some(scheduled) = subnet_splitting::is_split_scheduled(summary_block) else {
             return;
         };
 
         let new_subnet_id = match subnet_splitting::get_post_split_subnet_assignment(
             self.replica_config.node_id,
-            &summary_block,
+            summary_block,
             self.registry.as_ref(),
             scheduled,
         ) {
@@ -272,19 +272,21 @@ impl DkgKeyManager {
             }
         };
 
-        let next_summary =
-            match get_post_split_dkg_summary(new_subnet_id, self.registry.as_ref(), &summary_block)
-            {
-                Ok(next_summary) => next_summary,
-                Err(err) => {
-                    error!(
-                        self.logger,
-                        "Couldn't get the next DKG summary for the new subnet {new_subnet_id:?} \
+        let next_summary = match get_post_split_dkg_summary(
+            new_subnet_id,
+            self.registry.as_ref(),
+            summary_block,
+        ) {
+            Ok(next_summary) => next_summary,
+            Err(err) => {
+                error!(
+                    self.logger,
+                    "Couldn't get the next DKG summary for the new subnet {new_subnet_id:?} \
                         after the split: {err:?}"
-                    );
-                    return;
-                }
-            };
+                );
+                return;
+            }
+        };
 
         info!(every_n_seconds => 5, self.logger, "Adding post-split DKG transcripts");
         self.load_transcripts_from_summary(&next_summary);
