@@ -619,17 +619,13 @@ impl StateMachine for FakeStateMachine {
     fn execute_round(
         &self,
         mut state: ReplicatedState,
-        network_topology: NetworkTopology,
         _batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
+        network_topology: NetworkTopology,
+        own_subnet_info: OwnSubnetInfo,
         registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         state.metadata.network_topology = Arc::new(network_topology);
-        state.metadata.own_subnet_features = subnet_features;
-        state.metadata.own_resource_limits = resource_limits;
-        state.metadata.node_public_keys = node_public_keys;
+        state.metadata.own_subnet_info = Arc::new(own_subnet_info);
         state.put_canister_state(
             CanisterStateBuilder::new()
                 .with_canister_id(canister_test_id(1))
@@ -687,16 +683,7 @@ fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
     own_subnet_id: SubnetId,
-) -> Result<
-    (
-        NetworkTopology,
-        SubnetFeatures,
-        ResourceLimits,
-        RegistryExecutionSettings,
-        NodePublicKeys,
-    ),
-    ReadRegistryError,
-> {
+) -> Result<(NetworkTopology, OwnSubnetInfo, RegistryExecutionSettings), ReadRegistryError> {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
     batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
 }
@@ -885,15 +872,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, metrics, state_manager, registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (
-            network_topology,
-            own_subnet_features,
-            own_resource_limits,
-            registry_execution_settings,
-            node_public_keys,
-        ) = batch_processor
+        let (network_topology, own_subnet_info, registry_execution_settings) = batch_processor
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap();
+        let OwnSubnetInfo {
+            subnet_features: own_subnet_features,
+            resource_limits: own_resource_limits,
+            node_public_keys,
+        } = own_subnet_info;
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
         // critical error counter is untouched.
@@ -1028,7 +1014,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         );
         assert_ne!(
             own_subnet_features,
-            latest_state.metadata.own_subnet_features
+            latest_state.metadata.own_subnet_info.subnet_features
         );
         assert_ne!(
             *registry_settings.lock().unwrap(),
@@ -1054,23 +1040,14 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             &network_topology,
             latest_state.metadata.network_topology.as_ref()
         );
+        assert_eq!(own_subnet_features, latest_state.subnet_features());
+        assert_eq!(own_resource_limits, latest_state.resource_limits());
         assert_eq!(
-            own_subnet_features,
-            latest_state.metadata.own_subnet_features
-        );
-        assert_eq!(
-            own_resource_limits,
-            latest_state.metadata.own_resource_limits
-        );
-        assert_eq!(
-            latest_state.metadata.own_resource_limits.maximum_state_size,
+            latest_state.resource_limits().maximum_state_size,
             Some(own_maximum_state_size)
         );
         assert_eq!(
-            latest_state
-                .metadata
-                .own_resource_limits
-                .maximum_state_delta,
+            latest_state.resource_limits().maximum_state_delta,
             Some(own_maximum_state_delta)
         );
         assert_eq!(
@@ -1125,7 +1102,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, _, registry_execution_settings, _) = result.unwrap();
+        let (_, _, registry_execution_settings) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -1450,7 +1427,8 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, _, node_public_keys) = res.unwrap();
+        let (_, own_subnet_info, _) = res.unwrap();
+        let node_public_keys = &own_subnet_info.node_public_keys;
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
@@ -1589,7 +1567,7 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
 
         // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
         // Hence, only one nodes are retrieved.
-        let (network_topology, _, _, _, _) = res.unwrap();
+        let (network_topology, _, _) = res.unwrap();
         let api_boundary_nodes = &network_topology.api_boundary_nodes;
         assert_eq!(api_boundary_nodes.len(), 1);
         assert!(api_boundary_nodes.contains_key(&node_test_id(11)));

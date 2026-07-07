@@ -5569,7 +5569,8 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         network_topology.set_subnets(subnets);
 
         state.metadata.network_topology = Arc::new(network_topology);
-        state.metadata.node_public_keys = node_public_keys;
+        std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).node_public_keys =
+            node_public_keys;
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 

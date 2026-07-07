@@ -30,12 +30,12 @@ use ic_registry_client_helpers::subnet::{
     SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    DroppedMessageMetrics, FullTopology, NetworkTopology, ReplicatedState, SubnetTopology,
+    DroppedMessageMetrics, FullTopology, NetworkTopology, OwnSubnetInfo, ReplicatedState,
+    SubnetTopology,
 };
 use ic_types::batch::{Batch, BatchContent, BatchSummary};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
@@ -724,13 +724,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-    ) -> (
-        NetworkTopology,
-        SubnetFeatures,
-        ResourceLimits,
-        RegistryExecutionSettings,
-        NodePublicKeys,
-    ) {
+    ) -> (NetworkTopology, OwnSubnetInfo, RegistryExecutionSettings) {
         loop {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
                 Ok(result) => return result,
@@ -769,16 +763,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-    ) -> Result<
-        (
-            NetworkTopology,
-            SubnetFeatures,
-            ResourceLimits,
-            RegistryExecutionSettings,
-            NodePublicKeys,
-        ),
-        ReadRegistryError,
-    > {
+    ) -> Result<(NetworkTopology, OwnSubnetInfo, RegistryExecutionSettings), ReadRegistryError>
+    {
         let subnet_record = self
             .registry
             .get_subnet_record(own_subnet_id, registry_version)
@@ -900,8 +886,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 
         Ok((
             network_topology,
-            subnet_features,
-            resource_limits,
+            OwnSubnetInfo {
+                subnet_features,
+                resource_limits,
+                node_public_keys,
+            },
             RegistryExecutionSettings {
                 max_number_of_canisters,
                 provisional_whitelist,
@@ -910,7 +899,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 node_ids: nodes,
                 registry_version,
             },
-            node_public_keys,
         ))
     }
 
@@ -1388,13 +1376,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         // TODO (MR-29) Cache network topology and subnet_features; and populate only
         // if version referenced in batch changes.
         let registry_version = batch.registry_version;
-        let (
-            network_topology,
-            subnet_features,
-            resource_limits,
-            registry_execution_settings,
-            node_public_keys,
-        ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
+        let (network_topology, own_subnet_info, registry_execution_settings) =
+            self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
         self.metrics
@@ -1416,12 +1399,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         let batch_number = batch.batch_number;
         let mut state_after_round = self.state_machine.execute_round(
             state,
-            network_topology,
             batch,
-            subnet_features,
-            resource_limits,
+            network_topology,
+            own_subnet_info,
             &registry_execution_settings,
-            node_public_keys,
         );
 
         let garbage_collect_timer = self.metrics.start_phase_timer(PHASE_GARBAGE_COLLECT);
