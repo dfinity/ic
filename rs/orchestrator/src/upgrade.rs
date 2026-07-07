@@ -643,8 +643,9 @@ impl Upgrade {
                     registry with that status deliberately has a height of 0, meaning it should never have been \
                     picked up. On the actual height of the split, Consensus does not create a CUP, but instead \
                     directly creates a post-split one.";
-                #[cfg(debug_assertions)]
-                panic!(error_message);
+                if cfg!(debug_assertions) {
+                    panic!("{}", error_message);
+                }
 
                 error!(self.logger, "{}", error_message);
                 self.metrics

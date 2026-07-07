@@ -218,7 +218,8 @@ mod tests {
     use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        ReplicatedState, SubnetTopology, metadata_state::testing::NetworkTopologyTesting,
+        ReplicatedState, SubnetTopology,
+        metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     };
     use ic_test_utilities_types::ids::SUBNET_1;
     use ic_types::{
@@ -322,17 +323,19 @@ mod tests {
         ranges: &[CanisterIdRange],
     ) -> ReplicatedState {
         let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
-        state.metadata.network_topology.subnets_mut().insert(
-            subnet_id,
-            SubnetTopology {
-                public_key,
-                ..SubnetTopology::default()
-            },
-        );
-        let routing_table = state.metadata.network_topology.routing_table_mut();
-        for range in ranges {
-            routing_table.insert(*range, subnet_id).unwrap();
-        }
+        state.metadata.modify_network_topology(|topology| {
+            topology.subnets_mut().insert(
+                subnet_id,
+                SubnetTopology {
+                    public_key,
+                    ..SubnetTopology::default()
+                },
+            );
+            let routing_table = topology.routing_table_mut();
+            for range in ranges {
+                routing_table.insert(*range, subnet_id).unwrap();
+            }
+        });
         state
     }
 

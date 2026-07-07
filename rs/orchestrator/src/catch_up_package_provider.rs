@@ -423,8 +423,9 @@ impl CatchUpPackageProvider {
                 let error_message = "Received a signed CUP with scheduled subnet splitting from a peer, even though Consensus \
                 should skip the scheduled height and directly produce a post-split CUP. Trusting the subnet's threshold \
                 signature anyways. This is a bug.";
-                #[cfg(debug_assertions)]
-                panic!(error_message);
+                if cfg!(debug_assertions) {
+                    panic!("{}", error_message);
+                }
 
                 error!(self.logger, "{}", error_message);
                 self.split_in_progress_subnet_id = None;
@@ -858,13 +859,13 @@ pub(crate) mod tests {
     ) -> CatchUpPackageProvider {
         CatchUpPackageProvider::new_with_initial_backoff(
             registry,
+            Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
             LocalCUPReader::new(cup_dir, no_op_logger()),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),
             no_op_logger(),
             node_id,
             backoff,
-            Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
         )
     }
 

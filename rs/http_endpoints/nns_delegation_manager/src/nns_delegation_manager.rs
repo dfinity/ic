@@ -715,7 +715,9 @@ mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
     use ic_replicated_state::SubnetTopology;
-    use ic_replicated_state::metadata_state::testing::NetworkTopologyTesting;
+    use ic_replicated_state::metadata_state::testing::{
+        NetworkTopologyTesting, SystemMetadataTesting,
+    };
     use ic_test_utilities_registry::{
         SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record,
         add_subnet_list_record,
@@ -1545,15 +1547,15 @@ mod tests {
     ) {
         let mut state_manager = MockStateManager::new();
         let mut state = ReplicatedState::new(subnet_id, SubnetType::Application);
-        state.metadata.network_topology.set_subnets(subnets);
-        for (subnet_id, canister_ranges) in routing_table {
-            state
-                .metadata
-                .network_topology
-                .routing_table_mut()
-                .assign_ranges(canister_ranges, subnet_id)
-                .unwrap();
-        }
+        state.metadata.modify_network_topology(|topology| {
+            topology.set_subnets(subnets);
+            for (subnet_id, canister_ranges) in routing_table {
+                topology
+                    .routing_table_mut()
+                    .assign_ranges(canister_ranges, subnet_id)
+                    .unwrap();
+            }
+        });
         let mutable_handle = Arc::new(RwLock::new(state));
         let handle_clone = Arc::clone(&mutable_handle);
         state_manager
@@ -1613,16 +1615,15 @@ mod tests {
         {
             let mut state = mutable_state.write().unwrap();
             let subnet_id = state.metadata.own_subnet_id;
-            state
-                .metadata
-                .network_topology
-                .set_subnets(BTreeMap::from_iter([(
+            state.metadata.modify_network_topology(|topology| {
+                topology.set_subnets(BTreeMap::from_iter([(
                     subnet_id,
                     SubnetTopology {
                         public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
                         ..Default::default()
                     },
                 )]));
+            });
         }
 
         let manager = DelegationManager {
@@ -1773,16 +1774,15 @@ mod tests {
         {
             let mut state = mutable_state.write().unwrap();
             let subnet_id = state.metadata.own_subnet_id;
-            state
-                .metadata
-                .network_topology
-                .set_subnets(BTreeMap::from_iter([(
+            state.metadata.modify_network_topology(|topology| {
+                topology.set_subnets(BTreeMap::from_iter([(
                     subnet_id,
                     SubnetTopology {
                         public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
                         ..Default::default()
                     },
                 )]));
+            });
         }
 
         // The next refresh should be produced by `reactive_fetch`.

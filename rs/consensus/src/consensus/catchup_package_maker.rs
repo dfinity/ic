@@ -679,7 +679,7 @@ mod tests {
                 deps.crypto.clone(),
                 deps.state_manager.clone(),
                 message_routing,
-                deps.registry,
+                deps.registry.clone(),
                 no_op_logger(),
             );
 
