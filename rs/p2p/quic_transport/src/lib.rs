@@ -68,10 +68,6 @@ mod connection_manager;
 mod metrics;
 mod request_handler;
 pub use crate::connection_manager::create_udp_socket;
-// The maximum size of a single message exchanged between nodes of a subnet. Defined in `ic-limits`
-// so that it can be shared with other components (e.g. the orchestrator's CatchUpPackage fetching)
-// that need to bound the amount of data buffered from a peer.
-pub(crate) use ic_limits::MAX_MESSAGE_SIZE_BYTES;
 
 /// The shutdown primitive is useful if futures should be cancelled at places different than '.await' points.
 /// Such functionality is needed to have explicit control on the state when exiting.

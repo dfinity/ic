@@ -35,7 +35,7 @@ use crate::{
     registry_helper::RegistryHelper,
     utils::https_endpoint_to_url,
 };
-use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
+use http_body_util::{BodyExt, Full, Limited};
 use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
@@ -860,10 +860,7 @@ pub(crate) mod tests {
             .await
             .expect_err("Expected an error when the CUP body exceeds the size limit");
 
-        assert!(
-            err.contains("exceeds the size limit"),
-            "Unexpected error: {err}"
-        );
+        assert!(err.contains("LengthLimitError"), "Unexpected error: {err}");
     }
 
     #[tokio::test]
