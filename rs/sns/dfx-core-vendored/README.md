@@ -8,11 +8,12 @@ to its principal.
 
 ## Motivation
 
-`dfx-core` re-exports `ic-agent` in its public API, so its **major version is
-bumped in lockstep with `ic-agent`**. Depending on the published crate ties this
-monorepo's `ic-agent` upgrades to the cadence of `dfx-core` releases. Once the
-[`dfinity/sdk`](https://github.com/dfinity/sdk) repository is archived those
-releases can no longer be cut, which would block this monorepo from upgrading
+`dfx` is deprecated. Once the [`dfinity/sdk`](https://github.com/dfinity/sdk)
+repository is archived, no new `dfx-core` releases can be cut — and that is a
+problem here because `dfx-core` re-exports `ic-agent` in its public API, so its
+**major version is bumped in lockstep with `ic-agent`**. Depending on the
+published crate therefore ties this monorepo's `ic-agent` upgrades to the cadence
+of `dfx-core` releases, which would eventually block this monorepo from upgrading
 `ic-agent` again.
 
 Keeping the small slice we use in-tree removes that coupling while preserving

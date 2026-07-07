@@ -7,8 +7,8 @@
 //! `networks.json` are intentionally not supported.
 //!
 //! For `local`, resolution mirrors dfx's `LocalBindDetermination::ApplyRunning
-//! WebserverPort`: the bind address defaults to `127.0.0.1:8000` inside a dfx
-//! project (a `dfx.json` found by walking up from the working directory) or
+//! WebserverPort`: the address to connect to defaults to `127.0.0.1:8000` inside
+//! a dfx project (a `dfx.json` found by walking up from the working directory) or
 //! `127.0.0.1:4943` for the shared network, and is overridden by the port
 //! recorded in the network's `webserver-port` file when a replica is running.
 use crate::config::directories::get_shared_network_data_directory;
@@ -20,12 +20,13 @@ use url::Url;
 // Kept identical to the corresponding constants in dfx-core.
 const DEFAULT_IC_GATEWAY: &str = "https://icp0.io";
 const DEFAULT_IC_GATEWAY_TRAILING_SLASH: &str = "https://icp0.io/";
-const DEFAULT_SHARED_LOCAL_BIND: &str = "127.0.0.1:4943"; // hex for "IC"
-const DEFAULT_PROJECT_LOCAL_BIND: &str = "127.0.0.1:8000";
+const DEFAULT_SHARED_LOCAL_ADDRESS: &str = "127.0.0.1:4943"; // hex for "IC"
+const DEFAULT_PROJECT_LOCAL_ADDRESS: &str = "127.0.0.1:8000";
 
-/// The subset of a dfx `NetworkDescriptor` that SNS actually consumes.
+/// The subset of dfx's `NetworkDescriptor` that SNS actually consumes. Named
+/// after the upstream `dfx_core::config::model::network_descriptor::NetworkDescriptor`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedNetwork {
+pub struct NetworkDescriptor {
     pub providers: Vec<String>,
     pub is_ic: bool,
 }
@@ -66,9 +67,9 @@ fn is_ic(network_name: &str, providers: &[String]) -> bool {
 
 /// Resolves a network identifier (`ic`, `local`, or an IC HTTP endpoint URL) to
 /// the provider URLs and mainnet flag needed to build an agent.
-pub fn resolve_network(network_name: &str) -> Result<ResolvedNetwork, NetworkResolutionError> {
+pub fn resolve_network(network_name: &str) -> Result<NetworkDescriptor, NetworkResolutionError> {
     if network_name == "ic" {
-        return Ok(ResolvedNetwork {
+        return Ok(NetworkDescriptor {
             providers: vec![DEFAULT_IC_GATEWAY.to_string()],
             is_ic: true,
         });
@@ -85,7 +86,7 @@ pub fn resolve_network(network_name: &str) -> Result<ResolvedNetwork, NetworkRes
     if Url::parse(network_name).is_ok() {
         let providers = vec![network_name.to_string()];
         let is_ic = is_ic(network_name, &providers);
-        return Ok(ResolvedNetwork { providers, is_ic });
+        return Ok(NetworkDescriptor { providers, is_ic });
     }
 
     Err(NetworkResolutionError::NetworkNotFound(
@@ -94,22 +95,22 @@ pub fn resolve_network(network_name: &str) -> Result<ResolvedNetwork, NetworkRes
 }
 
 /// Resolves the `local` network, mirroring dfx's default bind determination.
-fn resolve_local_network() -> Result<ResolvedNetwork, NetworkResolutionError> {
-    let (data_directory, default_bind) = match find_project_root() {
+fn resolve_local_network() -> Result<NetworkDescriptor, NetworkResolutionError> {
+    let (data_directory, default_address) = match find_project_root() {
         Some(project_root) => (
             project_root.join(".dfx").join("network").join("local"),
-            project_local_bind(&project_root),
+            project_local_address(&project_root),
         ),
         None => (
             get_shared_network_data_directory("local")
                 .map_err(NetworkResolutionError::DetermineSharedNetworkDirectoryFailed)?,
-            DEFAULT_SHARED_LOCAL_BIND.to_string(),
+            DEFAULT_SHARED_LOCAL_ADDRESS.to_string(),
         ),
     };
 
-    let bind_address = get_running_webserver_bind_address(&data_directory, &default_bind)?;
-    let provider = format!("http://{bind_address}");
-    Ok(ResolvedNetwork {
+    let address = get_running_webserver_address(&data_directory, &default_address)?;
+    let provider = format!("http://{address}");
+    Ok(NetworkDescriptor {
         providers: vec![provider],
         is_ic: false,
     })
@@ -129,10 +130,10 @@ fn find_project_root() -> Option<PathBuf> {
     }
 }
 
-/// Returns the configured bind for the project's `local` network, falling back
-/// to dfx's project default. Only the `bind` field is honoured; when a replica
-/// is running its `webserver-port` takes precedence regardless.
-fn project_local_bind(project_root: &Path) -> String {
+/// Returns the configured address for the project's `local` network, falling
+/// back to dfx's project default. Only the `bind` field is honoured; when a
+/// replica is running its `webserver-port` takes precedence regardless.
+fn project_local_address(project_root: &Path) -> String {
     let dfx_json = project_root.join("dfx.json");
     let bind = std::fs::read(&dfx_json)
         .ok()
@@ -145,23 +146,23 @@ fn project_local_bind(project_root: &Path) -> String {
                 .as_str()
                 .map(str::to_string)
         });
-    bind.unwrap_or_else(|| DEFAULT_PROJECT_LOCAL_BIND.to_string())
+    bind.unwrap_or_else(|| DEFAULT_PROJECT_LOCAL_ADDRESS.to_string())
 }
 
-/// Applies a running replica's webserver port (if any) to the default bind.
+/// Applies a running replica's webserver port (if any) to the default address.
 /// Mirrors `dfx_core::network::provider::get_running_webserver_bind_address`.
-fn get_running_webserver_bind_address(
+fn get_running_webserver_address(
     data_directory: &Path,
-    default_local_bind: &str,
+    default_local_address: &str,
 ) -> Result<String, NetworkResolutionError> {
-    let local_bind = default_local_bind.to_string();
+    let local_address = default_local_address.to_string();
     let path = data_directory.join("webserver-port");
     if path.exists() {
         let s = std::fs::read_to_string(&path)
             .map_err(|e| NetworkResolutionError::ReadWebserverPortFailed(path.clone(), e))?;
         let s = s.trim();
         if s.is_empty() {
-            Ok(local_bind)
+            Ok(local_address)
         } else {
             let port = s
                 .parse::<u16>()
@@ -169,13 +170,13 @@ fn get_running_webserver_bind_address(
             // converting to a socket address, and then setting the port,
             // will unfortunately transform "localhost:port" to "[::1]:{port}",
             // which the agent fails to connect with.
-            let host = match local_bind.rfind(':') {
-                None => local_bind.clone(),
-                Some(index) => local_bind[0..index].to_string(),
+            let host = match local_address.rfind(':') {
+                None => local_address.clone(),
+                Some(index) => local_address[0..index].to_string(),
             };
             Ok(format!("{host}:{port}"))
         }
     } else {
-        Ok(local_bind)
+        Ok(local_address)
     }
 }
