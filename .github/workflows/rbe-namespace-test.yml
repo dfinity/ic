@@ -81,15 +81,6 @@ jobs:
 
             --remote_default_exec_properties=container-image="$worker_image"
 
-            # nsc bazel execution setup (above) points Bazel's remote downloader at Namespace,
-            # which fetches repository-rule URLs (http_archive/http_file/oci.pull) on Bazel's
-            # behalf. By default it fetches anonymously, so registries that require auth (e.g.
-            # ghcr.io) return HTTP 401. Forward the per-URL credentials Bazel resolves from
-            # ~/.netrc (written by the netrc action) via the http_header_url:<idx>:<key>
-            # qualifier. Unlike --remote_downloader_header, which sends one Authorization header
-            # to *every* origin, this scopes each credential to the URL it belongs to.
-            --experimental_remote_downloader_propagate_credentials
-
             # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
             # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
             # mid-build, actions fail with "Lost inputs no longer available remotely" or
@@ -102,7 +93,6 @@ jobs:
             --experimental_remote_cache_eviction_retries=10
 
             --keep_going
-            --test_output=errors
           )
 
           bazel "${bazel_args[@]}" "${target_patterns[@]}"
