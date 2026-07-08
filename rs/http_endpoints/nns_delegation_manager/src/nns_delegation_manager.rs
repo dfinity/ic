@@ -461,13 +461,6 @@ async fn connect(
 
             let mut dns_resolver = Resolver::builder_tokio()?;
             dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
-            #[cfg(test)]
-            {
-                // In unit tests, the domain does not resolve and we want to fail fast to keep a low
-                // test execution time.
-                dns_resolver.options_mut().timeout = Duration::from_millis(100);
-                dns_resolver.options_mut().attempts = 1;
-            }
             let ip_addr = dns_resolver
                 .build()?
                 .lookup_ip(domain.as_str())
