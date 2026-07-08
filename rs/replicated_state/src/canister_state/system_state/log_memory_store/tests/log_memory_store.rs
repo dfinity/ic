@@ -386,15 +386,16 @@ fn fetch_canister_logs_response_within_limit() {
     // (`CanisterLogRecord::data_size()` = 40 B + content per record), while Candid
     // encodes each record's fixed fields in fewer bytes (two `nat64` = 16 B). The
     // worst case for the encoded size is therefore the fewest/largest records, so we
-    // sweep record sizes up to a single near-maximal record and assert the encoded
-    // `FetchCanisterLogsResponse` fits within the result cap plus a 4 KiB page for
-    // Candid framing (the bound that `ic-types` asserts fits in an inter-canister
-    // message). The sizes are kept large enough that a full buffer exceeds
-    // `RESULT_MAX_SIZE`: the ring buffer holds only a few hundred records (its index
-    // table is one page), so tiny records could never fill it past the cap.
+    // sweep record sizes from empty content up to a single near-maximal record and
+    // assert the encoded `FetchCanisterLogsResponse` fits within the result cap plus a
+    // 4 KiB page for Candid framing (the bound that `ic-types` asserts fits in an
+    // inter-canister message). `append_deltas` below adds `2 * RESULT_MAX_SIZE` of
+    // records regardless of record size, so the buffer always exceeds the cap and
+    // `records()` must trim.
     let max_response = RESULT_MAX_SIZE.get() as usize + 4 * KIB;
     let aggregate_capacity = 3 * RESULT_MAX_SIZE.get() as usize;
     for content_len in [
+        0,
         16 * KIB,
         128 * KIB,
         RESULT_MAX_SIZE.get() as usize - CanisterLogRecord::default().data_size(),
