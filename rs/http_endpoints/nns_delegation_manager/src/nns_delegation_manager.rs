@@ -423,6 +423,11 @@ async fn try_fetch_delegation_from_nns(
     Ok(nns_delegation_builder)
 }
 
+/// Port of the stub DNS server which makes DNS resolution hermetic in unit tests, see
+/// `tests::start_nxdomain_dns_server`.
+#[cfg(test)]
+static TEST_DNS_SERVER_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+
 async fn connect(
     log: ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
@@ -459,15 +464,35 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
+            // In production, resolve the API BN domain using the system's DNS configuration
+            // (/etc/resolv.conf).
+            #[cfg(not(test))]
             let mut dns_resolver = Resolver::builder_tokio()?;
-            dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
+            // In unit tests, resolve via the stub DNS server running on localhost (see
+            // `tests::start_nxdomain_dns_server`) so that resolution behaves the same in every
+            // environment, in particular inside Bazel's network-isolated sandbox where the
+            // system's nameservers are unreachable.
             #[cfg(test)]
-            {
-                // In unit tests, the domain does not resolve and we want to fail fast to keep a low
-                // test execution time.
-                dns_resolver.options_mut().timeout = Duration::from_millis(100);
-                dns_resolver.options_mut().attempts = 1;
-            }
+            let mut dns_resolver = {
+                use hickory_resolver::{
+                    config::{ConnectionConfig, NameServerConfig, ResolverConfig},
+                    net::runtime::TokioRuntimeProvider,
+                };
+
+                let port = *TEST_DNS_SERVER_PORT
+                    .get()
+                    .expect("tests exercising the CloudEngine path must start the stub DNS server");
+                let mut connection = ConnectionConfig::udp();
+                connection.port = port;
+                let mut config = ResolverConfig::default();
+                config.add_name_server(NameServerConfig::new(
+                    std::net::Ipv4Addr::LOCALHOST.into(),
+                    /*trust_negative_responses=*/ true,
+                    vec![connection],
+                ));
+                Resolver::builder_with_config(config, TokioRuntimeProvider::default())
+            };
+            dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
             let ip_addr = dns_resolver
                 .build()?
                 .lookup_ip(domain.as_str())
@@ -1250,6 +1275,8 @@ mod tests {
 
     #[tokio::test]
     async fn load_root_delegation_on_cloud_engine_should_contact_api_bn_test() {
+        start_nxdomain_dns_server().await;
+
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config) = set_up_nns_delegation_dependencies(
             rt_handle.clone(),
@@ -1270,10 +1297,50 @@ mod tests {
         )
         .await;
 
-        // Since the API BN is configured with a domain that does not resolve, we expect the
-        // connection to fail with a name resolution error, which indicates that we indeed tried to
-        // connect to the API BN instead of an NNS node.
+        // Since the API BN is configured with a domain that does not resolve (the stub DNS server
+        // answers NXDOMAIN to every query), we expect the connection to fail with a name
+        // resolution error, which indicates that we indeed tried to connect to the API BN instead
+        // of an NNS node.
         assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
+    }
+
+    /// Starts a stub DNS server on localhost which responds with `NXDOMAIN` to every query,
+    /// mimicking how a real nameserver answers for a non-existing domain like `API_BN_DOMAIN`.
+    /// Registers its port in `TEST_DNS_SERVER_PORT` so that `connect` resolves against it,
+    /// making the DNS resolution behave the same in every environment, in particular inside
+    /// Bazel's network-isolated sandbox where the system's nameservers are unreachable.
+    async fn start_nxdomain_dns_server() {
+        use hickory_resolver::proto::op::{Message, ResponseCode};
+
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+            .await
+            .expect("failed to bind the stub DNS server socket");
+        let port = socket
+            .local_addr()
+            .expect("failed to get the stub DNS server address")
+            .port();
+
+        tokio::spawn(async move {
+            // 512 bytes is the maximum size of a plain DNS message over UDP (RFC 1035).
+            let mut buffer = [0_u8; 512];
+            while let Ok((len, src)) = socket.recv_from(&mut buffer).await {
+                let Ok(query) = Message::from_vec(&buffer[..len]) else {
+                    continue;
+                };
+                let mut response = Message::error_msg(
+                    query.metadata.id,
+                    query.metadata.op_code,
+                    ResponseCode::NXDomain,
+                );
+                response.add_queries(query.queries.iter().cloned());
+                if let Ok(bytes) = response.to_vec() {
+                    let _ = socket.send_to(&bytes, src).await;
+                }
+            }
+        });
+
+        // Ignore the result: if another test already started a stub DNS server, use that one.
+        let _ = TEST_DNS_SERVER_PORT.set(port);
     }
 
     #[tokio::test]
