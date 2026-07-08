@@ -3,14 +3,11 @@ use crate::canister_settings::VisibilitySettings;
 use crate::execution_environment::{RoundLimits, as_round_instructions};
 use candid::Encode;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_management_canister_types_private::{
     CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
     FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::CanisterState;
-use ic_types::canister_log::MAX_FETCH_CANISTER_LOGS_RESULT_BYTES;
-use ic_types::messages::CanisterCall;
 use ic_types::{NumBytes, NumInstructions, PrincipalId};
 use std::collections::VecDeque;
 
@@ -19,44 +16,19 @@ pub(crate) fn fetch_canister_logs(
     canister: &CanisterState,
     args: FetchCanisterLogsRequest,
     log_memory_store_feature: FlagStatus,
-    msg: &mut CanisterCall,
     round_limits: &mut RoundLimits,
-    cycles_account_manager: &CyclesAccountManager,
-    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-    // The response (and hence the fee) is only known after reading the logs, so
-    // reject up front any call that could not afford the worst-case response: the
-    // maximum number of records, which is the result-size limit divided by the
-    // minimum per-record size. This ensures we never do the read work for free.
-    let max_record_count = MAX_FETCH_CANISTER_LOGS_RESULT_BYTES as u64
-        / std::mem::size_of::<CanisterLogRecord>() as u64;
-    let max_fee = cycles_account_manager
-        .management_canister_cost(
-            fetch_canister_logs_instructions(max_record_count, NumBytes::new(0)),
-            subnet_cycles_config,
-        )
-        .real();
-    let payment = msg.cycles();
-    if payment < max_fee {
-        return Err(CanisterManagerError::FetchCanisterLogsNotEnoughCycles {
-            sent: payment,
-            required: max_fee,
-        });
-    }
     let canister_id = canister.canister_id();
     let (reply, record_count, content_size) =
         fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
     // The caller is authorized (the visibility check inside
-    // `fetch_canister_logs_response` passed). Charge for the work of reading and
-    // encoding the logs, approximated from the number of records returned and
-    // their content size (see `fetch_canister_logs_instructions`): deduct the
-    // cycles fee from the call's payment and the corresponding instructions from
-    // the round's budget.
+    // `fetch_canister_logs_response` passed). Account for the work of reading and
+    // encoding the logs against the round's instruction budget, approximated from
+    // the number of records returned and their content size (see
+    // `fetch_canister_logs_instructions`). No cycles are charged for this work:
+    // the caller already pays the per-byte message transmission fee on the
+    // (potentially large) response, which dominates the execution cost.
     let instructions = fetch_canister_logs_instructions(record_count, content_size);
-    let fee = cycles_account_manager
-        .management_canister_cost(instructions, subnet_cycles_config)
-        .real();
-    msg.deduct_cycles(fee);
     round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
         canister_id,

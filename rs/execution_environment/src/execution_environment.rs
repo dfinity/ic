@@ -1840,19 +1840,15 @@ impl ExecutionEnvironment {
                                 },
                                 Ok(args) => {
                                     let canister_id = args.get_canister_id();
-                                    let subnet_cycles_config = state.get_own_subnet_cycles_config();
                                     self.execute_mgmt_operation_on_canister(
                                         canister_id,
-                                        |canister, msg, round_limits, _consumed_cycles| {
+                                        |canister, _msg, round_limits, _consumed_cycles| {
                                             fetch_canister_logs(
                                                 sender,
                                                 canister,
                                                 args,
                                                 self.config.log_memory_store_feature,
-                                                msg,
                                                 round_limits,
-                                                &self.cycles_account_manager,
-                                                subnet_cycles_config,
                                             )
                                         },
                                         &mut state,
