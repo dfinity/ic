@@ -816,12 +816,16 @@ fn can_retrieve_subnet_metrics(
                         ..SubnetTopology::default()
                     },
                 );
-                let routing_table = topology.routing_table_mut();
-                for (start, end) in [(canister_test_id(0), canister_test_id(10))] {
-                    routing_table
-                        .insert(CanisterIdRange { start, end }, subnet_id)
-                        .unwrap();
-                }
+                let routing_table = topology
+                    .routing_table_mut()
+                    .insert(
+                        CanisterIdRange {
+                            start: canister_test_id(0),
+                            end: canister_test_id(10),
+                        },
+                        subnet_id,
+                    )
+                    .unwrap();
             });
         let certification = Certification {
             height: Height::from(1),
@@ -2166,7 +2170,7 @@ fn nns_delegation_and_public_key(
     let certificate_tree = create_certificate_labeled_tree(
         &ranges.to_vec(),
         subnet_id,
-        subnet_public_key.clone(),
+        subnet_public_key,
         /*max_ranges_per_routing_table_leaf=*/ 5,
         /*time=*/ 42,
         /*with_tree_canister_ranges=*/ true,
