@@ -439,9 +439,9 @@ mod test {
     #[test]
     fn initial_state_data_does_not_leak_mappings() {
         let module = SerializedModule {
-            bytes: Arc::new(SerializedModuleBytes(vec![0u8; 4096])),
+            bytes: Arc::new(SerializedModuleBytes(vec![0_u8; 4096])),
             exported_functions: BTreeSet::new(),
-            data_segments: vec![(0usize, vec![7u8; 4096 * 8])].into_iter().collect(),
+            data_segments: vec![(0_usize, vec![7_u8; 4096 * 8])].into_iter().collect(),
             wasm_metadata: WasmMetadata::new(std::collections::BTreeMap::new()),
             compilation_cost: NumInstructions::from(0),
             imports_details: WasmImportsDetails {
