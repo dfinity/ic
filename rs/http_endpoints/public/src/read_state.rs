@@ -396,8 +396,8 @@ fn get_certificate_and_create_response(
 
     let signature = certification.signed.signature.signature.get().0;
 
-    // Make sure the public key in the NNS delegation matches the one in the certified state we are
-    // about to serve. Otherwise the client would not be able to verify the certificate.
+    // Make sure the NNS delegation matches the certified state we are about to serve. Otherwise the
+    // client would reject the certificate.
     if let Some((delegation, metadata)) = &delegation_from_nns
         && let Err(HttpError { status, message }) = verify_delegation_matches_certified_state(
             delegation,

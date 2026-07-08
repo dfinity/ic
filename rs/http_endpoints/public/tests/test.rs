@@ -2147,13 +2147,10 @@ fn test_call_v4_subnet_wrong_canister_or_method(
 // certified state. This can happen around subnet splits and canister migrations.
 // ---------------------------------------------------------------------------
 
-/// Builds an NNS delegation for `subnet_test_id(1)` certifying a fresh random
-/// subnet public key and the given canister ranges (in both the flat and the tree
-/// layout, so it works with every
-/// [`ic_nns_delegation_manager::CanisterRangesFilter`]). Returns the delegation
-/// together with the exact bytes of the certified public key, so a caller can
-/// install a matching (or, by using different bytes, a mismatching) key in the
-/// certified state.
+/// Builds an NNS delegation for `subnet_test_id(1)` certifying the given public key
+/// and the given canister ranges (in both the flat and the tree layout, so it works
+/// with every [`ic_nns_delegation_manager::CanisterRangesFilter`]). If no public key
+/// is given, a fresh one is generated.
 fn nns_delegation_and_public_key(
     existing_public_key: Option<ThresholdSigPublicKey>,
     ranges: &[(CanisterId, CanisterId)],
@@ -2179,8 +2176,6 @@ fn nns_delegation_and_public_key(
 
     let (_certificate, _root_pk, cbor) =
         CertificateBuilder::new(CertificateData::CustomTree(certificate_tree)).build();
-
-    println!("{:?}", _certificate.tree());
 
     let delegation = CertificateDelegation {
         subnet_id: Blob(subnet_id.get().to_vec()),
