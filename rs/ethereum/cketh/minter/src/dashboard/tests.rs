@@ -19,8 +19,8 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
-    Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest,
-    TransactionPrice,
+    Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest, TransactionPrice,
+    TransactionSignature,
 };
 use ic_ethereum_types::Address;
 use maplit::{btreemap, btreeset};
@@ -1423,7 +1423,7 @@ fn cketh_withdrawal_flow(
         data: vec![],
         access_list: Default::default(),
     };
-    let dummy_signature = Eip1559Signature {
+    let dummy_signature = TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),
         s: Default::default(),
@@ -1476,7 +1476,7 @@ fn ckerc20_withdrawal_flow(
         EthereumNetwork::Sepolia,
     )
     .unwrap();
-    let dummy_signature = Eip1559Signature {
+    let dummy_signature = TransactionSignature {
         signature_y_parity: false,
         r: Default::default(),
         s: Default::default(),

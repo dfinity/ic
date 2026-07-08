@@ -2,16 +2,21 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.69.0")
+bazel_dep(name = "rules_rust", version = "0.71.3")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-u8dkwlLQYSgbI1knek1GSA4tz69yr8HObgCtpYzL/Uw=",
+    integrity = "sha256-h8txtdi9xcNfgjdTBYX+R9CEsxKDucJx+OPvezmkTQM=",
     patch_strip = 1,
     patches = [
+        # Configure per-compilation-mode strip levels, which the native
+        # `rust.toolchain` tag's flat `strip_level` string_dict cannot express
+        # (https://github.com/bazelbuild/rules_rust/issues/3730).
         "//bazel:rules_rust_strip_level.patch",
-        "//bazel:rules_rust_package_alias.patch",
+        # Fix cross-crate DEP_* env vars being redacted to an `${out_dir}` token
+        # that downstream crates' build scripts cannot resolve (see patch header).
+        "//bazel:rules_rust_dep_env.patch",
     ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.69.0/rules_rust-0.69.0.tar.gz"],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.71.3/rules_rust-0.71.3.tar.gz"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
@@ -58,6 +63,20 @@ crate.spec(
     ],
     package = "aide",
     version = "^0.14.2",
+)
+crate.spec(
+    features = [
+        "std",
+    ],
+    package = "aes-gcm",
+    version = "^0.10.3",
+)
+crate.spec(
+    features = [
+        "std",
+    ],
+    package = "argon2",
+    version = "^0.4",
 )
 crate.spec(
     package = "arbitrary",
@@ -388,8 +407,12 @@ crate.spec(
     version = "0.34",
 )
 crate.spec(
-    package = "dfx-core",
-    version = "^0.4.0",
+    package = "dialoguer",
+    version = "^0.11.0",
+)
+crate.spec(
+    package = "directories-next",
+    version = "^2.0.0",
 )
 crate.spec(
     package = "dyn-clone",
@@ -583,7 +606,7 @@ crate.spec(
 )
 crate.spec(
     package = "hickory-resolver",
-    version = "0.25.2",
+    version = "0.26.1",
 )
 crate.spec(
     package = "hkdf",
@@ -897,6 +920,17 @@ crate.spec(
     ],
     package = "k256",
     version = "^0.13.4",
+)
+crate.spec(
+    features = [
+        "apple-native",
+        "windows-native",
+        "linux-native",
+        "sync-secret-service",
+        "vendored",
+    ],
+    package = "keyring",
+    version = "^3",
 )
 crate.spec(
     package = "lazy_static",
@@ -1262,7 +1296,7 @@ crate.spec(
         "rustls-aws-lc-rs",
     ],
     package = "quinn",
-    version = "^0.11.5",
+    version = "^0.11.11",
 )
 crate.spec(
     package = "quinn-udp",
@@ -1277,7 +1311,7 @@ crate.spec(
         "small_rng",
     ],
     package = "rand",
-    version = "^0.8.5",
+    version = "^0.8.6",
 )
 crate.spec(
     package = "rand_chacha",
@@ -1330,6 +1364,7 @@ crate.spec(
         "json",
         "multipart",
         "rustls",
+        "socks",
         "stream",
     ],
     package = "reqwest",
@@ -1465,6 +1500,10 @@ crate.spec(
     ],
     package = "secp256k1",
     version = "^0.22",
+)
+crate.spec(
+    package = "security-framework",
+    version = "^3",
 )
 crate.spec(
     features = [
@@ -1771,11 +1810,11 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.12.3",
+    version = "^0.13.1",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.12.3",
+    version = "^0.13.1",
 )
 crate.spec(
     features = ["full"],

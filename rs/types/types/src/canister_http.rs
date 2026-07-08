@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
@@ -62,7 +62,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::system_metadata::v1 as pb_metadata,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,9 @@ pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
 
 /// Maximum number of response bytes for a canister http request.
 pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
+
+/// Maximum size of a canister http reject message.
+pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 
 /// Maximum number of bytes to represent URL for a canister http request.
 pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
@@ -179,6 +182,35 @@ pub enum Replication {
         min_responses: u32,
         max_responses: u32,
     },
+}
+
+impl Replication {
+    /// Returns the [`ReplicationKind`] of this request.
+    pub fn kind(&self) -> ReplicationKind {
+        match self {
+            Replication::FullyReplicated => ReplicationKind::FullyReplicated,
+            Replication::Flexible { .. } => ReplicationKind::Flexible,
+            Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
+        }
+    }
+}
+
+/// The kind of replication of a request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplicationKind {
+    FullyReplicated,
+    Flexible,
+    NonReplicated,
+}
+
+impl ReplicationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ReplicationKind::FullyReplicated => "fully_replicated",
+            ReplicationKind::Flexible => "flexible",
+            ReplicationKind::NonReplicated => "non_replicated",
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
@@ -802,6 +834,12 @@ pub struct CanisterHttpRequest {
     /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
     /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
+    /// The subnet's cycles cost schedule in effect at the request context's
+    /// registry version.
+    pub cost_schedule: CanisterCyclesCostSchedule,
+    /// The number of nodes on the subnet at the request context's registry
+    /// version.
+    pub subnet_size: NumberOfNodes,
 }
 
 /// The content of a response after the transformation

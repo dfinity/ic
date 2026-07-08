@@ -31,9 +31,8 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
-    CyclesAccountManagerSubnetConfig, CyclesUseCaseKind, Instructions,
-    RequestAndResponseTransmission,
+    BurnedCycles, CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, CyclesUseCaseKind,
+    Instructions, RequestAndResponseTransmission,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -315,6 +314,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
+            | Ok(Ic00Method::ListCanisters)
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister)
@@ -877,8 +877,8 @@ impl SandboxSafeSystemState {
         &self.environment_variables
     }
 
-    pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.subnet_cycles_config.cost_schedule
+    pub fn subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.subnet_cycles_config
     }
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {

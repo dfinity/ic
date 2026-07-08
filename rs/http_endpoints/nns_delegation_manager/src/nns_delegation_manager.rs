@@ -59,10 +59,7 @@ const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
 const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 
-#[cfg(not(test))]
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(test)]
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(not(test))]
 const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
@@ -472,7 +469,7 @@ async fn connect(
                 dns_resolver.options_mut().attempts = 1;
             }
             let ip_addr = dns_resolver
-                .build()
+                .build()?
                 .lookup_ip(domain.as_str())
                 .await?
                 .iter()
@@ -1276,7 +1273,7 @@ mod tests {
         // Since the API BN is configured with a domain that does not resolve, we expect the
         // connection to fail with a name resolution error, which indicates that we indeed tried to
         // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if format!("{err:?}").contains("ResolveError"));
+        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
     }
 
     #[tokio::test]

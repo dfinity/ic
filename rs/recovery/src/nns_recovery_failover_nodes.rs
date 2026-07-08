@@ -184,27 +184,31 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         // Depending on the next step we might require some user interaction before we can execute
         // it.
         match step_type {
-            StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState
-                if self.params.download_node.is_none() =>
-            {
-                // We could pick a node with highest finalization and CUP height automatically,
-                // but we might have a preference between nodes of same heights.
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
+            #[allow(clippy::collapsible_match)]
+            StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
+                if self.params.download_node.is_none() {
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
 
-                self.params.download_node = read_optional(&self.logger, "Enter download IP:");
+                    self.params.download_node = read_optional(&self.logger, "Enter download IP:");
+                }
             }
             _ => {}
         }
         match step_type {
-            StepType::DownloadState if self.params.download_state_height.is_none() => {
-                self.params.download_state_height = read_optional(
-                    &self.logger,
-                    "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
-                );
+            #[allow(clippy::collapsible_match)]
+            StepType::DownloadState => {
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
             }
             StepType::ProposeToCreateSubnet => {
                 if self.params.replica_version.is_none() {
@@ -221,16 +225,22 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
-            StepType::DownloadParentNNSStore if self.params.parent_nns_host_ip.is_none() => {
-                self.params.parent_nns_host_ip = read_optional(
-                    &self.logger,
-                    "Enter parent NNS IP to download the registry store from:",
-                );
+            #[allow(clippy::collapsible_match)]
+            StepType::DownloadParentNNSStore => {
+                if self.params.parent_nns_host_ip.is_none() {
+                    self.params.parent_nns_host_ip = read_optional(
+                        &self.logger,
+                        "Enter parent NNS IP to download the registry store from:",
+                    );
+                }
             }
 
-            StepType::ICReplayWithRegistryContent if self.params.replay_until_height.is_none() => {
-                self.params.replay_until_height =
-                    read_optional(&self.logger, "Replay until height: ");
+            #[allow(clippy::collapsible_match)]
+            StepType::ICReplayWithRegistryContent => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
+                }
             }
 
             StepType::UploadAndHostTar => {
@@ -250,11 +260,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
-            StepType::WaitForCUP if self.params.upload_method.is_none() => {
-                self.params.upload_method = read_optional_data_location(
-                    &self.logger,
-                    "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
-                );
+            #[allow(clippy::collapsible_match)]
+            StepType::WaitForCUP => {
+                if self.params.upload_method.is_none() {
+                    self.params.upload_method = read_optional_data_location(
+                        &self.logger,
+                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                    );
+                }
             }
             _ => {}
         }

@@ -1281,7 +1281,6 @@ impl ExecutionTest {
     /// Executes a canister task method of the given canister.
     pub fn canister_task(&mut self, canister_id: CanisterId, task: CanisterTask) {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
         let canister = Arc::make_mut(&mut canister_arc);
@@ -1338,7 +1337,6 @@ impl ExecutionTest {
         self.update_execution_stats(
             canister_id,
             result.instructions_used.unwrap(),
-            cost_schedule,
             self.get_own_subnet_cycles_config(),
         );
         self.check_invariants();
@@ -1430,7 +1428,6 @@ impl ExecutionTest {
         response: Response,
     ) -> ExecutionResponse {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let mut canister = Arc::unwrap_or_clone(canister);
@@ -1501,7 +1498,6 @@ impl ExecutionTest {
         self.update_execution_stats(
             canister_id,
             instructions_used,
-            cost_schedule,
             state.get_own_subnet_cycles_config(),
         );
         state.put_canister_state(canister);
@@ -1718,7 +1714,6 @@ impl ExecutionTest {
     /// Return a progress flag indicating if the message was executed or not.
     pub fn execute_subnet_message(&mut self) -> bool {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let message = match state.pop_subnet_input() {
             Some(message) => message,
@@ -1729,6 +1724,7 @@ impl ExecutionTest {
         };
         let maybe_canister_id = get_effective_canister_id(message.clone());
         let is_install_code = check_is_install_code(message.clone());
+        let is_list_canisters = check_is_list_canisters(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1795,7 +1791,6 @@ impl ExecutionTest {
                         self.update_execution_stats(
                             canister_id,
                             capped_slice_instructions_used,
-                            cost_schedule,
                             self.get_own_subnet_cycles_config(),
                         );
                     }
@@ -1814,7 +1809,9 @@ impl ExecutionTest {
                         .insert(canister_id, paused_subnet_message);
                 }
             }
-        } else {
+        } else if !is_list_canisters {
+            // `list_canisters` has no effective canister ID but still consumes
+            // round instructions, so it is exempt from this assertion.
             assert_eq!(slice_instructions_used.get(), 0);
         }
         self.check_invariants();
@@ -1840,7 +1837,6 @@ impl ExecutionTest {
             executed_any = true;
         }
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let canister_ids: Vec<CanisterId> = canisters.all_keys().copied().collect();
@@ -1878,7 +1874,6 @@ impl ExecutionTest {
                     self.update_execution_stats(
                         canister_id,
                         instructions_used,
-                        cost_schedule,
                         state.get_own_subnet_cycles_config(),
                     );
                 }
@@ -1919,7 +1914,6 @@ impl ExecutionTest {
     /// Executes a slice of the given canister.
     pub fn execute_slice(&mut self, canister_id: CanisterId) {
         let mut state = self.state.take().unwrap();
-        let cost_schedule = state.get_own_cost_schedule();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let network_topology = Arc::clone(&state.metadata.network_topology);
@@ -1987,7 +1981,6 @@ impl ExecutionTest {
                         self.update_execution_stats(
                             canister_id,
                             capped_instructions_used,
-                            cost_schedule,
                             self.get_own_subnet_cycles_config(),
                         );
                     }
@@ -2029,7 +2022,6 @@ impl ExecutionTest {
                     self.update_execution_stats(
                         canister_id,
                         instructions_used,
-                        cost_schedule,
                         state.get_own_subnet_cycles_config(),
                     );
                 }
@@ -2066,7 +2058,6 @@ impl ExecutionTest {
         &mut self,
         canister_id: CanisterId,
         executed: NumInstructions,
-        cost_schedule: CanisterCyclesCostSchedule,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) {
         let mgr = &self.cycles_account_manager;
@@ -2082,7 +2073,10 @@ impl ExecutionTest {
         *self
             .execution_cost
             .entry(canister_id)
-            .or_insert(CompoundCycles::new(Cycles::new(0), cost_schedule)) += instruction_cost;
+            .or_insert(CompoundCycles::new(
+                Cycles::new(0),
+                subnet_cycles_config.cost_schedule,
+            )) += instruction_cost;
     }
 
     /// Inducts messages between canisters and pushes all cross-net messages to
@@ -2982,10 +2976,11 @@ impl ExecutionTestBuilder {
             );
         }
 
+        let own_subnet_info = std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info);
         if self.subnet_features.is_empty() {
-            state.metadata.own_subnet_features = SubnetFeatures::default();
+            own_subnet_info.subnet_features = SubnetFeatures::default();
         } else {
-            state.metadata.own_subnet_features =
+            own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
 
@@ -3299,6 +3294,15 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
     message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
+}
+
+fn check_is_list_canisters(message: SubnetMessage) -> bool {
+    let message = match message {
+        SubnetMessage::Response(_) => return false,
+        SubnetMessage::Request(request) => CanisterCall::Request(request),
+        SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
+    };
+    message.method_name() == "list_canisters"
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {

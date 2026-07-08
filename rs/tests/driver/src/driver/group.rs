@@ -1024,9 +1024,9 @@ impl SystemTestGroup {
             false,
         )) as Box<dyn Task>;
 
-        // The Local backend has no TTL; libvirt resources live for the lifetime of the
-        // libvirtd subprocess owned by the LocalBackend instance, so the keepalive task
-        // (which refreshes the Farm group TTL) is not needed there.
+        // The Local backend has no TTL: its VMs and network live for the lifetime of
+        // the test process, so the keepalive task (which refreshes the Farm group TTL)
+        // is not needed there.
         let use_local_backend = SystemTestBackend::from_env() == SystemTestBackend::Local;
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
         let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !use_local_backend
@@ -1452,8 +1452,17 @@ impl SystemTestGroup {
             }
             let backend = SystemTestBackend::from_env();
             backend.write_attribute(&root_env);
-            crate::driver::process::enable_child_subreaper(group_ctx.log());
-            crate::driver::process::spawn_descendant_reaper(group_ctx.log());
+            // Under the Local backend, make sure this (root) driver process can
+            // administer its network namespace, unsharing a fresh one when it
+            // cannot — e.g. on RBE, where the action runs as root but inside a
+            // netns owned by an ancestor user namespace, so RTNETLINK operations
+            // are denied. This must happen before the tokio runtime and any task
+            // subprocess is spawned so the whole process tree shares the netns.
+            if backend == SystemTestBackend::Local {
+                crate::driver::local_backend::LocalBackend::ensure_administrable_netns(
+                    group_ctx.log(),
+                )?;
+            }
             if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
@@ -1553,12 +1562,6 @@ impl SystemTestGroup {
                 if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
-                // Final safety net: SIGKILL and reap every descendant that
-                // outlived teardown. Because this process is a child-subreaper
-                // (see `enable_child_subreaper` above), any orphaned daemon
-                // (libvirtd/dnsmasq/QEMU) has been reparented here and would
-                // otherwise hang the bazel test process-wrapper.
-                crate::driver::process::kill_all_descendants(group_ctx.log());
                 if report.failure.is_empty() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
@@ -1605,7 +1608,7 @@ impl SystemTestGroup {
                     .expect("failed to delete the farm group");
             }
             SystemTestBackend::Local => {
-                info!(env.logger(), "Deleting local libvirt group.");
+                info!(env.logger(), "Deleting local group.");
                 match crate::driver::local_backend::LocalBackend::from_test_env(&env) {
                     Ok(backend) => {
                         if let Err(e) = backend.delete_group(&group_name) {
