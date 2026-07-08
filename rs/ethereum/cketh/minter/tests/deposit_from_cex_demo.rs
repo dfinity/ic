@@ -65,11 +65,16 @@ struct BatchScenario {
     average_gas_used: u64,
 }
 
-const SCENARIOS: [BatchScenario; 2] = [
+const SCENARIOS: [BatchScenario; 3] = [
     BatchScenario {
         deposits: 1,
         total_gas_used: 94_932,
         average_gas_used: 94_932,
+    },
+    BatchScenario {
+        deposits: 10,
+        total_gas_used: 570_151,
+        average_gas_used: 57_015,
     },
     BatchScenario {
         deposits: 20,
