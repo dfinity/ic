@@ -63,10 +63,7 @@ const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 // connection timeout uses the same value in production and in tests. Establishing the TLS
 // connection to the in-process mock server can take a while under load, and a low connection
 // timeout would spuriously fire before the connection is established and mask the
-// send/receive/DNS-resolution errors that the tests assert on. To keep this timeout meaningful in
-// tests, the concurrency of the test binary is limited (see `RUST_TEST_THREADS` and the `cpu:4`
-// tag in `BUILD.bazel`), and the test that specifically exercises the connection timeout passes
-// its own short timeout instead.
+// send/receive/DNS-resolution errors that the tests assert on.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[cfg(not(test))]
