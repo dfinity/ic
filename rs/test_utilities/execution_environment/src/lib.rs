@@ -1691,9 +1691,9 @@ impl ExecutionTest {
             .transpose()
             .unwrap();
             if method == Some(Method::FetchCanisterLogs) {
-                // `fetch_canister_logs` consumes round instructions but charges the
-                // caller's request payment rather than the target canister, so the
-                // canister's instruction-cycle metric does not change.
+                // `fetch_canister_logs` consumes round instructions but charges no
+                // cycles fee, so the canister's instruction-cycle metric does not
+                // change.
                 assert_eq!(cycles_used.get(), 0);
             } else {
                 assert_eq!(
