@@ -24,8 +24,8 @@
 use candid::Principal;
 use ic_cketh_minter::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
 use ic_cketh_minter::tx::{
-    AccessList, Authorization, Eip1559Signature, Eip7702TransactionRequest, SignableTransaction,
-    Signed, SignedAuthorization,
+    AccessList, Authorization, Eip1559Signature, Eip1559TransactionRequest,
+    Eip7702TransactionRequest, SignableTransaction, Signed, SignedAuthorization,
 };
 use ic_ethereum_types::Address;
 use ic_secp256k1::{PrivateKey, PublicKey};
@@ -42,6 +42,8 @@ use std::time::{Duration, Instant};
 // through `eth_sendTransaction`).
 const MINTER_PRIVATE_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const CEX_PRIVATE_KEY: &str = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+const ATTACKER_PRIVATE_KEY: &str =
+    "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 
 const USDT_SUPPLY: u128 = 1_000_000_000_000; // 1M USDT (6 decimals)
 const DEPOSIT_AMOUNT: u128 = 10_000_000; // 10 USDT per deposit
@@ -117,6 +119,121 @@ fn assert_gas(actual: u64, expected: u64, label: &str) {
     if expected != 0 {
         assert_eq!(actual, expected, "unexpected {label} gas used");
     }
+}
+
+/// Because the IC principal to credit is a sweep argument, sweeping is gated to
+/// the minter: anyone else calling a delegated deposit address is rejected, so a
+/// deposit cannot be credited to an attacker's principal.
+#[test]
+fn a_non_minter_cannot_sweep_a_deposit() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
+    let minter = eth_address(&minter_key.public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let attacker = eth_address(&key_from_hex(ATTACKER_PRIVATE_KEY).public_key());
+
+    let Contracts {
+        usdt,
+        helper,
+        via_helper,
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    // A single funded deposit address.
+    let principal = Principal::self_authenticating([42u8]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+    let tx = anvil.send_transaction(
+        &cex,
+        Some(&usdt),
+        &call(
+            "transfer(address,uint256)",
+            &[
+                Token::Word(word_addr(&deposit)),
+                Token::Word(word_u256(DEPOSIT_AMOUNT)),
+            ],
+        ),
+        None,
+    );
+    assert!(status_ok(&anvil.await_receipt(&tx)), "CEX transfer failed");
+
+    // The minter installs the delegation without sweeping: the authorization
+    // rides in an otherwise-empty batch, so the deposit gets the sweeper's code
+    // while keeping its funds.
+    let authorization = sign_authorization(&key, chain_id, &via_helper, 0);
+    let delegate_only = call(
+        "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
+        &[
+            Token::Array(vec![]),
+            Token::Array(vec![]),
+            Token::Array(vec![]),
+            Token::Array(vec![word_addr(&usdt)]),
+        ],
+    );
+    assert!(
+        status_ok(&anvil.send_eip7702(
+            &minter_key,
+            chain_id,
+            &via_helper,
+            delegate_only,
+            vec![authorization]
+        )),
+        "delegation setup reverted"
+    );
+    assert!(
+        !anvil.code(&deposit).is_empty(),
+        "deposit should now be delegated to the sweeper"
+    );
+    assert_eq!(
+        anvil.usdt_balance(&usdt, &deposit),
+        DEPOSIT_AMOUNT,
+        "installing the delegation should not move funds"
+    );
+
+    // The attacker tries to credit the deposit to their own principal. Gas
+    // estimation would already fail ("caller is not the minter"), so the attacker
+    // forces an explicit gas limit to get the transaction mined (and reverted).
+    let attack = anvil.send_transaction(
+        &attacker,
+        Some(&deposit),
+        &call(
+            "sweepErc20(address[],bytes32,bytes32)",
+            &[
+                Token::Array(vec![word_addr(&usdt)]),
+                Token::Word(encode_principal(&Principal::anonymous())),
+                Token::Word([0u8; 32]),
+            ],
+        ),
+        Some(300_000),
+    );
+    assert!(
+        !status_ok(&anvil.await_receipt(&attack)),
+        "the attacker's sweep should have reverted"
+    );
+    assert_eq!(
+        anvil.usdt_balance(&usdt, &deposit),
+        DEPOSIT_AMOUNT,
+        "the attacker must not move the funds"
+    );
+
+    // The minter sweeps it correctly: the delegation persists, so no new
+    // authorization is needed — a plain EIP-1559 transaction suffices.
+    let sweep = call(
+        "sweepErc20(address[],bytes32,bytes32)",
+        &[
+            Token::Array(vec![word_addr(&usdt)]),
+            Token::Word(encode_principal(&principal)),
+            Token::Word([0u8; 32]),
+        ],
+    );
+    let receipt = anvil.send_eip1559(&minter_key, chain_id, &deposit, sweep);
+    assert!(status_ok(&receipt), "the minter's sweep reverted");
+    assert_eq!(anvil.usdt_balance(&usdt, &deposit), 0, "deposit not swept");
+    let events = received_events(&receipt, &helper);
+    assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
+    assert_eq!(events[0].owner, deposit);
+    assert_eq!(events[0].principal, encode_principal(&principal));
 }
 
 struct Contracts {
@@ -594,6 +711,24 @@ impl Anvil {
             data,
             access_list: AccessList::new(),
             authorization_list,
+        };
+        let signature = sign(key, &tx.hash().0);
+        let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_hex());
+        self.await_receipt(&hash)
+    }
+
+    fn send_eip1559(&self, key: &PrivateKey, chain_id: u64, to: &Address, data: Vec<u8>) -> Value {
+        let from = eth_address(&key.public_key());
+        let tx = Eip1559TransactionRequest {
+            chain_id,
+            nonce: TransactionNonce::from(self.nonce(&from)),
+            max_priority_fee_per_gas: WeiPerGas::new(PRIORITY_FEE),
+            max_fee_per_gas: WeiPerGas::new(MAX_FEE),
+            gas_limit: GasAmount::new(SWEEP_GAS_LIMIT),
+            destination: *to,
+            amount: Wei::ZERO,
+            data,
+            access_list: AccessList::new(),
         };
         let signature = sign(key, &tx.hash().0);
         let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_hex());
