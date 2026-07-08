@@ -1270,19 +1270,8 @@ mod tests {
         )
         .await;
 
-        // Since the API BN is configured with a domain that does not resolve, we expect the
-        // connection to fail with a name resolution error, which indicates that we indeed tried to
-        // connect to the API BN instead of an NNS node. Depending on the environment the resolver
-        // either reports `NoRecordsFound` (a DNS server answered that the domain does not exist) or
-        // `Timeout` (no DNS server answered within the resolver timeout); both prove that we went
-        // through the API BN DNS-resolution path rather than connecting to an NNS node by IP.
-        assert_matches!(
-            response,
-            Err(err) if {
-                let err = format!("{err:?}");
-                err.contains("NoRecordsFound") || err.contains("Timeout")
-            }
-        );
+        // connect to the API BN instead of an NNS node.
+        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
     }
 
     #[tokio::test]
