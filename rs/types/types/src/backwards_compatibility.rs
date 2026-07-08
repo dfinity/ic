@@ -4,13 +4,17 @@ use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 /// A helper struct for introducing new fields to structs that must stay backwards compatible.
+/// Its inner value can be read with [`as_ref`](BackwardsCompatible::as_ref).
+///
 /// Compared to [`Option`], its [`Hash`] implementation:
 ///  - ignores `None` (so adding an unset field preserves the surrounding struct hash), and
 ///  - hashes `Some(v)` like `v` (so later replacing it with `T` preserves hashes).
 ///
 /// Lifecycle of adding a new field to a struct in a backwards compatible way:
 /// 1. Add a new field to the struct with type `BackwardsCompatible<T, false>`. At this point the
-///    field is *NOT* allowed to have any value other than `None`.
+///    field is *NOT* allowed to be instantiated with any value other than `None`. Though, it still
+///    "understands" it: if it receives a protobuf containing a set value, it will still convert it
+///    and store it in the `BackwardsCompatible` value.
 /// 2. When the change is deployed to all replicas, we can switch the type to
 ///    `BackwardsCompatible<T, true>` and the field can begin to be populated.
 /// 3. When the change is deployed to all replicas, we can replace the type with `T`.
