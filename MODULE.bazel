@@ -197,7 +197,7 @@ use_repo(oci, "ic_gatewayd", "ic_gatewayd_linux_amd64")
 # foundry container used in test
 oci.pull(
     name = "foundry",
-    image = "ghcr.io/foundry-rs/foundry@sha256:8f9dd6d4c498538b3aa3999758520bca24a41273163b0c7295ed53b1a6062f30",  # v0.3.0 https://github.com/foundry-rs/foundry/pkgs/container/foundry/391862899?tag=v0.3.0
+    image = "ghcr.io/foundry-rs/foundry@sha256:8347b728d5d393dac1c018691b36f506d23b9dcd78341d40ea0fcb11c3a19cdd",  # v1.7.1 https://github.com/foundry-rs/foundry/pkgs/container/foundry?tag=v1.7.1
     platforms = [
         "linux/amd64",
     ],
@@ -1319,14 +1319,14 @@ canisters(
 bazel_dep(name = "rules_motoko", version = "1.0.0")
 archive_override(
     module_name = "rules_motoko",
-    integrity = "sha256-cheylLgUCNaODuEtYla4/oVrj6F0FMp7nRjui1AvCo4=",
-    strip_prefix = "rules_motoko-9b6d6311db8f1c1fe4c24b70414edf149913ae44",
+    integrity = "sha256-skEVw/tHSuYMLJxh8rWuwt6bjyYWpoay0JBZNYz4+5U=",
+    strip_prefix = "rules_motoko-0c3d815c0c07c5696a4cb3fa8da25834594a5294",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/9b6d6311db8f1c1fe4c24b70414edf149913ae44"],
+    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/0c3d815c0c07c5696a4cb3fa8da25834594a5294"],
 )
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
-motoko.toolchain(version = "0.16.3")  # NOTE: keep version in line with Dockerfile
+motoko.toolchain(version = "1.11.0")  # NOTE: keep version in line with Dockerfile
 
 # Universal VM and Prometheus VM disk images for the Local system-test backend.
 # These are vendored copies of the same artifacts the Farm backend references
