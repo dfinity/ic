@@ -43,6 +43,7 @@ impl<T> BackwardsCompatibleOption<T, true> {
 }
 
 impl<T, const SETTABLE: bool> BackwardsCompatibleOption<T, SETTABLE> {
+    #[doc(hidden)]
     pub const fn new_for_test_only(value: Option<T>) -> Self {
         Self(value)
     }
