@@ -14,8 +14,8 @@ runs:
         echo "machine api.github.com login x-access-token password ${{ github.token }}" >> ~/.netrc
         # ghcr.io lets Bazel/rules_oci authenticate GHCR pulls (e.g. the ghcr.io/dfinity/*
         # images referenced from MODULE.bazel) with the GITHUB_TOKEN. When a remote downloader
-        # is used with --remote_downloader_propagate_credentials, this credential is forwarded
-        # per-URL rather than as a single global header sent to every host.
+        # is used with --experimental_remote_downloader_propagate_credentials, this credential
+        # is forwarded per-URL rather than as a single global header sent to every host.
         echo "machine ghcr.io login x-access-token password ${{ github.token }}" >> ~/.netrc
         echo "Current GitHub API rate limits:"
 
