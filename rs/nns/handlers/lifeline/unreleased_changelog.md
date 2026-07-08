@@ -10,11 +10,7 @@ on the process that this file is part of, see
 ## Added
 
 ## Changed
-* Compile the `lifeline` canister with the latest Motoko compiler (1.11.0).
-
-* Compile the `lifeline` canister with the latest Motoko compiler (0.16.3) (compared to compiling with 0.8.7 before)
-  but keep using classical orthogonal persistence by compiling with `--legacy-persistence`.
-  Note that this compiler upgrade does not change the behaviour of the `lifeline` canister.
+* Compile the `lifeline` canister with the latest Motoko compiler (1.11.0) (compared to compiling with 0.16.3 before).
 
 ## Deprecated
 
