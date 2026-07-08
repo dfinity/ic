@@ -417,6 +417,16 @@ http_file(
     url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.18+commit.87f61d96",
 )
 
+# Latest stable solc, used by //rs/ethereum/cketh/minter:deposit_from_cex_demo_test
+# to compile the demo contracts (pinned exactly for reproducible bytecode/gas).
+http_file(
+    name = "solc_0_8_35",
+    downloaded_file_path = "solc",
+    executable = True,
+    sha256 = "fa8ac9a32d301ad023a36ee5a29f8e291fe3200c60244e43c142539e82a617f4",
+    url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.35+commit.47b9dedd",
+)
+
 # foundry release binaries (anvil/cast/forge/chisel) used to run a local
 # EIP-7702-capable Ethereum node hermetically from a rust_test, without docker.
 # This release (>= v1.0) supports EIP-7702, unlike the v0.3.0 `@foundry` oci

@@ -293,7 +293,7 @@ rust_test(
         "DepositHelperWithSubaccount.sol",
         "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol",
         "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol",
-        "@solc//file",
+        "@solc_0_8_35//file",
     ],
     edition = "2021",
     env = {
@@ -301,7 +301,7 @@ rust_test(
         "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
         "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol)",
         "MOCKUSDT_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol)",
-        "SOLC_BIN": "$(rootpath @solc//file)",
+        "SOLC_BIN": "$(rootpath @solc_0_8_35//file)",
     },
     deps = [
         # Keep sorted.

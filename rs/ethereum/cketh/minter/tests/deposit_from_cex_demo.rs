@@ -60,9 +60,9 @@ const SWEEP_GAS_LIMIT: u128 = 1_000_000;
 
 // The flow is fully deterministic (fixed keys, fixed contracts, fresh chain), so
 // the gas used by each sweep transaction is a constant.
-const SINGLE_SWEEP_GAS_USED: u64 = 92_443; // 1 EOA, first-time delegation + sweep
-const BATCH_SWEEP_GAS_USED: u64 = 156_615; // 3 EOAs delegated, 2 swept
-const FINAL_SWEEP_GAS_USED: u64 = 58_753; // already delegated, plain EIP-1559 sweep
+const SINGLE_SWEEP_GAS_USED: u64 = 91_977; // 1 EOA, first-time delegation + sweep
+const BATCH_SWEEP_GAS_USED: u64 = 155_575; // 3 EOAs delegated, 2 swept
+const FINAL_SWEEP_GAS_USED: u64 = 58_288; // already delegated, plain EIP-1559 sweep
 
 #[test]
 fn deposit_from_cex_variant_b() {
@@ -397,6 +397,11 @@ fn compile(source_var: &str, contract: &str) -> Vec<u8> {
         .args([
             "--combined-json",
             "bin",
+            // Pin the EVM version: EIP-7702 is a Prague feature, and this is the
+            // fork anvil runs. Explicit so a newer solc default (osaka/fusaka)
+            // cannot silently change the bytecode.
+            "--evm-version",
+            "prague",
             "--optimize",
             "--optimize-runs",
             "200",
