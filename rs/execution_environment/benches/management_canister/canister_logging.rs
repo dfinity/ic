@@ -10,6 +10,7 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, wat_canister, wat_fn,
@@ -69,6 +70,7 @@ fn fill_logs_canister_wasm(records_to_fill: u32, log_message: &[u8]) -> Vec<u8> 
 trait LogFillHarness {
     fn run_fill_logs(&mut self, canister_id: CanisterId);
     fn log_bytes_used(&self, canister_id: CanisterId) -> usize;
+    fn log_byte_capacity(&self, canister_id: CanisterId) -> usize;
 }
 
 impl LogFillHarness for StateMachine {
@@ -85,6 +87,15 @@ impl LogFillHarness for StateMachine {
             .log_memory_store
             .bytes_used()
     }
+
+    fn log_byte_capacity(&self, canister_id: CanisterId) -> usize {
+        self.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store
+            .byte_capacity()
+    }
 }
 
 impl LogFillHarness for ExecutionTest {
@@ -99,13 +110,28 @@ impl LogFillHarness for ExecutionTest {
             .log_memory_store
             .bytes_used()
     }
+
+    fn log_byte_capacity(&self, canister_id: CanisterId) -> usize {
+        self.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .byte_capacity()
+    }
 }
 
 /// Repeatedly runs `fill_logs` until the log ring buffer is saturated. Each call
 /// appends at most a delta's worth of records (see `records_per_fill`), so the
 /// used bytes grow until the buffer is full, after which the ring buffer evicts
 /// its oldest records and `bytes_used` plateaus at the buffer capacity.
-fn fill_log_buffer_to_capacity(harness: &mut impl LogFillHarness, canister_id: CanisterId) {
+///
+/// `log_message_size` is the content size of each written record and must match
+/// the size the canister actually logs. It is only used to size the
+/// post-condition margin below.
+fn fill_log_buffer_to_capacity(
+    harness: &mut impl LogFillHarness,
+    canister_id: CanisterId,
+    log_message_size: usize,
+) {
     let mut prev_used = 0;
     loop {
         harness.run_fill_logs(canister_id);
@@ -115,6 +141,19 @@ fn fill_log_buffer_to_capacity(harness: &mut impl LogFillHarness, canister_id: C
         }
         prev_used = used;
     }
+    // Guard against terminating on an early plateau rather than a full buffer:
+    // the loop stops as soon as `bytes_used` stops growing, which also happens if
+    // each fill fails to accumulate (e.g. an index gap clears the store on
+    // append, see `records_per_fill`), leaving `bytes_used` at ~one delta. A full
+    // ring buffer instead sits within one stored record of its capacity, since
+    // eviction is per-record and stops as soon as the next record fits.
+    let capacity = harness.log_byte_capacity(canister_id);
+    let record_size = LogMemoryStore::estimate_record_size(log_message_size);
+    assert!(
+        prev_used + record_size >= capacity,
+        "log buffer plateaued at {prev_used} B, more than one record ({record_size} B) below \
+         capacity {capacity} B — it was not filled to capacity",
+    );
 }
 
 /// Creates a StateMachine with a canister whose log buffer is filled to capacity.
@@ -143,7 +182,7 @@ fn setup_canister_with_full_log(
         vec![],
     )
     .unwrap();
-    fill_log_buffer_to_capacity(&mut env, canister_id);
+    fill_log_buffer_to_capacity(&mut env, canister_id, log_message_size);
     (env, canister_id)
 }
 
@@ -195,7 +234,7 @@ fn setup_fetch_bench<F: FnOnce(CanisterId) -> Vec<u8>>(
         fill_logs_canister_wasm(records_to_fill, &log_message),
     )
     .unwrap();
-    fill_log_buffer_to_capacity(&mut test, target);
+    fill_log_buffer_to_capacity(&mut test, target, log_message_size);
 
     // Enqueue the inter-canister call. It is the only pending subnet message, so
     // the next `execute_subnet_message` executes exactly this call.
