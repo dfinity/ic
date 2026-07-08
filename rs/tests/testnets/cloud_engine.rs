@@ -62,6 +62,9 @@ use std::net::Ipv4Addr;
 /// Cycles to fund the demo application canister with. 300T cycles.
 const DEMO_CANISTER_CYCLES: u128 = 300_000_000_000_000;
 
+/// Cycles to fund the whale application canister with. 100_000T (100 quadrillion) cycles.
+const WHALE_CANISTER_CYCLES: u128 = 100_000_000_000_000_000;
+
 /// dm1-dmz datacenter and network constants
 const DM1_DMZ_DC: &str = "dm1-dmz";
 const DM1_DMZ_NETWORK: Ipv4Addr = Ipv4Addr::new(23, 142, 184, 224);
@@ -422,13 +425,17 @@ pub fn setup(env: TestEnv) {
     // Create an empty (no wasm installed) canister on the Application subnet,
     // fund it with 300T cycles and set its controllers to
     // TEST_NEURON_1_OWNER_PRINCIPAL and the anonymous principal.
-    create_demo_canister_on_app_subnet(&env);
+    create_empty_canister_on_app_subnet(&env, DEMO_CANISTER_CYCLES, "demo");
+
+    // Create a second empty canister on the Application subnet, seeded with
+    // 100_000T cycles (a "whale" canister), same controllers as the demo one.
+    create_empty_canister_on_app_subnet(&env, WHALE_CANISTER_CYCLES, "whale");
 }
 
 /// Creates an empty canister (no wasm installed) on the (single) Application
-/// subnet, funds it with 300T cycles via the provisional API, and sets its
+/// subnet, funds it with `cycles` via the provisional API, and sets its
 /// controllers to `TEST_NEURON_1_OWNER_PRINCIPAL` and the anonymous principal.
-fn create_demo_canister_on_app_subnet(env: &TestEnv) {
+fn create_empty_canister_on_app_subnet(env: &TestEnv, cycles: u128, label: &str) {
     let topology = env.topology_snapshot();
     let app_subnet = topology
         .subnets()
@@ -448,7 +455,7 @@ fn create_demo_canister_on_app_subnet(env: &TestEnv) {
         let mgr = ManagementCanister::create(&agent);
         let (canister_id,) = mgr
             .create_canister()
-            .as_provisional_create_with_amount(Some(DEMO_CANISTER_CYCLES))
+            .as_provisional_create_with_amount(Some(cycles))
             .with_effective_canister_id(effective_canister_id)
             .with_controller(test_neuron_principal)
             .with_controller(anonymous_principal)
@@ -462,7 +469,7 @@ fn create_demo_canister_on_app_subnet(env: &TestEnv) {
     let log = env.logger();
     slog::info!(
         log,
-        "Created empty demo canister {canister_id} on Application subnet with 300T cycles; \
+        "Created empty {label} canister {canister_id} on Application subnet with {cycles} cycles; \
          controllers: TEST_NEURON_1_OWNER_PRINCIPAL ({}) and anonymous",
         *TEST_NEURON_1_OWNER_PRINCIPAL
     );
