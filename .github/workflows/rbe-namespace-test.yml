@@ -9,12 +9,6 @@ name: RBE Namespace Test
 
 on:
   workflow_dispatch:
-    inputs:
-      targets:
-        description: 'Bazel target patterns to test'
-        required: false
-        default: '//...'
-        type: string
   pull_request:
     types: [opened, synchronize, reopened, labeled]
   push:
@@ -55,17 +49,12 @@ jobs:
           nsc bazel execution setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
-      - name: Bazel Test with RBE
+      - name: Bazel Test with RBE (no system-tests)
         shell: bash
-        env:
-          BAZEL_TARGETS: ${{ github.event.inputs.targets || '//...' }}
         run: |
           set -euo pipefail
 
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:65f912a41be8cf3e9247d8dc34f317ddfc11badf8dc93f137c1702d6a2cd2790"
-
-          targets="$BAZEL_TARGETS"
-          read -ra target_patterns <<<"$targets"
 
           bazel_args=(
             --noworkspace_rc
@@ -77,7 +66,7 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
-            --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
+            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
             --remote_default_exec_properties=container-image="$worker_image"
 
@@ -95,4 +84,41 @@ jobs:
             --keep_going
           )
 
-          bazel "${bazel_args[@]}" "${target_patterns[@]}"
+          bazel "${bazel_args[@]}" --test_tag_filters=-local_system_test //...
+
+      - name: Bazel Test with RBE (only system-tests)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:65f912a41be8cf3e9247d8dc34f317ddfc11badf8dc93f137c1702d6a2cd2790"
+
+          bazel_args=(
+            --noworkspace_rc
+            --bazelrc=./bazel/conf/.bazelrc.build
+            --bazelrc=/tmp/bazel-rbe.bazelrc
+
+            test
+
+            --spawn_strategy=remote,sandboxed,local
+            --strategy=Genrule=remote,sandboxed,local
+
+            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
+
+            --remote_default_exec_properties=container-image="$worker_image"
+
+            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
+            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
+            # mid-build, actions fail with "Lost inputs no longer available remotely" or
+            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
+            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
+            # so the CAS extends their TTL and stops evicting live inputs. (If evictions
+            # persist, add --remote_download_all, as bazel/conf/.bazelrc.internal does for the
+            # DFINITY cache, to keep outputs on the runner instead of relying on the CAS.)
+            --experimental_remote_cache_lease_extension
+            --experimental_remote_cache_eviction_retries=10
+
+            --keep_going
+          )
+
+          bazel "${bazel_args[@]}" //rs/tests/...
