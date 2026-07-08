@@ -247,73 +247,25 @@ rust_ic_test_suite(
     ],
 )
 
-# Pick the foundry archive matching the host platform the test runs on.
-[
-    config_setting(
-        name = platform,
-        constraint_values = constraints,
-    )
-    for platform, constraints in {
-        "linux_amd64": [
-            "@platforms//os:linux",
-            "@platforms//cpu:x86_64",
-        ],
-        "linux_arm64": [
-            "@platforms//os:linux",
-            "@platforms//cpu:arm64",
-        ],
-        "darwin_amd64": [
-            "@platforms//os:osx",
-            "@platforms//cpu:x86_64",
-        ],
-        "darwin_arm64": [
-            "@platforms//os:osx",
-            "@platforms//cpu:arm64",
-        ],
-    }.items()
-]
-
-alias(
-    name = "anvil",
-    actual = select({
-        ":linux_amd64": "@foundry_bin_linux_amd64//:anvil",
-        ":linux_arm64": "@foundry_bin_linux_arm64//:anvil",
-        ":darwin_amd64": "@foundry_bin_darwin_amd64//:anvil",
-        ":darwin_arm64": "@foundry_bin_darwin_arm64//:anvil",
-    }),
-)
-
-# The macOS solc download is a universal (x86_64 + arm64) binary, so it serves
-# both Intel and Apple Silicon Macs natively.
-alias(
-    name = "solc",
-    actual = select({
-        ":linux_amd64": "@solc_0_8_35_linux_amd64//file",
-        ":linux_arm64": "@solc_0_8_35_linux_arm64//file",
-        ":darwin_amd64": "@solc_0_8_35_macosx_amd64//file",
-        ":darwin_arm64": "@solc_0_8_35_macosx_amd64//file",
-    }),
-)
-
 rust_test(
     name = "deposit_from_cex_demo_test",
     size = "small",
     srcs = ["tests/deposit_from_cex_demo.rs"],
     data = [
-        ":anvil",
+        "//:anvil",
+        "//:solc",
         # Contract sources compiled at test time by the vendored solc.
         "DepositHelperWithSubaccount.sol",
         "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol",
         "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol",
-        ":solc",
     ],
     edition = "2021",
     env = {
-        "ANVIL_BIN": "$(rootpath :anvil)",
+        "ANVIL_BIN": "$(rootpath //:anvil)",
         "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
         "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol)",
         "MOCKUSDT_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol)",
-        "SOLC_BIN": "$(rootpath :solc)",
+        "SOLC_BIN": "$(rootpath //:solc)",
     },
     deps = [
         # Keep sorted.

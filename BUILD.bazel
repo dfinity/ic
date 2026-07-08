@@ -100,6 +100,30 @@ alias(
     }),
 )
 
+### foundry (anvil) & solc, used by //rs/ethereum/cketh/minter:deposit_from_cex_demo_test
+
+alias(
+    name = "anvil",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@foundry_bin_darwin_arm64//:anvil",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@foundry_bin_darwin_amd64//:anvil",
+        "@bazel_tools//src/conditions:linux_aarch64": "@foundry_bin_linux_arm64//:anvil",
+        "@bazel_tools//src/conditions:linux_x86_64": "@foundry_bin_linux_amd64//:anvil",
+    }),
+)
+
+# The macOS solc download is a universal (x86_64 + arm64) binary, so it serves
+# both Intel and Apple Silicon Macs natively.
+alias(
+    name = "solc",
+    actual = select({
+        "@bazel_tools//src/conditions:darwin_arm64": "@solc_0_8_35_macosx_amd64//file",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@solc_0_8_35_macosx_amd64//file",
+        "@bazel_tools//src/conditions:linux_aarch64": "@solc_0_8_35_linux_arm64//file",
+        "@bazel_tools//src/conditions:linux_x86_64": "@solc_0_8_35_linux_amd64//file",
+    }),
+)
+
 genrule(
     name = "dogecoind_stub",
     outs = ["dogecoind_stub.txt"],
