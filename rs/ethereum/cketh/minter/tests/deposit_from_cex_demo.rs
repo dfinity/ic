@@ -31,7 +31,7 @@
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
 
 use candid::Principal;
-use ethers_core::abi::{ParamType, Token, decode, encode};
+use ethers_core::abi::{decode, encode, ParamType, Token};
 use ethers_core::types::{Address as EthAddress, U256};
 use ic_cketh_minter::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
 use ic_cketh_minter::tx::{
@@ -41,7 +41,7 @@ use ic_cketh_minter::tx::{
 use ic_ethereum_types::Address;
 use ic_secp256k1::{PrivateKey, PublicKey};
 use ic_sha3::Keccak256;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
