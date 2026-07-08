@@ -5,7 +5,7 @@ use crate::{
     validation::ValidationError,
 };
 use ic_types::{
-    CanisterId, Height, NumBytes,
+    CanisterId, Height, NumBytes, RegistryVersion,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -80,6 +80,7 @@ pub enum InvalidIngressPayloadReason {
 pub enum IngressPayloadValidationFailure {
     StateManagerError(Height, StateManagerError),
     IngressHistoryError(Height, IngressHistoryError),
+    GetIngressMessageSettingsFailed(RegistryVersion, String),
 }
 
 pub type IngressPayloadValidationError =

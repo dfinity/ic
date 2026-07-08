@@ -104,9 +104,18 @@ impl IngressSelector for IngressManager {
         let max_expiry = context.time + MAX_INGRESS_TTL;
         let expiry_range = min_expiry..=max_expiry;
 
-        let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't fetch ingress message parameters from the registry.");
+        let settings = match self.get_ingress_message_settings(context.registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "Failed to get the ingress message settings from the registry: {err}"
+                );
+
+                return PayloadWithSizeEstimate::default();
+            }
+        };
 
         // Select valid ingress messages and stop once the total size
         // becomes greater than byte_limit.
@@ -332,9 +341,26 @@ impl IngressSelector for IngressManager {
             .start_timer();
 
         let certified_height = context.certified_height;
-        let settings = self
-            .get_ingress_message_settings(context.registry_version)
-            .expect("Couldn't get IngressMessageSettings from the registry.");
+        let settings = match self.get_ingress_message_settings(context.registry_version) {
+            Ok(settings) => settings,
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Failed to get the ingress message settings from the registry \
+                    at version {}: {:?}",
+                    context.registry_version,
+                    err
+                );
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::GetIngressMessageSettingsFailed(
+                        context.registry_version,
+                        err,
+                    ),
+                ));
+            }
+        };
 
         let past_ingress = match IngressSetChain::new(context.time, past_ingress, || {
             IngressHistorySet::new(self.ingress_hist_reader.as_ref(), certified_height)
