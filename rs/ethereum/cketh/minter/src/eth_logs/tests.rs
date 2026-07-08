@@ -440,6 +440,12 @@ mod parse_principal_from_slice {
         assert_eq!(decoded_principal, Ok(principal));
     }
 
+    #[test]
+    #[should_panic(expected = "principal is empty")]
+    fn should_panic_when_encoding_the_management_canister_principal() {
+        let _ = principal_to_bytes32(&Principal::management_canister());
+    }
+
     fn to_bytes_with_size_prefix(principal: &Principal) -> Vec<u8> {
         let mut principal_bytes = principal.as_slice().to_vec();
         let size = principal_bytes.len() as u8;

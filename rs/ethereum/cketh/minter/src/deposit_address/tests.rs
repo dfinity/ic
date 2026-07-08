@@ -77,12 +77,9 @@ fn should_derive_distinct_addresses_for_edge_case_principals() {
 
     let max_length_principal = Principal::self_authenticating(b"ic-cketh-minter-max-length-owner");
     assert_eq!(max_length_principal.as_slice().len(), 29);
+    assert_eq!(Principal::anonymous().as_slice().len(), 1);
 
-    let owners = [
-        max_length_principal,
-        Principal::anonymous(),
-        Principal::management_canister(),
-    ];
+    let owners = [max_length_principal, Principal::anonymous()];
 
     let mut addresses = BTreeSet::new();
     for owner in &owners {

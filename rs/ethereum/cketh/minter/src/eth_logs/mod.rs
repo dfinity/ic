@@ -253,6 +253,10 @@ pub enum EventSourceError {
 pub fn principal_to_bytes32(principal: &Principal) -> [u8; 32] {
     let bytes = principal.as_slice();
     let n = bytes.len();
+    assert!(
+        !bytes.is_empty(),
+        "BUG: principal is empty (the management canister principal cannot call the minter)"
+    );
     assert!(n <= 29, "BUG: principal is longer than 29 bytes: {n}");
     let mut fixed = [0_u8; 32];
     fixed[0] = n as u8;
