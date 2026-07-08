@@ -31,7 +31,7 @@ common --remote_download_all
 # up-to-date" and --check_up_to_date aborted the upload.
 common --noexperimental_inmemory_dotd_files
 
-build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
+build --experimental_remote_downloader=bazel-remote.idx.dfinity.network
 build:local --experimental_remote_downloader=
 build --remote_local_fallback
 build    --remote_upload_local_results=false
