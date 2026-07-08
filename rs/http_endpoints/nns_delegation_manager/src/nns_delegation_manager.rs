@@ -59,10 +59,7 @@ const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
 const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 
-#[cfg(not(test))]
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(test)]
-const CONNECTION_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(not(test))]
 const NNS_DELEGATION_BODY_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);

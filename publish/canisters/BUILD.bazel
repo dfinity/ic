@@ -153,7 +153,6 @@ artifact_bundle(
         testonly = True,
         src = target + ".didfile",
         out = name + ".did",
-        allow_symlink = False,
     )
     for (name, target) in CANISTERS.items()
     if (

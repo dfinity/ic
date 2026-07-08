@@ -13,15 +13,15 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
     CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload, SignWithECDSAArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities_execution_environment::{get_reject, get_reply};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
@@ -2830,6 +2830,207 @@ fn canister_status_via_query_call_by_subnet_admin_succeeds() {
     );
     assert!(result.is_ok());
     assert_eq!(canister_status_count(&env), 1);
+}
+
+fn list_canisters_count(env: &StateMachine) -> u64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "ic00_list_canisters"),
+        ("outcome", "finished"),
+        ("status", "success"),
+        ("speed", "fast"),
+    ]))
+    .map_or(0, |stats| stats.count)
+}
+
+// `list_canisters` consumes round instructions according to its cost model (a
+// base cost plus a per-canister cost). This test checks that the round
+// instruction limit is respected: when many `list_canisters` calls are pending
+// at once, the per-round subnet-message instruction budget only allows some of
+// them to execute per round, so the rest are deferred to later rounds (i.e. not
+// all calls execute in the same round).
+#[test]
+fn list_canisters_respects_round_instruction_limit() {
+    // Keep in sync with `list_canisters_instructions` in `execution/common.rs`.
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    // Number of concurrent `list_canisters` calls. Chosen large enough that they
+    // cannot all fit within a single round's subnet-message instruction budget
+    // (`max_instructions_per_round / 16`, which with the default configuration
+    // fits at most ~12 calls of ~20M instructions each).
+    const NUM_CALLS: u64 = 30;
+
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    // Create an additional canister so that the subnet hosts more than just
+    // the admin canister, exercising the per-canister cost of `list_canisters`.
+    create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let num_canisters = env.get_latest_state().num_canisters() as u64;
+    assert_eq!(num_canisters, 2);
+    let cost_per_call = BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters;
+
+    // Build an update that fires `NUM_CALLS` concurrent `list_canisters`
+    // inter-canister calls (ignoring their responses) and then replies. After
+    // this single message executes, all `NUM_CALLS` calls are pending as subnet
+    // messages at the same time.
+    let mut update = wasm();
+    for _ in 0..NUM_CALLS {
+        update = update.call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        );
+    }
+    let update = update.reply().build();
+
+    // `send_ingress` executes a single round in which the update runs and
+    // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
+    let instructions_baseline = env.subnet_message_instructions();
+    let calls_baseline = list_canisters_count(&env);
+    assert_eq!(calls_baseline, 0);
+    env.send_ingress(
+        PrincipalId::new_anonymous(),
+        admin_canister,
+        "update",
+        update,
+    );
+
+    // Execute rounds one at a time, tracking after each round how many
+    // `list_canisters` calls have been executed so far, using the
+    // `execution_subnet_message_duration_seconds` metric to count them
+    // explicitly (rather than inferring the count from consumed instructions).
+    let executed_so_far = || list_canisters_count(&env) - calls_baseline;
+    let mut executed_per_round = vec![];
+    for _ in 0..100 {
+        env.tick();
+        executed_per_round.push(executed_so_far());
+        if executed_so_far() == NUM_CALLS {
+            break;
+        }
+    }
+
+    // Not all `list_canisters` calls were executed in the same round: there is a
+    // round after which some but not all of them had been executed.
+    assert!(
+        executed_per_round.iter().any(|&n| n > 0 && n < NUM_CALLS),
+        "expected list_canisters calls to be spread across rounds, got progression {:?}",
+        executed_per_round,
+    );
+    // Eventually all of them were executed.
+    assert_eq!(*executed_per_round.last().unwrap(), NUM_CALLS);
+    // Each executed call was charged exactly per the cost model, confirming the
+    // round instruction accounting.
+    assert_eq!(
+        env.subnet_message_instructions() - instructions_baseline,
+        (NUM_CALLS * cost_per_call) as f64
+    );
+}
+
+// A subnet admin canister can call `list_canisters` via an inter-canister
+// call and receives a successful response. Coalescing of the returned
+// canister ID ranges is tested separately by `test_list_canisters_success` in
+// `query_handler/tests.rs`.
+#[test]
+fn list_canisters_via_inter_canister_call_succeeds() {
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args().other_side(EmptyBlob.encode()),
+        )
+        .build();
+    let reply = get_reply(env.execute_ingress(admin_canister, "update", list_canisters));
+    ListCanistersResponse::decode(&reply).unwrap();
+}
+
+// A non-admin canister calling `list_canisters` via an inter-canister call is
+// rejected, and the rejected call must not consume any round instructions:
+// instructions are only deducted from the round limits for a successful call,
+// per the cost model checked by `list_canisters_respects_round_instruction_limit`
+// above.
+#[test]
+fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
+    let admin = user_test_id(100).get();
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+
+    let non_admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let instructions_baseline = env.subnet_message_instructions();
+    let reject = get_reject(env.execute_ingress(non_admin_canister, "update", list_canisters));
+    assert!(reject.contains("Only the subnet admins can perform certain actions"));
+
+    assert_eq!(env.subnet_message_instructions(), instructions_baseline);
 }
 
 #[test]
