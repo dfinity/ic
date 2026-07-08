@@ -20,8 +20,8 @@ pub(crate) fn check_node_assignment_invariants(
 ) -> Result<(), InvariantCheckError> {
     // Replica
     let replicas: HashSet<NodeId> = get_subnet_records_map(snapshot)
-        .into_iter()
-        .flat_map(|(_, s)| s.membership)
+        .into_values()
+        .flat_map(|s| s.membership)
         .map(|v| NodeId::from(PrincipalId::try_from(v).unwrap()))
         .collect();
 

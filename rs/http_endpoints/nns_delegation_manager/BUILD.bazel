@@ -56,7 +56,10 @@ rust_test(
     env = {
         "RUST_TEST_THREADS": "4",
     },
-    tags = ["cpu:4"],
+    tags = [
+        "cpu:4",
+        "requires-network",
+    ],
     deps = [
         "//rs/certification/test-utils",
         "//rs/crypto/tls_interfaces",
