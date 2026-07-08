@@ -1,13 +1,12 @@
 use super::{
     AccessList, GasFeeEstimate, ResubmissionStrategy, ResubmitTransactionError, Resubmittable,
-    SignableTransaction, Signed, TransactionPrice, encode_u256,
+    SignableTransaction, Signed, TransactionPrice,
 };
 use crate::{
     eth_rpc::Hash,
     eth_rpc_client::responses::{TransactionReceipt, TransactionStatus},
     numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas},
 };
-use ethnum::u256;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
@@ -93,24 +92,6 @@ impl rlp::Encodable for Eip1559TransactionRequest {
         s.begin_unbounded_list();
         self.rlp_inner(s);
         s.finalize_unbounded_list();
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Decode, Encode)]
-pub struct Eip1559Signature {
-    #[n(0)]
-    pub signature_y_parity: bool,
-    #[cbor(n(1), with = "icrc_cbor::u256")]
-    pub r: u256,
-    #[cbor(n(2), with = "icrc_cbor::u256")]
-    pub s: u256,
-}
-
-impl rlp::Encodable for Eip1559Signature {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.append(&self.signature_y_parity);
-        encode_u256(s, self.r);
-        encode_u256(s, self.s);
     }
 }
 

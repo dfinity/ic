@@ -1,5 +1,4 @@
-use super::eip_1559::Eip1559Signature;
-use super::{TransactionPrice, compute_recovery_id, split_in_two};
+use super::{TransactionPrice, compute_recovery_id, encode_u256, split_in_two};
 use crate::{
     eth_rpc::Hash,
     numeric::{GasAmount, TransactionNonce, WeiPerGas},
@@ -9,6 +8,24 @@ use ethnum::u256;
 use ic_management_canister_types_private::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Decode, Encode)]
+pub struct TransactionSignature {
+    #[n(0)]
+    pub signature_y_parity: bool,
+    #[cbor(n(1), with = "icrc_cbor::u256")]
+    pub r: u256,
+    #[cbor(n(2), with = "icrc_cbor::u256")]
+    pub s: u256,
+}
+
+impl rlp::Encodable for TransactionSignature {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.append(&self.signature_y_parity);
+        encode_u256(s, self.r);
+        encode_u256(s, self.s);
+    }
+}
 
 /// A transaction request that can be signed and wrapped into a [`Signed`] transaction.
 pub trait SignableTransaction: rlp::Encodable {
@@ -47,7 +64,7 @@ pub trait SignableTransaction: rlp::Encodable {
 }
 
 /// Immutable signed transaction.
-/// Use `<request>.sign()` to create a newly signed transaction or
+/// Use [`sign`](sign) to create a newly signed transaction or
 /// `Signed::from((transaction, signature))` if the signature is already known.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Signed<T> {
@@ -65,7 +82,7 @@ struct InnerSigned<T> {
     #[n(0)]
     transaction: T,
     #[n(1)]
-    signature: Eip1559Signature,
+    signature: TransactionSignature,
 }
 
 impl<T: SignableTransaction> InnerSigned<T> {
@@ -96,8 +113,8 @@ impl<T> AsRef<T> for Signed<T> {
     }
 }
 
-impl<T: SignableTransaction> From<(T, Eip1559Signature)> for Signed<T> {
-    fn from((transaction, signature): (T, Eip1559Signature)) -> Self {
+impl<T: SignableTransaction> From<(T, TransactionSignature)> for Signed<T> {
+    fn from((transaction, signature): (T, TransactionSignature)) -> Self {
         Self::new(transaction, signature)
     }
 }
@@ -133,7 +150,7 @@ where
 }
 
 impl<T: SignableTransaction> Signed<T> {
-    pub fn new(transaction: T, signature: Eip1559Signature) -> Self {
+    pub fn new(transaction: T, signature: TransactionSignature) -> Self {
         let inner = InnerSigned {
             transaction,
             signature,
@@ -145,12 +162,12 @@ impl<T: SignableTransaction> Signed<T> {
         }
     }
 
-    pub fn raw_transaction_hex(&self) -> Vec<u8> {
+    pub fn raw_transaction_bytes(&self) -> Vec<u8> {
         self.inner.raw_bytes()
     }
 
     pub fn raw_transaction_hex_string(&self) -> String {
-        format!("0x{}", hex::encode(self.raw_transaction_hex()))
+        format!("0x{}", hex::encode(self.raw_transaction_bytes()))
     }
 
     /// If included in a block, this hash value is used as reference to this transaction.
@@ -167,23 +184,23 @@ impl<T: SignableTransaction> Signed<T> {
     }
 }
 
-/// Sign `transaction` with the minter's ECDSA key and wrap it into a [`Signed`] transaction.
-pub async fn sign<T: SignableTransaction>(transaction: T) -> Result<Signed<T>, String> {
+/// Sign `transaction` with the minter's ECDSA key at `derivation_path` and wrap it into a
+/// [`Signed`] transaction.
+pub async fn sign<T: SignableTransaction>(
+    transaction: T,
+    derivation_path: DerivationPath,
+) -> Result<Signed<T>, String> {
     let hash = transaction.hash();
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    let signature = crate::management::sign_with_ecdsa(
-        key_name,
-        DerivationPath::new(crate::MAIN_DERIVATION_PATH),
-        hash.0,
-    )
-    .await
-    .map_err(|e| format!("failed to sign tx: {e}"))?;
+    let signature = crate::management::sign_with_ecdsa(key_name, derivation_path, hash.0)
+        .await
+        .map_err(|e| format!("failed to sign tx: {e}"))?;
     let recid = compute_recovery_id(&hash, &signature).await;
     if recid.is_x_reduced() {
         return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
     }
     let (r_bytes, s_bytes) = split_in_two(signature);
-    let signature = Eip1559Signature {
+    let signature = TransactionSignature {
         signature_y_parity: recid.is_y_odd(),
         r: u256::from_be_bytes(r_bytes),
         s: u256::from_be_bytes(s_bytes),

@@ -82,7 +82,10 @@ impl Authorization {
         Hash(ic_sha3::Keccak256::hash(bytes))
     }
 
-    pub async fn sign(self) -> Result<SignedAuthorization, String> {
+    pub async fn sign(
+        self,
+        derivation_path: DerivationPath,
+    ) -> Result<SignedAuthorization, String> {
         if self.chain_id == 0 {
             return Err(
                 "BUG: EIP-7702 authorization chain_id must be set explicitly and never 0"
@@ -91,13 +94,9 @@ impl Authorization {
         }
         let hash = self.hash();
         let key_name = read_state(|s| s.ecdsa_key_name.clone());
-        let signature = crate::management::sign_with_ecdsa(
-            key_name,
-            DerivationPath::new(crate::MAIN_DERIVATION_PATH),
-            hash.0,
-        )
-        .await
-        .map_err(|e| format!("failed to sign authorization: {e}"))?;
+        let signature = crate::management::sign_with_ecdsa(key_name, derivation_path, hash.0)
+            .await
+            .map_err(|e| format!("failed to sign authorization: {e}"))?;
         let recid = compute_recovery_id(&hash, &signature).await;
         if recid.is_x_reduced() {
             return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
@@ -158,6 +157,10 @@ impl SignableTransaction for Eip7702TransactionRequest {
     }
 
     fn rlp_inner(&self, rlp: &mut RlpStream) {
+        debug_assert!(
+            !self.authorization_list.is_empty(),
+            "BUG: EIP-7702 transaction must have a non-empty authorization_list"
+        );
         rlp.append(&self.chain_id);
         rlp.append(&self.nonce);
         rlp.append(&self.max_priority_fee_per_gas);

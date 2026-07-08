@@ -6,13 +6,13 @@ mod eip_7702;
 mod signed;
 
 pub use eip_1559::{
-    Eip1559Signature, Eip1559TransactionRequest, FinalizedEip1559Transaction,
-    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
+    SignedTransactionRequest, TransactionRequest,
 };
 pub use eip_7702::{
     Authorization, Eip7702TransactionRequest, SignedAuthorization, SignedEip7702TransactionRequest,
 };
-pub use signed::{SignableTransaction, Signed, sign};
+pub use signed::{SignableTransaction, Signed, TransactionSignature, sign};
 
 use crate::{
     eth_rpc::Hash,
