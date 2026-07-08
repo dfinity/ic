@@ -6,8 +6,8 @@ use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STO
 use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgsBuilder,
-    FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest, LogVisibilityV2,
-    Payload,
+    FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
+    FetchCanisterLogsResponse, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -258,13 +258,13 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
 }
 
 /// Executes a single `fetch_canister_logs` subnet message against a target whose
-/// log buffer is filled to capacity and returns the size of the reply payload.
+/// log buffer is filled to capacity and returns the Candid-encoded reply payload.
 /// Panics if the call was rejected. Used for one-off sanity checks.
-fn fetch_reply_len(
+fn fetch_response(
     filter: Option<FetchCanisterLogsFilter>,
     log_memory_limit: u64,
     log_message_size: usize,
-) -> usize {
+) -> Vec<u8> {
     let mut test = setup_fetch_bench(
         "fetch_canister_logs",
         |target| {
@@ -278,9 +278,29 @@ fn fetch_reply_len(
     assert!(test.execute_subnet_message());
     test.induct_messages();
     match &test.get_xnet_response(0).response_payload {
-        ic_types::messages::Payload::Data(data) => data.len(),
+        ic_types::messages::Payload::Data(data) => data.clone(),
         other => panic!("fetch_canister_logs was rejected: {other:?}"),
     }
+}
+
+/// Size of the Candid-encoded `fetch_canister_logs` reply payload.
+fn fetch_reply_len(
+    filter: Option<FetchCanisterLogsFilter>,
+    log_memory_limit: u64,
+    log_message_size: usize,
+) -> usize {
+    fetch_response(filter, log_memory_limit, log_message_size).len()
+}
+
+/// The log records returned by a `fetch_canister_logs` call.
+fn fetch_records(
+    filter: Option<FetchCanisterLogsFilter>,
+    log_memory_limit: u64,
+    log_message_size: usize,
+) -> Vec<CanisterLogRecord> {
+    FetchCanisterLogsResponse::decode(&fetch_response(filter, log_memory_limit, log_message_size))
+        .unwrap()
+        .canister_log_records
 }
 
 pub fn canister_logging_benchmark(c: &mut Criterion) {
@@ -331,11 +351,14 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         // Unfiltered worst case must return a full ~2 MiB response of log data
         // (the response is trimmed to `RESULT_MAX_SIZE`, i.e. 2 MB).
         assert!(fetch_reply_len(None, 2 * MIB, (32 * KIB) as usize) > 1_800_000);
-        // Filtered (by index) path must return the matching records.
-        assert!(fetch_reply_len(FETCH_FILTER_BY_IDX, 128 * KIB, 0) > 0);
-        // The empty filter must return no records even from a full buffer, so
-        // its response is far smaller than any that carries records.
-        assert!(fetch_reply_len(FETCH_FILTER_EMPTY, 2 * MIB, 0) < 1_000);
+        // A match-all by-index filter returns the same records as no filter (the
+        // 128 KiB buffer is small enough not to be trimmed to `RESULT_MAX_SIZE`).
+        assert_eq!(
+            fetch_records(FETCH_FILTER_BY_IDX, 128 * KIB, 0),
+            fetch_records(None, 128 * KIB, 0),
+        );
+        // The empty filter must return no records even from a full buffer.
+        assert!(fetch_records(FETCH_FILTER_EMPTY, 2 * MIB, 0).is_empty());
     }
 
     {
