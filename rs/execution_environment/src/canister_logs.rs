@@ -24,14 +24,15 @@ pub(crate) fn fetch_canister_logs(
     cycles_account_manager: &CyclesAccountManager,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-    // The response size (and hence the fee) is only known after reading the
-    // logs, so reject up front any call that could not afford the worst-case
-    // (maximum) response size. This ensures we never do the read work for free.
+    // The response (and hence the fee) is only known after reading the logs, so
+    // reject up front any call that could not afford the worst-case response:
+    // the maximum number of records, which is `RESULT_MAX_SIZE` divided by the
+    // minimum per-record size. This ensures we never do the read work for free.
+    let max_record_count = MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64
+        / std::mem::size_of::<CanisterLogRecord>() as u64;
     let max_fee = cycles_account_manager
         .management_canister_cost(
-            fetch_canister_logs_instructions(NumBytes::new(
-                MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64,
-            )),
+            fetch_canister_logs_instructions(max_record_count, NumBytes::new(0)),
             subnet_cycles_config,
         )
         .real();
@@ -43,13 +44,15 @@ pub(crate) fn fetch_canister_logs(
         });
     }
     let canister_id = canister.canister_id();
-    let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
+    let (reply, record_count, content_size) =
+        fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
     // The caller is authorized (the visibility check inside
     // `fetch_canister_logs_response` passed). Charge for the work of reading and
-    // encoding the logs, approximated from the actual response size (see
-    // `fetch_canister_logs_instructions`): deduct the cycles fee from the call's
-    // payment and the corresponding instructions from the round's budget.
-    let instructions = fetch_canister_logs_instructions(NumBytes::new(reply.len() as u64));
+    // encoding the logs, approximated from the number of records returned and
+    // their content size (see `fetch_canister_logs_instructions`): deduct the
+    // cycles fee from the call's payment and the corresponding instructions from
+    // the round's budget.
+    let instructions = fetch_canister_logs_instructions(record_count, content_size);
     let fee = cycles_account_manager
         .management_canister_cost(instructions, subnet_cycles_config)
         .real();
@@ -67,48 +70,61 @@ pub(crate) fn fetch_canister_logs(
 }
 
 /// Derives the number of instructions to charge for executing a
-/// `fetch_canister_logs` call from the size of the response it produces.
+/// `fetch_canister_logs` call from the response it produces: the number of
+/// records returned and the total size of their content.
 ///
-/// The cost is a function of the response size (rather than the log memory
-/// buffer size) because the log memory store's index lets a fetch read only
-/// about the records it returns, so the computational overhead is dependent on
-/// the response size.
+/// The cost is a function of the response (rather than the log memory buffer
+/// size) because the log memory store's index lets a fetch read only about the
+/// records it returns. The measured execution time is dominated by the number
+/// of records (per-record decode/encode overhead), with a smaller term for
+/// copying the record content, so both are charged separately.
 ///
-/// This is a linear approximation of the measured `fetch_canister_logs`
-/// execution time (see the `fetch_canister_log` benchmark in
-/// `rs/execution_environment/benches/management_canister/canister_logging.rs`),
-/// with the factors derived from those benchmarks:
-///
-/// ```text
-/// time ≈ 1.15 ms + 13.3 ms/MiB × response_size
-/// ```
-///
-/// Converting at 2 billion instructions per second (2_000_000 instructions per
-/// millisecond) yields:
+/// This is a conservative linear upper bound on the measured
+/// `fetch_canister_logs` execution time (see the `fetch_canister_log` benchmark
+/// in `rs/execution_environment/benches/management_canister/canister_logging.rs`),
+/// chosen so the charge never falls below the measured cost of any case:
 ///
 /// ```text
-/// instructions ≈ 2_300_000 + 25.4 × response_size_bytes
+/// time ≲ 7 ms + 0.45 µs × record_count + 2.5 ns × content_size
 /// ```
 ///
-/// The per-byte factor is rounded up to stay conservative (never undercharge).
-pub(crate) fn fetch_canister_logs_instructions(response_size: NumBytes) -> NumInstructions {
-    // Fixed cost of ~1.15 ms of call overhead, at 2_000_000 instructions/ms
-    // (2 billion instructions per second): 1.15 × 2_000_000.
-    const BASE_INSTRUCTIONS: u64 = 2_300_000;
-    // ~13.3 ms/MiB at 2_000_000 instructions/ms ≈ 25.4 instructions/byte,
-    // rounded up to 26 to stay conservative.
-    const INSTRUCTIONS_PER_BYTE: u64 = 26;
+/// The fixed term covers a full-buffer fetch that returns nothing (~6.4 ms),
+/// the per-record term covers the worst case of 0-byte log messages (a full
+/// 2 MiB buffer returns ~50k records in ~27 ms), and the per-content-byte term
+/// covers the content copy (a full 2 MiB buffer of ~100-byte messages). At 2
+/// billion instructions per second (2_000_000 instructions per millisecond):
+///
+/// ```text
+/// instructions ≈ 14_000_000 + 900 × record_count + 5 × content_size
+/// ```
+pub(crate) fn fetch_canister_logs_instructions(
+    record_count: u64,
+    content_size: NumBytes,
+) -> NumInstructions {
+    // Fixed cost of ~7 ms, at 2_000_000 instructions/ms (2 billion per second),
+    // covering a full-buffer fetch whose filter matches nothing (~6.4 ms).
+    const BASE_INSTRUCTIONS: u64 = 14_000_000;
+    // ~0.45 µs/record: the per-record decode/encode overhead dominates the cost.
+    const INSTRUCTIONS_PER_RECORD: u64 = 900;
+    // ~2.5 ns/byte: the cost of copying and encoding the record content.
+    const INSTRUCTIONS_PER_CONTENT_BYTE: u64 = 5;
     NumInstructions::new(
-        BASE_INSTRUCTIONS.saturating_add(INSTRUCTIONS_PER_BYTE.saturating_mul(response_size.get())),
+        BASE_INSTRUCTIONS
+            .saturating_add(INSTRUCTIONS_PER_RECORD.saturating_mul(record_count))
+            .saturating_add(INSTRUCTIONS_PER_CONTENT_BYTE.saturating_mul(content_size.get())),
     )
 }
 
+/// Reads the requested canister log records and returns the Candid-encoded
+/// `FetchCanisterLogsResponse` together with the number of records returned and
+/// the total size of their content. The record count and content size are used
+/// to charge for the call (see `fetch_canister_logs_instructions`).
 pub(crate) fn fetch_canister_logs_response(
     sender: PrincipalId,
     canister: &CanisterState,
     args: FetchCanisterLogsRequest,
     log_memory_store_feature: FlagStatus,
-) -> Result<Vec<u8>, CanisterManagerError> {
+) -> Result<(Vec<u8>, u64, NumBytes), CanisterManagerError> {
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
     let s = &canister.system_state;
     let canister_log_records = match log_memory_store_feature {
@@ -117,10 +133,16 @@ pub(crate) fn fetch_canister_logs_response(
         }
         _ => filter_records(&args, s.canister_log.records()),
     };
-    Ok(Encode!(&FetchCanisterLogsResponse {
+    let record_count = canister_log_records.len() as u64;
+    let content_size = canister_log_records
+        .iter()
+        .map(|r| r.content.len())
+        .sum::<usize>();
+    let reply = Encode!(&FetchCanisterLogsResponse {
         canister_log_records
     })
-    .unwrap())
+    .unwrap();
+    Ok((reply, record_count, NumBytes::new(content_size as u64)))
 }
 
 /// Checks if the caller has permission to access the logs based on the canister's log visibility settings.
@@ -165,21 +187,28 @@ mod tests {
 
     #[test]
     fn fetch_canister_logs_instructions_matches_linear_approximation() {
-        // Empty response → only the ~1.15 ms fixed cost (2_300_000 instructions).
+        // Empty response → only the ~7 ms fixed cost (14_000_000 instructions).
         assert_eq!(
-            fetch_canister_logs_instructions(NumBytes::new(0)),
-            NumInstructions::new(2_300_000)
+            fetch_canister_logs_instructions(0, NumBytes::new(0)),
+            NumInstructions::new(14_000_000)
         );
-        // Maximum response size: 2_300_000 + 26 × response_size instructions.
-        let max_response = MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64;
+        // 14_000_000 + 900 × record_count + 5 × content_size instructions.
         assert_eq!(
-            fetch_canister_logs_instructions(NumBytes::new(max_response)),
-            NumInstructions::new(2_300_000 + 26 * max_response)
+            fetch_canister_logs_instructions(50_000, NumBytes::new(0)),
+            NumInstructions::new(14_000_000 + 900 * 50_000)
         );
-        // Monotonically non-decreasing in the response size.
+        assert_eq!(
+            fetch_canister_logs_instructions(10, NumBytes::new(4_096)),
+            NumInstructions::new(14_000_000 + 900 * 10 + 5 * 4_096)
+        );
+        // Monotonically non-decreasing in both the record count and content size.
         assert!(
-            fetch_canister_logs_instructions(NumBytes::new(max_response / 2))
-                < fetch_canister_logs_instructions(NumBytes::new(max_response))
+            fetch_canister_logs_instructions(100, NumBytes::new(1_000))
+                < fetch_canister_logs_instructions(200, NumBytes::new(1_000))
+        );
+        assert!(
+            fetch_canister_logs_instructions(100, NumBytes::new(1_000))
+                < fetch_canister_logs_instructions(100, NumBytes::new(2_000))
         );
     }
 }
