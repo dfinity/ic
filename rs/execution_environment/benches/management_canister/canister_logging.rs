@@ -237,8 +237,9 @@ fn setup_fetch_bench<F: FnOnce(CanisterId) -> Vec<u8>>(
     fill_log_buffer_to_capacity(&mut test, target, log_message_size);
 
     // Enqueue the inter-canister call. It is the only pending subnet message, so
-    // the next `execute_subnet_message` executes exactly this call.
-    test.inject_call_to_ic00(method, make_payload(target), Cycles::new(5_000_000_000));
+    // the next `execute_subnet_message` executes exactly this call. No cycles are
+    // attached: `fetch_canister_logs` deducts only round instructions, not cycles.
+    test.inject_call_to_ic00(method, make_payload(target), Cycles::zero());
     test
 }
 
