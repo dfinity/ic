@@ -1621,7 +1621,7 @@ where
         let canister_status_result = call_response.map_err(|(code, description)| {
             format!(
                 "Could not get the controllers of canister {target_canister_id} \
-                    due to an error from the replica. {code:?}:{description:?}"
+                due to an error from the replica. {code:?}:{description:?}"
             )
         })?;
 
