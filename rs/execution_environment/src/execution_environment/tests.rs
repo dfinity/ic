@@ -2296,7 +2296,9 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
         .with_nns_subnet_id(own_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -2330,7 +2332,9 @@ fn http_request_bound_holds() {
         // set number of max in-flight calls to 10
         .with_max_canister_http_requests_in_flight(10)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -2395,7 +2399,9 @@ fn management_canister_xnet_called_from_non_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -3345,7 +3351,9 @@ fn execute_canister_http_request_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = false;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = false;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -5833,4 +5841,50 @@ fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
     );
     let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
     let _ = get_reject(res);
+}
+
+// `list_canisters` can only be called via an inter-canister call; an ingress
+// message is rejected by the ingress filter before execution, since
+// `list_canisters` is not among the ic00 methods allowed via ingress, even if
+// the caller is a subnet admin.
+#[test]
+fn list_canisters_via_ingress_fails_at_ingress_filter() {
+    let admin = user_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+    test.set_user_id(admin);
+
+    let result =
+        test.should_accept_ingress_message(IC_00, Method::ListCanisters, EmptyBlob.encode());
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "ic00 method list_canisters can not be called via ingress messages"
+        ))
+    );
+}
+
+// Even if an ingress message reaches `execute_subnet_message`, `list_canisters`
+// is still rejected: it can only be called via an inter-canister call, even by
+// a subnet admin.
+#[test]
+fn list_canisters_via_ingress_fails_at_execution() {
+    let admin = user_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+    test.set_user_id(admin);
+
+    let err = test
+        .subnet_message(Method::ListCanisters, EmptyBlob.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains("list_canisters cannot be called by a user")
+    );
 }

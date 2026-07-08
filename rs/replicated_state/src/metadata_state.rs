@@ -93,14 +93,9 @@ pub struct SystemMetadata {
 
     pub own_subnet_type: SubnetType,
 
-    pub own_subnet_features: SubnetFeatures,
-
-    pub own_resource_limits: ResourceLimits,
-
-    /// DER-encoded public keys of the subnet's nodes.
-    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
-
-    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+    /// Registry-derived information about this subnet (its features, resource
+    /// limits and node public keys).
+    pub own_subnet_info: Arc<OwnSubnetInfo>,
 
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
@@ -255,6 +250,9 @@ pub struct NetworkTopology {
     /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
+
+    /// API boundary nodes, indexed by `NodeId`.
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -284,6 +282,7 @@ impl Default for NetworkTopology {
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
             default_initial_dkg_subnet_id: None,
+            api_boundary_nodes: Default::default(),
         }
     }
 }
@@ -300,6 +299,7 @@ impl NetworkTopology {
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
         default_initial_dkg_subnet_id: Option<SubnetId>,
+        api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     ) -> Self {
         Self {
             subnets,
@@ -311,6 +311,7 @@ impl NetworkTopology {
             bitcoin_mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         }
     }
 
@@ -433,6 +434,18 @@ pub fn can_have_subnet_admins(
             && cost_schedule == CanisterCyclesCostSchedule::Free)
 }
 
+/// Registry-derived information about the subnet that this replicated state
+/// belongs to. Repopulated from the registry at the start of every round.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct OwnSubnetInfo {
+    pub subnet_features: SubnetFeatures,
+
+    pub resource_limits: ResourceLimits,
+
+    /// DER-encoded public keys of the subnet's nodes.
+    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetMetrics {
     consumed_cycles_by_deleted_canisters: NominalCycles,
@@ -552,10 +565,7 @@ impl SystemMetadata {
             batch_time: UNIX_EPOCH,
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
 
@@ -863,12 +873,7 @@ impl SystemMetadata {
             // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            own_subnet_features: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            own_resource_limits: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            node_public_keys: _,
-            api_boundary_nodes: _,
+            own_subnet_info: _,
             ref mut split_from,
             subnet_split_from,
             subnet_call_context_manager: _,
@@ -973,10 +978,7 @@ impl SystemMetadata {
             network_topology,
             own_subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_info,
             split_from,
             mut subnet_split_from,
             mut subnet_call_context_manager,
@@ -1079,11 +1081,8 @@ impl SystemMetadata {
             // New subnet ID.
             own_subnet_id: subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
             // Already populated from the registry.
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_info,
             split_from,
             subnet_split_from,
             subnet_call_context_manager,
@@ -2206,10 +2205,7 @@ pub mod testing {
             network_topology: Default::default(),
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
             prev_state_hash: Default::default(),

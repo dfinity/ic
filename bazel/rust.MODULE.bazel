@@ -65,6 +65,20 @@ crate.spec(
     version = "^0.14.2",
 )
 crate.spec(
+    features = [
+        "std",
+    ],
+    package = "aes-gcm",
+    version = "^0.10.3",
+)
+crate.spec(
+    features = [
+        "std",
+    ],
+    package = "argon2",
+    version = "^0.4",
+)
+crate.spec(
     package = "arbitrary",
     version = "^1.3.2",
 )
@@ -393,8 +407,12 @@ crate.spec(
     version = "0.34",
 )
 crate.spec(
-    package = "dfx-core",
-    version = "^0.4.0",
+    package = "dialoguer",
+    version = "^0.11.0",
+)
+crate.spec(
+    package = "directories-next",
+    version = "^2.0.0",
 )
 crate.spec(
     package = "dyn-clone",
@@ -902,6 +920,17 @@ crate.spec(
     ],
     package = "k256",
     version = "^0.13.4",
+)
+crate.spec(
+    features = [
+        "apple-native",
+        "windows-native",
+        "linux-native",
+        "sync-secret-service",
+        "vendored",
+    ],
+    package = "keyring",
+    version = "^3",
 )
 crate.spec(
     package = "lazy_static",
@@ -1471,6 +1500,10 @@ crate.spec(
     ],
     package = "secp256k1",
     version = "^0.22",
+)
+crate.spec(
+    package = "security-framework",
+    version = "^3",
 )
 crate.spec(
     features = [

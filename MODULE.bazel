@@ -197,7 +197,7 @@ use_repo(oci, "ic_gatewayd", "ic_gatewayd_linux_amd64")
 # foundry container used in test
 oci.pull(
     name = "foundry",
-    image = "ghcr.io/foundry-rs/foundry@sha256:8f9dd6d4c498538b3aa3999758520bca24a41273163b0c7295ed53b1a6062f30",  # v0.3.0 https://github.com/foundry-rs/foundry/pkgs/container/foundry/391862899?tag=v0.3.0
+    image = "ghcr.io/foundry-rs/foundry@sha256:8347b728d5d393dac1c018691b36f506d23b9dcd78341d40ea0fcb11c3a19cdd",  # v1.7.1 https://github.com/foundry-rs/foundry/pkgs/container/foundry?tag=v1.7.1
     platforms = [
         "linux/amd64",
     ],
