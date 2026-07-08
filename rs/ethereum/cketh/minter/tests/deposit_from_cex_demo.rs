@@ -34,16 +34,13 @@ use ic_cketh_minter::tx::{
 use ic_ethereum_types::Address;
 use ic_secp256k1::{PrivateKey, PublicKey};
 use ic_sha3::Keccak256;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-// Bytecode of the demo contracts, pre-compiled (see docs/deposit_from_cex_demo).
-// `CkDeposit` is the real minter helper `DepositHelperWithSubaccount.sol`.
-const MOCKUSDT_BYTECODE: &str = include_str!("deposit_from_cex_demo/MockUSDT.bin.hex");
-const CKDEPOSIT_BYTECODE: &str = include_str!("deposit_from_cex_demo/CkDeposit.bin.hex");
-const CKSWEEPER_VIA_HELPER_BYTECODE: &str =
-    include_str!("deposit_from_cex_demo/CkSweeperViaHelper.bin.hex");
+// The demo contracts are compiled from source at test time by the vendored
+// `solc` (see BUILD.bazel). `CkDeposit` is the real minter helper
+// `DepositHelperWithSubaccount.sol`, compiled from its canonical source.
 
 // Anvil's first three well-known dev accounts (unlocked, so the CEX and attacker
 // transactions can go through `eth_sendTransaction`).
@@ -63,9 +60,9 @@ const SWEEP_GAS_LIMIT: u128 = 1_000_000;
 
 // The flow is fully deterministic (fixed keys, fixed contracts, fresh chain), so
 // the gas used by each sweep transaction is a constant.
-const SINGLE_SWEEP_GAS_USED: u64 = 95_887; // 1 EOA, first-time delegation + sweep
-const BATCH_SWEEP_GAS_USED: u64 = 164_746; // 3 EOAs delegated, 2 swept
-const FINAL_SWEEP_GAS_USED: u64 = 62_197; // already delegated, plain EIP-1559 sweep
+const SINGLE_SWEEP_GAS_USED: u64 = 92_443; // 1 EOA, first-time delegation + sweep
+const BATCH_SWEEP_GAS_USED: u64 = 156_615; // 3 EOAs delegated, 2 swept
+const FINAL_SWEEP_GAS_USED: u64 = 58_753; // already delegated, plain EIP-1559 sweep
 
 #[test]
 fn deposit_from_cex_variant_b() {
@@ -77,29 +74,33 @@ fn deposit_from_cex_variant_b() {
     let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
     let attacker = eth_address(&key_from_hex(ATTACKER_PRIVATE_KEY).public_key());
 
-    // 0) deploy the ERC-20, the real helper and the sweeper delegate.
+    // 0) compile from source and deploy the ERC-20, the real helper and the
+    //    sweeper delegate.
     let usdt = anvil.deploy(
         &cex,
-        &concat(
-            MOCKUSDT_BYTECODE,
-            &abi(&[
+        &deploy_code(
+            &compile("MOCKUSDT_SOL", "MockUSDT"),
+            &[
                 Token::Word(word_addr(&cex)),
                 Token::Word(word_u256(USDT_SUPPLY)),
-            ]),
+            ],
         ),
     );
     let helper = anvil.deploy(
         &minter,
-        &concat(CKDEPOSIT_BYTECODE, &abi(&[Token::Word(word_addr(&minter))])),
+        &deploy_code(
+            &compile("CKDEPOSIT_SOL", "CkDeposit"),
+            &[Token::Word(word_addr(&minter))],
+        ),
     );
     let via_helper = anvil.deploy(
         &minter,
-        &concat(
-            CKSWEEPER_VIA_HELPER_BYTECODE,
-            &abi(&[
+        &deploy_code(
+            &compile("CKSWEEPER_VIA_HELPER_SOL", "CkSweeperViaHelper"),
+            &[
                 Token::Word(word_addr(&minter)),
                 Token::Word(word_addr(&helper)),
-            ]),
+            ],
         ),
     );
     let helper_minter = anvil.call(&helper, &call("getMinterAddress()", &[]));
@@ -387,10 +388,39 @@ fn encode_principal(principal: &Principal) -> [u8; 32] {
     encoded
 }
 
-fn concat(bytecode_hex: &str, constructor_args: &[u8]) -> Vec<u8> {
-    let mut code = hex::decode(bytecode_hex.trim().trim_start_matches("0x")).unwrap();
-    code.extend_from_slice(constructor_args);
-    code
+/// Compiles `contract` from the Solidity source at env var `source_var` using the
+/// vendored `solc`, returning its creation bytecode.
+fn compile(source_var: &str, contract: &str) -> Vec<u8> {
+    let solc = std::env::var("SOLC_BIN").expect("SOLC_BIN not set by Bazel");
+    let source = std::env::var(source_var).expect("contract source env var not set by Bazel");
+    let output = Command::new(&solc)
+        .args([
+            "--combined-json",
+            "bin",
+            "--optimize",
+            "--optimize-runs",
+            "200",
+            &source,
+        ])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run solc at {solc}: {e}"));
+    assert!(
+        output.status.success(),
+        "solc failed for {source}:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let compiled: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let (_, artifact) = compiled["contracts"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .find(|(key, _)| key.ends_with(&format!(":{contract}")))
+        .unwrap_or_else(|| panic!("solc did not produce contract {contract} from {source}"));
+    hex::decode(artifact["bin"].as_str().unwrap()).unwrap()
+}
+
+fn deploy_code(bytecode: &[u8], constructor_args: &[Token]) -> Vec<u8> {
+    [bytecode, &abi(constructor_args)].concat()
 }
 
 struct ReceivedEvent {

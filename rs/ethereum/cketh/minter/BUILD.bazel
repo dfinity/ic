@@ -287,11 +287,21 @@ rust_test(
     name = "deposit_from_cex_demo_test",
     size = "small",
     srcs = ["tests/deposit_from_cex_demo.rs"],
-    compile_data = glob(["tests/deposit_from_cex_demo/*.bin.hex"]),
-    data = [":anvil"],
+    data = [
+        ":anvil",
+        # Contract sources compiled at test time by the vendored solc.
+        "DepositHelperWithSubaccount.sol",
+        "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol",
+        "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol",
+        "@solc//file",
+    ],
     edition = "2021",
     env = {
         "ANVIL_BIN": "$(rootpath :anvil)",
+        "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
+        "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol)",
+        "MOCKUSDT_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol)",
+        "SOLC_BIN": "$(rootpath @solc//file)",
     },
     deps = [
         # Keep sorted.
