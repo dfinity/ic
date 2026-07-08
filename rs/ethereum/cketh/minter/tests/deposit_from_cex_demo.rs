@@ -13,10 +13,13 @@
 //! `ReceivedEthOrErc20` event (carrying the IC principal) that the minter's
 //! existing deposit pipeline already scrapes and mints from.
 //!
-//! The test is table-driven over the design doc's two batch extremes (its "Cost
-//! estimation" section): a single deposit swept in one batch (`B=1`) versus a
-//! batch of twenty (`B=20`), asserting that per-deposit gas amortizes as the
-//! batch grows.
+//! The test is table-driven over batch sizes 1, 10 and 20 (the design doc's
+//! "Cost estimation" section sizes the `B=1` and `B=20` extremes). Each batch is
+//! swept twice for the same addresses: first with an EIP-7702 transaction that
+//! installs the delegations, then — after re-funding — with a plain EIP-1559
+//! transaction reusing the persisted delegations. It asserts that per-deposit gas
+//! amortizes as the batch grows and that the already-delegated EIP-1559 sweep is
+//! cheaper than the EIP-7702 one.
 //!
 //! Runs the `anvil` binary vendored via `@foundry_bin_*` (see BUILD.bazel);
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
@@ -55,31 +58,46 @@ const PRIORITY_FEE: u128 = 1_000_000_000; // 1 gwei
 const MAX_FEE: u128 = 50_000_000_000; // 50 gwei
 const SWEEP_GAS_LIMIT: u128 = 5_000_000;
 
-/// The design doc's two batch extremes: a single deposit swept in one batch
-/// (`B=1`) versus a batch of twenty (`B=20`). The flow is fully deterministic
-/// (fixed keys, fixed contracts, fresh chain), so each batch's total gas is a
-/// constant; the point is that per-deposit gas shrinks as the batch grows.
+/// Each batch size is swept twice, for the same deposit addresses:
+///   * `eip7702_*`: the first sweep, a type-0x04 transaction that installs each
+///     deposit EOA's delegation (its authorization rides in the transaction) and
+///     sweeps it — the full EIP-7702 cost.
+///   * `eip1559_*`: a second sweep of the same addresses after re-funding; the
+///     delegation already persists, so a plain EIP-1559 transaction suffices.
+///
+/// The flow is fully deterministic (fixed keys, fixed contracts, fresh chain), so
+/// every figure is a constant. Per-deposit gas amortizes as the batch grows, and
+/// the already-delegated EIP-1559 sweep is cheaper than the EIP-7702 one by the
+/// delegation-install overhead.
 struct BatchScenario {
     deposits: usize,
-    total_gas_used: u64,
-    average_gas_used: u64,
+    eip7702_total_gas_used: u64,
+    eip7702_average_gas_used: u64,
+    eip1559_total_gas_used: u64,
+    eip1559_average_gas_used: u64,
 }
 
 const SCENARIOS: [BatchScenario; 3] = [
     BatchScenario {
         deposits: 1,
-        total_gas_used: 94_932,
-        average_gas_used: 94_932,
+        eip7702_total_gas_used: 94_932,
+        eip7702_average_gas_used: 94_932,
+        eip1559_total_gas_used: 63_252,
+        eip1559_average_gas_used: 63_252,
     },
     BatchScenario {
         deposits: 10,
-        total_gas_used: 570_151,
-        average_gas_used: 57_015,
+        eip7702_total_gas_used: 570_151,
+        eip7702_average_gas_used: 57_015,
+        eip1559_total_gas_used: 390_151,
+        eip1559_average_gas_used: 39_015,
     },
     BatchScenario {
         deposits: 20,
-        total_gas_used: 1_113_373,
-        average_gas_used: 55_668,
+        eip7702_total_gas_used: 1_113_373,
+        eip7702_average_gas_used: 55_668,
+        eip1559_total_gas_used: 753_373,
+        eip1559_average_gas_used: 37_668,
     },
 ];
 
@@ -94,7 +112,7 @@ fn batched_sweep_amortizes_gas_across_the_batch() {
 
     let contracts = deploy_contracts(&anvil, &minter, &cex);
 
-    let mut previous_per_deposit = u64::MAX;
+    let mut previous_average = u64::MAX;
     for scenario in SCENARIOS {
         let gas = sweep_batch(
             &anvil,
@@ -105,26 +123,42 @@ fn batched_sweep_amortizes_gas_across_the_batch() {
             &contracts,
             scenario.deposits,
         );
-        let per_deposit = gas / scenario.deposits as u64;
+        let deposits = scenario.deposits as u64;
+        let eip7702_average = gas.eip7702 / deposits;
+        let eip1559_average = gas.eip1559 / deposits;
         println!(
-            "batch of {}: {gas} gas total, {per_deposit} per deposit",
-            scenario.deposits
+            "batch of {}: EIP-7702 {} ({eip7702_average}/deposit), EIP-1559 {} ({eip1559_average}/deposit)",
+            scenario.deposits, gas.eip7702, gas.eip1559
         );
         assert_gas(
-            gas,
-            scenario.total_gas_used,
-            &format!("batch of {} total", scenario.deposits),
+            gas.eip7702,
+            scenario.eip7702_total_gas_used,
+            &format!("batch of {} EIP-7702 total", scenario.deposits),
         );
         assert_gas(
-            per_deposit,
-            scenario.average_gas_used,
-            &format!("batch of {} average", scenario.deposits),
+            eip7702_average,
+            scenario.eip7702_average_gas_used,
+            &format!("batch of {} EIP-7702 average", scenario.deposits),
+        );
+        assert_gas(
+            gas.eip1559,
+            scenario.eip1559_total_gas_used,
+            &format!("batch of {} EIP-1559 total", scenario.deposits),
+        );
+        assert_gas(
+            eip1559_average,
+            scenario.eip1559_average_gas_used,
+            &format!("batch of {} EIP-1559 average", scenario.deposits),
         );
         assert!(
-            per_deposit < previous_per_deposit,
+            gas.eip1559 < gas.eip7702,
+            "an already-delegated (EIP-1559) sweep must cost less than one installing the delegation (EIP-7702)"
+        );
+        assert!(
+            eip7702_average < previous_average,
             "per-deposit gas should shrink as the batch grows"
         );
-        previous_per_deposit = per_deposit;
+        previous_average = eip7702_average;
     }
 }
 
@@ -301,6 +335,15 @@ fn deploy_contracts(anvil: &Anvil, minter: &Address, cex: &Address) -> Contracts
 /// deposit EOAs' authorizations ride in the same transaction's authorization
 /// list. Asserts every deposit is swept and emits the canonical event, and
 /// returns the batch's gas used.
+struct BatchGas {
+    eip7702: u64,
+    eip1559: u64,
+}
+
+/// Sweeps `n` deposit addresses to the minter twice, returning the gas each
+/// sweep used. The first sweep is a type-0x04 (EIP-7702) transaction that
+/// installs the delegations; the second, after re-funding the same addresses, is
+/// a plain EIP-1559 transaction reusing the now-persisted delegations.
 fn sweep_batch(
     anvil: &Anvil,
     chain_id: u64,
@@ -309,11 +352,9 @@ fn sweep_batch(
     cex: &Address,
     contracts: &Contracts,
     n: usize,
-) -> u64 {
+) -> BatchGas {
     let Contracts {
-        usdt,
-        helper,
-        via_helper,
+        usdt, via_helper, ..
     } = contracts;
 
     // Distinct principals per batch size keep the deposit addresses fresh.
@@ -333,6 +374,71 @@ fn sweep_batch(
             anvil.code(deposit).is_empty(),
             "deposit address should have no code"
         );
+    }
+
+    let sweep_call = call(
+        "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
+        &[
+            Token::Array(deposits.iter().map(word_addr).collect()),
+            Token::Array(principals.iter().map(encode_principal).collect()),
+            Token::Array(vec![[0u8; 32]; n]),
+            Token::Array(vec![word_addr(usdt)]),
+        ],
+    );
+
+    // First sweep: an EIP-7702 transaction whose authorization list installs each
+    // deposit EOA's delegation before the batch sweeps it.
+    fund(anvil, cex, usdt, &deposits);
+    let minter_before = anvil.usdt_balance(usdt, minter);
+    let authorizations: Vec<SignedAuthorization> = keys
+        .iter()
+        .map(|key| sign_authorization(key, chain_id, via_helper, 0))
+        .collect();
+    let receipt = anvil.send_eip7702(
+        minter_key,
+        chain_id,
+        via_helper,
+        sweep_call.clone(),
+        authorizations,
+    );
+    let eip7702 = assert_batch_swept(
+        anvil,
+        &receipt,
+        contracts,
+        minter,
+        &deposits,
+        &principals,
+        minter_before,
+    );
+
+    // Second sweep of the SAME addresses: the delegation persists, so no
+    // authorization is needed — a plain EIP-1559 transaction.
+    for deposit in &deposits {
+        assert!(
+            !anvil.code(deposit).is_empty(),
+            "the delegation should persist after the first sweep"
+        );
+    }
+    fund(anvil, cex, usdt, &deposits);
+    let minter_before = anvil.usdt_balance(usdt, minter);
+    let receipt = anvil.send_eip1559(minter_key, chain_id, via_helper, sweep_call);
+    let eip1559 = assert_batch_swept(
+        anvil,
+        &receipt,
+        contracts,
+        minter,
+        &deposits,
+        &principals,
+        minter_before,
+    );
+
+    BatchGas { eip7702, eip1559 }
+}
+
+/// Funds each address with `DEPOSIT_AMOUNT` via a plain ERC-20 transfer from the
+/// CEX.
+fn fund(anvil: &Anvil, cex: &Address, usdt: &Address, deposits: &[Address]) {
+    for deposit in deposits {
         let tx = anvil.send_transaction(
             cex,
             Some(usdt),
@@ -347,42 +453,41 @@ fn sweep_batch(
         );
         assert!(status_ok(&anvil.await_receipt(&tx)), "CEX transfer failed");
     }
+}
 
-    let minter_before = anvil.usdt_balance(usdt, minter);
-
-    let authorizations: Vec<SignedAuthorization> = keys
-        .iter()
-        .map(|key| sign_authorization(key, chain_id, via_helper, 0))
-        .collect();
-    let data = call(
-        "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
-        &[
-            Token::Array(deposits.iter().map(word_addr).collect()),
-            Token::Array(principals.iter().map(encode_principal).collect()),
-            Token::Array(vec![[0u8; 32]; n]),
-            Token::Array(vec![word_addr(usdt)]),
-        ],
+/// Asserts the sweep credited each deposit to the minter via the canonical
+/// helper event, and returns its gas used.
+fn assert_batch_swept(
+    anvil: &Anvil,
+    receipt: &Value,
+    contracts: &Contracts,
+    minter: &Address,
+    deposits: &[Address],
+    principals: &[Principal],
+    minter_before: u128,
+) -> u64 {
+    let Contracts { usdt, helper, .. } = contracts;
+    assert!(status_ok(receipt), "batch sweep reverted");
+    let events = received_events(receipt, helper);
+    assert_eq!(
+        events.len(),
+        deposits.len(),
+        "one ReceivedEthOrErc20 event per deposit"
     );
-    let receipt = anvil.send_eip7702(minter_key, chain_id, via_helper, data, authorizations);
-    assert!(status_ok(&receipt), "batch sweep reverted");
-
-    let events = received_events(&receipt, helper);
-    assert_eq!(events.len(), n, "one ReceivedEthOrErc20 event per deposit");
-    for (event, (deposit, principal)) in events.iter().zip(deposits.iter().zip(&principals)) {
+    for (event, (deposit, principal)) in events.iter().zip(deposits.iter().zip(principals)) {
         assert_eq!(event.owner, *deposit);
         assert_eq!(event.principal, encode_principal(principal));
         assert_eq!(event.amount, DEPOSIT_AMOUNT);
     }
-    for deposit in &deposits {
+    for deposit in deposits {
         assert_eq!(anvil.usdt_balance(usdt, deposit), 0, "deposit not swept");
     }
     assert_eq!(
         anvil.usdt_balance(usdt, minter),
-        minter_before + DEPOSIT_AMOUNT * n as u128,
+        minter_before + DEPOSIT_AMOUNT * deposits.len() as u128,
         "minter did not receive every deposit"
     );
-
-    gas_used(&receipt)
+    gas_used(receipt)
 }
 
 // ---------------------------------------------------------------------------
