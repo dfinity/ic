@@ -9,26 +9,26 @@ use std::hash::{Hash, Hasher};
 /// of the struct with the field present but set to `None`.
 ///
 /// Lifecycle of adding a new field to a struct in a backwards compatible way:
-/// 1. Add a new field to the struct with type `BackwardsCompatibleOption<T, false>`. At this point
-///    the field is *NOT* allowed to have any value other than `None`.
+/// 1. Add a new field to the struct with type `BackwardsCompatible<T, false>`. At this point the
+///    field is *NOT* allowed to have any value other than `None`.
 /// 2. When the change is deployed to all replicas, we can switch the type to
-///    `BackwardsCompatibleOption<T, true>` and the field can begin to be populated.
+///    `BackwardsCompatible<T, true>` and the field can begin to be populated.
 /// 3. When the change is deployed to all replicas, we can replace the type with `T`.
-pub struct BackwardsCompatibleOption<T, const SETTABLE: bool>(Option<T>);
+pub struct BackwardsCompatible<T, const SETTABLE: bool>(Option<T>);
 
-impl<T: Default> Default for BackwardsCompatibleOption<T, false> {
+impl<T: Default> Default for BackwardsCompatible<T, false> {
     fn default() -> Self {
         Self(None)
     }
 }
 
-impl<T: Default> Default for BackwardsCompatibleOption<T, true> {
+impl<T: Default> Default for BackwardsCompatible<T, true> {
     fn default() -> Self {
         Self(Some(T::default()))
     }
 }
 
-impl<T: Hash, const SETTABLE: bool> Hash for BackwardsCompatibleOption<T, SETTABLE> {
+impl<T: Hash, const SETTABLE: bool> Hash for BackwardsCompatible<T, SETTABLE> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         if let Some(value) = &self.0 {
             value.hash(state);
@@ -36,13 +36,13 @@ impl<T: Hash, const SETTABLE: bool> Hash for BackwardsCompatibleOption<T, SETTAB
     }
 }
 
-impl<T> BackwardsCompatibleOption<T, true> {
+impl<T> BackwardsCompatible<T, true> {
     pub const fn new(value: T) -> Self {
         Self(Some(value))
     }
 }
 
-impl<T, const SETTABLE: bool> BackwardsCompatibleOption<T, SETTABLE> {
+impl<T, const SETTABLE: bool> BackwardsCompatible<T, SETTABLE> {
     #[doc(hidden)]
     pub const fn new_for_test_only(value: Option<T>) -> Self {
         Self(value)
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn none_variant_is_ignored_in_hash() {
-        let none = BackwardsCompatibleOption::<u64, false>::new_for_test_only(None);
+        let none = BackwardsCompatible::<u64, false>::new_for_test_only(None);
 
         // Hashing the `None` variant must not write anything to the hasher, so
         // the result must be identical to that of a fresh, untouched hasher.
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn some_variant_hashes_like_inner_value() {
         let value = 42_u64;
-        let some = BackwardsCompatibleOption::<u64, true>::new(value);
+        let some = BackwardsCompatible::<u64, true>::new(value);
 
         assert_eq!(hash_of(&some), hash_of(&value));
     }
@@ -99,13 +99,13 @@ mod tests {
     struct WithUnsettableField {
         a: u64,
         b: String,
-        unsettable_field: BackwardsCompatibleOption<u32, false>,
+        unsettable_field: BackwardsCompatible<u32, false>,
     }
     #[derive(Hash)]
     struct WithSettableField {
         a: u64,
         b: String,
-        settable_field: BackwardsCompatibleOption<u32, true>,
+        settable_field: BackwardsCompatible<u32, true>,
     }
 
     #[test]
@@ -117,7 +117,7 @@ mod tests {
         let with = WithUnsettableField {
             a: 7,
             b: "ic".to_string(),
-            unsettable_field: BackwardsCompatibleOption::default(),
+            unsettable_field: BackwardsCompatible::default(),
         };
 
         // The whole point of the type: introducing a `None` field leaves the
@@ -134,7 +134,7 @@ mod tests {
         let with = WithSettableField {
             a: 7,
             b: "ic".to_string(),
-            settable_field: BackwardsCompatibleOption::default(),
+            settable_field: BackwardsCompatible::default(),
         };
 
         // Introducing a `Some` field changes the hash of the surrounding struct.
@@ -143,21 +143,21 @@ mod tests {
 
     #[test]
     fn default_is_none_when_not_settable() {
-        let opt = BackwardsCompatibleOption::<u64, false>::default();
+        let opt = BackwardsCompatible::<u64, false>::default();
 
         assert_eq!(opt.as_ref(), None);
     }
 
     #[test]
     fn default_is_some_default_when_settable() {
-        let opt = BackwardsCompatibleOption::<u64, true>::default();
+        let opt = BackwardsCompatible::<u64, true>::default();
 
         assert_eq!(opt.as_ref(), Some(&u64::default()));
     }
 
     #[test]
     fn new_wraps_value_in_some() {
-        let opt = BackwardsCompatibleOption::<u64, true>::new(123);
+        let opt = BackwardsCompatible::<u64, true>::new(123);
 
         assert_eq!(opt.as_ref(), Some(&123));
     }
@@ -183,11 +183,10 @@ mod tests {
 
     #[test]
     fn try_from_proto_maps_none_to_none() {
-        let opt_settable =
-            BackwardsCompatibleOption::<Value, true>::try_from_proto(None::<ValidProto>)
-                .expect("conversion of `None` should never fail");
+        let opt_settable = BackwardsCompatible::<Value, true>::try_from_proto(None::<ValidProto>)
+            .expect("conversion of `None` should never fail");
         let opt_not_settable =
-            BackwardsCompatibleOption::<Value, false>::try_from_proto(None::<ValidProto>)
+            BackwardsCompatible::<Value, false>::try_from_proto(None::<ValidProto>)
                 .expect("conversion of `None` should never fail");
 
         // `None` maps to `None` regardless of whether the field is settable or not.
@@ -197,11 +196,10 @@ mod tests {
 
     #[test]
     fn try_from_proto_maps_some_to_converted_value() {
-        let opt_settable =
-            BackwardsCompatibleOption::<Value, true>::try_from_proto(Some(ValidProto(9)))
-                .expect("conversion should succeed");
+        let opt_settable = BackwardsCompatible::<Value, true>::try_from_proto(Some(ValidProto(9)))
+            .expect("conversion should succeed");
         let opt_not_settable =
-            BackwardsCompatibleOption::<Value, false>::try_from_proto(Some(ValidProto(9)))
+            BackwardsCompatible::<Value, false>::try_from_proto(Some(ValidProto(9)))
                 .expect("conversion should succeed");
 
         // `Some(proto)` maps to `Some(converted_value)` regardless of whether the field is
@@ -213,9 +211,9 @@ mod tests {
     #[test]
     fn try_from_proto_propagates_conversion_error() {
         let result_settable =
-            BackwardsCompatibleOption::<Value, true>::try_from_proto(Some(InvalidProto));
+            BackwardsCompatible::<Value, true>::try_from_proto(Some(InvalidProto));
         let result_not_settable =
-            BackwardsCompatibleOption::<Value, false>::try_from_proto(Some(InvalidProto));
+            BackwardsCompatible::<Value, false>::try_from_proto(Some(InvalidProto));
 
         // Conversion errors are propagated regardless of whether the field is settable or not.
         assert!(matches!(
