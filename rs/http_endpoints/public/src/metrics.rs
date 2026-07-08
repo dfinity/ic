@@ -154,7 +154,7 @@ impl HttpHandlerMetrics {
             verify_delegation_duration: metrics_registry.histogram_vec(
                 "replica_http_verify_delegation_duration_seconds",
                 "Duration of verifying delegation, by delegation format.",
-                // 1ms, 2ms, ... 5s
+                // 0.1ms, 0.2ms, ... 5s
                 decimal_buckets(-4, 0),
                 &[LABEL_DELEGATION_FORMAT],
             ),
