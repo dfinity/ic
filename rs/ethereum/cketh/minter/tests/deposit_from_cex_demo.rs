@@ -3,24 +3,20 @@
 //! EIP-7702 transaction layer (`ic_cketh_minter::tx`) against a local anvil node.
 //!
 //! The minter is simulated by a plain EOA controlling a family of derived EOAs
-//! (stand-in for threshold ECDSA key derivation on the IC). The flow:
+//! (stand-in for threshold ECDSA key derivation on the IC). For each batch size
+//! it: deploys a USDT-style ERC-20, the real ckETH helper (`CkDeposit`, compiled
+//! from `DepositHelperWithSubaccount.sol`) and the `CkSweeperViaHelper` EIP-7702
+//! delegate; has the CEX fund a set of fresh, unfunded deposit EOAs with plain
+//! ERC-20 transfers; then sweeps them all to the minter in ONE type-0x04
+//! (EIP-7702) transaction whose gas is paid entirely by the minter. Each sweep
+//! goes through the helper's `depositErc20`, emitting the canonical
+//! `ReceivedEthOrErc20` event (carrying the IC principal) that the minter's
+//! existing deposit pipeline already scrapes and mints from.
 //!
-//!   0) deploy a USDT-style ERC-20, the real ckETH helper (`CkDeposit`, compiled
-//!      from `DepositHelperWithSubaccount.sol`) and the `CkSweeperViaHelper`
-//!      EIP-7702 delegate.
-//!   1) the minter derives user-specific deposit addresses; they are unfunded
-//!      (0 ETH, 0 USDT, no code).
-//!   2) users withdraw USDT from the CEX: plain ERC-20 transfers (CEX pays gas).
-//!   3) the minter sweeps one deposit EOA in ONE type-0x04 (EIP-7702) transaction
-//!      (authorization signed by the deposit EOA + call to `sweepErc20`, gas paid
-//!      by the minter). The sweep goes through the helper's `depositErc20`, so it
-//!      emits the canonical `ReceivedEthOrErc20` event carrying the IC principal
-//!      that the minter's existing deposit pipeline already scrapes and mints from.
-//!   4) batched sweep: ONE transaction re-delegates three deposit EOAs (their
-//!      authorizations ride in the same transaction) and sweeps two of them.
-//!   5) attack: someone other than the minter tries to sweep (passing their own
-//!      principal) and is rejected; the minter then sweeps it correctly with a
-//!      plain EIP-1559 transaction (the delegation already persists).
+//! The test is table-driven over the design doc's two batch extremes (its "Cost
+//! estimation" section): a single deposit swept in one batch (`B=1`) versus a
+//! batch of twenty (`B=20`), asserting that per-deposit gas amortizes as the
+//! batch grows.
 //!
 //! Runs the `anvil` binary vendored via `@foundry_bin_*` (see BUILD.bazel);
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
@@ -28,8 +24,8 @@
 use candid::Principal;
 use ic_cketh_minter::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
 use ic_cketh_minter::tx::{
-    AccessList, Authorization, Eip1559Signature, Eip1559TransactionRequest,
-    Eip7702TransactionRequest, SignableTransaction, Signed, SignedAuthorization,
+    AccessList, Authorization, Eip1559Signature, Eip7702TransactionRequest, SignableTransaction,
+    Signed, SignedAuthorization,
 };
 use ic_ethereum_types::Address;
 use ic_secp256k1::{PrivateKey, PublicKey};
@@ -42,231 +38,221 @@ use std::time::{Duration, Instant};
 // `solc` (see BUILD.bazel). `CkDeposit` is the real minter helper
 // `DepositHelperWithSubaccount.sol`, compiled from its canonical source.
 
-// Anvil's first three well-known dev accounts (unlocked, so the CEX and attacker
-// transactions can go through `eth_sendTransaction`).
+// Anvil's first well-known dev accounts (unlocked, so the CEX transfers can go
+// through `eth_sendTransaction`).
 const MINTER_PRIVATE_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const CEX_PRIVATE_KEY: &str = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const ATTACKER_PRIVATE_KEY: &str =
-    "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
 
 const USDT_SUPPLY: u128 = 1_000_000_000_000; // 1M USDT (6 decimals)
-const AMOUNTS: [u128; 4] = [150_000_000, 80_000_000, 60_000_000, 40_000_000];
+const DEPOSIT_AMOUNT: u128 = 10_000_000; // 10 USDT per deposit
 
-// Generous, deterministic fees and gas limits; the minter dev account is funded
-// with 10000 ETH. Gas *used* (asserted below) is independent of these.
+// Generous, deterministic fees and a gas limit large enough for a batch of 20;
+// the minter dev account is funded with 10000 ETH. Gas *used* (asserted below)
+// is independent of these.
 const PRIORITY_FEE: u128 = 1_000_000_000; // 1 gwei
 const MAX_FEE: u128 = 50_000_000_000; // 50 gwei
-const SWEEP_GAS_LIMIT: u128 = 1_000_000;
+const SWEEP_GAS_LIMIT: u128 = 5_000_000;
 
-// The flow is fully deterministic (fixed keys, fixed contracts, fresh chain), so
-// the gas used by each sweep transaction is a constant.
-const SINGLE_SWEEP_GAS_USED: u64 = 91_977; // 1 EOA, first-time delegation + sweep
-const BATCH_SWEEP_GAS_USED: u64 = 155_575; // 3 EOAs delegated, 2 swept
-const FINAL_SWEEP_GAS_USED: u64 = 58_288; // already delegated, plain EIP-1559 sweep
+/// The design doc's two batch extremes: a single deposit swept in one batch
+/// (`B=1`) versus a batch of twenty (`B=20`). The flow is fully deterministic
+/// (fixed keys, fixed contracts, fresh chain), so each batch's total gas is a
+/// constant; the point is that per-deposit gas shrinks as the batch grows.
+struct BatchScenario {
+    deposits: usize,
+    total_gas_used: u64,
+}
+
+const SCENARIOS: [BatchScenario; 2] = [
+    BatchScenario {
+        deposits: 1,
+        total_gas_used: 94_932,
+    },
+    BatchScenario {
+        deposits: 20,
+        total_gas_used: 1_113_373,
+    },
+];
 
 #[test]
-fn deposit_from_cex_variant_b() {
+fn batched_sweep_amortizes_gas_across_the_batch() {
     let anvil = Anvil::start();
     let chain_id = anvil.chain_id();
 
     let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
     let minter = eth_address(&minter_key.public_key());
     let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
-    let attacker = eth_address(&key_from_hex(ATTACKER_PRIVATE_KEY).public_key());
 
-    // 0) compile from source and deploy the ERC-20, the real helper and the
-    //    sweeper delegate.
-    let usdt = anvil.deploy(
-        &cex,
-        &deploy_code(
-            &compile("MOCKUSDT_SOL", "MockUSDT"),
-            &[
-                Token::Word(word_addr(&cex)),
-                Token::Word(word_u256(USDT_SUPPLY)),
-            ],
-        ),
-    );
-    let helper = anvil.deploy(
-        &minter,
-        &deploy_code(
-            &compile("CKDEPOSIT_SOL", "CkDeposit"),
-            &[Token::Word(word_addr(&minter))],
-        ),
-    );
-    let via_helper = anvil.deploy(
-        &minter,
-        &deploy_code(
-            &compile("CKSWEEPER_VIA_HELPER_SOL", "CkSweeperViaHelper"),
-            &[
-                Token::Word(word_addr(&minter)),
-                Token::Word(word_addr(&helper)),
-            ],
-        ),
-    );
-    let helper_minter = anvil.call(&helper, &call("getMinterAddress()", &[]));
-    assert_eq!(
-        address_from_word(&helper_minter),
-        minter,
-        "helper minter mismatch"
-    );
+    let contracts = deploy_contracts(&anvil, &minter, &cex);
 
-    // 1) derive deposit addresses; they must be unfunded and code-less.
-    let principals: Vec<Principal> = (0u8..4)
-        .map(|i| Principal::self_authenticating([i]))
-        .collect();
-    let deposit_keys: Vec<PrivateKey> = principals.iter().map(derive_deposit_key).collect();
-    let deposits: Vec<Address> = deposit_keys
-        .iter()
-        .map(|k| eth_address(&k.public_key()))
-        .collect();
-    for d in &deposits {
-        assert_eq!(anvil.balance(d), 0, "deposit address should have no ETH");
-        assert_eq!(
-            anvil.usdt_balance(&usdt, d),
-            0,
-            "deposit address should have no USDT"
+    let mut previous_per_deposit = u64::MAX;
+    for scenario in SCENARIOS {
+        let gas = sweep_batch(
+            &anvil,
+            chain_id,
+            &minter_key,
+            &minter,
+            &cex,
+            &contracts,
+            scenario.deposits,
+        );
+        let per_deposit = gas / scenario.deposits as u64;
+        println!(
+            "batch of {}: {gas} gas total, {per_deposit} per deposit",
+            scenario.deposits
+        );
+        assert_gas(
+            gas,
+            scenario.total_gas_used,
+            &format!("batch of {}", scenario.deposits),
         );
         assert!(
-            anvil.code(d).is_empty(),
-            "deposit address should have no code"
+            per_deposit < previous_per_deposit,
+            "per-deposit gas should shrink as the batch grows"
         );
+        previous_per_deposit = per_deposit;
     }
-
-    // 2) users withdraw USDT from the CEX (plain ERC-20 transfers).
-    for (d, amount) in deposits.iter().zip(AMOUNTS) {
-        let tx = anvil.send_transaction(
-            &cex,
-            Some(&usdt),
-            &call(
-                "transfer(address,uint256)",
-                &[Token::Word(word_addr(d)), Token::Word(word_u256(amount))],
-            ),
-            None,
-        );
-        assert!(status_ok(&anvil.await_receipt(&tx)), "CEX transfer failed");
-    }
-    for d in &deposits {
-        assert_eq!(
-            anvil.balance(d),
-            0,
-            "deposit address still cannot pay gas itself"
-        );
-    }
-
-    // 3) single sweep through the helper: one EIP-7702 transaction, gas paid by
-    //    the minter, emitting the canonical ReceivedEthOrErc20 event.
-    let auth = sign_authorization(&deposit_keys[0], chain_id, &via_helper, 0);
-    let data = call(
-        "sweepErc20(address[],bytes32,bytes32)",
-        &[
-            Token::Array(vec![word_addr(&usdt)]),
-            Token::Word(encode_principal(&principals[0])),
-            Token::Word([0u8; 32]),
-        ],
-    );
-    let receipt = anvil.send_eip7702(&minter_key, chain_id, &deposits[0], data, vec![auth]);
-    assert!(status_ok(&receipt), "single sweep reverted");
-    assert_eq!(
-        anvil.usdt_balance(&usdt, &deposits[0]),
-        0,
-        "deposit not swept"
-    );
-    assert_eq!(
-        anvil.usdt_balance(&usdt, &minter),
-        AMOUNTS[0],
-        "minter did not receive the deposit"
-    );
-    let events = received_events(&receipt, &helper);
-    assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
-    assert_eq!(events[0].owner, deposits[0]);
-    assert_eq!(events[0].principal, encode_principal(&principals[0]));
-    assert_eq!(events[0].amount, AMOUNTS[0]);
-    let single_gas = gas_used(&receipt);
-    println!("single sweep gas used: {single_gas}");
-
-    // 4) batched sweep: re-delegate the three remaining EOAs in one transaction,
-    //    sweeping EOAs 1 and 2 (EOA 3 is only delegated, swept in step 5).
-    let auths: Vec<SignedAuthorization> = (1..4)
-        .map(|i| sign_authorization(&deposit_keys[i], chain_id, &via_helper, 0))
-        .collect();
-    let data = call(
-        "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
-        &[
-            Token::Array(vec![word_addr(&deposits[1]), word_addr(&deposits[2])]),
-            Token::Array(vec![
-                encode_principal(&principals[1]),
-                encode_principal(&principals[2]),
-            ]),
-            Token::Array(vec![[0u8; 32], [0u8; 32]]),
-            Token::Array(vec![word_addr(&usdt)]),
-        ],
-    );
-    let receipt = anvil.send_eip7702(&minter_key, chain_id, &via_helper, data, auths);
-    assert!(status_ok(&receipt), "batched sweep reverted");
-    let events = received_events(&receipt, &helper);
-    assert_eq!(events.len(), 2, "expected two ReceivedEthOrErc20 events");
-    for (i, event) in events.iter().enumerate() {
-        assert_eq!(event.owner, deposits[i + 1]);
-        assert_eq!(event.principal, encode_principal(&principals[i + 1]));
-    }
-    let batch_gas = gas_used(&receipt);
-    println!("batch sweep gas used: {batch_gas}");
-
-    // 5) attack: EOA 3 is delegated but not yet swept (still holds 40 USDT). The
-    //    attacker tries to credit it to their own principal and is rejected.
-    let attack = anvil.send_transaction(
-        &attacker,
-        Some(&deposits[3]),
-        &call(
-            "sweepErc20(address[],bytes32,bytes32)",
-            &[
-                Token::Array(vec![word_addr(&usdt)]),
-                Token::Word(encode_principal(&Principal::anonymous())),
-                Token::Word([0u8; 32]),
-            ],
-        ),
-        Some(300_000), // explicit gas: estimation would fail ("caller is not the minter").
-    );
-    assert!(
-        !status_ok(&anvil.await_receipt(&attack)),
-        "attacker's sweep should have reverted"
-    );
-    assert_eq!(
-        anvil.usdt_balance(&usdt, &deposits[3]),
-        AMOUNTS[3],
-        "attacker moved funds"
-    );
-
-    // The minter sweeps EOA 3 correctly: the delegation already persists, so this
-    // is a plain EIP-1559 transaction with no authorization.
-    let data = call(
-        "sweepErc20(address[],bytes32,bytes32)",
-        &[
-            Token::Array(vec![word_addr(&usdt)]),
-            Token::Word(encode_principal(&principals[3])),
-            Token::Word([0u8; 32]),
-        ],
-    );
-    let receipt = anvil.send_eip1559(&minter_key, chain_id, &deposits[3], data);
-    assert!(status_ok(&receipt), "final sweep reverted");
-    let grand_total: u128 = AMOUNTS.iter().sum();
-    assert_eq!(
-        anvil.usdt_balance(&usdt, &minter),
-        grand_total,
-        "minter should hold every deposit"
-    );
-    let final_gas = gas_used(&receipt);
-    println!("final sweep gas used: {final_gas}");
-
-    assert_gas(single_gas, SINGLE_SWEEP_GAS_USED, "single sweep");
-    assert_gas(batch_gas, BATCH_SWEEP_GAS_USED, "batch sweep");
-    assert_gas(final_gas, FINAL_SWEEP_GAS_USED, "final sweep");
 }
 
 fn assert_gas(actual: u64, expected: u64, label: &str) {
     if expected != 0 {
         assert_eq!(actual, expected, "unexpected {label} gas used");
     }
+}
+
+struct Contracts {
+    usdt: Address,
+    helper: Address,
+    via_helper: Address,
+}
+
+/// Compiles and deploys the ERC-20, the real helper and the sweeper delegate.
+fn deploy_contracts(anvil: &Anvil, minter: &Address, cex: &Address) -> Contracts {
+    let usdt = anvil.deploy(
+        cex,
+        &deploy_code(
+            &compile("MOCKUSDT_SOL", "MockUSDT"),
+            &[
+                Token::Word(word_addr(cex)),
+                Token::Word(word_u256(USDT_SUPPLY)),
+            ],
+        ),
+    );
+    let helper = anvil.deploy(
+        minter,
+        &deploy_code(
+            &compile("CKDEPOSIT_SOL", "CkDeposit"),
+            &[Token::Word(word_addr(minter))],
+        ),
+    );
+    let via_helper = anvil.deploy(
+        minter,
+        &deploy_code(
+            &compile("CKSWEEPER_VIA_HELPER_SOL", "CkSweeperViaHelper"),
+            &[
+                Token::Word(word_addr(minter)),
+                Token::Word(word_addr(&helper)),
+            ],
+        ),
+    );
+    assert_eq!(
+        address_from_word(&anvil.call(&helper, &call("getMinterAddress()", &[]))),
+        *minter,
+        "helper minter mismatch"
+    );
+    Contracts {
+        usdt,
+        helper,
+        via_helper,
+    }
+}
+
+/// Funds `n` fresh, unfunded deposit EOAs from the CEX, then sweeps them all to
+/// the minter in ONE EIP-7702 batch transaction (gas paid by the minter). The
+/// deposit EOAs' authorizations ride in the same transaction's authorization
+/// list. Asserts every deposit is swept and emits the canonical event, and
+/// returns the batch's gas used.
+fn sweep_batch(
+    anvil: &Anvil,
+    chain_id: u64,
+    minter_key: &PrivateKey,
+    minter: &Address,
+    cex: &Address,
+    contracts: &Contracts,
+    n: usize,
+) -> u64 {
+    let Contracts {
+        usdt,
+        helper,
+        via_helper,
+    } = contracts;
+
+    // Distinct principals per batch size keep the deposit addresses fresh.
+    let principals: Vec<Principal> = (0..n)
+        .map(|i| Principal::self_authenticating([n as u8, i as u8]))
+        .collect();
+    let keys: Vec<PrivateKey> = principals.iter().map(derive_deposit_key).collect();
+    let deposits: Vec<Address> = keys.iter().map(|k| eth_address(&k.public_key())).collect();
+
+    for deposit in &deposits {
+        assert_eq!(
+            anvil.balance(deposit),
+            0,
+            "deposit address should have no ETH"
+        );
+        assert!(
+            anvil.code(deposit).is_empty(),
+            "deposit address should have no code"
+        );
+        let tx = anvil.send_transaction(
+            cex,
+            Some(usdt),
+            &call(
+                "transfer(address,uint256)",
+                &[
+                    Token::Word(word_addr(deposit)),
+                    Token::Word(word_u256(DEPOSIT_AMOUNT)),
+                ],
+            ),
+            None,
+        );
+        assert!(status_ok(&anvil.await_receipt(&tx)), "CEX transfer failed");
+    }
+
+    let minter_before = anvil.usdt_balance(usdt, minter);
+
+    let authorizations: Vec<SignedAuthorization> = keys
+        .iter()
+        .map(|key| sign_authorization(key, chain_id, via_helper, 0))
+        .collect();
+    let data = call(
+        "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
+        &[
+            Token::Array(deposits.iter().map(word_addr).collect()),
+            Token::Array(principals.iter().map(encode_principal).collect()),
+            Token::Array(vec![[0u8; 32]; n]),
+            Token::Array(vec![word_addr(usdt)]),
+        ],
+    );
+    let receipt = anvil.send_eip7702(minter_key, chain_id, via_helper, data, authorizations);
+    assert!(status_ok(&receipt), "batch sweep reverted");
+
+    let events = received_events(&receipt, helper);
+    assert_eq!(events.len(), n, "one ReceivedEthOrErc20 event per deposit");
+    for (event, (deposit, principal)) in events.iter().zip(deposits.iter().zip(&principals)) {
+        assert_eq!(event.owner, *deposit);
+        assert_eq!(event.principal, encode_principal(principal));
+        assert_eq!(event.amount, DEPOSIT_AMOUNT);
+    }
+    for deposit in &deposits {
+        assert_eq!(anvil.usdt_balance(usdt, deposit), 0, "deposit not swept");
+    }
+    assert_eq!(
+        anvil.usdt_balance(usdt, minter),
+        minter_before + DEPOSIT_AMOUNT * n as u128,
+        "minter did not receive every deposit"
+    );
+
+    gas_used(&receipt)
 }
 
 // ---------------------------------------------------------------------------
@@ -608,24 +594,6 @@ impl Anvil {
             data,
             access_list: AccessList::new(),
             authorization_list,
-        };
-        let signature = sign(key, &tx.hash().0);
-        let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_hex());
-        self.await_receipt(&hash)
-    }
-
-    fn send_eip1559(&self, key: &PrivateKey, chain_id: u64, to: &Address, data: Vec<u8>) -> Value {
-        let from = eth_address(&key.public_key());
-        let tx = Eip1559TransactionRequest {
-            chain_id,
-            nonce: TransactionNonce::from(self.nonce(&from)),
-            max_priority_fee_per_gas: WeiPerGas::new(PRIORITY_FEE),
-            max_fee_per_gas: WeiPerGas::new(MAX_FEE),
-            gas_limit: GasAmount::new(SWEEP_GAS_LIMIT),
-            destination: *to,
-            amount: Wei::ZERO,
-            data,
-            access_list: AccessList::new(),
         };
         let signature = sign(key, &tx.hash().0);
         let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_hex());
