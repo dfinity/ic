@@ -62,16 +62,19 @@ const SWEEP_GAS_LIMIT: u128 = 5_000_000;
 struct BatchScenario {
     deposits: usize,
     total_gas_used: u64,
+    average_gas_used: u64,
 }
 
 const SCENARIOS: [BatchScenario; 2] = [
     BatchScenario {
         deposits: 1,
         total_gas_used: 94_932,
+        average_gas_used: 94_932,
     },
     BatchScenario {
         deposits: 20,
         total_gas_used: 1_113_373,
+        average_gas_used: 55_668,
     },
 ];
 
@@ -105,7 +108,12 @@ fn batched_sweep_amortizes_gas_across_the_batch() {
         assert_gas(
             gas,
             scenario.total_gas_used,
-            &format!("batch of {}", scenario.deposits),
+            &format!("batch of {} total", scenario.deposits),
+        );
+        assert_gas(
+            per_deposit,
+            scenario.average_gas_used,
+            &format!("batch of {} average", scenario.deposits),
         );
         assert!(
             per_deposit < previous_per_deposit,
