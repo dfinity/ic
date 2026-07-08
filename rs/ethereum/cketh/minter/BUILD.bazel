@@ -256,15 +256,15 @@ rust_test(
         "//:solc",
         # Contract sources compiled at test time by the vendored solc.
         "DepositHelperWithSubaccount.sol",
-        "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol",
-        "//rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol",
+        "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
+        "tests/deposit_from_cex_demo/MockUSDT.sol",
     ],
     edition = "2021",
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
         "CKDEPOSIT_SOL": "$(rootpath DepositHelperWithSubaccount.sol)",
-        "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:CkSweeperViaHelper.sol)",
-        "MOCKUSDT_SOL": "$(rootpath //rs/ethereum/cketh/docs/deposit_from_cex_demo/contracts:MockUSDT.sol)",
+        "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperViaHelper.sol)",
+        "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
     },
     deps = [

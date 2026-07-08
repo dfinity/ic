@@ -1,8 +1,0 @@
-package(default_visibility = ["//visibility:public"])
-
-# Solidity sources compiled at test time by
-# //rs/ethereum/cketh/minter:deposit_from_cex_demo_test.
-exports_files([
-    "MockUSDT.sol",
-    "CkSweeperViaHelper.sol",
-])
