@@ -2,8 +2,8 @@ benches:
   bench_post_upgrade:
     total:
       calls: 1
-      instructions: 871319906
+      instructions: 871401291
       heap_increase: 222
       stable_memory_increase: 0
     scopes: {}
-version: 0.4.1
+version: 0.6.0
