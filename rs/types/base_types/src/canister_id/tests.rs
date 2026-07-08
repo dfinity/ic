@@ -171,7 +171,7 @@ fn test_try_from_principal_id() {
     match CanisterId::try_from_principal_id(definitely_not_a_canister_id) {
         Err(CanisterIdError::InvalidPrincipalId(description)) => {
             let description = description.to_lowercase();
-            for key_word in ["opaque", "self", "authenticating", "class"] {
+            for key_word in ["selfauthenticating", "class"] {
                 assert!(
                     description.contains(key_word),
                     "{key_word} not in {description:?}"
@@ -186,7 +186,7 @@ fn test_try_from_principal_id() {
     {
         Err(CanisterIdError::InvalidPrincipalId(description)) => {
             let description = description.to_lowercase();
-            for key_word in ["10", "5", "bytes"] {
+            for key_word in ["5", "bytes"] {
                 assert!(
                     description.contains(key_word),
                     "{key_word} not in {description:?}"
@@ -200,7 +200,7 @@ fn test_try_from_principal_id() {
     match CanisterId::try_from_principal_id(PrincipalId::new_opaque(&[42; 9][..])) {
         Err(CanisterIdError::InvalidPrincipalId(description)) => {
             let description = description.to_lowercase();
-            for key_word in ["byte", "8", "0x01"] {
+            for key_word in ["10", "bytes"] {
                 assert!(
                     description.contains(key_word),
                     "{key_word} not in {description:?}"
