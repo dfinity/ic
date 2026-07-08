@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-/// A helper struct used for introducing new fields to structs which need to be backwards compatible.
-/// The main difference w.r.t. an [`Option`] is that its [`Hash`] implementation ignores the `None`
-/// variant, which means that the hash of the struct without the field would be the same as the hash
-/// of the struct with the field present but set to `None`.
+/// A helper struct for introducing new fields to structs that must stay backwards compatible.
+/// Compared to [`Option`], its [`Hash`] implementation:
+///  - ignores `None` (so adding an unset field preserves the surrounding struct hash), and
+///  - hashes `Some(v)` like `v` (so later replacing it with `T` preserves hashes).
 ///
 /// Lifecycle of adding a new field to a struct in a backwards compatible way:
 /// 1. Add a new field to the struct with type `BackwardsCompatible<T, false>`. At this point the
@@ -48,10 +48,17 @@ impl<T, const SETTABLE: bool> BackwardsCompatible<T, SETTABLE> {
         Self(value)
     }
 
+    /// Allows to access the inner value, if set. Note that this could still be `Some(T)` even if
+    /// `SETTABLE` is `false` in case the replica version was rolled back from a version that
+    /// populated the field.
     pub const fn as_ref(&self) -> Option<&T> {
         self.0.as_ref()
     }
 
+    /// Converts an optional protobuf value into a `BackwardsCompatible` value. Even if `SETTABLE`
+    /// is `false`, if the protobuf value is `Some`, the inner value will be converted and stored in
+    /// the `BackwardsCompatible` value. This is to allow for the case where a replica version that
+    /// populated the field is rolled back to a version that does not populate the field.
     pub fn try_from_proto<Proto: TryInto<T, Error = ProxyDecodeError>>(
         proto: Option<Proto>,
     ) -> Result<Self, ProxyDecodeError> {
