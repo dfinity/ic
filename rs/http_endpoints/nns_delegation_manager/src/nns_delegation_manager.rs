@@ -59,11 +59,6 @@ const DELEGATION_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
 const DELEGATION_RETRY_MAX_BACKOFF_SECONDS: u64 = 15;
 
-// Unlike the send/receive timeouts below (which we deliberately lower in test mode), the
-// connection timeout uses the same value in production and in tests. Establishing the TLS
-// connection to the in-process mock server can take a while under load, and a low connection
-// timeout would spuriously fire before the connection is established and mask the
-// send/receive/DNS-resolution errors that the tests assert on.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[cfg(not(test))]
