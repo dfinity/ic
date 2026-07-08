@@ -1232,7 +1232,7 @@ fn test_icrc3_get_blocks() {
     for (local_index, (actual_block, expected_block)) in actual_res
         .blocks
         .into_iter()
-        .zip(expected_res.blocks.into_iter())
+        .zip(expected_res.blocks)
         .enumerate()
     {
         check_old_vs_icrc3_blocks(
@@ -1285,7 +1285,7 @@ fn test_icrc3_get_blocks() {
     for (block_index, (actual_block, expected_block)) in actual_archived_blocks
         .blocks
         .into_iter()
-        .zip(expected_archived_blocks.blocks.into_iter())
+        .zip(expected_archived_blocks.blocks)
         .enumerate()
     {
         check_old_vs_icrc3_blocks(block_index, expected_block.clone(), actual_block.clone());
