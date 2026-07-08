@@ -1,4 +1,5 @@
 use crate::{
+    MAIN_DERIVATION_PATH,
     eth_logs::LedgerSubaccount,
     eth_rpc_client::{
         AnyOf, MIN_ATTACHED_CYCLES, MinByKey, MultiCallError, NoReduction, ToReducedWithStrategy,
@@ -24,6 +25,7 @@ use evm_rpc_types::{
 };
 use futures::future::join_all;
 use ic_canister_log::log;
+use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -309,7 +311,12 @@ async fn sign_transactions_batch() {
     let results = join_all(
         transactions_batch
             .into_iter()
-            .map(|(withdrawal_id, tx)| async move { (withdrawal_id, tx.sign().await) }),
+            .map(|(withdrawal_id, tx)| async move {
+                (
+                    withdrawal_id,
+                    crate::tx::sign(tx, DerivationPath::new(MAIN_DERIVATION_PATH)).await,
+                )
+            }),
     )
     .await;
     let mut errors = Vec::new();
@@ -352,7 +359,7 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     let rpc_client = read_state(rpc_client);
     let results = join_all(transactions_to_send.iter().map(async |tx| {
         rpc_client
-            .send_raw_transaction(tx.raw_transaction_hex())
+            .send_raw_transaction(tx.raw_transaction_bytes())
             .with_cycles(MIN_ATTACHED_CYCLES)
             .try_send()
             .await
