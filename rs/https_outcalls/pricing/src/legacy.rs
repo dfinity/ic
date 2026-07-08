@@ -49,8 +49,11 @@ impl BudgetTracker for LegacyTracker {
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
-        // Legacy pricing does not perform cycles accounting, so no cycles
-        // are ever refunded.
+        // Legacy pricing performs no per-replica cycles accounting, so the
+        // replica reports having spent nothing (the default). Legacy refunds are
+        // handled separately (the full legacy fee is charged upfront), so the
+        // per-replica refund derived from this receipt must not be applied to
+        // legacy-priced requests.
         CanisterHttpPaymentReceipt::default()
     }
 }

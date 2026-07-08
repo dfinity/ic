@@ -1098,15 +1098,15 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_non_replicated() {
+fn validate_payload_fails_for_spent_exceeding_allowance_non_replicated() {
     let delegated_node_id = node_test_id(1);
     let callback_id = CallbackId::from(99);
 
     let (response, metadata) = test_response_and_metadata(callback_id.get());
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
-    add_signer_with_excess_refund_to_proof(&mut proof, delegated_node_id);
+    add_signer_with_excess_spent_to_proof(&mut proof, delegated_node_id);
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         4,
         vec![(
             callback_id,
@@ -1121,17 +1121,17 @@ fn validate_payload_fails_for_refund_exceeding_allowance_non_replicated() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_fully_replicated() {
+fn validate_payload_fails_for_spent_exceeding_allowance_fully_replicated() {
     let num_nodes = 4;
     let callback_id = CallbackId::from(99);
 
     let (response, metadata) = test_response_and_metadata(callback_id.get());
     let mut proof = response_and_metadata_to_proof(&response, &metadata);
     for node in 0..num_nodes as u64 {
-        add_signer_with_excess_refund_to_proof(&mut proof, node_test_id(node));
+        add_signer_with_excess_spent_to_proof(&mut proof, node_test_id(node));
     }
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, request_context(Replication::FullyReplicated))],
         default_validation_context(),
@@ -1143,18 +1143,18 @@ fn validate_payload_fails_for_refund_exceeding_allowance_fully_replicated() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_divergence() {
+fn validate_payload_fails_for_spent_exceeding_allowance_divergence() {
     let callback_id = CallbackId::from(99);
 
     let (_response, metadata) = test_response_and_metadata(callback_id.get());
     let payload = CanisterHttpPayload {
         divergence_responses: vec![CanisterHttpResponseDivergence {
-            shares: vec![share_with_excess_refund(0, &metadata)],
+            shares: vec![share_with_excess_spent(0, &metadata)],
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         4,
         vec![(callback_id, request_context(Replication::FullyReplicated))],
         default_validation_context(),
@@ -1163,7 +1163,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_divergence() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
+fn validate_payload_fails_for_spent_exceeding_allowance_flexible_response() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(99);
@@ -1177,13 +1177,13 @@ fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
             callback_id,
             responses: vec![FlexibleCanisterHttpResponseWithProof {
                 response,
-                proof: share_with_excess_refund(0, &metadata),
+                proof: share_with_excess_spent(0, &metadata),
             }],
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, flexible_request_context(committee, 1, 4))],
         default_validation_context(),
@@ -1192,7 +1192,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_flexible_response() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
+fn validate_payload_fails_for_spent_exceeding_allowance_too_many_rejects() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(99);
@@ -1209,13 +1209,13 @@ fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
             callback_id,
             reject_responses: vec![FlexibleCanisterHttpResponseWithProof {
                 response,
-                proof: share_with_excess_refund(0, &metadata),
+                proof: share_with_excess_spent(0, &metadata),
             }],
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, flexible_request_context(committee, 1, 4))],
         default_validation_context(),
@@ -1224,7 +1224,7 @@ fn validate_payload_fails_for_refund_exceeding_allowance_too_many_rejects() {
 }
 
 #[test]
-fn validate_payload_fails_for_refund_exceeding_allowance_responses_too_large() {
+fn validate_payload_fails_for_spent_exceeding_allowance_responses_too_large() {
     let num_nodes = 4;
     let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(99);
@@ -1233,16 +1233,16 @@ fn validate_payload_fails_for_refund_exceeding_allowance_responses_too_large() {
     let payload = CanisterHttpPayload {
         flexible_errors: vec![FlexibleCanisterHttpError::ResponsesTooLarge {
             callback_id,
-            all_seen_shares: vec![share_with_excess_refund(0, &metadata)],
+            all_seen_shares: vec![share_with_excess_spent(0, &metadata)],
             // Match the committee size and context `min_responses` so validation
-            // reaches the per-share refund check.
+            // reaches the per-share spent check.
             total_requests: num_nodes as u32,
             min_responses: 2,
         }],
         ..Default::default()
     };
 
-    assert_payload_rejected_for_excess_refund(
+    assert_payload_rejected_for_excess_spent(
         num_nodes,
         vec![(callback_id, flexible_request_context(committee, 2, 4))],
         default_validation_context(),
@@ -1686,17 +1686,17 @@ pub(crate) fn add_signer_to_proof(proof: &mut CanisterHttpResponseWithConsensus,
     );
 }
 
-/// A payment receipt whose refund exceeds the default (zero) per-replica
+/// A payment receipt whose spent cycles exceed the default (zero) per-replica
 /// allowance.
 fn receipt_exceeding_allowance() -> CanisterHttpPaymentReceipt {
     CanisterHttpPaymentReceipt {
-        refund: Cycles::new(1),
+        spent: Cycles::new(1),
     }
 }
 
 /// Builds a share for `metadata` signed by `signer_node` whose payment receipt
-/// claims a refund exceeding the default per-replica allowance.
-fn share_with_excess_refund(
+/// claims spent cycles exceeding the default per-replica allowance.
+fn share_with_excess_spent(
     signer_node: u64,
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseShare {
@@ -1710,8 +1710,8 @@ fn share_with_excess_refund(
 }
 
 /// Inserts a fake signature for `signer` together with a payment receipt whose
-/// refund exceeds the default per-replica allowance into an aggregated proof.
-fn add_signer_with_excess_refund_to_proof(
+/// spent cycles exceed the default per-replica allowance into an aggregated proof.
+fn add_signer_with_excess_spent_to_proof(
     proof: &mut CanisterHttpResponseWithConsensus,
     signer: NodeId,
 ) {
@@ -1726,8 +1726,8 @@ fn add_signer_with_excess_refund_to_proof(
 
 /// Configures a payload builder with `num_nodes` nodes and the given request
 /// `contexts`, validates `payload`, and asserts that it is rejected because a
-/// payment receipt's refund exceeds the per-replica allowance.
-fn assert_payload_rejected_for_excess_refund(
+/// payment receipt's spent cycles exceed the per-replica allowance.
+fn assert_payload_rejected_for_excess_spent(
     num_nodes: usize,
     contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
     validation_context: ValidationContext,
@@ -1745,12 +1745,12 @@ fn assert_payload_rejected_for_excess_refund(
             validation_result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
-                        refund,
+                    InvalidCanisterHttpPayloadReason::SpentExceedsAllowance {
+                        spent,
                         per_replica_allowance,
                     },
                 ),
-            )) if refund == receipt_exceeding_allowance().refund
+            )) if spent == receipt_exceeding_allowance().spent
                 && per_replica_allowance == Cycles::new(0)
         );
     });

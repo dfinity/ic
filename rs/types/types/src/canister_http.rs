@@ -1047,15 +1047,17 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[derive(Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpPaymentReceipt {
-    /// The amount of cycles, out of the per-replica allowance, that the
-    /// replica did not use and wishes to refund to the caller.
-    pub refund: Cycles,
+    /// The amount of cycles, out of the per-replica allowance, that the replica
+    /// consumed. The cycles to refund to the caller are derived downstream as
+    /// `per_replica_allowance - spent`. Never exceeds the per-replica allowance:
+    /// the producer caps it and consensus rejects any receipt above it.
+    pub spent: Cycles,
 }
 
 impl CountBytes for CanisterHttpPaymentReceipt {
     fn count_bytes(&self) -> usize {
-        let Self { refund } = self;
-        size_of_val(refund)
+        let Self { spent } = self;
+        size_of_val(spent)
     }
 }
 
@@ -1128,8 +1130,8 @@ impl CanisterHttpResponseReceipt {
         &self.metadata.replica_version
     }
 
-    pub fn refund(&self) -> Cycles {
-        self.payment_receipt.refund
+    pub fn spent(&self) -> Cycles {
+        self.payment_receipt.spent
     }
 }
 

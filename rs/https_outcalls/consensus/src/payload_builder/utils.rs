@@ -75,16 +75,23 @@ pub(crate) fn check_response_consistency(
     Ok(())
 }
 
-/// Enforces the per-replica refund allowance from the request context: the
-/// `refund` claimed in the payment receipt must never exceed the
-/// `per_replica_allowance` derived from the request's context.
-pub(crate) fn check_refund_allowance(
+/// Enforces the per-replica allowance from the request context: the amount the
+/// replica claims to have `spent` in the payment receipt must never exceed the
+/// `per_replica_allowance` derived from the request's context. This bounds a
+/// Byzantine node's claim, which could otherwise be as large as `u128::MAX` and
+/// corrupt the downstream cycles accounting.
+///
+/// NOTE: on a free cost schedule the allowance is zero, so this forces the
+/// reported spend to zero. Recording a nonzero per-replica spend on free
+/// subnets (e.g. for user-space cost accounting) would require bounding against
+/// a cost-based maximum instead of the allowance.
+pub(crate) fn check_spent_allowance(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    if receipt.refund > per_replica_allowance {
-        return Err(InvalidCanisterHttpPayloadReason::RefundExceedsAllowance {
-            refund: receipt.refund,
+    if receipt.spent > per_replica_allowance {
+        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance {
+            spent: receipt.spent,
             per_replica_allowance,
         });
     }
@@ -198,7 +205,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership,
-/// and the per-replica refund allowance.
+/// and the per-replica allowance.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -210,7 +217,7 @@ pub(crate) fn validate_response_share(
     seen_signers: &mut HashSet<NodeId>,
     per_replica_allowance: Cycles,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_refund_allowance(&share.content.payment_receipt, per_replica_allowance)?;
+    check_spent_allowance(&share.content.payment_receipt, per_replica_allowance)?;
 
     if share.content.id() != callback_id {
         return Err(
