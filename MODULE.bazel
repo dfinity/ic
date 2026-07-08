@@ -419,12 +419,31 @@ http_file(
 
 # Latest stable solc, used by //rs/ethereum/cketh/minter:deposit_from_cex_demo_test
 # to compile the demo contracts (pinned exactly for reproducible bytecode/gas).
+# One binary per host platform; the consuming target selects the right one.
+# The macosx-amd64 download is a universal (x86_64 + arm64) Mach-O, so it runs
+# natively on both Intel and Apple Silicon Macs.
 http_file(
-    name = "solc_0_8_35",
+    name = "solc_0_8_35_linux_amd64",
     downloaded_file_path = "solc",
     executable = True,
     sha256 = "fa8ac9a32d301ad023a36ee5a29f8e291fe3200c60244e43c142539e82a617f4",
     url = "https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.35+commit.47b9dedd",
+)
+
+http_file(
+    name = "solc_0_8_35_linux_arm64",
+    downloaded_file_path = "solc",
+    executable = True,
+    sha256 = "4218d2936d2b582bc5751dac548f97b36a8652b21ded52b60a1c1259143ee0e4",
+    url = "https://binaries.soliditylang.org/linux-arm64/solc-linux-arm64-v0.8.35+commit.47b9dedd",
+)
+
+http_file(
+    name = "solc_0_8_35_macosx_amd64",
+    downloaded_file_path = "solc",
+    executable = True,
+    sha256 = "6e432580d973cae74c869ef4f737529e73fec5b200dce3c08d5e76c4a6b19159",
+    url = "https://binaries.soliditylang.org/macosx-amd64/solc-macosx-amd64-v0.8.35+commit.47b9dedd",
 )
 
 # foundry release binaries (anvil/cast/forge/chisel) used to run a local
