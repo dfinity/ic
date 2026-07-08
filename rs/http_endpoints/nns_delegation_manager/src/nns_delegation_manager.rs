@@ -1270,6 +1270,8 @@ mod tests {
         )
         .await;
 
+        // Since the API BN is configured with a domain that does not resolve, we expect the
+        // connection to fail with a name resolution error, which indicates that we indeed tried to
         // connect to the API BN instead of an NNS node.
         assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
     }
