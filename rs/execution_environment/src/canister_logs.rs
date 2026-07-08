@@ -9,7 +9,7 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::CanisterState;
-use ic_types::canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES;
+use ic_types::canister_log::MAX_FETCH_CANISTER_LOGS_RESULT_BYTES;
 use ic_types::messages::CanisterCall;
 use ic_types::{NumBytes, NumInstructions, PrincipalId};
 use std::collections::VecDeque;
@@ -25,10 +25,10 @@ pub(crate) fn fetch_canister_logs(
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> Result<CanisterManagerResponse, CanisterManagerError> {
     // The response (and hence the fee) is only known after reading the logs, so
-    // reject up front any call that could not afford the worst-case response:
-    // the maximum number of records, which is `RESULT_MAX_SIZE` divided by the
+    // reject up front any call that could not afford the worst-case response: the
+    // maximum number of records, which is the result-size limit divided by the
     // minimum per-record size. This ensures we never do the read work for free.
-    let max_record_count = MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64
+    let max_record_count = MAX_FETCH_CANISTER_LOGS_RESULT_BYTES as u64
         / std::mem::size_of::<CanisterLogRecord>() as u64;
     let max_fee = cycles_account_manager
         .management_canister_cost(
