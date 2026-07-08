@@ -63,6 +63,7 @@
 // executions).
 
 pub mod artifact;
+pub mod backwards_compatibility;
 pub mod batch;
 pub mod canister_http;
 pub mod canister_log;
