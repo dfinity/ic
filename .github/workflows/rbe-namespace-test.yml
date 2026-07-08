@@ -66,7 +66,7 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
-            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
+            --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
             --remote_default_exec_properties=container-image="$worker_image"
 
@@ -84,9 +84,11 @@ jobs:
             --keep_going
           )
 
-          bazel "${bazel_args[@]}" --test_tag_filters=-local_system_test //...
+          bazel "${bazel_args[@]}" //...
 
       - name: Bazel Test with RBE (only system-tests)
+        # Run even if the previous "no system-tests" step failed, but not when the job is cancelled.
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
