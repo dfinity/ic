@@ -24,7 +24,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, CanisterLog, NumInstructions, ingress::WasmResult};
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
@@ -92,7 +92,10 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
+fn setup_env_with_cost_schedule(
+    replicated_inter_canister_log_fetch: FlagStatus,
+    cost_schedule: CanisterCyclesCostSchedule,
+) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
@@ -110,7 +113,15 @@ fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachi
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
+        .with_cost_schedule(cost_schedule)
         .build()
+}
+
+fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
+    setup_env_with_cost_schedule(
+        replicated_inter_canister_log_fetch,
+        CanisterCyclesCostSchedule::Normal,
+    )
 }
 
 fn setup_env() -> StateMachine {
@@ -2627,6 +2638,40 @@ fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
     // The helper attaches no cycles as payment — no fetch fee is required.
     let records = fetch_log_records_intercanister(&env, canister_a, canister_b);
     assert_eq!(records.len(), 1);
+}
+
+#[test]
+fn test_fetch_canister_logs_rejected_from_free_cost_schedule_subnet() {
+    // On a subnet with a free cost schedule the caller pays no message
+    // transmission fee and cannot attach cycles, so `fetch_canister_logs` (which
+    // charges no cycles fee) rejects the call rather than perform the read work
+    // entirely for free.
+    let env = setup_env_with_cost_schedule(FlagStatus::Enabled, CanisterCyclesCostSchedule::Free);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![PrincipalId::new_user_test_id(42)])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    let result = fetch_canister_logs_intercanister(&env, canister_a, canister_b);
+    let reject_message = get_reject(result);
+    assert!(
+        reject_message.contains("normal cost schedule"),
+        "Expected a free-cost-schedule rejection, got: {reject_message}"
+    );
 }
 
 #[test]

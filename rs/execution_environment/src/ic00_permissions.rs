@@ -3,6 +3,7 @@ use ic_management_canister_types_private::Method as Ic00Method;
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 /// Keeps track of when an IC00 method is allowed to be executed.
 #[derive(Eq, PartialEq)]
@@ -13,6 +14,13 @@ pub struct Ic00MethodPermissions {
     allow_remote_subnet_sender: bool,
     /// Call initiated only by the NNS subnet.
     allow_only_nns_subnet_sender: bool,
+    /// Call initiated by a sender on a subnet with a "free" cost schedule.
+    ///
+    /// Such senders are not charged the message transmission fee and cannot
+    /// attach cycles, so methods that perform (otherwise caller-funded) work on
+    /// their behalf without a cycles fee (e.g. `fetch_canister_logs`) disallow
+    /// them to avoid doing that work entirely for free.
+    allow_free_cost_schedule_sender: bool,
     /// Due to the substantial complexity of this call, it must be counted toward the round limit.
     counts_toward_round_limit: bool,
     /// As this call modifies the canister state (changes to the cycles balance are ignored here),
@@ -30,6 +38,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -61,20 +70,34 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::FetchCanisterLogs
-            | Ic00Method::ReadCanisterSnapshotMetadata
-            | Ic00Method::ReadCanisterSnapshotData => Self {
+            // `fetch_canister_logs` charges no cycles fee, so it must not be
+            // called by a sender that is not charged the message transmission
+            // fee either (a subnet on a "free" cost schedule).
+            Ic00Method::FetchCanisterLogs => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: false,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
+            Ic00Method::ReadCanisterSnapshotMetadata | Ic00Method::ReadCanisterSnapshotData => {
+                Self {
+                    method,
+                    allow_remote_subnet_sender: true,
+                    allow_only_nns_subnet_sender: false,
+                    allow_free_cost_schedule_sender: true,
+                    counts_toward_round_limit: true,
+                    does_not_run_on_aborted_canister: false,
+                    installs_code: false,
+                }
+            }
             Ic00Method::UploadChunk
             | Ic00Method::TakeCanisterSnapshot
             | Ic00Method::LoadCanisterSnapshot
@@ -83,6 +106,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
@@ -96,6 +120,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
@@ -107,6 +132,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -115,6 +141,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: true,
                 does_not_run_on_aborted_canister: true,
                 // Only one install code message allowed at a time.
@@ -124,6 +151,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
@@ -133,6 +161,7 @@ impl Ic00MethodPermissions {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
+                allow_free_cost_schedule_sender: true,
                 counts_toward_round_limit: false,
                 does_not_run_on_aborted_canister: true,
                 installs_code: false,
@@ -148,6 +177,7 @@ impl Ic00MethodPermissions {
                 Ok(sender_subnet_id) => {
                     self.verify_caller_is_remote_subnet(sender_subnet_id, state)?;
                     self.verify_caller_is_nns_subnet(msg.sender(), sender_subnet_id, state)?;
+                    self.verify_caller_is_not_on_free_cost_schedule(sender_subnet_id, state)?;
                     Ok(())
                 }
                 Err(err) => Err(err),
@@ -195,6 +225,37 @@ impl Ic00MethodPermissions {
                 format!(
                     "{} is called by {}. It can only be called by NNS.",
                     self.method, sender_id
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Checks that the caller is on a subnet known to be on a normal (i.e. not
+    /// "free") cost schedule, for methods that disallow free-schedule senders.
+    ///
+    /// A missing topology entry for the sender's subnet is treated as a failure
+    /// too: we cannot confirm the sender is charged for the call, so we reject
+    /// rather than risk doing the work for free.
+    fn verify_caller_is_not_on_free_cost_schedule(
+        &self,
+        sender_subnet_id: SubnetId,
+        state: &ReplicatedState,
+    ) -> Result<(), UserError> {
+        if self.allow_free_cost_schedule_sender {
+            return Ok(());
+        }
+        if state
+            .metadata
+            .network_topology
+            .get_cost_schedule(&sender_subnet_id)
+            != Some(CanisterCyclesCostSchedule::Normal)
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "{} can only be called by a canister on a subnet with a normal cost schedule.",
+                    self.method
                 ),
             ));
         }
