@@ -388,7 +388,7 @@ fn fetch_canister_logs_response_within_limit() {
     // worst case for the encoded size is therefore the fewest/largest records, so we
     // sweep record sizes up to a single near-maximal record and assert the encoded
     // `FetchCanisterLogsResponse` fits within the result cap plus a 4 KiB page for
-    // Candid framing (the bound that `ring_buffer` asserts fits in an inter-canister
+    // Candid framing (the bound that `ic-types` asserts fits in an inter-canister
     // message). The sizes are kept large enough that a full buffer exceeds
     // `RESULT_MAX_SIZE`: the ring buffer holds only a few hundred records (its index
     // table is one page), so tiny records could never fill it past the cap.
