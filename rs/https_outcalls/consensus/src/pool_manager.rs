@@ -483,11 +483,12 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["validate_shares"])
             .start_timer();
 
-        let active_contexts = &self
-            .latest_state()
+        let state = self.latest_state();
+        let active_contexts = &state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
+        let cost_schedule = state.get_own_cost_schedule();
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -519,8 +520,12 @@ impl CanisterHttpPoolManagerImpl {
                 };
 
                 // Invalidate shares whose claimed spent cycles exceed what a
-                // single replica is allowed to consume.
-                if share.content.spent() > context.refund_status.per_replica_allowance {
+                // single replica is allowed to consume. Free subnets charge
+                // nothing, so their spend is not bounded (it may exceed the zero
+                // allowance) and is used only for cost accounting.
+                if cost_schedule != CanisterCyclesCostSchedule::Free
+                    && share.content.spent() > context.refund_status.per_replica_allowance
+                {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
                         "Spent cycles are greater than replica allowance".to_string(),

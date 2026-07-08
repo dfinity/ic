@@ -16,7 +16,7 @@ use ic_types::{
     messages::CallbackId,
     signature::{BasicSigBatchEntry, BasicSignature},
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     mem::size_of,
@@ -75,21 +75,20 @@ pub(crate) fn check_response_consistency(
     Ok(())
 }
 
-/// Enforces the per-replica allowance from the request context: the amount the
-/// replica claims to have `spent` in the payment receipt must never exceed the
-/// `per_replica_allowance` derived from the request's context. This bounds a
-/// Byzantine node's claim, which could otherwise be as large as `u128::MAX` and
-/// corrupt the downstream cycles accounting.
+/// Enforces the per-replica allowance from the request context: on a subnet
+/// that charges (a Normal cost schedule), the amount the replica claims to have
+/// `spent` in the payment receipt must never exceed the `per_replica_allowance`
+/// derived from the request's context.
 ///
-/// NOTE: on a free cost schedule the allowance is zero, so this forces the
-/// reported spend to zero. Recording a nonzero per-replica spend on free
-/// subnets (e.g. for user-space cost accounting) would require bounding against
-/// a cost-based maximum instead of the allowance.
+/// On a free cost schedule nothing is charged, so a replica may legitimately
+/// report a spend exceeding the (zero) allowance for cost accounting; there are
+/// no cycles at stake, so the spend is not bounded here.
 pub(crate) fn check_spent_allowance(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    if receipt.spent > per_replica_allowance {
+    if cost_schedule != CanisterCyclesCostSchedule::Free && receipt.spent > per_replica_allowance {
         return Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance {
             spent: receipt.spent,
             per_replica_allowance,
@@ -157,6 +156,7 @@ pub(crate) fn validate_flexible_response_with_proof(
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     per_replica_allowance: Cycles,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
     if response_with_proof.response.id != callback_id {
         return Err(
@@ -173,6 +173,7 @@ pub(crate) fn validate_flexible_response_with_proof(
         flex_committee,
         seen_signers,
         per_replica_allowance,
+        cost_schedule,
     )?;
 
     let calculated_hash = crypto_hash(&response_with_proof.response);
@@ -216,8 +217,13 @@ pub(crate) fn validate_response_share(
     flex_committee: &BTreeSet<NodeId>,
     seen_signers: &mut HashSet<NodeId>,
     per_replica_allowance: Cycles,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_spent_allowance(&share.content.payment_receipt, per_replica_allowance)?;
+    check_spent_allowance(
+        &share.content.payment_receipt,
+        per_replica_allowance,
+        cost_schedule,
+    )?;
 
     if share.content.id() != callback_id {
         return Err(
@@ -533,4 +539,67 @@ pub(crate) fn find_flexible_result(
 
     // 4. Not enough data yet
     FlexibleFindResult::Pending
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
+        CanisterHttpPaymentReceipt {
+            spent: Cycles::new(spent),
+        }
+    }
+
+    #[test]
+    fn spent_within_allowance_is_accepted_when_charging() {
+        assert!(
+            check_spent_allowance(
+                &receipt(50),
+                Cycles::new(100),
+                CanisterCyclesCostSchedule::Normal,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn spent_exceeding_allowance_is_rejected_when_charging() {
+        assert!(matches!(
+            check_spent_allowance(
+                &receipt(101),
+                Cycles::new(100),
+                CanisterCyclesCostSchedule::Normal,
+            ),
+            Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance { .. })
+        ));
+    }
+
+    #[test]
+    fn spent_exceeding_zero_allowance_is_rejected_on_normal_schedule() {
+        // A zero allowance on a charging subnet (e.g. the caller paid exactly the
+        // base fee) must still reject any nonzero spend.
+        assert!(matches!(
+            check_spent_allowance(
+                &receipt(1),
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Normal,
+            ),
+            Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance { .. })
+        ));
+    }
+
+    #[test]
+    fn spent_exceeding_allowance_is_accepted_on_free_schedule() {
+        // Free subnets may report a spend exceeding the (zero) allowance for cost
+        // accounting; nothing is charged, so it is not bounded.
+        assert!(
+            check_spent_allowance(
+                &receipt(1_000_000),
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Free,
+            )
+            .is_ok()
+        );
+    }
 }

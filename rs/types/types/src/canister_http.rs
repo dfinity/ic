@@ -1048,9 +1048,8 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpPaymentReceipt {
     /// The amount of cycles, out of the per-replica allowance, that the replica
-    /// consumed. The cycles to refund to the caller are derived downstream as
-    /// `per_replica_allowance - spent`. Never exceeds the per-replica allowance:
-    /// the producer caps it and consensus rejects any receipt above it.
+    /// consumed. On free subnets it may exceed the (zero) allowance, since it is
+    /// only used for cost accounting and no cycles are at stake.
     pub spent: Cycles,
 }
 
