@@ -24,8 +24,8 @@
 use candid::Principal;
 use ic_cketh_minter::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
 use ic_cketh_minter::tx::{
-    AccessList, Authorization, Eip1559Signature, Eip1559TransactionRequest,
-    Eip7702TransactionRequest, SignableTransaction, Signed, SignedAuthorization,
+    AccessList, Authorization, Eip1559TransactionRequest, Eip7702TransactionRequest,
+    SignableTransaction, Signed, SignedAuthorization, TransactionSignature,
 };
 use ic_ethereum_types::Address;
 use ic_secp256k1::{PrivateKey, PublicKey};
@@ -395,7 +395,7 @@ fn eth_address(public_key: &PublicKey) -> Address {
     Address::new(address)
 }
 
-fn sign(key: &PrivateKey, digest: &[u8; 32]) -> Eip1559Signature {
+fn sign(key: &PrivateKey, digest: &[u8; 32]) -> TransactionSignature {
     let signature = key.sign_digest_with_ecdsa(digest);
     let recovery_id = key
         .public_key()
@@ -404,7 +404,7 @@ fn sign(key: &PrivateKey, digest: &[u8; 32]) -> Eip1559Signature {
     let (mut r, mut s) = ([0u8; 32], [0u8; 32]);
     r.copy_from_slice(&signature[..32]);
     s.copy_from_slice(&signature[32..]);
-    Eip1559Signature {
+    TransactionSignature {
         signature_y_parity: recovery_id.is_y_odd(),
         r: ethnum::u256::from_be_bytes(r),
         s: ethnum::u256::from_be_bytes(s),
@@ -713,7 +713,7 @@ impl Anvil {
             authorization_list,
         };
         let signature = sign(key, &tx.hash().0);
-        let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_hex());
+        let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_bytes());
         self.await_receipt(&hash)
     }
 
@@ -731,7 +731,7 @@ impl Anvil {
             access_list: AccessList::new(),
         };
         let signature = sign(key, &tx.hash().0);
-        let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_hex());
+        let hash = self.send_raw(&Signed::from((tx, signature)).raw_transaction_bytes());
         self.await_receipt(&hash)
     }
 
