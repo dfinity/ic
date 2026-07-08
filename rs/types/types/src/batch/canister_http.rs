@@ -174,7 +174,10 @@ impl CanisterHttpPayload {
         responses.len()
             + divergence_responses.len()
             + flexible_responses.len()
-            + flexible_errors.len()
+            + flexible_errors
+                .iter()
+                .filter(|error| !matches!(error, FlexibleCanisterHttpError::Timeout { .. }))
+                .count()
     }
 
     /// Returns true, if this is an empty payload

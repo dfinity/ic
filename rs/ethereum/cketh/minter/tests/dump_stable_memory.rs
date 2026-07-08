@@ -174,7 +174,7 @@ fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequ
         ),
     };
 
-    let signature = ic_cketh_minter::tx::Eip1559Signature {
+    let signature = ic_cketh_minter::tx::TransactionSignature {
         signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
         r: map_ethers_u256(decoded_sig.r),
         s: map_ethers_u256(decoded_sig.s),

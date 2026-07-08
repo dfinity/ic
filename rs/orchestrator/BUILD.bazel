@@ -36,6 +36,7 @@ rust_library(
         "//rs/ic_os/sev/guest",
         "//rs/interfaces",
         "//rs/interfaces/registry",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/nns/constants",
