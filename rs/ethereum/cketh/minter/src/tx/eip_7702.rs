@@ -157,7 +157,7 @@ impl SignableTransaction for Eip7702TransactionRequest {
     }
 
     fn rlp_inner(&self, rlp: &mut RlpStream) {
-        debug_assert!(
+        assert!(
             !self.authorization_list.is_empty(),
             "BUG: EIP-7702 transaction must have a non-empty authorization_list"
         );

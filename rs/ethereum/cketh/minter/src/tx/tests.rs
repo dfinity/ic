@@ -346,12 +346,15 @@ mod eip7702 {
         assert_eq!(recovered.as_bytes(), authority.as_ref());
     }
 
-    // Known-answer recovery vector reproducing the viem signAuthorization/recoverAuthorizationAddress
-    // fixture: the anvil account 0 key
-    // 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-    // -> 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 signs the authorization
-    // { chain_id: 1, delegate: wagmi test contract, nonce: 0 } and recovers to that address.
-    // https://github.com/wevm/viem/blob/main/src/utils/authorization/recoverAuthorizationAddress.test.ts
+    // Known-answer recovery vector reproducing the viem recoverAuthorizationAddress fixture: the
+    // anvil account 0 key signs the authorization { chain_id: 1, delegate: wagmi test contract,
+    // nonce: 0 } and recovers to that account's address. All values are pinned to viem commit
+    // 349eb2eae6a84d0a7ea9e73b81b51f3fe2f17df8:
+    // - fixture: test/src/utils/authorization/recoverAuthorizationAddress.test.ts (imports the
+    //   constants below; the literal values are not inlined there)
+    // - accounts[0].privateKey 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    //   and accounts[0].address 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266: test/src/constants.ts L1-6
+    // - wagmiContractConfig.address 0xFBA3912Ca04dd458c843e2EE08967fC04f3579c2: test/src/abis.ts L1252-1253
     #[test]
     fn should_recover_viem_authority_from_signed_authorization() {
         use crate::address::ecdsa_public_key_to_address;
