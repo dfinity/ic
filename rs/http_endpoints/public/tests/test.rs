@@ -816,7 +816,7 @@ fn can_retrieve_subnet_metrics(
                         ..SubnetTopology::default()
                     },
                 );
-                let routing_table = topology
+                topology
                     .routing_table_mut()
                     .insert(
                         CanisterIdRange {
