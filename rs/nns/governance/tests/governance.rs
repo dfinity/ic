@@ -10957,8 +10957,7 @@ async fn test_known_neurons() {
         },
     ];
     let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
-    sorted_response_known_neurons
-        .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
+    sorted_response_known_neurons.sort_by_key(|a| a.id.as_ref().unwrap().id);
     assert_eq!(sorted_response_known_neurons, expected_known_neurons);
 
     // This proposal tries to name neuron 1 with the already existing name "Two", this should fail.
@@ -10985,8 +10984,7 @@ async fn test_known_neurons() {
 
     // Check that the state is the same as before the last proposal.
     let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
-    sorted_response_known_neurons
-        .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
+    sorted_response_known_neurons.sort_by_key(|a| a.id.as_ref().unwrap().id);
     assert_eq!(sorted_response_known_neurons, expected_known_neurons);
 
     // Update the name of neuron 2.

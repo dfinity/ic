@@ -1615,7 +1615,7 @@ where
     let mut prev_hash = None;
 
     // Check that the hash chain is correct.
-    for block in archived_blocks.into_iter().chain(resp.blocks.into_iter()) {
+    for block in archived_blocks.into_iter().chain(resp.blocks) {
         assert_eq!(
             prev_hash,
             get_phash(&block).expect("cannot get the hash of the previous block")
@@ -2069,7 +2069,7 @@ pub fn icrc1_test_block_transformation<T, Tokens>(
     for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
         .blocks
         .into_iter()
-        .zip(resp_post_upgrade.blocks.into_iter())
+        .zip(resp_post_upgrade.blocks)
     {
         assert!(
             equivalent_values(&block_pre_upgrade, &block_post_upgrade),
