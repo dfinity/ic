@@ -31,6 +31,8 @@
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
 
 use candid::Principal;
+use ethers_core::abi::{ParamType, Token, decode, encode};
+use ethers_core::types::{Address as EthAddress, U256};
 use ic_cketh_minter::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
 use ic_cketh_minter::tx::{
     AccessList, Authorization, Eip1559TransactionRequest, Eip7702TransactionRequest,
@@ -235,10 +237,7 @@ fn a_non_minter_cannot_sweep_a_deposit() {
         Some(&usdt),
         &call(
             "transfer(address,uint256)",
-            &[
-                Token::Word(word_addr(&deposit)),
-                Token::Word(word_u256(DEPOSIT_AMOUNT)),
-            ],
+            &[address_token(&deposit), uint_token(DEPOSIT_AMOUNT)],
         ),
         None,
     );
@@ -254,7 +253,7 @@ fn a_non_minter_cannot_sweep_a_deposit() {
             Token::Array(vec![]),
             Token::Array(vec![]),
             Token::Array(vec![]),
-            Token::Array(vec![word_addr(&usdt)]),
+            Token::Array(vec![address_token(&usdt)]),
         ],
     );
     assert!(
@@ -286,9 +285,9 @@ fn a_non_minter_cannot_sweep_a_deposit() {
         &call(
             "sweepErc20(address[],bytes32,bytes32)",
             &[
-                Token::Array(vec![word_addr(&usdt)]),
-                Token::Word(encode_principal(&Principal::anonymous())),
-                Token::Word([0u8; 32]),
+                Token::Array(vec![address_token(&usdt)]),
+                bytes32_token(encode_principal(&Principal::anonymous())),
+                bytes32_token([0u8; 32]),
             ],
         ),
         Some(300_000),
@@ -308,9 +307,9 @@ fn a_non_minter_cannot_sweep_a_deposit() {
     let sweep = call(
         "sweepErc20(address[],bytes32,bytes32)",
         &[
-            Token::Array(vec![word_addr(&usdt)]),
-            Token::Word(encode_principal(&principal)),
-            Token::Word([0u8; 32]),
+            Token::Array(vec![address_token(&usdt)]),
+            bytes32_token(encode_principal(&principal)),
+            bytes32_token([0u8; 32]),
         ],
     );
     let receipt = anvil.send_eip1559(&minter_key, chain_id, &deposit, sweep);
@@ -420,8 +419,8 @@ fn attested_sweep_rejects_a_forged_attestation() {
     let delegate_only = call(
         "sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])",
         &[
-            Token::TupleArray(vec![]),
-            Token::Array(vec![word_addr(&usdt)]),
+            Token::Array(vec![]),
+            Token::Array(vec![address_token(&usdt)]),
         ],
     );
     assert!(
@@ -455,12 +454,12 @@ fn attested_sweep_rejects_a_forged_attestation() {
         &call(
             "sweepErc20(address[],bytes32,bytes32,bytes32,bytes32,uint8)",
             &[
-                Token::Array(vec![word_addr(&usdt)]),
-                Token::Word(encode_principal(&attacker_principal)),
-                Token::Word([0u8; 32]),
-                Token::Word(forged.r),
-                Token::Word(forged.s),
-                Token::Word(word_u256(forged.v as u128)),
+                Token::Array(vec![address_token(&usdt)]),
+                bytes32_token(encode_principal(&attacker_principal)),
+                bytes32_token([0u8; 32]),
+                bytes32_token(forged.r),
+                bytes32_token(forged.s),
+                uint_token(forged.v as u128),
             ],
         ),
         Some(300_000),
@@ -481,12 +480,12 @@ fn attested_sweep_rejects_a_forged_attestation() {
     let sweep = call(
         "sweepErc20(address[],bytes32,bytes32,bytes32,bytes32,uint8)",
         &[
-            Token::Array(vec![word_addr(&usdt)]),
-            Token::Word(encode_principal(&principal)),
-            Token::Word([0u8; 32]),
-            Token::Word(attestation.r),
-            Token::Word(attestation.s),
-            Token::Word(word_u256(attestation.v as u128)),
+            Token::Array(vec![address_token(&usdt)]),
+            bytes32_token(encode_principal(&principal)),
+            bytes32_token([0u8; 32]),
+            bytes32_token(attestation.r),
+            bytes32_token(attestation.s),
+            uint_token(attestation.v as u128),
         ],
     );
     let receipt = anvil.send_eip1559(&attacker_key, chain_id, &deposit, sweep);
@@ -512,38 +511,35 @@ fn deploy_contracts(anvil: &Anvil, minter: &Address, cex: &Address) -> Contracts
         cex,
         &deploy_code(
             &compile("MOCKUSDT_SOL", "MockUSDT"),
-            &[
-                Token::Word(word_addr(cex)),
-                Token::Word(word_u256(USDT_SUPPLY)),
-            ],
+            &[address_token(cex), uint_token(USDT_SUPPLY)],
         ),
     );
     let helper = anvil.deploy(
         minter,
         &deploy_code(
             &compile("CKDEPOSIT_SOL", "CkDeposit"),
-            &[Token::Word(word_addr(minter))],
+            &[address_token(minter)],
         ),
     );
     let via_helper = anvil.deploy(
         minter,
         &deploy_code(
             &compile("CKSWEEPER_VIA_HELPER_SOL", "CkSweeperViaHelper"),
-            &[
-                Token::Word(word_addr(minter)),
-                Token::Word(word_addr(&helper)),
-            ],
+            &[address_token(minter), address_token(&helper)],
         ),
     );
     let attested = anvil.deploy(
         minter,
         &deploy_code(
             &compile("CKSWEEPER_ATTESTED_SOL", "CkSweeperAttested"),
-            &[Token::Word(word_addr(&helper))],
+            &[address_token(&helper)],
         ),
     );
     assert_eq!(
-        address_from_word(&anvil.call(&helper, &call("getMinterAddress()", &[]))),
+        to_address(decode_one(
+            ParamType::Address,
+            &anvil.call(&helper, &call("getMinterAddress()", &[])),
+        )),
         *minter,
         "helper minter mismatch"
     );
@@ -604,10 +600,15 @@ fn sweep_batch(
     let sweep_call = call(
         "sweepErc20Batch(address[],bytes32[],bytes32[],address[])",
         &[
-            Token::Array(deposits.iter().map(word_addr).collect()),
-            Token::Array(principals.iter().map(encode_principal).collect()),
-            Token::Array(vec![[0u8; 32]; n]),
-            Token::Array(vec![word_addr(usdt)]),
+            Token::Array(deposits.iter().map(address_token).collect()),
+            Token::Array(
+                principals
+                    .iter()
+                    .map(|p| bytes32_token(encode_principal(p)))
+                    .collect(),
+            ),
+            Token::Array(vec![bytes32_token([0u8; 32]); n]),
+            Token::Array(vec![address_token(usdt)]),
         ],
     );
 
@@ -669,10 +670,7 @@ fn fund(anvil: &Anvil, cex: &Address, usdt: &Address, deposits: &[Address]) {
             Some(usdt),
             &call(
                 "transfer(address,uint256)",
-                &[
-                    Token::Word(word_addr(deposit)),
-                    Token::Word(word_u256(DEPOSIT_AMOUNT)),
-                ],
+                &[address_token(deposit), uint_token(DEPOSIT_AMOUNT)],
             ),
             None,
         );
@@ -755,28 +753,25 @@ fn sweep_batch_attested(
 
     // Each deposit key attests (as the minter would, via threshold ECDSA) to its
     // own IC account; the attestations become the batch's SweepItem structs.
-    let items: Vec<Vec<[u8; 32]>> = keys
+    let items: Vec<Token> = keys
         .iter()
         .zip(&deposits)
         .zip(&principals)
         .map(|((key, deposit), principal)| {
             let a = attest(key, chain_id, helper, principal, &[0u8; 32]);
-            vec![
-                word_addr(deposit),
-                encode_principal(principal),
-                [0u8; 32], // subaccount
-                a.r,
-                a.s,
-                word_u256(a.v as u128),
-            ]
+            Token::Tuple(vec![
+                address_token(deposit),
+                bytes32_token(encode_principal(principal)),
+                bytes32_token([0u8; 32]), // subaccount
+                bytes32_token(a.r),
+                bytes32_token(a.s),
+                uint_token(a.v as u128),
+            ])
         })
         .collect();
     let sweep_call = call(
         "sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])",
-        &[
-            Token::TupleArray(items),
-            Token::Array(vec![word_addr(usdt)]),
-        ],
+        &[Token::Array(items), Token::Array(vec![address_token(usdt)])],
     );
 
     // First sweep: an EIP-7702 transaction (submitted by the relayer) whose
@@ -840,12 +835,19 @@ fn attest(
     principal: &Principal,
     subaccount: &[u8; 32],
 ) -> Attestation {
-    let mut preimage = Vec::new();
-    preimage.extend_from_slice(b"ck-deposit-owner");
-    preimage.extend_from_slice(&word_u256(chain_id as u128)); // block.chainid, as uint256
-    preimage.extend_from_slice(helper.as_ref());
-    preimage.extend_from_slice(&encode_principal(principal));
-    preimage.extend_from_slice(subaccount);
+    // The packed preimage mirrors the contract's
+    // `abi.encodePacked("ck-deposit-owner", block.chainid, HELPER, principal,
+    // subaccount)`: fixed-length fields, no padding between them.
+    let mut chain_id_bytes = [0u8; 32];
+    chain_id_bytes[24..].copy_from_slice(&chain_id.to_be_bytes());
+    let preimage: Vec<u8> = [
+        b"ck-deposit-owner".as_ref(),
+        &chain_id_bytes,
+        helper.as_ref(),
+        &encode_principal(principal),
+        subaccount,
+    ]
+    .concat();
     let signature = sign(key, &Keccak256::hash(&preimage));
     Attestation {
         r: signature.r.to_be_bytes(),
@@ -916,62 +918,37 @@ fn sign_authorization(
 }
 
 // ---------------------------------------------------------------------------
-// Minimal ABI encoding / event decoding (no eth library needed).
+// ABI encoding / decoding via ethers-core (ethabi).
 // ---------------------------------------------------------------------------
 
-enum Token {
-    Word([u8; 32]),
-    /// A dynamic array of single 32-byte values (e.g. `address[]`, `bytes32[]`).
-    Array(Vec<[u8; 32]>),
-    /// A dynamic array of static tuples (e.g. `SweepItem[]`); each inner vec holds
-    /// the tuple's field words in order.
-    TupleArray(Vec<Vec<[u8; 32]>>),
-}
-
-fn abi(tokens: &[Token]) -> Vec<u8> {
-    let head_len = 32 * tokens.len();
-    let (mut head, mut tail) = (Vec::new(), Vec::new());
-    for token in tokens {
-        match token {
-            Token::Word(word) => head.extend_from_slice(word),
-            Token::Array(elements) => {
-                head.extend_from_slice(&word_u256((head_len + tail.len()) as u128));
-                tail.extend_from_slice(&word_u256(elements.len() as u128));
-                elements.iter().for_each(|e| tail.extend_from_slice(e));
-            }
-            Token::TupleArray(elements) => {
-                head.extend_from_slice(&word_u256((head_len + tail.len()) as u128));
-                tail.extend_from_slice(&word_u256(elements.len() as u128));
-                for element in elements {
-                    element.iter().for_each(|word| tail.extend_from_slice(word));
-                }
-            }
-        }
-    }
-    [head, tail].concat()
-}
-
+/// A function call: the 4-byte selector followed by the ABI-encoded arguments.
 fn call(signature: &str, tokens: &[Token]) -> Vec<u8> {
     let selector = &Keccak256::hash(signature.as_bytes())[..4];
-    [selector, &abi(tokens)].concat()
+    [selector, &encode(tokens)].concat()
 }
 
-fn word_addr(address: &Address) -> [u8; 32] {
-    let mut word = [0u8; 32];
-    word[12..].copy_from_slice(address.as_ref());
-    word
+fn address_token(address: &Address) -> Token {
+    Token::Address(EthAddress::from_slice(address.as_ref()))
 }
 
-fn word_u256(value: u128) -> [u8; 32] {
-    let mut word = [0u8; 32];
-    word[16..].copy_from_slice(&value.to_be_bytes());
-    word
+fn uint_token(value: u128) -> Token {
+    Token::Uint(U256::from(value))
 }
 
-fn address_from_word(word: &[u8]) -> Address {
-    let mut address = [0u8; 20];
-    address.copy_from_slice(&word[12..32]);
-    Address::new(address)
+fn bytes32_token(value: [u8; 32]) -> Token {
+    Token::FixedBytes(value.to_vec())
+}
+
+/// Decodes a single ABI-encoded return value.
+fn decode_one(param: ParamType, data: &[u8]) -> Token {
+    decode(&[param], data)
+        .expect("ABI decode failed")
+        .pop()
+        .unwrap()
+}
+
+fn to_address(token: Token) -> Address {
+    Address::new(token.into_address().unwrap().0)
 }
 
 /// The bytes32 expected by the helper: byte 0 is the principal length, followed
@@ -1021,7 +998,7 @@ fn compile(source_var: &str, contract: &str) -> Vec<u8> {
 }
 
 fn deploy_code(bytecode: &[u8], constructor_args: &[Token]) -> Vec<u8> {
-    [bytecode, &abi(constructor_args)].concat()
+    [bytecode, &encode(constructor_args)].concat()
 }
 
 struct ReceivedEvent {
@@ -1049,10 +1026,19 @@ fn received_events(receipt: &Value, helper: &Address) -> Vec<ReceivedEvent> {
         .map(|log| {
             let topics = log["topics"].as_array().unwrap();
             let data = from_hex(log["data"].as_str().unwrap());
+            // `amount` and `subaccount` are the non-indexed event fields; the
+            // indexed `owner` and `principal` come from the topics.
+            let amount = decode_one(ParamType::Uint(256), &data[..32])
+                .into_uint()
+                .unwrap()
+                .as_u128();
             ReceivedEvent {
-                owner: address_from_word(&from_hex(topics[2].as_str().unwrap())),
+                owner: to_address(decode_one(
+                    ParamType::Address,
+                    &from_hex(topics[2].as_str().unwrap()),
+                )),
                 principal: from_hex(topics[3].as_str().unwrap()).try_into().unwrap(),
-                amount: u128_from_be(&data[16..32]),
+                amount,
             }
         })
         .collect()
@@ -1143,11 +1129,11 @@ impl Anvil {
     }
 
     fn usdt_balance(&self, usdt: &Address, who: &Address) -> u128 {
-        let out = self.call(
-            usdt,
-            &call("balanceOf(address)", &[Token::Word(word_addr(who))]),
-        );
-        u128_from_be(&out[16..32])
+        let out = self.call(usdt, &call("balanceOf(address)", &[address_token(who)]));
+        decode_one(ParamType::Uint(256), &out)
+            .into_uint()
+            .unwrap()
+            .as_u128()
     }
 
     fn send_transaction(
@@ -1294,8 +1280,4 @@ fn address_from_hex(hex_str: &str) -> Address {
 
 fn hex_to_u64(value: &Value) -> u64 {
     u64::from_str_radix(value.as_str().unwrap().trim_start_matches("0x"), 16).unwrap()
-}
-
-fn u128_from_be(bytes: &[u8]) -> u128 {
-    u128::from_be_bytes(bytes.try_into().unwrap())
 }

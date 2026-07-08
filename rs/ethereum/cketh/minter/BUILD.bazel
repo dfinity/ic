@@ -275,6 +275,7 @@ rust_test(
         "//packages/ic-ethereum-types",
         "//packages/ic-secp256k1",
         "@crate_index//:candid",
+        "@crate_index//:ethers-core",
         "@crate_index//:ethnum",
         "@crate_index//:hex",
         "@crate_index//:ic-sha3",
