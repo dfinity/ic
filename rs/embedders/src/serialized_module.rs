@@ -13,7 +13,7 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::{DiskBytes, NumInstructions, methods::WasmMethod};
 use ic_wasm_types::WasmEngineError;
-use nix::sys::mman::{MapFlags, ProtFlags, mmap};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
@@ -259,8 +259,15 @@ impl OnDiskSerializedModule {
         }) as *mut u8;
         // Safety: allocation was made with length `mmap_size`.
         let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
-        bincode::deserialize::<InitialStateData>(data)
-            .expect("Error parsing initial state data file")
+        let initial_state_data = bincode::deserialize::<InitialStateData>(data)
+            .expect("Error parsing initial state data file");
+        // Safety: `mmap_ptr`/`mmap_size` are the pointer and length returned by
+        // the `mmap` above; `data` is not used past this point.
+        unsafe {
+            munmap(mmap_ptr as *mut std::ffi::c_void, mmap_size)
+                .expect("Unable to unmap initial state data file");
+        }
+        initial_state_data
     }
 }
 
@@ -426,5 +433,68 @@ mod test {
                 }
             });
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn initial_state_data_does_not_leak_mappings() {
+        let module = SerializedModule {
+            bytes: Arc::new(SerializedModuleBytes(vec![0u8; 4096])),
+            exported_functions: BTreeSet::new(),
+            data_segments: vec![(0usize, vec![7u8; 4096 * 8])].into_iter().collect(),
+            wasm_metadata: WasmMetadata::new(std::collections::BTreeMap::new()),
+            compilation_cost: NumInstructions::from(0),
+            imports_details: WasmImportsDetails {
+                imports_call_cycles_add: false,
+                imports_canister_cycle_balance: false,
+                imports_msg_cycles_available: false,
+                imports_msg_cycles_refunded: false,
+                imports_msg_cycles_accept: false,
+                imports_mint_cycles: false,
+            },
+            is_wasm64: false,
+        };
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut bytes_path: PathBuf = dir.path().into();
+        let mut data_path: PathBuf = dir.path().into();
+        bytes_path.push("bytes");
+        data_path.push("data");
+        let on_disk =
+            OnDiskSerializedModule::from_serialized_module(module, &bytes_path, &data_path);
+
+        let map_size = {
+            let len = on_disk.initial_state_data.metadata().unwrap().len() as usize;
+            len.div_ceil(4096) * 4096
+        };
+        let count_leaked_maps = || {
+            std::fs::read_to_string("/proc/self/maps")
+                .unwrap()
+                .lines()
+                .filter(|line| {
+                    line.split_once(' ')
+                        .and_then(|(range, _)| range.split_once('-'))
+                        .and_then(|(s, e)| {
+                            Some(
+                                usize::from_str_radix(e, 16).ok()?
+                                    - usize::from_str_radix(s, 16).ok()?,
+                            )
+                        })
+                        == Some(map_size)
+                })
+                .count()
+        };
+
+        let before = count_leaked_maps();
+        const ITERS: usize = 500;
+        for _ in 0..ITERS {
+            let _ = on_disk.initial_state_data();
+        }
+        let after = count_leaked_maps();
+
+        assert!(
+            after <= before + 2,
+            "initial_state_data() leaked mappings: {before} -> {after} over {ITERS} calls"
+        );
     }
 }
