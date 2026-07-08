@@ -52,7 +52,8 @@ fn test_canister_ids() -> Vec<CanisterId> {
 }
 
 /// `eq`, `cmp` and `partial_cmp` must be indistinguishable from comparing the
-/// underlying `PrincipalId`s and equal IDs must hash equally.
+/// underlying `PrincipalId`s; and equal / different IDs must have equal /
+/// different hashes.
 #[test]
 fn eq_cmp_hash_match_underlying_principal() {
     let ids = test_canister_ids();
@@ -70,13 +71,11 @@ fn eq_cmp_hash_match_underlying_principal() {
             );
             assert_eq!(a.partial_cmp(b), Some(a.cmp(b)));
 
-            if a == b {
-                assert_eq!(
-                    hash_of(a),
-                    hash_of(b),
-                    "equal IDs {a} and {b} have different hashes"
-                );
-            }
+            assert_eq!(
+                a == b,
+                hash_of(a) == hash_of(b),
+                "eq disagrees with hash equality for {a} vs {b}"
+            );
         }
     }
 }
