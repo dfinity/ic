@@ -213,7 +213,6 @@ async fn load_root_delegation(
 
         match try_fetch_delegation_from_nns(
             config,
-            CONNECTION_TIMEOUT,
             log,
             rt_handle,
             subnet_id,
@@ -248,7 +247,6 @@ async fn load_root_delegation(
 /// Returns a BoxError if any step of the process fails.
 async fn try_fetch_delegation_from_nns(
     config: &Config,
-    connection_timeout: Duration,
     log: &ReplicaLogger,
     rt_handle: &tokio::runtime::Handle,
     subnet_id: SubnetId,
@@ -296,7 +294,7 @@ async fn try_fetch_delegation_from_nns(
     let registry_version = registry_client.get_latest_version();
 
     let mut request_sender = timeout(
-        connection_timeout,
+        CONNECTION_TIMEOUT,
         connect(
             log.clone(),
             rt_handle,
@@ -308,7 +306,7 @@ async fn try_fetch_delegation_from_nns(
     )
     .await
     .map_err(|_| {
-        format!("Timed out while connecting to the node after {connection_timeout:?}")
+        format!("Timed out while connecting to the node after {CONNECTION_TIMEOUT:?}")
     })??;
 
     let uri = format!("/api/v2/subnet/{nns_subnet_id}/read_state");
@@ -1266,7 +1264,6 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
-            CONNECTION_TIMEOUT,
             &no_op_logger(),
             &rt_handle,
             CLOUD_ENGINE_SUBNET_ID,
@@ -1304,10 +1301,6 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
-            // Use a short connection timeout here: this test deliberately makes the mock server
-            // hang before accepting the connection, so we want the connection timeout to fire
-            // quickly instead of waiting for the full `CONNECTION_TIMEOUT`.
-            Duration::from_secs(1),
             &no_op_logger(),
             &rt_handle,
             APP_SUBNET_ID,
@@ -1333,7 +1326,6 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
-            CONNECTION_TIMEOUT,
             &no_op_logger(),
             &rt_handle,
             APP_SUBNET_ID,
@@ -1359,7 +1351,6 @@ mod tests {
 
         let response = try_fetch_delegation_from_nns(
             &Config::default(),
-            CONNECTION_TIMEOUT,
             &no_op_logger(),
             &rt_handle,
             APP_SUBNET_ID,
