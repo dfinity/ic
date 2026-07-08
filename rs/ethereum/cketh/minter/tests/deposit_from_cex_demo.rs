@@ -21,6 +21,12 @@
 //! amortizes as the batch grows and that the already-delegated EIP-1559 sweep is
 //! cheaper than the EIP-7702 one.
 //!
+//! The same batch scenarios run against a second, `CkSweeperAttested` delegate
+//! matching the proposed design where sweeping is *permissionless* but each sweep
+//! carries a minter attestation (a deposit-key signature binding the address to
+//! its IC account). Those sweeps are submitted by a non-minter relayer, and a
+//! separate test shows a forged attestation is rejected.
+//!
 //! Runs the `anvil` binary vendored via `@foundry_bin_*` (see BUILD.bazel);
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
 
@@ -47,6 +53,11 @@ const MINTER_PRIVATE_KEY: &str = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5e
 const CEX_PRIVATE_KEY: &str = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const ATTACKER_PRIVATE_KEY: &str =
     "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
+// A fourth dev account standing in for an arbitrary third party (relayer): it
+// submits the permissionless attested sweeps, demonstrating the sender need not
+// be the minter.
+const RELAYER_PRIVATE_KEY: &str =
+    "7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6";
 
 const USDT_SUPPLY: u128 = 1_000_000_000_000; // 1M USDT (6 decimals)
 const DEPOSIT_AMOUNT: u128 = 10_000_000; // 10 USDT per deposit
@@ -98,6 +109,33 @@ const SCENARIOS: [BatchScenario; 3] = [
         eip7702_average_gas_used: 55_668,
         eip1559_total_gas_used: 753_373,
         eip1559_average_gas_used: 37_668,
+    },
+];
+
+/// The same scenarios for the permissionless attested sweeper. Its per-sweep cost
+/// is slightly higher than the caller-gated variant: the attestation adds an
+/// `ecrecover` plus the signature calldata (r/s/v) per deposit.
+const ATTESTED_SCENARIOS: [BatchScenario; 3] = [
+    BatchScenario {
+        deposits: 1,
+        eip7702_total_gas_used: 98_000,
+        eip7702_average_gas_used: 98_000,
+        eip1559_total_gas_used: 66_320,
+        eip1559_average_gas_used: 66_320,
+    },
+    BatchScenario {
+        deposits: 10,
+        eip7702_total_gas_used: 609_431,
+        eip7702_average_gas_used: 60_943,
+        eip1559_total_gas_used: 429_431,
+        eip1559_average_gas_used: 42_943,
+    },
+    BatchScenario {
+        deposits: 20,
+        eip7702_total_gas_used: 1_192_900,
+        eip7702_average_gas_used: 59_645,
+        eip1559_total_gas_used: 832_900,
+        eip1559_average_gas_used: 41_645,
     },
 ];
 
@@ -185,6 +223,7 @@ fn a_non_minter_cannot_sweep_a_deposit() {
         usdt,
         helper,
         via_helper,
+        ..
     } = deploy_contracts(&anvil, &minter, &cex);
 
     // A single funded deposit address.
@@ -283,13 +322,191 @@ fn a_non_minter_cannot_sweep_a_deposit() {
     assert_eq!(events[0].principal, encode_principal(&principal));
 }
 
+/// The proposed permissionless variant: the same batch sweeps, but through the
+/// attested sweeper and submitted by a relayer that is NOT the minter.
+#[test]
+fn attested_sweep_is_permissionless_and_amortizes_gas() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let relayer_key = key_from_hex(RELAYER_PRIVATE_KEY);
+    assert_ne!(
+        eth_address(&relayer_key.public_key()),
+        minter,
+        "the relayer must not be the minter"
+    );
+
+    let contracts = deploy_contracts(&anvil, &minter, &cex);
+
+    let mut previous_average = u64::MAX;
+    for scenario in ATTESTED_SCENARIOS {
+        let gas = sweep_batch_attested(
+            &anvil,
+            chain_id,
+            &relayer_key,
+            &minter,
+            &cex,
+            &contracts,
+            scenario.deposits,
+        );
+        let deposits = scenario.deposits as u64;
+        let eip7702_average = gas.eip7702 / deposits;
+        let eip1559_average = gas.eip1559 / deposits;
+        println!(
+            "attested batch of {}: EIP-7702 {} ({eip7702_average}/deposit), EIP-1559 {} ({eip1559_average}/deposit)",
+            scenario.deposits, gas.eip7702, gas.eip1559
+        );
+        assert_gas(
+            gas.eip7702,
+            scenario.eip7702_total_gas_used,
+            &format!("attested batch of {} EIP-7702 total", scenario.deposits),
+        );
+        assert_gas(
+            eip7702_average,
+            scenario.eip7702_average_gas_used,
+            &format!("attested batch of {} EIP-7702 average", scenario.deposits),
+        );
+        assert_gas(
+            gas.eip1559,
+            scenario.eip1559_total_gas_used,
+            &format!("attested batch of {} EIP-1559 total", scenario.deposits),
+        );
+        assert_gas(
+            eip1559_average,
+            scenario.eip1559_average_gas_used,
+            &format!("attested batch of {} EIP-1559 average", scenario.deposits),
+        );
+        assert!(
+            gas.eip1559 < gas.eip7702,
+            "an already-delegated (EIP-1559) sweep must cost less than one installing the delegation (EIP-7702)"
+        );
+        assert!(
+            eip7702_average < previous_average,
+            "per-deposit gas should shrink as the batch grows"
+        );
+        previous_average = eip7702_average;
+    }
+}
+
+/// The attestation is what makes permissionless sweeping safe: a caller cannot
+/// forge one for their own principal, and the genuine one credits the attested
+/// account no matter who submits it.
+#[test]
+fn attested_sweep_rejects_a_forged_attestation() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter = eth_address(&key_from_hex(MINTER_PRIVATE_KEY).public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+    let attacker_key = key_from_hex(ATTACKER_PRIVATE_KEY);
+    let attacker = eth_address(&attacker_key.public_key());
+
+    let Contracts {
+        usdt,
+        helper,
+        attested,
+        ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    // A single funded deposit, delegated to the attested sweeper (its
+    // authorization rides in an otherwise-empty batch).
+    let principal = Principal::self_authenticating([0xB0]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+    fund(&anvil, &cex, &usdt, &[deposit]);
+    let authorization = sign_authorization(&key, chain_id, &attested, 0);
+    let delegate_only = call(
+        "sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])",
+        &[
+            Token::TupleArray(vec![]),
+            Token::Array(vec![word_addr(&usdt)]),
+        ],
+    );
+    assert!(
+        status_ok(&anvil.send_eip7702(
+            &attacker_key,
+            chain_id,
+            &attested,
+            delegate_only,
+            vec![authorization]
+        )),
+        "delegation setup reverted"
+    );
+    assert!(
+        !anvil.code(&deposit).is_empty(),
+        "deposit should be delegated to the attested sweeper"
+    );
+
+    // The attacker forges an attestation for their own principal, signed with
+    // their own key: it recovers to the attacker, not the deposit address.
+    let attacker_principal = Principal::self_authenticating([0xC0]);
+    let forged = attest(
+        &attacker_key,
+        chain_id,
+        &helper,
+        &attacker_principal,
+        &[0u8; 32],
+    );
+    let attack = anvil.send_transaction(
+        &attacker,
+        Some(&deposit),
+        &call(
+            "sweepErc20(address[],bytes32,bytes32,bytes32,bytes32,uint8)",
+            &[
+                Token::Array(vec![word_addr(&usdt)]),
+                Token::Word(encode_principal(&attacker_principal)),
+                Token::Word([0u8; 32]),
+                Token::Word(forged.r),
+                Token::Word(forged.s),
+                Token::Word(word_u256(forged.v as u128)),
+            ],
+        ),
+        Some(300_000),
+    );
+    assert!(
+        !status_ok(&anvil.await_receipt(&attack)),
+        "a forged attestation must be rejected"
+    );
+    assert_eq!(
+        anvil.usdt_balance(&usdt, &deposit),
+        DEPOSIT_AMOUNT,
+        "the attacker must not move the funds"
+    );
+
+    // The genuine attestation (deposit key over the real principal) sweeps it,
+    // even when submitted by the attacker — sweeping is permissionless.
+    let attestation = attest(&key, chain_id, &helper, &principal, &[0u8; 32]);
+    let sweep = call(
+        "sweepErc20(address[],bytes32,bytes32,bytes32,bytes32,uint8)",
+        &[
+            Token::Array(vec![word_addr(&usdt)]),
+            Token::Word(encode_principal(&principal)),
+            Token::Word([0u8; 32]),
+            Token::Word(attestation.r),
+            Token::Word(attestation.s),
+            Token::Word(word_u256(attestation.v as u128)),
+        ],
+    );
+    let receipt = anvil.send_eip1559(&attacker_key, chain_id, &deposit, sweep);
+    assert!(status_ok(&receipt), "the genuine attested sweep reverted");
+    assert_eq!(anvil.usdt_balance(&usdt, &deposit), 0, "deposit not swept");
+    let events = received_events(&receipt, &helper);
+    assert_eq!(events.len(), 1, "expected one ReceivedEthOrErc20 event");
+    assert_eq!(events[0].principal, encode_principal(&principal));
+}
+
 struct Contracts {
     usdt: Address,
     helper: Address,
+    /// Caller-gated sweeper delegate (only the minter may sweep).
     via_helper: Address,
+    /// Permissionless sweeper delegate gated by a minter attestation.
+    attested: Address,
 }
 
-/// Compiles and deploys the ERC-20, the real helper and the sweeper delegate.
+/// Compiles and deploys the ERC-20, the real helper and both sweeper delegates.
 fn deploy_contracts(anvil: &Anvil, minter: &Address, cex: &Address) -> Contracts {
     let usdt = anvil.deploy(
         cex,
@@ -318,6 +535,13 @@ fn deploy_contracts(anvil: &Anvil, minter: &Address, cex: &Address) -> Contracts
             ],
         ),
     );
+    let attested = anvil.deploy(
+        minter,
+        &deploy_code(
+            &compile("CKSWEEPER_ATTESTED_SOL", "CkSweeperAttested"),
+            &[Token::Word(word_addr(&helper))],
+        ),
+    );
     assert_eq!(
         address_from_word(&anvil.call(&helper, &call("getMinterAddress()", &[]))),
         *minter,
@@ -327,6 +551,7 @@ fn deploy_contracts(anvil: &Anvil, minter: &Address, cex: &Address) -> Contracts
         usdt,
         helper,
         via_helper,
+        attested,
     }
 }
 
@@ -490,6 +715,145 @@ fn assert_batch_swept(
     gas_used(receipt)
 }
 
+/// Like [`sweep_batch`] but through the permissionless attested sweeper: the
+/// sweeps are submitted by `sender_key` (a non-minter relayer) and each carries
+/// an attestation by the deposit key instead of relying on minter caller-gating.
+fn sweep_batch_attested(
+    anvil: &Anvil,
+    chain_id: u64,
+    sender_key: &PrivateKey,
+    minter: &Address,
+    cex: &Address,
+    contracts: &Contracts,
+    n: usize,
+) -> BatchGas {
+    let Contracts {
+        usdt,
+        helper,
+        attested,
+        ..
+    } = contracts;
+
+    // Distinct principals, disjoint from the caller-gated test's addresses.
+    let principals: Vec<Principal> = (0..n)
+        .map(|i| Principal::self_authenticating([0xA0, n as u8, i as u8]))
+        .collect();
+    let keys: Vec<PrivateKey> = principals.iter().map(derive_deposit_key).collect();
+    let deposits: Vec<Address> = keys.iter().map(|k| eth_address(&k.public_key())).collect();
+
+    for deposit in &deposits {
+        assert_eq!(
+            anvil.balance(deposit),
+            0,
+            "deposit address should have no ETH"
+        );
+        assert!(
+            anvil.code(deposit).is_empty(),
+            "deposit address should have no code"
+        );
+    }
+
+    // Each deposit key attests (as the minter would, via threshold ECDSA) to its
+    // own IC account; the attestations become the batch's SweepItem structs.
+    let items: Vec<Vec<[u8; 32]>> = keys
+        .iter()
+        .zip(&deposits)
+        .zip(&principals)
+        .map(|((key, deposit), principal)| {
+            let a = attest(key, chain_id, helper, principal, &[0u8; 32]);
+            vec![
+                word_addr(deposit),
+                encode_principal(principal),
+                [0u8; 32], // subaccount
+                a.r,
+                a.s,
+                word_u256(a.v as u128),
+            ]
+        })
+        .collect();
+    let sweep_call = call(
+        "sweepErc20Batch((address,bytes32,bytes32,bytes32,bytes32,uint8)[],address[])",
+        &[
+            Token::TupleArray(items),
+            Token::Array(vec![word_addr(usdt)]),
+        ],
+    );
+
+    // First sweep: an EIP-7702 transaction (submitted by the relayer) whose
+    // authorization list installs each deposit EOA's delegation.
+    fund(anvil, cex, usdt, &deposits);
+    let minter_before = anvil.usdt_balance(usdt, minter);
+    let authorizations: Vec<SignedAuthorization> = keys
+        .iter()
+        .map(|key| sign_authorization(key, chain_id, attested, 0))
+        .collect();
+    let receipt = anvil.send_eip7702(
+        sender_key,
+        chain_id,
+        attested,
+        sweep_call.clone(),
+        authorizations,
+    );
+    let eip7702 = assert_batch_swept(
+        anvil,
+        &receipt,
+        contracts,
+        minter,
+        &deposits,
+        &principals,
+        minter_before,
+    );
+
+    // Second sweep of the SAME addresses: the delegation persists, so a plain
+    // EIP-1559 transaction reusing the attestations suffices (replay is intended).
+    fund(anvil, cex, usdt, &deposits);
+    let minter_before = anvil.usdt_balance(usdt, minter);
+    let receipt = anvil.send_eip1559(sender_key, chain_id, attested, sweep_call);
+    let eip1559 = assert_batch_swept(
+        anvil,
+        &receipt,
+        contracts,
+        minter,
+        &deposits,
+        &principals,
+        minter_before,
+    );
+
+    BatchGas { eip7702, eip1559 }
+}
+
+/// A minter attestation binding a deposit address to an IC account, as its
+/// (r, s, v) signature components.
+struct Attestation {
+    r: [u8; 32],
+    s: [u8; 32],
+    v: u8,
+}
+
+/// Signs the attestation digest with the deposit address' own key (the minter's
+/// role on the IC). The digest mirrors `CkSweeperAttested._attestationDigest`:
+/// `keccak256("ck-deposit-owner" ‖ chain_id ‖ helper ‖ principal ‖ subaccount)`.
+fn attest(
+    key: &PrivateKey,
+    chain_id: u64,
+    helper: &Address,
+    principal: &Principal,
+    subaccount: &[u8; 32],
+) -> Attestation {
+    let mut preimage = Vec::new();
+    preimage.extend_from_slice(b"ck-deposit-owner");
+    preimage.extend_from_slice(&word_u256(chain_id as u128)); // block.chainid, as uint256
+    preimage.extend_from_slice(helper.as_ref());
+    preimage.extend_from_slice(&encode_principal(principal));
+    preimage.extend_from_slice(subaccount);
+    let signature = sign(key, &Keccak256::hash(&preimage));
+    Attestation {
+        r: signature.r.to_be_bytes(),
+        s: signature.s.to_be_bytes(),
+        v: 27 + signature.signature_y_parity as u8,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Keys, addresses and signatures (local stand-in for threshold ECDSA).
 // ---------------------------------------------------------------------------
@@ -557,7 +921,11 @@ fn sign_authorization(
 
 enum Token {
     Word([u8; 32]),
+    /// A dynamic array of single 32-byte values (e.g. `address[]`, `bytes32[]`).
     Array(Vec<[u8; 32]>),
+    /// A dynamic array of static tuples (e.g. `SweepItem[]`); each inner vec holds
+    /// the tuple's field words in order.
+    TupleArray(Vec<Vec<[u8; 32]>>),
 }
 
 fn abi(tokens: &[Token]) -> Vec<u8> {
@@ -570,6 +938,13 @@ fn abi(tokens: &[Token]) -> Vec<u8> {
                 head.extend_from_slice(&word_u256((head_len + tail.len()) as u128));
                 tail.extend_from_slice(&word_u256(elements.len() as u128));
                 elements.iter().for_each(|e| tail.extend_from_slice(e));
+            }
+            Token::TupleArray(elements) => {
+                head.extend_from_slice(&word_u256((head_len + tail.len()) as u128));
+                tail.extend_from_slice(&word_u256(elements.len() as u128));
+                for element in elements {
+                    element.iter().for_each(|word| tail.extend_from_slice(word));
+                }
             }
         }
     }
