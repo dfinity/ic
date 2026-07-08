@@ -18,8 +18,15 @@ pub const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KIB;
 /// The maximum size of a delta (per message) canister log buffer.
 pub const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MIB;
 
-/// Maximum number of response bytes for a fetch canister logs request.
-pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
+/// Maximum stored data size (in bytes) of the log records returned by a single
+/// `fetch_canister_logs` request.
+///
+/// The log memory store's ring buffer trims its result to this limit, measured by
+/// `CanisterLogRecord::data_size()`. This is the single source of truth for that
+/// limit: `RESULT_MAX_SIZE` in `ic-replicated-state` is defined from it, and
+/// `ic-replicated-state` also asserts that the encoded response (this value plus a
+/// Candid framing margin) fits within a single inter-canister message.
+pub const MAX_FETCH_CANISTER_LOGS_RESULT_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
