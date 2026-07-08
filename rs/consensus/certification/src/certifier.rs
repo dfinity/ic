@@ -1044,7 +1044,7 @@ mod tests {
                     .collect();
 
                 // sort by heights
-                certs.sort_by(|s1, s2| s1.height.cmp(&s2.height));
+                certs.sort_by_key(|s| s.height);
 
                 assert_eq!(certs[0].height, Height::from(3));
                 assert_eq!(certs[1].height, Height::from(4));

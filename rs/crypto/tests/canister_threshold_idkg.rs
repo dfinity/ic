@@ -3665,7 +3665,7 @@ mod reshare_key_transcript {
 
             let nodes_involved_in_resharing: Nodes = source_subnet_nodes
                 .into_filtered_by_receivers(&source_receivers)
-                .chain(target_subnet_nodes.into_iter())
+                .chain(target_subnet_nodes)
                 .collect();
             let initial_dealings = {
                 let signed_dealings = nodes_involved_in_resharing
@@ -3751,7 +3751,7 @@ mod reshare_key_transcript {
 
             let nodes_involved_in_resharing: Nodes = source_subnet_nodes
                 .into_filtered_by_receivers(&source_receivers)
-                .chain(target_subnet_nodes.into_iter())
+                .chain(target_subnet_nodes)
                 .collect();
             let reshared_key_transcript = nodes_involved_in_resharing
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
@@ -3807,7 +3807,7 @@ mod reshare_key_transcript {
 
             let nodes_involved_in_resharing: Nodes = source_subnet_nodes
                 .into_filtered_by_receivers(&source_receivers)
-                .chain(target_subnet_nodes.into_iter())
+                .chain(target_subnet_nodes)
                 .collect();
             let reshared_key_transcript = nodes_involved_in_resharing
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
