@@ -246,7 +246,7 @@ impl InternalHttpQueryHandler {
                                     format!("Canister {canister_id} not found"),
                                 )
                             })?;
-                    let (reply, _record_count) = fetch_canister_logs_response(
+                    let (reply, _record_count, _content_size) = fetch_canister_logs_response(
                         query.source(),
                         canister,
                         args,
