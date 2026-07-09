@@ -11,6 +11,12 @@ on the process that this file is part of, see
 
 ## Changed
 
+* `delete_subnet` may now delete any non-System subnet, lifting the previous
+  restriction to `CloudEngine` subnets. Authorization by subnet type:
+  System subnets (e.g. the NNS) may never be deleted; the engine controller
+  canister may only delete `CloudEngine` subnets; governance may delete any
+  non-System subnet.
+
 ## Deprecated
 
 ## Removed
