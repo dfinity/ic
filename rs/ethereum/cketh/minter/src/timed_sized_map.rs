@@ -134,13 +134,18 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     }
 
     fn remove_from_time_index(&mut self, key: &K, inserted_at: Timestamp) {
-        if let Some(bucket) = self.by_time.get_mut(&inserted_at) {
-            if let Some(position) = bucket.iter().position(|indexed| indexed == key) {
-                bucket.remove(position);
-            }
-            if bucket.is_empty() {
-                self.by_time.remove(&inserted_at);
-            }
+        let bucket = self
+            .by_time
+            .get_mut(&inserted_at)
+            .expect("BUG: entry timestamp missing from the time index");
+        let position = bucket
+            .iter()
+            .position(|indexed| indexed == key)
+            .expect("BUG: entry missing from its timestamp bucket");
+        bucket.remove(position);
+        let is_empty = bucket.is_empty();
+        if is_empty {
+            self.by_time.remove(&inserted_at);
         }
     }
 
