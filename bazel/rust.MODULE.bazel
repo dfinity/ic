@@ -1838,7 +1838,7 @@ crate.spec(
 )
 crate.spec(
     package = "tower_governor",
-    version = "^0.7.0",
+    version = "^0.8.0",
 )
 crate.spec(
     package = "tower-request-id",
