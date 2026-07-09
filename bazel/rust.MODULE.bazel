@@ -1264,11 +1264,11 @@ crate.spec(
 )
 crate.spec(
     package = "prost",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "prost-build",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "protobuf",
@@ -1811,11 +1811,19 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.13.1",
+    version = "^0.14.5",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.13.1",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost-build",
+    version = "^0.14.5",
 )
 crate.spec(
     features = ["full"],
