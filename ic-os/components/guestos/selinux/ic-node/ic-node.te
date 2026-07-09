@@ -177,7 +177,7 @@ corenet_tcp_connect_all_unreserved_ports(ic_replica_t)
 allow ic_replica_t self:tcp_socket create_stream_socket_perms;
 allow ic_replica_t self:tcp_socket rw_stream_socket_perms;
 
-# Rocksdb wants to read /sys/kernel/mm/transparent_hugepage/enabled
+# The replica reads /sys/kernel/mm/transparent_hugepage/enabled
 # Maybe deny and dev_dontaudit_read_sysfs(ic_replica_t) instead?
 dev_read_sysfs(ic_replica_t)
 

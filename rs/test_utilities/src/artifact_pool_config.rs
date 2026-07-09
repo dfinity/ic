@@ -1,5 +1,5 @@
 use ic_config::artifact_pool::{
-    ArtifactPoolConfig, ArtifactPoolTomlConfig, LMDBConfig, PersistentPoolBackend, RocksDBConfig,
+    ArtifactPoolConfig, ArtifactPoolTomlConfig, LMDBConfig, PersistentPoolBackend,
 };
 use tempfile::Builder;
 
@@ -10,29 +10,14 @@ pub fn with_test_pool_config<T>(run: impl FnOnce(ArtifactPoolConfig) -> T) -> T 
     run(ArtifactPoolConfig::new(tempdir.path().to_path_buf()))
 }
 
-/// Creates a new RocksDBConfig, based on the default, for tests.
-/// It removes the persistent pool directory afterwards.
-pub fn with_test_rocksdb_pool_config<T>(run: impl FnOnce(RocksDBConfig) -> T) -> T {
-    let tempdir = Builder::new().prefix("persistent-pool").tempdir().unwrap();
-    let mut toml_config = ArtifactPoolTomlConfig::new(tempdir.path().to_path_buf(), None);
-    toml_config.consensus_pool_backend = Some("rocksdb".to_string());
-    let config = match ArtifactPoolConfig::from(toml_config).persistent_pool_backend {
-        PersistentPoolBackend::RocksDB(config) => config,
-        _ => panic!("Missing rocksdb persistent pool config"),
-    };
-    run(config)
-}
-
 /// Creates a new LMDBConfig, based on the default, for tests.
 /// It removes the persistent pool directory afterwards.
 pub fn with_test_lmdb_pool_config<T>(run: impl FnOnce(LMDBConfig) -> T) -> T {
     let tempdir = Builder::new().prefix("persistent-pool").tempdir().unwrap();
     let mut toml_config = ArtifactPoolTomlConfig::new(tempdir.path().to_path_buf(), None);
     toml_config.consensus_pool_backend = Some("lmdb".to_string());
-    let config = match ArtifactPoolConfig::from(toml_config).persistent_pool_backend {
-        PersistentPoolBackend::Lmdb(config) => config,
-        _ => panic!("Missing lmdb persistent pool config"),
-    };
+    let PersistentPoolBackend::Lmdb(config) =
+        ArtifactPoolConfig::from(toml_config).persistent_pool_backend;
     run(config)
 }
 

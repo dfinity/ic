@@ -136,17 +136,6 @@ impl CertificationPoolImpl {
                     log.clone(),
                 ),
             ) as Box<_>,
-            #[cfg(target_os = "macos")]
-            PersistentPoolBackend::RocksDB(config) => Box::new(
-                crate::rocksdb_pool::PersistentHeightIndexedPool::new_certification_pool(
-                    config,
-                    log.clone(),
-                ),
-            ) as Box<_>,
-            #[allow(unreachable_patterns)]
-            cfg => {
-                unimplemented!("Configuration {:?} is not supported", cfg)
-            }
         };
 
         CertificationPoolImpl {

@@ -1390,11 +1390,6 @@ crate.spec(
     version = "^0.5.2",
 )
 crate.spec(
-    default_features = False,
-    package = "rocksdb",
-    version = "^0.22.0",
-)
-crate.spec(
     package = "rolling-file",
     version = "^0.2.0",
 )
@@ -2240,19 +2235,6 @@ crate.annotation(
 crate.annotation(
     crate = "ic-wasm",
     gen_binaries = ["ic-wasm"],
-)
-crate.annotation(
-    build_script_env = {
-        # Bazel executors assign only one core when executing
-        # the build script, making rocksdb compilation
-        # extremely slow. Bazel doesn't provide any way to
-        # override this settings so we cheat by starting more
-        # processes in parallel.
-        #
-        # See IDX-2406.
-        "NUM_JOBS": "8",
-    },
-    crate = "librocksdb-sys",
 )
 crate.annotation(
     build_script_data = [

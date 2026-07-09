@@ -16,14 +16,6 @@ pub mod backup;
 mod lmdb_iterator;
 mod lmdb_pool;
 
-// On macOS we have support for rocksdb in addition to lmdb as lmdb
-// historically caused issues.
-
-#[cfg(target_os = "macos")]
-mod rocksdb_iterator;
-#[cfg(target_os = "macos")]
-mod rocksdb_pool;
-
 use ic_interfaces::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{ReplicaVersion, Time};
 use std::convert::TryFrom;
