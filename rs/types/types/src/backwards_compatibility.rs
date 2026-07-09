@@ -8,6 +8,7 @@ use std::hash::{Hash, Hasher};
 /// Compared to [`Option`], its [`Hash`] implementation:
 ///  - ignores `None` (so adding an unset field preserves the surrounding struct hash), and
 ///  - hashes `Some(v)` like `v` (so later replacing it with `T` preserves hashes).
+///
 /// The purpose of this is to have a compatible `Hash` implementation across versions of a struct,
 /// so that replicas running different versions of the code can still agree on the hash of a struct
 /// instance.
