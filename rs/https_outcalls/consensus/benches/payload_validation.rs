@@ -23,7 +23,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         ValidationContext,
@@ -489,6 +489,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
     }
 }
 

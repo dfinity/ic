@@ -776,6 +776,7 @@ pub mod test {
             pricing_version,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
         }
     }
 

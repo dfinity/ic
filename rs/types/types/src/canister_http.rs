@@ -142,6 +142,8 @@ pub struct CanisterHttpRequestContext {
     pub refund_status: RefundStatus,
     /// The registry version at which this request is being processed.
     pub registry_version: RegistryVersion,
+    /// The number of nodes on the subnet processing this request.
+    pub subnet_size: NumberOfNodes,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -304,6 +306,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             pricing_version: Some(pricing_message),
             refund_status: Some(refund_status),
             registry_version: context.registry_version.get(),
+            subnet_size: context.subnet_size.get(),
         }
     }
 }
@@ -429,6 +432,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             pricing_version,
             refund_status,
             registry_version: RegistryVersion::from(context.registry_version),
+            subnet_size: NumberOfNodes::from(context.subnet_size),
         })
     }
 }
@@ -610,6 +614,8 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
+            // TODO: populate with the actual subnet size this request is processed at.
+            subnet_size: NumberOfNodes::from(0),
         })
     }
 
@@ -715,6 +721,8 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
+            // TODO: populate with the actual subnet size this request is processed at.
+            subnet_size: NumberOfNodes::from(0),
         })
     }
 }
@@ -1261,6 +1269,7 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
         };
 
         let expected_size = context.url.len()
@@ -1307,6 +1316,7 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
         };
 
         let expected_size = context.url.len()
@@ -1387,6 +1397,7 @@ mod tests {
                     refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
                 },
                 registry_version: RegistryVersion::from(7),
+                subnet_size: NumberOfNodes::from(13),
             };
 
             let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();

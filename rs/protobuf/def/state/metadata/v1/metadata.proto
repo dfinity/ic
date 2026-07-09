@@ -163,6 +163,7 @@ message CanisterHttpRequestContext {
   optional PricingVersion pricing_version = 12;
   optional RefundStatus refund_status = 13;
   uint64 registry_version = 14;
+  uint32 subnet_size = 15;
   reserved 5;
 }
 

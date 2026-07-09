@@ -231,6 +231,8 @@ pub struct CanisterHttpRequestContext {
     pub refund_status: ::core::option::Option<RefundStatus>,
     #[prost(uint64, tag = "14")]
     pub registry_version: u64,
+    #[prost(uint32, tag = "15")]
+    pub subnet_size: u32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefundStatus {
