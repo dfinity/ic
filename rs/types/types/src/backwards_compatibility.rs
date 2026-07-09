@@ -17,8 +17,29 @@ use std::hash::{Hash, Hasher};
 /// 2. When the change is deployed to all replicas, we can switch the type to
 ///    `BackwardsCompatible<T, true>` and the field can begin to be populated.
 /// 3. When the change is deployed to all replicas, we can replace the type with `T`.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BackwardsCompatible<T, const SETTABLE: bool>(Option<T>);
+
+impl<T: Serialize, const SETTABLE: bool> Serialize for BackwardsCompatible<T, SETTABLE> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>, const SETTABLE: bool> Deserialize<'de>
+    for BackwardsCompatible<T, SETTABLE>
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Option::<T>::deserialize(deserializer)?;
+        Ok(Self(value))
+    }
+}
 
 impl<T: Default> Default for BackwardsCompatible<T, false> {
     fn default() -> Self {
