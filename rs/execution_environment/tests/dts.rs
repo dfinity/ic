@@ -40,14 +40,30 @@ const DTS_WAT: &str = r#"
             )
             (import "ic0" "canister_version" (func $canister_version (result i64)))
             (func $work
+                ;; The bulk of the work is a sequence of `memory.fill`s. Their
+                ;; cost (~1 instruction/byte) is page-size independent, unlike the
+                ;; one-off deterministic-memory-tracker page-fault charge, which
+                ;; depends on the OS page size (16 OS pages per Wasm page on 4 KiB
+                ;; hosts such as Linux, 4 on 16 KiB hosts such as arm64-darwin).
+                ;; Doing enough fills keeps the number of DTS slices dominated by
+                ;; this page-size-independent work, so the tests observe the same
+                ;; DTS behavior on both platforms. All fills target Wasm page 0,
+                ;; so only that single page is dirtied. The last fill writes `78`
+                ;; over `heap[0..)`, which `canister_query read` relies on.
                 (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
                 (memory.fill (i32.const 0) (i32.const 23) (i32.const 50000))
                 (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
                 (memory.fill (i32.const 0) (i32.const 45) (i32.const 50000))
                 (memory.fill (i32.const 0) (i32.const 56) (i32.const 50000))
                 (memory.fill (i32.const 0) (i32.const 67) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 23) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 34) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 45) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 56) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 67) (i32.const 50000))
+                (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
                 (memory.fill (i32.const 0) (i32.const 78) (i32.const 50000))
-                
             )
             (start $work)
 
@@ -1516,17 +1532,19 @@ fn dts_ingress_status_of_update_is_correct() {
     env.advance_time(Duration::from_secs(1));
     let update = env.send_ingress(user_id, canister, "update", vec![]);
     env.tick();
-    let original_time = env.time();
 
     assert_eq!(
         ingress_state(env.ingress_status(&update)),
         Some(IngressState::Processing)
     );
 
-    assert_eq!(
-        ingress_time(env.ingress_status(&update)),
-        Some(original_time)
-    );
+    // The ingress time is pinned to the batch time of the round in which the
+    // message first started executing. Depending on the OS page size that may be
+    // the round triggered by `send_ingress` or the subsequent `tick`, so capture
+    // the pinned time from the ingress status rather than assuming it equals the
+    // current time. The rest of the test verifies that this pinned time does not
+    // change while the DTS execution is in progress.
+    let original_time = ingress_time(env.ingress_status(&update)).unwrap();
 
     env.advance_time(Duration::from_secs(60));
 
@@ -1871,12 +1889,15 @@ fn dts_canister_with_paused_upgrade_is_not_uninstalled_due_to_resource_charges()
 fn impl_dts_canister_with_update_is_uninstalled_due_to_resource_charges(
     aborted: bool,
 ) -> Result<WasmResult, UserError> {
-    // A single `memory.fill` in `$work` now costs ~170_000 instructions: the
-    // first write to a Wasm page is charged the full deterministic-memory-tracker
-    // page overhead (2x16 OS pages * 5_000) plus the ~10_000 byte copy cost. The
-    // slice limit must exceed that so the (un-splittable) operation fits in one
-    // slice, while staying below the total `$work` cost (~230_000) so execution
-    // still spans multiple rounds and can be aborted.
+    // The first write to a Wasm page in `$work` is charged the full
+    // deterministic-memory-tracker page-fault overhead, which is OS-page-size
+    // dependent (2 x 16 OS pages x 5_000 = 160_000 on 4 KiB hosts such as Linux,
+    // 2 x 4 OS pages x 5_000 = 40_000 on 16 KiB hosts such as arm64-darwin). The
+    // slice limit must exceed that (un-splittable) charge on either platform so
+    // execution can make progress, while staying well below the total `$work`
+    // cost so execution still spans multiple rounds and can be aborted. `$work`
+    // does enough page-size-independent `memory.fill` work (~1 instruction/byte)
+    // that it spans multiple rounds on both platforms.
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
         NumInstructions::from(200_000),

@@ -4731,8 +4731,13 @@ fn install_code_calls_canister_init_and_start() {
             (start $start)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    // number of page accesses: (1 read + 1 write) x 16 OS pages (=1 Wasm page) x (2 Wasm invocations with different DMTs: init and start) = 64
-    let dirty_heap_cost = NumInstructions::from(64 * (test.dirty_heap_page_overhead()));
+    // number of page accesses: (1 read + 1 write) x OS pages per Wasm page x
+    // (2 Wasm invocations with different DMTs: init and start). The number of OS
+    // pages per Wasm page depends on the OS page size (16 on 4 KiB hosts such as
+    // Linux, 4 on 16 KiB hosts such as arm64-darwin).
+    let os_pages_per_wasm_page = WASM_PAGE_SIZE_IN_BYTES as u64 / PAGE_SIZE as u64;
+    let dirty_heap_cost =
+        NumInstructions::from(2 * os_pages_per_wasm_page * 2 * test.dirty_heap_page_overhead());
     assert_eq!(
         // Function is 1 instruction.
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST
