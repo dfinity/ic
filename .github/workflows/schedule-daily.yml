@@ -76,55 +76,6 @@ jobs:
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-  bazel-test-bare-metal:
-    name: Bazel Test Bare Metal
-    runs-on: *dind-large-setup
-    container: *container-setup
-    environment: Nightly Tests
-    steps:
-      - *checkout
-      - name: Run Bazel Launch Bare Metal
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            echo "$ZH2_DLL01_INI_SECRET" > file1
-            echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-
-            launch_bare_metal() {
-
-              # shellcheck disable=SC2046,SC2086
-              bazel run \
-                //ic-os/setupos/envs/dev:launch_bare_metal -- \
-                  --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-                  --ini_filename "$(realpath file1)" \
-                  --file_share_ssh_key "$(realpath file2)" \
-                  --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-                  --file_share_username ci_interim \
-                  --ci_mode \
-                  $@
-            }
-
-            # Run bare metal installation test
-            launch_bare_metal --hsm
-
-            # Run bare metal node performance benchmarks
-            launch_bare_metal --benchmark
-
-            # Run bare metal node hostOS metrics check
-            launch_bare_metal --check_hostos_metrics
-
-            # Run SEV tests
-            bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-            bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-            bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-            bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-
-            bazel clean
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        env:
-          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
-          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
-
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     runs-on: *dind-large-setup

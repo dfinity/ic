@@ -76,9 +76,7 @@ impl RateLimit {
             .finish()
             .unwrap();
 
-        router.layer(ServiceBuilder::new().layer(GovernorLayer {
-            config: Arc::new(governor_conf),
-        }))
+        router.layer(ServiceBuilder::new().layer(GovernorLayer::new(Arc::new(governor_conf))))
     }
 
     /// Allow requests_per_second requests per subnet
@@ -94,9 +92,7 @@ impl RateLimit {
             .finish()
             .unwrap();
 
-        router.layer(ServiceBuilder::new().layer(GovernorLayer {
-            config: Arc::new(governor_conf),
-        }))
+        router.layer(ServiceBuilder::new().layer(GovernorLayer::new(Arc::new(governor_conf))))
     }
 }
 
