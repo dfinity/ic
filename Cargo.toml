@@ -899,6 +899,7 @@ tower-http = { version = "0.6.4", features = [
     "compression-full",
     "tracing",
 ] }
+tower_governor = "0.8.0"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
