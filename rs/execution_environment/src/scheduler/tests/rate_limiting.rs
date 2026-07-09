@@ -12,6 +12,7 @@ use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, Method, 
 use ic_registry_subnet_type::SubnetType;
 use ic_types::NumBytes;
 use ic_types::messages::Payload;
+use ic_types_cycles::Cycles;
 use more_asserts::assert_ge;
 
 const PAGE_SIZE: NumBytes = NumBytes::new(ic_sys::PAGE_SIZE as u64);

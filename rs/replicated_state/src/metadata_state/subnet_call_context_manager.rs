@@ -225,9 +225,8 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
-    /// `CanisterHttpRequestContext`s whose responses have already been delivered
-    /// to execution. They are kept here until they time out (see
-    /// [`DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT`]).
+    /// `CanisterHttpRequestContext`s whose responses have already been delivered to execution.
+    /// They are kept here such that asynchronous refunds may continue to be processed.
     pub delivered_canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
     pub reshare_chain_key_contexts: BTreeMap<CallbackId, ReshareChainKeyContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,

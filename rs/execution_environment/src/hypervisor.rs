@@ -1,7 +1,7 @@
 use ic_canister_sandbox_backend_lib::replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
 use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
@@ -25,7 +25,6 @@ use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
     methods::FuncRef,
 };
-use ic_types_cycles::CanisterCyclesCostSchedule;
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
 use std::{path::Path, sync::Arc};
@@ -45,6 +44,7 @@ pub struct HypervisorMetrics {
     compilation_cache_size: IntGaugeVec,
     code_section_size: Histogram,
     canister_log_delta_memory_usage: Histogram,
+    max_num_locals: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -87,6 +87,16 @@ impl HypervisorMetrics {
                 // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
                 binary_buckets_with_zero(10, 23),
             ),
+            max_num_locals: metrics_registry.histogram(
+                "hypervisor_max_num_locals",
+                "The maximum number of Wasm function locals.",
+                vec![
+                    0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 200.0, 300.0,
+                    400.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1000.0, 2000.0, 3000.0, 4000.0,
+                    5000.0, 6000.0, 7000.0, 8000.0, 9000.0, 10000.0, 20000.0, 30000.0, 40000.0,
+                    50000.0,
+                ],
+            ),
         }
     }
 
@@ -101,6 +111,7 @@ impl HypervisorMetrics {
             compilation_time,
             max_complexity,
             code_section_size,
+            max_num_locals,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
@@ -114,6 +125,7 @@ impl HypervisorMetrics {
         self.compilation_cache_size
             .with_label_values(&["disk"])
             .set(cache_disk_size as i64);
+        self.max_num_locals.observe(*max_num_locals as f64);
     }
 }
 
@@ -302,12 +314,12 @@ impl Hypervisor {
         execution_parameters: ExecutionParameters,
         func_ref: FuncRef,
         mut execution_state: ExecutionState,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         state_changes_error: &IntCounter,
         call_tree_metrics: &dyn CallTreeMetrics,
         call_context_creation_time: Time,
-        cost_schedule: CanisterCyclesCostSchedule,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -324,8 +336,8 @@ impl Hypervisor {
             func_ref,
             RequestMetadata::for_new_call_tree(time),
             round_limits,
-            network_topology,
-            cost_schedule,
+            network_topology.clone(),
+            subnet_cycles_config,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
             WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -343,7 +355,7 @@ impl Hypervisor {
             &mut output,
             round_limits,
             time,
-            network_topology,
+            &network_topology,
             self.own_subnet_id,
             &self.metrics,
             &self.log,
@@ -369,8 +381,8 @@ impl Hypervisor {
         func_ref: FuncRef,
         request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
-        network_topology: &NetworkTopology,
-        cost_schedule: CanisterCyclesCostSchedule,
+        network_topology: Arc<NetworkTopology>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> WasmExecutionResult {
         assert_ge!(
             execution_parameters.instruction_limits.message(),
@@ -400,7 +412,7 @@ impl Hypervisor {
             api_type.caller(),
             api_type.call_context_id(),
             execution_state.wasm_execution_mode.is_wasm64(),
-            cost_schedule,
+            subnet_cycles_config,
         );
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

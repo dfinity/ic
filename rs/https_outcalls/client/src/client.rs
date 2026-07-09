@@ -15,15 +15,17 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId, NumBytes, NumInstructions,
+    CanisterId, CountBytes, NumBytes, NumInstructions,
     canister_http::{
         CanisterHttpHeader, CanisterHttpMethod, CanisterHttpPaymentReceipt, CanisterHttpReject,
         CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, Transform, validate_http_headers_and_body,
+        CanisterHttpResponseContent, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform,
+        validate_http_headers_and_body,
     },
     ingress::WasmResult,
     messages::{Query, QuerySource, Request},
 };
+use ic_utils::str::StrEllipsize;
 use std::{
     sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
@@ -135,9 +137,12 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 id: request_id,
                 context: request_context,
                 socks_proxy_addrs,
+                cost_schedule,
+                subnet_size,
             } = canister_http_request;
 
-            let mut budget = pricing_factory.new_tracker(&request_context);
+            let mut budget =
+                pricing_factory.new_tracker(&request_context, subnet_size, cost_schedule);
             let request_size = request_context.variable_parts_size();
 
             let CanisterHttpRequestContext {
@@ -153,6 +158,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 http_method: request_http_method,
                 transform: request_transform,
                 pricing_version: request_pricing_version,
+                replication: request_replication,
                 ..
             } = request_context;
 
@@ -181,7 +187,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 return;
             }
 
-            let payload = async {
+            let mut payload = async {
                 // Execute the HTTP request and get the adapter response.
                 let (adapter_response, downloaded_bytes, elapsed) = execute_http_request(
                     &mut http_adapter_client,
@@ -266,14 +272,42 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             }
             .await;
 
-            // Account for the final (post-transform) response that will be
-            // handed back to the caller, then create the payment receipt after
-            // all processing is complete.
-            if let Ok(resp) = &payload {
-                let _ = budget.subtract_transformed_response_usage(NumBytes::from(resp.len() as u64));
+            // Truncate an oversized reject message before pricing and gossiping
+            // it, so the gossip cost reflects what is actually gossiped.
+            if let Err(reject) = &mut payload
+                && reject.message.len() > MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES
+            {
+                warn!(
+                    log,
+                    "Pruning oversized reject message for request {}: \
+                     original size {}, new size {}",
+                    request_id,
+                    reject.message.len(),
+                    MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES,
+                );
+                reject.message = reject
+                    .message
+                    .ellipsize(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, 90);
             }
+
+            // Account for the cost of gossiping the final (post-transform)
+            // response to peers before creating the receipt.
+            let response_size = match &payload {
+                Ok(response) => response.len(),
+                Err(reject) => reject.count_bytes(),
+            };
+            let payload = budget
+                .subtract_gossip_usage(NumBytes::from(response_size as u64))
+                .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
+                    reject_code: RejectCode::CanisterReject,
+                    message: "Insufficient cycles".to_string(),
+                })
+                .and(payload);
+
+            // Create the payment receipt after all processing is complete.
             let receipt = budget.create_payment_receipt();
 
+            let replication = request_replication.kind();
             permit.send((
                 CanisterHttpResponse {
                     id: request_id,
@@ -282,7 +316,11 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         Ok(resp) => {
                             metrics
                                 .request_total
-                                .with_label_values(&["success", request_http_method.as_str()])
+                                .with_label_values(&[
+                                    "success",
+                                    request_http_method.as_str(),
+                                    replication.as_str(),
+                                ])
                                 .inc();
                             CanisterHttpResponseContent::Success(resp)
                         }
@@ -292,6 +330,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 .with_label_values(&[
                                     reject.reject_code.as_str(),
                                     request_http_method.as_str(),
+                                    replication.as_str(),
                                 ])
                                 .inc();
                             CanisterHttpResponseContent::Reject(reject)
@@ -381,7 +420,7 @@ async fn execute_http_request(
             response_time: elapsed,
         })
         .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
-            reject_code: RejectCode::SysFatal,
+            reject_code: RejectCode::CanisterReject,
             message: "Insufficient cycles".to_string(),
         })?;
 
@@ -523,7 +562,7 @@ async fn transform_adapter_response(
         );
         (
             Err(CanisterHttpReject {
-                reject_code: RejectCode::SysFatal,
+                reject_code: RejectCode::CanisterReject,
                 message: "Insufficient cycles".to_string(),
             }),
             instructions_used,
@@ -562,6 +601,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_https_outcalls_pricing::CanisterCyclesCostSchedule;
     use ic_https_outcalls_service::{
         HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult,
         https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
@@ -569,8 +609,11 @@ mod tests {
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::{
-        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+    use ic_types::{
+        NumberOfNodes, RegistryVersion,
+        canister_http::{
+            MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
+        },
     };
     use ic_types::{
         canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
@@ -663,9 +706,11 @@ mod tests {
                 replication: Replication::FullyReplicated,
                 pricing_version: PricingVersion::Legacy,
                 refund_status: RefundStatus::default(),
-                subnet_size: 13,
+                registry_version: RegistryVersion::from(1),
             },
             socks_proxy_addrs: vec![],
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+            subnet_size: NumberOfNodes::from(13),
         }
     }
 
@@ -1132,6 +1177,109 @@ mod tests {
             }
         }
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
+    }
+
+    // Test that an oversized reject message is truncated (char-boundary-safe)
+    // before being returned, so that what is priced and gossiped is bounded.
+    #[tokio::test]
+    async fn test_oversized_reject_message_is_truncated() {
+        // Adapter mock setup. Not relevant; the transform produces the reject.
+        let response = HttpsOutcallResponse {
+            status: 200,
+            headers: Vec::new(),
+            content: Vec::new(),
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
+        let (svc, mut handle) = setup_system_query_mock();
+
+        // 300 four-byte emoji (1200 bytes) followed by a single one-byte 'x'
+        // (1201 bytes total). `ellipsize` keeps a prefix + "..." + suffix; the
+        // trailing byte makes the total length not a multiple of 4 so that the
+        // both suffix and prefix cut, fall *inside* an emoji.
+        const PREFIX_PERCENTAGE: usize = 90;
+        let oversized_message = format!("{}x", "😀".repeat(300));
+        let oversized_len = oversized_message.len();
+        assert!(oversized_len > MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES);
+
+        // The exact byte offsets `ellipsize` cuts at.
+        let budget = MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES - "...".len();
+        let prefix_cut = MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES * PREFIX_PERCENTAGE / 100;
+        let suffix_cut = oversized_len - (budget - prefix_cut);
+        assert!(
+            !oversized_message.is_char_boundary(prefix_cut),
+            "prefix cut at byte {prefix_cut} must fall inside a multi-byte emoji"
+        );
+        assert!(
+            !oversized_message.is_char_boundary(suffix_cut),
+            "suffix cut at byte {suffix_cut} must fall inside a multi-byte emoji"
+        );
+
+        // The client must apply exactly this truncation before pricing the response.
+        let expected_message = oversized_message
+            .ellipsize(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, PREFIX_PERCENTAGE);
+        tokio::spawn(async move {
+            let (_, rsp) = handle.next_request().await.unwrap();
+            rsp.send_response(Ok((
+                Ok(WasmResult::Reject(oversized_message)),
+                current_time(),
+            )));
+        });
+
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+            MetricsRegistry::default(),
+            no_op_logger(),
+        );
+
+        assert_eq!(
+            client.send(build_mock_canister_http_request(
+                420,
+                Some("transform".to_string())
+            )),
+            Ok(())
+        );
+        loop {
+            match client.try_receive() {
+                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Ok((r, _payment_receipt)) => {
+                    let CanisterHttpResponseContent::Reject(reject) = r.content else {
+                        panic!("expected a reject response");
+                    };
+                    // Ellipsized exactly as the limit dictates: this pins the size
+                    // and the ellipsize parameters.
+                    assert_eq!(
+                        reject.message, expected_message,
+                        "reject message should be ellipsized to the allowed size"
+                    );
+                    assert!(reject.message.len() <= MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES);
+                    assert!(reject.message.len() < oversized_len);
+
+                    // Although both cuts fell inside an emoji (asserted above), the
+                    // returned message is well-formed: no emoji was split. Every
+                    // character retained on either side of the ellipsis is a whole
+                    // emoji (plus the preserved trailing 'x' at the very end).
+                    let (head, tail) = reject
+                        .message
+                        .split_once("...")
+                        .expect("ellipsized message must contain the ellipsis");
+                    assert!(
+                        !head.is_empty() && head.chars().all(|c| c == '😀'),
+                        "prefix must consist of whole emoji, got {head:?}"
+                    );
+                    assert!(
+                        tail.strip_suffix('x')
+                            .expect("trailing byte should be preserved")
+                            .chars()
+                            .all(|c| c == '😀'),
+                        "suffix must be whole emoji followed by the trailing byte, got {tail:?}"
+                    );
+                    break;
+                }
+            }
+        }
     }
 
     // Test client capacity. The capicity of the client is specified by the channel size.

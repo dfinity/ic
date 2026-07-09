@@ -126,7 +126,6 @@ struct BenchTarget {
     builder: CanisterHttpPayloadBuilderImpl,
     payload: CanisterHttpPayload,
     validation_context: ValidationContext,
-    height: Height,
     // Kept alive for the lifetime of the benchmark so that the consensus pool
     // (and its cache, held by the builder) and the registry remain valid.
     _deps: Dependencies,
@@ -142,7 +141,6 @@ fn bench_payload_verification(c: &mut Criterion) {
             group.bench_with_input(BenchmarkId::from_parameter(config.label), config, |b, _| {
                 b.iter(|| {
                     black_box(target.builder.validate_canister_http_payload_impl(
-                        black_box(target.height),
                         black_box(&target.payload),
                         black_box(&target.validation_context),
                         black_box(HashSet::new()),
@@ -237,7 +235,6 @@ fn build_target(
         builder,
         payload,
         validation_context: validation_context(),
-        height: Height::new(1),
         _deps: deps,
     }
 }
@@ -476,7 +473,6 @@ fn response_and_metadata(
         content_hash: crypto_hash(&response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        registry_version: REGISTRY_VERSION,
         replica_version: ReplicaVersion::default(),
     };
     (response, metadata)
@@ -495,7 +491,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         replication,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
-        subnet_size: 4,
+        registry_version: RegistryVersion::from(1),
     }
 }
 

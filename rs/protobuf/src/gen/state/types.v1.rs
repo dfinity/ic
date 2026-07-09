@@ -368,8 +368,6 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
-    #[prost(bool, tag = "17")]
-    pub empty_signature_agreements_flag: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {

@@ -32,7 +32,6 @@ rust_library(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:prometheus",
@@ -66,6 +65,7 @@ rust_test(
         "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/helpers",
+        "//rs/registry/keys",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
@@ -79,7 +79,6 @@ rust_test(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:hex",
@@ -89,6 +88,7 @@ rust_test(
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:slog",
+        "@crate_index//:strum",
     ],
 )
 

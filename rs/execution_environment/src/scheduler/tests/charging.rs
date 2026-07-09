@@ -5,9 +5,7 @@ use super::super::test_utilities::{
 };
 use super::super::*;
 use super::zero_instruction_overhead_config;
-use ic_config::subnet_config::{
-    CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetSecurity,
-};
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
     Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
@@ -16,6 +14,7 @@ use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::canister_test_id;
 use std::time::Duration;
 
@@ -33,7 +32,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     // Just enough memory to cost us one cycle per second.
     let bytes_per_cycle = (1_u128 << 30)
         .checked_div(
-            CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
+            CyclesAccountManagerConfig::application_subnet()
                 .gib_storage_per_second_fee
                 .get(),
         )
@@ -434,7 +433,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
@@ -547,7 +546,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
-    let scheduler_config = SubnetConfig::new(subnet_type, SubnetSecurity::None).scheduler_config;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());

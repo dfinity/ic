@@ -13,7 +13,9 @@ use crate::{
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, ExecutionParameters, InstructionLimits,
 };
@@ -23,7 +25,6 @@ use ic_interfaces::execution_environment::{
     SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
@@ -40,7 +41,7 @@ use ic_types::{
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
 };
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -147,7 +148,7 @@ impl<'a> QueryContext<'a> {
         cycles_account_manager: Arc<CyclesAccountManager>,
         instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
-        let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
+        let network_topology = Arc::clone(&state.get_ref().metadata.network_topology);
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_query_call_graph_instructions),
             subnet_available_memory,
@@ -396,11 +397,6 @@ impl<'a> QueryContext<'a> {
                 )),
             );
         }
-        let cost_schedule = self.get_cost_schedule();
-        let subnet_size = self
-            .network_topology
-            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         if self
             .cycles_account_manager
             .can_withdraw_cycles_with_threshold(
@@ -409,8 +405,7 @@ impl<'a> QueryContext<'a> {
                 canister.memory_usage(),
                 canister.message_memory_usage(),
                 canister.system_state.reserved_balance(),
-                subnet_size,
-                self.get_cost_schedule(),
+                self.get_own_subnet_cycles_config(),
                 false,
             )
             .is_err()
@@ -434,6 +429,7 @@ impl<'a> QueryContext<'a> {
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
         let data_certificate = self.get_data_certificate(&canister.canister_id());
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (mut canister, instructions_left, result, call_context_id, system_api_call_counters) =
             execute_non_replicated_query(
                 query_kind,
@@ -443,11 +439,11 @@ impl<'a> QueryContext<'a> {
                 data_certificate,
                 self.state.get_ref().time(),
                 execution_parameters,
-                &self.network_topology,
+                self.network_topology.clone(),
                 self.hypervisor,
                 &mut self.round_limits,
                 self.query_critical_error,
-                cost_schedule,
+                own_subnet_cycles_config,
             );
         self.add_system_api_call_counters(system_api_call_counters);
         let instructions_executed = instruction_limit - instructions_left;
@@ -651,8 +647,7 @@ impl<'a> QueryContext<'a> {
             ),
         };
 
-        let cost_schedule = self.get_cost_schedule();
-
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (output, output_execution_state, output_system_state) = self.hypervisor.execute(
             api_type,
             time,
@@ -662,12 +657,12 @@ impl<'a> QueryContext<'a> {
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
-            &self.network_topology,
+            self.network_topology.clone(),
             &mut self.round_limits,
             self.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
-            cost_schedule,
+            own_subnet_cycles_config,
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
@@ -748,7 +743,7 @@ impl<'a> QueryContext<'a> {
                 FuncRef::QueryClosure(cleanup_closure)
             }
         };
-        let cost_schedule = self.get_cost_schedule();
+        let own_subnet_cycles_config = self.get_own_subnet_cycles_config();
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
                 ApiType::CompositeCleanup {
@@ -764,12 +759,12 @@ impl<'a> QueryContext<'a> {
                 execution_parameters,
                 func_ref,
                 canister.execution_state.take().unwrap(),
-                &self.network_topology,
+                self.network_topology.clone(),
                 &mut self.round_limits,
                 self.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
-                cost_schedule,
+                own_subnet_cycles_config,
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
@@ -1124,7 +1119,7 @@ impl<'a> QueryContext<'a> {
         self.transient_errors
     }
 
-    pub fn get_cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.state.get_ref().get_own_cost_schedule()
+    fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.state.get_ref().get_own_subnet_cycles_config()
     }
 }

@@ -1,0 +1,34 @@
+# Fix cross-crate DEP_* env vars: rules_rust 0.71.x redacts the producer's out_dir
+# to a generic ${out_dir} token in dep env files, but those files are consumed by
+# downstream crates' build scripts whose --out-dir differs, leaving the token
+# unresolved (e.g. libssh2-sys failing to find zlib.h from libz-sys's DEP_Z_INCLUDE).
+# Upstream issue: the 'env files are only consumed by the direct owner' assumption
+# in redact_paths() does not hold for outputs_to_dep_env().
+# Fixed upstream by https://github.com/bazelbuild/rules_rust/pull/4124:
+# drop this patch when upgrading to a release that includes it.
+diff --git a/cargo/private/cargo_build_script_runner/lib.rs b/cargo/private/cargo_build_script_runner/lib.rs
+--- a/cargo/private/cargo_build_script_runner/lib.rs
++++ b/cargo/private/cargo_build_script_runner/lib.rs
+@@ -181,7 +181,7 @@
+         outputs: &[BuildScriptOutput],
+         crate_links: &str,
+         exec_root: &str,
+-        out_dir: &str,
++        _out_dir: &str,
+     ) -> String {
+         let prefix = format!("DEP_{}_", crate_links.replace('-', "_").to_uppercase());
+         outputs
+@@ -191,7 +191,12 @@
+                     Some(format!(
+                         "{}{}",
+                         prefix,
+-                        Self::escape_for_serializing(Self::redact_paths(env, exec_root, out_dir))
++                        // Do NOT redact the producer's out_dir to the generic `${out_dir}`
++                        // token here: DEP_* env vars are consumed by *downstream* crates'
++                        // build scripts, whose process_wrapper `--out-dir` points to a
++                        // different directory, so the token would resolve incorrectly
++                        // (or not at all). Only the exec root is safe to substitute.
++                        Self::escape_for_serializing(Self::redact_exec_root(env, exec_root))
+                     ))
+                 } else {
+                     None

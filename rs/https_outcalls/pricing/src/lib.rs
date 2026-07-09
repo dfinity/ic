@@ -8,9 +8,10 @@ use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    NumBytes, NumInstructions,
+    NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, PricingVersion},
 };
+pub use ic_types_cycles::CanisterCyclesCostSchedule;
 
 use dark_launch::DarkLaunchTracker;
 use legacy::LegacyTracker;
@@ -20,7 +21,7 @@ use payg::PayAsYouGoTracker;
 pub trait BudgetTracker: Send {
     /// Returns the maximum network resources the Adapter is allowed to consume.
     fn get_adapter_limits(&self) -> AdapterLimits;
-    /// Deducts the actual network resources consumed.
+    /// Deducts the cost of the network resources consumed by the request.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if `network_usage <= get_adapter_limits()`.
@@ -30,17 +31,18 @@ pub trait BudgetTracker: Send {
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
     /// Returns the maximum instructions allowed for the transformation function.
     fn get_transform_limit(&self) -> NumInstructions;
-    /// Deducts the actual instructions consumed by the transformation.
+    /// Deducts the cost of the instructions consumed by the transformation.
     ///
     /// # Invariants
     ///  - This method returns `Ok(())` if and only if `usage <= get_transform_limit()`.
     fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
     /// Deducts the cost of the final (post-transform) response that this replica
-    /// produced and that will be handed back to the caller.
+    /// produced and that will be gossiped to peers. This cost does not apply to fully-replicated
+    /// requests, which doesn't gossip responses.
     ///
     /// This is the last accounting step and is invoked once the size of the
     /// response is known.
-    fn subtract_transformed_response_usage(
+    fn subtract_gossip_usage(
         &mut self,
         transformed_response_size: NumBytes,
     ) -> Result<(), PricingError>;
@@ -49,6 +51,12 @@ pub trait BudgetTracker: Send {
     /// far via the `subtract_*` methods.
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt;
 }
+
+/// The maximum duration the adapter is allowed to take to fully receive a
+/// response, as measured by the client. The server already enforces a 30s
+/// timeout (see `DEFAULT_HTTP_REQUEST_TIMEOUT_SECS`), so this is a safety margin
+/// above it.
+pub(crate) const MAX_RESPONSE_TIME: Duration = Duration::from_secs(60);
 
 pub struct AdapterLimits {
     /// The maximum size of the HTTP response, including the headers and the body.
@@ -70,10 +78,6 @@ pub enum PricingError {
     InsufficientCycles,
 }
 
-/// Builds a [`BudgetTracker`] for each canister HTTP request.
-///
-/// The factory is constructed once per replica and holds the shared metrics
-/// and logger needed by the dark-launch tracker.
 #[derive(Clone)]
 pub struct PricingFactory {
     metrics: PricingMetrics,
@@ -88,24 +92,24 @@ impl PricingFactory {
         }
     }
 
-    /// Creates the tracker for a request. The subnet size (`N`) needed by the
-    /// pay-as-you-go formula is read from `context.subnet_size`.
-    pub fn new_tracker(&self, context: &CanisterHttpRequestContext) -> Box<dyn BudgetTracker> {
+    pub fn new_tracker(
+        &self,
+        context: &CanisterHttpRequestContext,
+        subnet_size: NumberOfNodes,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Box<dyn BudgetTracker> {
         match context.pricing_version {
-            // Legacy pricing is what is actually charged today. We run the
-            // PayAsYouGo tracker as a shadow next to it so we can measure how
-            // many requests would become backwards-incompatible under the new
-            // pricing without changing any observable behaviour.
             PricingVersion::Legacy => Box::new(DarkLaunchTracker::new(
                 Box::new(LegacyTracker::new(context.max_response_bytes)),
-                Box::new(PayAsYouGoTracker::new(context)),
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule)),
                 context.request.sender,
+                context.replication.kind(),
                 self.metrics.clone(),
                 self.log.clone(),
             )),
-            // PayAsYouGo requests are not served yet (the client rejects them),
-            // but we still hand back the matching tracker for completeness.
-            PricingVersion::PayAsYouGo => Box::new(PayAsYouGoTracker::new(context)),
+            PricingVersion::PayAsYouGo => {
+                Box::new(PayAsYouGoTracker::new(context, subnet_size, cost_schedule))
+            }
         }
     }
 }

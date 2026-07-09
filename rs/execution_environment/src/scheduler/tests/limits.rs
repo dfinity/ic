@@ -9,6 +9,7 @@ use crate::scheduler::test_utilities::EMPTY_WASM;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{NumWasmPages, num_bytes_try_from};
+use ic_types_cycles::Cycles;
 use proptest::prelude::*;
 
 #[test]

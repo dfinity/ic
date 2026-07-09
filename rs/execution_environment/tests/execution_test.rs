@@ -5,7 +5,7 @@ use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     flag_status::FlagStatus,
-    subnet_config::{CyclesAccountManagerConfig, SubnetConfig, SubnetSecurity},
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
@@ -13,15 +13,15 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
     CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2,
-    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload, SignWithECDSAArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities_execution_environment::{get_reject, get_reply};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
@@ -387,7 +387,7 @@ fn test_canister_stable_memory_upgrade_restart() {
 #[test]
 fn test_canister_out_of_cycles() {
     // Start a node with a config where all computation/storage is free.
-    let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
@@ -430,8 +430,7 @@ fn test_canister_out_of_cycles() {
     // We don't charge for allocation periodically, we advance the state machine
     // time to trigger allocation charging.
     let now = now
-        + 2 * CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
-            .duration_between_allocation_charges;
+        + 2 * CyclesAccountManagerConfig::application_subnet().duration_between_allocation_charges;
     env.set_time(now);
     env.tick();
 
@@ -446,7 +445,7 @@ fn test_canister_out_of_cycles() {
 
 #[test]
 fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let compute_percent_allocated_per_second_fee = subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee;
@@ -488,8 +487,7 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     // Advance the statem machine time a bit more and confirm the canister is
     // still uninstalled.
     env.advance_time(
-        2 * CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None)
-            .duration_between_allocation_charges,
+        2 * CyclesAccountManagerConfig::application_subnet().duration_between_allocation_charges,
     );
     env.tick();
 
@@ -688,7 +686,7 @@ fn can_query_cycle_balance_and_top_up_canisters() {
 
 #[test]
 fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -733,7 +731,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
 
 #[test]
 fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.scheduler_cores = 2;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -804,7 +802,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
 
 #[test]
 fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.scheduler_cores = 2;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -889,7 +887,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
 
 #[test]
 fn canister_snapshot_metrics_are_observed() {
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.scheduler_cores = 2;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -1041,7 +1039,7 @@ fn assert_rejected(result: Result<WasmResult, UserError>) {
 
 #[test]
 fn exceeding_memory_capacity_fails_during_message_execution() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -1093,7 +1091,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
 
 #[test]
 fn subnet_memory_reservation_works() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
@@ -1149,7 +1147,7 @@ fn subnet_memory_reservation_works() {
 
 #[test]
 fn subnet_memory_reservation_scales_with_number_of_cores() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
     assert_lt!(1, num_cores);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
@@ -1210,7 +1208,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
 
 #[test]
 fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -1268,7 +1266,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
 
 #[test]
 fn canister_with_reserved_balance_is_not_frozen_too_early() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -1542,7 +1540,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
 
     let heap_delta_limit = 100 * MIB;
 
-    let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
     let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
     let env = StateMachineBuilder::new()
@@ -1610,7 +1608,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
 #[test]
 fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
     fn setup(subnet_heap_delta_capacity: u64, heap_delta_initial_reserve: u64) -> StateMachine {
-        let mut subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+        let mut subnet_config = SubnetConfig::new(SubnetType::Application);
         subnet_config.scheduler_config.subnet_heap_delta_capacity =
             subnet_heap_delta_capacity.into();
         subnet_config.scheduler_config.heap_delta_initial_reserve =
@@ -1938,7 +1936,7 @@ fn helper_best_effort_responses(
     timeout_seconds: Option<u32>,
     expected_deadline_seconds: u32,
 ) {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
 
     let env = StateMachineBuilder::new()
         .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
@@ -2615,7 +2613,7 @@ fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
 #[test]
 fn test_canister_liquid_cycle_balance() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
+        SubnetConfig::new(SubnetType::Application),
         HypervisorConfig::default(),
     ));
 
@@ -2689,7 +2687,7 @@ fn test_canister_liquid_cycle_balance() {
 #[test]
 fn large_ipc_call_fails() {
     let wasm = canister_test::Project::cargo_bin_maybe_from_env("call_loop_canister", &[]);
-    let subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::System);
     let instruction_limit = subnet_config.scheduler_config.max_instructions_per_message;
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -2775,7 +2773,7 @@ fn canister_status_count(env: &StateMachine) -> u64 {
 
 #[test]
 fn canister_status_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
@@ -2802,7 +2800,7 @@ fn canister_status_via_query_call_by_controller_succeeds() {
 
 #[test]
 fn canister_status_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let subnet_admin = user_test_id(100);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -2834,9 +2832,210 @@ fn canister_status_via_query_call_by_subnet_admin_succeeds() {
     assert_eq!(canister_status_count(&env), 1);
 }
 
+fn list_canisters_count(env: &StateMachine) -> u64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "ic00_list_canisters"),
+        ("outcome", "finished"),
+        ("status", "success"),
+        ("speed", "fast"),
+    ]))
+    .map_or(0, |stats| stats.count)
+}
+
+// `list_canisters` consumes round instructions according to its cost model (a
+// base cost plus a per-canister cost). This test checks that the round
+// instruction limit is respected: when many `list_canisters` calls are pending
+// at once, the per-round subnet-message instruction budget only allows some of
+// them to execute per round, so the rest are deferred to later rounds (i.e. not
+// all calls execute in the same round).
+#[test]
+fn list_canisters_respects_round_instruction_limit() {
+    // Keep in sync with `list_canisters_instructions` in `execution/common.rs`.
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    // Number of concurrent `list_canisters` calls. Chosen large enough that they
+    // cannot all fit within a single round's subnet-message instruction budget
+    // (`max_instructions_per_round / 16`, which with the default configuration
+    // fits at most ~12 calls of ~20M instructions each).
+    const NUM_CALLS: u64 = 30;
+
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    // Create an additional canister so that the subnet hosts more than just
+    // the admin canister, exercising the per-canister cost of `list_canisters`.
+    create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let num_canisters = env.get_latest_state().num_canisters() as u64;
+    assert_eq!(num_canisters, 2);
+    let cost_per_call = BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters;
+
+    // Build an update that fires `NUM_CALLS` concurrent `list_canisters`
+    // inter-canister calls (ignoring their responses) and then replies. After
+    // this single message executes, all `NUM_CALLS` calls are pending as subnet
+    // messages at the same time.
+    let mut update = wasm();
+    for _ in 0..NUM_CALLS {
+        update = update.call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        );
+    }
+    let update = update.reply().build();
+
+    // `send_ingress` executes a single round in which the update runs and
+    // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
+    let instructions_baseline = env.subnet_message_instructions();
+    let calls_baseline = list_canisters_count(&env);
+    assert_eq!(calls_baseline, 0);
+    env.send_ingress(
+        PrincipalId::new_anonymous(),
+        admin_canister,
+        "update",
+        update,
+    );
+
+    // Execute rounds one at a time, tracking after each round how many
+    // `list_canisters` calls have been executed so far, using the
+    // `execution_subnet_message_duration_seconds` metric to count them
+    // explicitly (rather than inferring the count from consumed instructions).
+    let executed_so_far = || list_canisters_count(&env) - calls_baseline;
+    let mut executed_per_round = vec![];
+    for _ in 0..100 {
+        env.tick();
+        executed_per_round.push(executed_so_far());
+        if executed_so_far() == NUM_CALLS {
+            break;
+        }
+    }
+
+    // Not all `list_canisters` calls were executed in the same round: there is a
+    // round after which some but not all of them had been executed.
+    assert!(
+        executed_per_round.iter().any(|&n| n > 0 && n < NUM_CALLS),
+        "expected list_canisters calls to be spread across rounds, got progression {:?}",
+        executed_per_round,
+    );
+    // Eventually all of them were executed.
+    assert_eq!(*executed_per_round.last().unwrap(), NUM_CALLS);
+    // Each executed call was charged exactly per the cost model, confirming the
+    // round instruction accounting.
+    assert_eq!(
+        env.subnet_message_instructions() - instructions_baseline,
+        (NUM_CALLS * cost_per_call) as f64
+    );
+}
+
+// A subnet admin canister can call `list_canisters` via an inter-canister
+// call and receives a successful response. Coalescing of the returned
+// canister ID ranges is tested separately by `test_list_canisters_success` in
+// `query_handler/tests.rs`.
+#[test]
+fn list_canisters_via_inter_canister_call_succeeds() {
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args().other_side(EmptyBlob.encode()),
+        )
+        .build();
+    let reply = get_reply(env.execute_ingress(admin_canister, "update", list_canisters));
+    ListCanistersResponse::decode(&reply).unwrap();
+}
+
+// A non-admin canister calling `list_canisters` via an inter-canister call is
+// rejected, and the rejected call must not consume any round instructions:
+// instructions are only deducted from the round limits for a successful call,
+// per the cost model checked by `list_canisters_respects_round_instruction_limit`
+// above.
+#[test]
+fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
+    let admin = user_test_id(100).get();
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+
+    let non_admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let instructions_baseline = env.subnet_message_instructions();
+    let reject = get_reject(env.execute_ingress(non_admin_canister, "update", list_canisters));
+    assert!(reject.contains("Only the subnet admins can perform certain actions"));
+
+    assert_eq!(env.subnet_message_instructions(), instructions_baseline);
+}
+
 #[test]
 fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let subnet_admin = user_test_id(100);
     let test_user = user_test_id(101);
     let env = StateMachineBuilder::new()
@@ -2885,7 +3084,7 @@ fn maximum_state_size() {
         maximum_state_size: Some(maximum_state_size),
         maximum_state_delta: None,
     };
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let hypervisor_config = HypervisorConfig {
         subnet_memory_reservation: NumBytes::new(0),
         ..Default::default()
@@ -2923,7 +3122,7 @@ fn maximum_state_delta() {
         maximum_state_size: None,
         maximum_state_delta: Some(maximum_state_delta),
     };
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     // We disable per-canister rate-limiting of heap delta to simplify the test.
     let hypervisor_config = HypervisorConfig {
         rate_limiting_of_heap_delta: FlagStatus::Disabled,
@@ -3147,7 +3346,7 @@ fn canister_metrics_count(env: &StateMachine) -> u64 {
 
 #[test]
 fn canister_metrics_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
             subnet_config,
@@ -3174,7 +3373,7 @@ fn canister_metrics_via_query_call_by_controller_succeeds() {
 
 #[test]
 fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let subnet_admin = user_test_id(100);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
@@ -3208,7 +3407,7 @@ fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
 
 #[test]
 fn canister_metrics_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let subnet_admin = user_test_id(100);
     let test_user = user_test_id(101);
     let env = StateMachineBuilder::new()

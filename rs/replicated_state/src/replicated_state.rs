@@ -24,6 +24,7 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     CanisterId, NumBytes, SubnetId, Time,
@@ -36,7 +37,8 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, CyclesUseCaseKind, DroppedMessages,
+    CanisterCyclesCostSchedule, CompoundCycles, CyclesAccountManagerSubnetConfig,
+    CyclesUseCaseKind, DroppedMessages,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -769,6 +771,24 @@ impl ReplicatedState {
         self.metadata.own_cost_schedule().unwrap_or_default()
     }
 
+    /// Returns the reference subnet size of this subnet, derived from its SEV status.
+    /// Defaults to `DEFAULT_REFERENCE_SUBNET_SIZE` if the network topology is not populated.
+    pub fn get_own_reference_subnet_size(&self) -> usize {
+        use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+        self.metadata
+            .own_reference_subnet_size()
+            .unwrap_or(DEFAULT_REFERENCE_SUBNET_SIZE)
+    }
+
+    /// Returns the cycles account manager subnet config for this subnet.
+    pub fn get_own_subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        CyclesAccountManagerSubnetConfig::new(
+            self.get_own_subnet_size(),
+            self.get_own_cost_schedule(),
+            self.get_own_reference_subnet_size(),
+        )
+    }
+
     /// Returns the list of subnet admins of this subnet.
     pub fn get_own_subnet_admins(&self) -> Option<BTreeSet<PrincipalId>> {
         let subnet_id = self.metadata.own_subnet_id;
@@ -855,6 +875,30 @@ impl ReplicatedState {
     /// subnet, if such a stream exists.
     pub fn get_stream(&self, destination_subnet_id: &SubnetId) -> Option<&Stream> {
         self.metadata.streams.get(destination_subnet_id)
+    }
+
+    /// Discards streams to subnets no longer present in the network topology.
+    ///
+    /// Safe to call because the XNet payload builder excludes deleted subnets
+    /// from the set of subnets it pulls slices for, and XNet payload validation
+    /// verifies certified stream slices against the block's registry version:
+    /// a slice from a deleted subnet fails validation so no slice from the
+    /// deleted subnet can appear in a block at a registry version where the
+    /// subnet is deleted. After the outgoing stream is dropped, no new
+    /// certified stream slices from the deleted subnet can be pulled and refer
+    /// to the deleted outgoing stream.
+    pub fn discard_streams_for_deleted_subnets(&mut self) {
+        let mut streams = self.take_streams();
+        streams.retain(|subnet_id, _| {
+            self.metadata
+                .network_topology
+                .subnets()
+                .contains_key(subnet_id)
+        });
+        // Cycles in dropped stream messages (refunds in responses, payments in requests)
+        // are intentionally not observed as lost: the deleted subnet may have partially
+        // executed the message and consumed some or all of those cycles.
+        self.put_streams(streams);
     }
 
     /// Returns the sum of reserved compute allocations of all currently
@@ -944,8 +988,12 @@ impl ReplicatedState {
         self.canister_states.callback_count()
     }
 
+    pub fn subnet_features(&self) -> SubnetFeatures {
+        self.metadata.own_subnet_info.subnet_features
+    }
+
     pub fn resource_limits(&self) -> ResourceLimits {
-        self.metadata.own_resource_limits
+        self.metadata.own_subnet_info.resource_limits
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or

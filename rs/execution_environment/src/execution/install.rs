@@ -172,8 +172,8 @@ pub(crate) fn execute_install(
             FuncRef::Method(method),
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
-            round.network_topology,
-            round.cost_schedule,
+            round.network_topology.clone(),
+            original.subnet_cycles_config,
         );
 
         match wasm_execution_result {
@@ -294,8 +294,8 @@ fn install_stage_2b_continue_install_after_start(
         FuncRef::Method(method),
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
-        round.network_topology,
-        round.cost_schedule,
+        round.network_topology.clone(),
+        original.subnet_cycles_config,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {

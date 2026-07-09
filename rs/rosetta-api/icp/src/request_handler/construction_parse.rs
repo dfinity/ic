@@ -672,7 +672,7 @@ mod tests {
         models::{
             Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
             ConstructionParseRequest, ConstructionPayloadsRequest,
-            ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
+            ConstructionPayloadsRequestMetadata, Currency, CurveType, NetworkIdentifier, Operation,
             OperationIdentifier, PublicKey, Signature, SignatureType, operation::OperationType,
         },
         request_handler::RosettaRequestHandler,
@@ -681,114 +681,20 @@ mod tests {
 
     #[test]
     fn test_payloads_parse_identity() {
-        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
-        let ledger_client = futures::executor::block_on(LedgerClient::new(
-            Url::from_str("http://localhost:1234").unwrap(),
-            CanisterId::from_u64(1),
-            "TKN".into(),
-            CanisterId::from_u64(2),
-            None,
-            None,
-            true,
-            None,
-            false,
-            false, // optimize_search_indexes: disabled for tests
-        ))
-        .unwrap();
-        // Create a mock canister ID for testing
-        let mock_canister_id_hex = "00000000000000000101";
-        let initial_sync_complete = AtomicBool::new(true);
-        let handler = RosettaRequestHandler::new(
-            "Internet Computer".into(),
-            ledger_client.into(),
-            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
-            Arc::new(initial_sync_complete),
-        );
+        let (handler, network_identifier, operations, pub_key, key) = setup_transfer_test();
 
-        // get the nextwork identifier
-        let network_identifier = handler.network_id();
-        let currency = Currency {
-            symbol: "TKN".into(),
-            decimals: 8,
-            metadata: None,
-        };
-
-        // get the account from the public key
-        let pub_key = crate::models::PublicKey {
-            hex_bytes: hex::encode(key.public_key().serialize_raw()),
-            curve_type: CurveType::Edwards25519,
-        };
-        let account = handler
-            .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone(),
-                public_key: pub_key.clone(),
-                metadata: None,
-            })
-            .unwrap()
-            .account_identifier;
-
-        // create the unsigned transaction
-        let operations = vec![
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 0,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Transaction.to_string(),
-                status: None,
-                account: account.clone(),
-                amount: Some(Amount {
-                    value: "-100000000".into(),
-                    currency: currency.clone(),
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 1,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Transaction.to_string(),
-                status: None,
-                account: account.clone(),
-                amount: Some(Amount {
-                    value: "100000000".into(),
-                    currency: currency.clone(),
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 2,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Fee.to_string(),
-                status: None,
-                account,
-                amount: Some(Amount {
-                    value: "-1000000".into(),
-                    currency,
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-        ];
         let gen_opt_u64 = proptest::option::of(proptest::prelude::any::<u64>());
         const ONE_HOUR_NANOS: u64 = 60 * 60 * 1_000_000_000;
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Could not get system time")
             .as_nanos() as u64;
+        // `ingress_start` is kept within a realistic window around `now`: the
+        // ingress window is now bounded to 24h, and this
+        // also avoids overflowing `ingress_start + ingress_interval` below.
+        let gen_ingress_start = proptest::option::of(now..(now + ONE_HOUR_NANOS));
         let gen_metadata = proptest::option::of(
-            (gen_opt_u64.clone(), gen_opt_u64.clone(), gen_opt_u64).prop_flat_map(
+            (gen_opt_u64.clone(), gen_ingress_start, gen_opt_u64).prop_flat_map(
                 |(created_at_time, ingress_start, memo)| {
                     proptest::option::of(1..ONE_HOUR_NANOS).prop_map(move |ingress_interval| {
                         let ingress_end = ingress_interval.map(|ingress_interval| {
@@ -811,7 +717,8 @@ mod tests {
         ) -> std::result::Result<(), TestCaseError> {
             match expected_metadata {
                 None => {
-                    // memo and created_at_time should always be set but the value is random
+                    // memo and created_at_time are always populated by construction_payloads
+                    // (memo defaults to 0, created_at_time to the current time)
                     prop_assert!(
                         actual_metadata.contains_key("memo"),
                         "Metadata should always contain a memo"
@@ -923,5 +830,179 @@ mod tests {
 
             check_metadata(metadata, parsed.metadata.unwrap()).unwrap()
         });
+    }
+
+    /// Builds a `RosettaRequestHandler` together with a single ICP transfer
+    /// (debit + credit + fee) and the signer's public and private keys, shared
+    /// by the construction tests below.
+    fn setup_transfer_test() -> (
+        RosettaRequestHandler,
+        NetworkIdentifier,
+        Vec<Operation>,
+        PublicKey,
+        ic_ed25519::PrivateKey,
+    ) {
+        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
+        let ledger_client = futures::executor::block_on(LedgerClient::new(
+            Url::from_str("http://localhost:1234").unwrap(),
+            CanisterId::from_u64(1),
+            "TKN".into(),
+            CanisterId::from_u64(2),
+            None,
+            None,
+            true,
+            None,
+            false,
+            false, // optimize_search_indexes: disabled for tests
+        ))
+        .unwrap();
+        let mock_canister_id_hex = "00000000000000000101";
+        let initial_sync_complete = AtomicBool::new(true);
+        let handler = RosettaRequestHandler::new(
+            "Internet Computer".into(),
+            ledger_client.into(),
+            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
+            Arc::new(initial_sync_complete),
+        );
+
+        let network_identifier = handler.network_id();
+        let currency = Currency {
+            symbol: "TKN".into(),
+            decimals: 8,
+            metadata: None,
+        };
+
+        let pub_key = PublicKey {
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
+            curve_type: CurveType::Edwards25519,
+        };
+        let account = handler
+            .construction_derive(ConstructionDeriveRequest {
+                network_identifier: network_identifier.clone(),
+                public_key: pub_key.clone(),
+                metadata: None,
+            })
+            .unwrap()
+            .account_identifier;
+
+        let operations = vec![
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 0,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Transaction.to_string(),
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "-100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 1,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Transaction.to_string(),
+                status: None,
+                account: account.clone(),
+                amount: Some(Amount {
+                    value: "100000000".into(),
+                    currency: currency.clone(),
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+            Operation {
+                operation_identifier: OperationIdentifier {
+                    index: 2,
+                    network_index: None,
+                },
+                related_operations: None,
+                type_: OperationType::Fee.to_string(),
+                status: None,
+                account,
+                amount: Some(Amount {
+                    value: "-1000000".into(),
+                    currency,
+                    metadata: None,
+                }),
+                coin_change: None,
+                metadata: None,
+            },
+        ];
+
+        (handler, network_identifier, operations, pub_key, key)
+    }
+
+    // When the caller does not specify a memo, `construction_payloads` uses a
+    // deterministic memo of 0 instead of a random one. With the time-based
+    // inputs pinned, reconstructing
+    // the same transfer must therefore produce a byte-identical unsigned
+    // transaction every time -- and hence the same transaction hash -- so that
+    // the ledger's `created_at_time` based deduplication can catch a retried
+    // transfer. This test reconstructs the same transfer three times and checks
+    // both that the unsigned transactions are identical and that the embedded
+    // memo is 0.
+    #[test]
+    fn test_payloads_without_memo_is_deterministic() {
+        let (handler, network_identifier, operations, pub_key, _key) = setup_transfer_test();
+
+        // Pin all time-based inputs so that the only thing that could vary
+        // across reconstructions is the (previously random) memo.
+        const NANOS: u64 = 1_000_000_000;
+        let created_at_time = 1_700_000_000 * NANOS;
+        let metadata = ConstructionPayloadsRequestMetadata {
+            memo: None,
+            created_at_time: Some(created_at_time),
+            ingress_start: Some(created_at_time),
+            ingress_end: Some(created_at_time + 600 * NANOS),
+        };
+
+        let reconstruct = || {
+            handler
+                .construction_payloads(ConstructionPayloadsRequest {
+                    network_identifier: network_identifier.clone(),
+                    operations: operations.clone(),
+                    metadata: Some(metadata.clone().try_into().unwrap()),
+                    public_keys: Some(vec![pub_key.clone()]),
+                })
+                .unwrap()
+                .unsigned_transaction
+        };
+
+        let unsigned_transactions: Vec<String> = (0..3).map(|_| reconstruct()).collect();
+
+        // Reconstruction must be deterministic: identical bytes => identical
+        // transaction hash, which is what lets the ledger deduplicate retries.
+        assert!(
+            unsigned_transactions
+                .iter()
+                .all(|tx| *tx == unsigned_transactions[0]),
+            "expected identical unsigned transactions across reconstructions, got {unsigned_transactions:?}"
+        );
+
+        // And the memo embedded in the (memo-less) transfer must be 0.
+        let parsed = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: false,
+                transaction: unsigned_transactions[0].clone(),
+            })
+            .unwrap();
+        let memo = parsed
+            .metadata
+            .expect("metadata should always be returned")
+            .get("memo")
+            .expect("memo should always be present")
+            .clone();
+        assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
     }
 }

@@ -586,8 +586,8 @@ impl CheckpointLoader {
             format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
         let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots
-            .iter()
-            .flat_map(|(_, x)| x.iter().map(|x| *x.0))
+            .values()
+            .flat_map(|x| x.iter().map(|x| *x.0))
             .collect();
         on_disk_snapshot_ids.sort();
         ref_snapshot_ids.sort();
@@ -852,6 +852,7 @@ pub fn load_canister_state(
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
         canister_state_bits.reserved_balance_limit,
+        canister_state_bits.minimum_incoming_canister_call_cycles,
         canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,

@@ -76,6 +76,8 @@ pub struct NetworkTopology {
     #[prost(message, optional, tag = "10")]
     pub default_initial_dkg_subnet_id:
         ::core::option::Option<super::super::super::types::v1::SubnetId>,
+    #[prost(message, repeated, tag = "11")]
+    pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FullTopology {
@@ -227,8 +229,8 @@ pub struct CanisterHttpRequestContext {
     pub pricing_version: ::core::option::Option<PricingVersion>,
     #[prost(message, optional, tag = "13")]
     pub refund_status: ::core::option::Option<RefundStatus>,
-    #[prost(uint32, tag = "14")]
-    pub subnet_size: u32,
+    #[prost(uint64, tag = "14")]
+    pub registry_version: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefundStatus {
@@ -500,6 +502,17 @@ pub struct NodePublicKeyEntry {
     pub public_key: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OwnSubnetInfo {
+    #[prost(message, optional, tag = "1")]
+    pub subnet_features:
+        ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,
+    #[prost(message, optional, tag = "2")]
+    pub resource_limits:
+        ::core::option::Option<super::super::super::registry::subnet::v1::ResourceLimits>,
+    #[prost(message, repeated, tag = "3")]
+    pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ApiBoundaryNodeEntry {
     #[prost(message, optional, tag = "1")]
     pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -556,6 +569,8 @@ pub struct SystemMetadata {
     pub own_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "8")]
     pub subnet_call_context_manager: ::core::option::Option<SubnetCallContextManager>,
+    #[prost(message, optional, tag = "26")]
+    pub own_subnet_info: ::core::option::Option<OwnSubnetInfo>,
     #[prost(message, optional, tag = "23")]
     pub subnet_split_from: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     /// Canister ID ranges allocated (exclusively) to this subnet, to generate
@@ -581,6 +596,10 @@ pub struct SystemMetadata {
     pub certification_version: u32,
     #[prost(uint64, tag = "11")]
     pub heap_delta_estimate: u64,
+    /// `own_subnet_features`, `node_public_keys` and `own_resource_limits` moved
+    /// into `own_subnet_info` (field 26); these are kept as legacy mirrors (still
+    /// written and read back) so that checkpoints remain compatible in both
+    /// directions across the transition.
     #[prost(message, optional, tag = "13")]
     pub own_subnet_features:
         ::core::option::Option<super::super::super::registry::subnet::v1::SubnetFeatures>,

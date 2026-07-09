@@ -18,6 +18,22 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
+# Provision the `ic-net-admin` capability launcher for the local system-test
+# backend (rs/tests/driver/src/driver/local_backend.rs; referenced there as
+# NET_ADMIN_LAUNCHER). It is a copy of `capsh` (from libcap2-bin) endowed with
+# narrow file capabilities so the otherwise-unprivileged test driver can raise
+# exactly CAP_NET_ADMIN / CAP_NET_RAW / CAP_NET_BIND_SERVICE into the ambient
+# set -- needed to create the per-group bridge and TAPs and to run its dnsmasq
+# router-advertiser / DHCPv4 server (which binds the privileged UDP port 67).
+# `setcap` needs CAP_SETFCAP, available at image-build time but not to the test
+# process; the resulting file capabilities are preserved in the image layer.
+# Baking this into the image (rather than provisioning it at container start)
+# keeps it off any runtime setup path, which can be unreliable -- e.g. in the
+# devcontainer such a hook would run as a VS Code `postStartCommand`, which
+# VS Code can skip.
+RUN install -m 0755 "$(command -v capsh)" /usr/local/bin/ic-net-admin && \
+    setcap cap_net_admin,cap_net_raw,cap_net_bind_service+ep /usr/local/bin/ic-net-admin
+
 # Drop troublesome SSH file (Potentially related: Debian #1072221)
 RUN rm -f /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
 
@@ -30,49 +46,29 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
     # both buildifier and ubuntu users need to be able to access root permissions
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Install a version of google-android-platform-tools-installer with e2fsdroid
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    mkdir e2fsdroid && \
-    cd e2fsdroid && \
-    curl -fsSLO http://mirrors.kernel.org/ubuntu/pool/multiverse/g/google-android-installers/google-android-platform-tools-installer_35.0.0+1710437545-3build2_amd64.deb && \
-    curl -fsSLO http://mirrors.kernel.org/ubuntu/pool/multiverse/g/google-android-installers/google-android-licenses_1710437545-3build2_all.deb && \
-    dpkg-deb -R google-android-platform-tools-installer_35.0.0+1710437545-3build2_amd64.deb contents && \
-    cd contents && \
-    sed -i 's/35.0.0/33.0.2/' DEBIAN/control DEBIAN/postinst && \
-    sed -i '/Version/ s/$/+downgraded/' DEBIAN/control && \
-    rm usr/share/google-android-platform-tools-installer/platform-tools_r35.0.0-linux.zip.sha1 && \
-    echo "6bf4f747ad929b02378b44ce083b4502d26109c7  platform-tools_r33.0.2-linux.zip" > usr/share/google-android-platform-tools-installer/platform-tools_r33.0.2-linux.zip.sha1 && \
-    find . -type f -not -path "./DEBIAN/*" -exec md5sum {} + | sort -k 2 | sed 's/\.\/\(.*\)/\1/' > DEBIAN/md5sums && \
-    cd .. && \
-    dpkg-deb -b contents/ downgraded.deb && \
-    apt -yqq install ./downgraded.deb ./google-android-licenses_1710437545-3build2_all.deb && \
-    apt-mark hold google-android-platform-tools-installer && \
-    cd .. && \
-    rm -rf e2fsdroid
-
 ARG bazelisk_sha=22e7d3a188699982f661cf4687137ee52d1f24fec1ec893d91a6c4d791a75de8
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.28.1/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-# Add mold linker - required because it is 6x faster than ld
-ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.37.1
-RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "98a45fcc651424551f56b8bc4f697ae7ae66930da59b1ef9dfeeaa4da64cb2c6  ${MOLD_BIN}" | shasum -a 256 -c - && \
-    ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
+# Use lld as the default linker instead of GNU bfd ld (which is ~6x slower).
+# For our large Rust debug binaries lld links roughly as fast as eg mold and
+# with comparable memory use. Bazel uses its own hermetic (zig/lld) toolchain and
+# is unaffected; this only changes the system linker used by cargo builds.
+RUN ln -sf "$(command -v ld.lld)" "$(realpath /usr/bin/ld)"
 
 # Add motoko compiler
-ARG motoko_version=0.16.3
-RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+# This is only used by Cargo; Bazel pulls its own via rules_motoko
+# NOTE: keep version in line with rules_motoko
+ARG motoko_version=1.11.0
+RUN curl -fsSL https://github.com/caffeinelabs/motoko/releases/download/${motoko_version}/motoko-Linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 # Install AFLplusplus (`make install` puts the executables in /usr/local/bin/)
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
-ARG LLVM_VERSION=21
 RUN git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git /afl && \
     cd /afl && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config CC=/usr/bin/clang CXX=/usr/bin/clang++ make install && \
     rm -rf /afl
 
 # Install rustup proxies system-wide as root:
@@ -88,6 +84,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     && rm -rf /opt/rustup
 
 WORKDIR /
+# Bake the entrypoint into the image so it works without the repo bind-mounted.
+COPY ./ci/container/init.sh /ci/container/init.sh
+ENTRYPOINT ["/ci/container/init.sh"]
 CMD ["/bin/bash"]
 
 FROM base as build
@@ -98,7 +97,7 @@ FROM base as dev
 
 # Add GitHub CLI repository to get the latest version
 RUN mkdir -p -m 755 /etc/apt/keyrings \
-	&& out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+	&& out=$(mktemp) && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o "$out" \
 	&& cat $out | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
 	&& chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
 	&& mkdir -p -m 755 /etc/apt/sources.list.d \

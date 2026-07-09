@@ -137,9 +137,8 @@ pub(crate) fn refund_timed_out_canister_http_contexts(
 
     let mut credits: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
     for mut context in timed_out {
-        let unresponsive_replicas = context
-            .subnet_size
-            .saturating_sub(context.refund_status.refunding_nodes.len());
+        let unresponsive_replicas =
+            13_usize.saturating_sub(context.refund_status.refunding_nodes.len());
         let refund = context.refund_status.per_replica_allowance * unresponsive_replicas;
         let applied = apply_capped(
             &mut context.refund_status,

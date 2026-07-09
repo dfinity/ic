@@ -10,6 +10,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, Method};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::methods::SystemMethod;
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::canister_test_id;
 use more_asserts::assert_le;
 use proptest::prelude::*;

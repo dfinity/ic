@@ -19,7 +19,7 @@ base64 = { workspace = true }
 candid = { workspace = true }
 candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
-dfx-core = { workspace = true }
+dfx-core-vendored = { path = "../dfx-core-vendored" }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -55,4 +55,5 @@ tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+ic-test-utilities-privileges = { path = "../../test_utilities/privileges" }
 lazy_static = { workspace = true }

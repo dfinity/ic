@@ -53,6 +53,7 @@ def component_files(mode):
         Label("guestos/remote-attestation-server.service"): "/etc/systemd/system/remote-attestation-server.service",
         Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
         Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
+        Label("guestos/share/ic-gateway.env"): "/opt/ic/share/ic-gateway.env",
         Label("guestos/share/nns_public_key.pem"): "/opt/ic/share/nns_public_key.pem",
 
         # init
@@ -78,6 +79,7 @@ def component_files(mode):
         Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
         Label("misc/sev/99-sev.rules"): "/etc/udev/rules.d/99-sev.rules",
         Label("guestos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
+        Label("guestos/misc/ic-node-tmpfiles.service"): "/etc/systemd/system/ic-node-tmpfiles.service",
         Label("guestos/misc/sudoers"): "/etc/sudoers",
         Label("guestos/misc/crypttab"): "/etc/crypttab",
         Label("guestos/misc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",

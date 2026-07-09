@@ -374,7 +374,9 @@ fn canister_and_replica_logs() {
         .unwrap()
         .read_to_string(&mut stdout)
         .unwrap();
-    assert!(stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+    assert!(stdout.contains(&format!(
+        "Finished executing install_code message on canister {canister_id}"
+    )));
 
     let mut stderr = String::new();
     out.stderr
@@ -411,7 +413,9 @@ fn canister_and_no_replica_logs() {
         .unwrap()
         .read_to_string(&mut stdout)
         .unwrap();
-    assert!(!stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+    assert!(!stdout.contains(&format!(
+        "Finished executing install_code message on canister {canister_id}"
+    )));
 
     let mut stderr = String::new();
     out.stderr
@@ -838,7 +842,7 @@ fn with_app_subnet_state_twice() {
 
 #[test]
 #[should_panic(
-    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }, CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] for a different subnet kind NNS."
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: rwlgt-iiaaa-aaaaa-aaaaa-cai }, end: CanisterId { is_u64: true, id: renrk-eyaaa-aaaaa-aaada-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: qoctq-giaaa-aaaaa-aaaea-cai }, end: CanisterId { is_u64: true, id: n5n4y-3aaaa-aaaaa-p777q-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: xp3jw-ot777-77777-aaaaa-cai }, end: CanisterId { is_u64: true, id: le5t5-53777-77777-p777q-cai } }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: rwlgt-iiaaa-aaaaa-aaaaa-cai }, end: CanisterId { is_u64: true, id: renrk-eyaaa-aaaaa-aaada-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: qoctq-giaaa-aaaaa-aaaea-cai }, end: CanisterId { is_u64: true, id: n5n4y-3aaaa-aaaaa-p777q-cai } }] for a different subnet kind NNS."
 )]
 fn with_nns_as_app_subnet_state() {
     let (_state_dir, nns_state_dir) = create_nns_subnet_state();
@@ -851,7 +855,7 @@ fn with_nns_as_app_subnet_state() {
 
 #[test]
 #[should_panic(
-    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(lxzze-o7777-77777-aaaaa-cai), end: CanisterId(x47dp-5x777-77777-p777q-cai) }] do not contain the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] expected for the subnet kind NNS."
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: xp3jw-ot777-77777-aaaaa-cai }, end: CanisterId { is_u64: true, id: le5t5-53777-77777-p777q-cai } }] do not contain the canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: rwlgt-iiaaa-aaaaa-aaaaa-cai }, end: CanisterId { is_u64: true, id: renrk-eyaaa-aaaaa-aaada-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: qoctq-giaaa-aaaaa-aaaea-cai }, end: CanisterId { is_u64: true, id: n5n4y-3aaaa-aaaaa-p777q-cai } }] expected for the subnet kind NNS."
 )]
 fn with_app_as_nns_subnet_state() {
     let (_state_dir, app_state_dir) = create_app_subnet_state();
@@ -938,19 +942,23 @@ fn test_query_stats() {
     assert_eq!(query_stats.request_payload_bytes_total, zero);
     assert_eq!(query_stats.response_payload_bytes_total, zero);
 
-    // Execute 13 query calls (one per each app subnet node) on the counter canister in each of 4 query stats epochs.
+    // Execute 13 query calls (one per each app subnet node) on the counter canister in each of the first two query stats epochs.
     // Every single query call has different arguments so that query calls are not cached.
+    // Due to a delay in query stats aggregation, two more epochs need to pass before
+    // we observe the stats from an epoch.
     let mut n: u64 = 0;
-    for _ in 0..4 {
-        for _ in 0..13 {
-            pic.query_call(
-                canister_id,
-                Principal::anonymous(),
-                "read",
-                n.to_le_bytes().to_vec(),
-            )
-            .unwrap();
-            n += 1;
+    for i in 0..4 {
+        if i < 2 {
+            for _ in 0..13 {
+                pic.query_call(
+                    canister_id,
+                    Principal::anonymous(),
+                    "read",
+                    n.to_le_bytes().to_vec(),
+                )
+                .unwrap();
+                n += 1;
+            }
         }
         // Execute one epoch.
         for _ in 0..60 {
@@ -958,7 +966,7 @@ fn test_query_stats() {
         }
     }
 
-    // Now the number of calls should be set to 26 (13 calls per epoch from 2 epochs) due to a delay in query stats aggregation.
+    // Now the number of calls should be set to 26 (13 calls per epoch from 2 epochs).
     let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
     assert_eq!(query_stats.num_calls_total, candid::Nat::from(26_u64));
     assert_ne!(query_stats.num_instructions_total, candid::Nat::from(0_u64));
@@ -1012,28 +1020,28 @@ fn test_query_stats_live() {
             .query_stats;
         assert_eq!(query_stats.num_calls_total, candid::Nat::from(0_u64));
 
-        let mut n: u64 = 0;
-        loop {
-            // Make one query call per app subnet node.
-            for _ in 0..13 {
-                agent
-                    .query(&canister_id, "read")
-                    .with_arg(n.to_le_bytes().to_vec())
-                    .call()
-                    .await
-                    .unwrap();
-                n += 1;
-            }
+        // Make one query call per app subnet node to generate stats.
+        for i in 0_u64..13 {
+            agent
+                .query(&canister_id, "read")
+                .with_arg(i.to_le_bytes().to_vec())
+                .call()
+                .await
+                .unwrap();
+        }
 
+        // Wait for query stats to propagate without making additional query calls.
+        loop {
             let current_query_stats = ic00
                 .canister_status(&canister_id)
                 .await
                 .unwrap()
                 .0
                 .query_stats;
-            if query_stats.num_calls_total != current_query_stats.num_calls_total {
+            if current_query_stats.num_calls_total > 0_u64 {
                 break;
             }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     })
 }

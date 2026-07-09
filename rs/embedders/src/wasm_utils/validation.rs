@@ -67,7 +67,6 @@ const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
-pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 2000;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1288,13 +1287,14 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
     Ok(())
 }
 
-// Checks that no more than `max_functions` are defined in the
-// module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
-// bytes.
+/// Checks that no more than `max_functions` are defined in the
+/// module and all function names are less than MAX_WASM_FUNCTION_NAME_LENGTH
+/// bytes.
+/// Returns the maximum number of locals across all Wasm functions.
 fn validate_function_section(
     module: &Module,
     max_functions: usize,
-) -> Result<(), WasmValidationError> {
+) -> Result<u64, WasmValidationError> {
     let local_indexes = module
         .functions
         .iter()
@@ -1312,6 +1312,7 @@ fn validate_function_section(
     }
     // We only need to look at local functions, since `validate_import_section`
     // already checks and only allows a fixed set of valid imports.
+    let mut max_num_locals = 0;
     for id in local_indexes {
         if let Some(name) = module.functions.get_name(id)
             && name.len() > MAX_WASM_FUNCTION_NAME_LENGTH
@@ -1329,22 +1330,16 @@ fn validate_function_section(
         // Check number of locals
         let num_locals = module
             .functions
-            .get(id)
+            .get(id) /* we retrieved the id from the same module */
             .kind()
             .unwrap_local() /* we are looping over locals only */
-            .unwrap() /* we retrieved the id from the same module */
+            .unwrap()
             .body
             .num_locals;
-        if num_locals > MAX_WASM_FUNCTION_NUM_LOCALS as u32 {
-            return Err(WasmValidationError::TooManyLocals {
-                index: *id as usize,
-                defined: num_locals as usize,
-                allowed: MAX_WASM_FUNCTION_NUM_LOCALS,
-            });
-        }
+        max_num_locals = max_num_locals.max(num_locals);
     }
 
-    Ok(())
+    Ok(max_num_locals as u64)
 }
 
 // Checks if the module has a Wasm64 memory.
@@ -1836,7 +1831,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_table_section(&module)?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
-    validate_function_section(&module, config.max_functions)?;
+    let max_num_locals = validate_function_section(&module, config.max_functions)?;
     // The maximum Wasm memory size is different for Wasm32 and Wasm64 and
     // each needs to be validated accordingly.
     let max_wasm_memory_size = if has_wasm64_memory(&module) {
@@ -1854,6 +1849,7 @@ pub(super) fn validate_wasm_binary<'a>(
             largest_function_instruction_count,
             max_complexity,
             code_section_size,
+            max_num_locals,
         },
         module,
     ))

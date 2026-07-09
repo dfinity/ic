@@ -1,11 +1,11 @@
 use crate::canister_http_refunds::{
     deliver_canister_http_refunds, refund_timed_out_canister_http_contexts,
 };
-use crate::message_routing::{
-    ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
-};
+use crate::message_routing::{CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics};
 use crate::routing::demux::Demux;
-use crate::routing::stream_builder::StreamBuilder;
+use crate::routing::stream_builder::{
+    StreamBuilder, generate_reject_responses_for_deleted_subnets,
+};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
@@ -13,11 +13,10 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
-use ic_registry_resource_limits::ResourceLimits;
-use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
 use ic_types::{ExecutionRound, NumBytes, SubnetId};
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -33,13 +32,10 @@ pub(crate) trait StateMachine: Send {
     fn execute_round(
         &self,
         state: ReplicatedState,
-        network_topology: NetworkTopology,
         batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
+        network_topology: Arc<NetworkTopology>,
+        own_subnet_info: Arc<OwnSubnetInfo>,
         registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -107,13 +103,10 @@ impl StateMachine for StateMachineImpl {
     fn execute_round(
         &self,
         mut state: ReplicatedState,
-        network_topology: NetworkTopology,
         batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
+        network_topology: Arc<NetworkTopology>,
+        own_subnet_info: Arc<OwnSubnetInfo>,
         registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         let time_out_messages_timer = self.metrics.start_phase_timer(PHASE_TIME_OUT_MESSAGES);
 
@@ -130,10 +123,7 @@ impl StateMachine for StateMachineImpl {
         }
 
         state.metadata.network_topology = network_topology;
-        state.metadata.own_subnet_features = subnet_features;
-        state.metadata.own_resource_limits = resource_limits;
-        state.metadata.node_public_keys = node_public_keys;
-        state.metadata.api_boundary_nodes = api_boundary_nodes;
+        state.metadata.own_subnet_info = own_subnet_info;
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);
@@ -274,10 +264,28 @@ impl StateMachine for StateMachineImpl {
 
         // Postprocess the state: route messages into streams.
         let message_routing_timer = self.metrics.start_phase_timer(PHASE_MESSAGE_ROUTING);
+        // Discard streams to subnets no longer present in the network topology.
+        state_after_execution.discard_streams_for_deleted_subnets();
         #[cfg(debug_assertions)]
         let balance_before_routing = state_after_execution.balance_with_messages();
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
+
+        // Enqueue synthetic rejects for callbacks to canisters on deleted subnets before
+        // enforcing the best-effort memory limit, so best-effort rejects are subject to shedding.
+        // Must be called after `build_streams()`, see the comment on
+        // `generate_reject_responses_for_deleted_subnets()`.
+        let errors = generate_reject_responses_for_deleted_subnets(&mut state_after_stream_builder);
+        for error in &errors {
+            // Critical error, responses should always be inducted successfully.
+            error!(
+                self.log,
+                "{}: Inducting synthetic reject response for deleted subnet failed: {}",
+                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                error
+            );
+            self.metrics.critical_error_induct_response_failed.inc();
+        }
         message_routing_timer.observe_duration();
 
         // Shed enough messages to stay below the best-effort message memory limit.
