@@ -387,11 +387,6 @@ impl IDkgPoolImpl {
                     POOL_TYPE_VALIDATED,
                 )) as Box<_>
             }
-            _ => Box::new(InMemoryIDkgPoolSection::new(
-                metrics_registry.clone(),
-                POOL_IDKG,
-                POOL_TYPE_VALIDATED,
-            )) as Box<_>,
         };
         Self {
             node_id,

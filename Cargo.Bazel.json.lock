@@ -1,5 +1,5 @@
 {
-  "checksum": "d6ca6745ef7d17f984d40625f0b27f428a21f181dd060a7ff6d1e93f4bd3c320",
+  "checksum": "81132dde202d4187d8f32062ccb55c5abfe390100810fdeba8169dbc5afacfdb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11109,95 +11109,6 @@
         "version": "1.3.0"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "bzip2-sys 0.1.11+1.0.8": {
-      "name": "bzip2-sys",
-      "version": "0.1.11+1.0.8",
-      "package_url": "https://github.com/alexcrichton/bzip2-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bzip2-sys/0.1.11+1.0.8/download",
-          "sha256": "736a955f3fa7875102d57c82b8cac37ec45224a07fd32d58f9f7a186b6cd4cdc"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bzip2_sys",
-            "crate_root": "lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bzip2_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bzip2-sys 0.1.11+1.0.8",
-              "target": "build_script_build"
-            },
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.11+1.0.8"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.2.48",
-              "target": "cc"
-            },
-            {
-              "id": "pkg-config 0.3.32",
-              "target": "pkg_config"
-            }
-          ],
-          "selects": {}
-        },
-        "links": "bzip2"
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -22799,10 +22710,6 @@
             {
               "id": "rlp 0.5.2",
               "target": "rlp"
-            },
-            {
-              "id": "rocksdb 0.22.0",
-              "target": "rocksdb"
             },
             {
               "id": "rolling-file 0.2.0",
@@ -45971,113 +45878,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "librocksdb-sys 0.16.0+8.10.0": {
-      "name": "librocksdb-sys",
-      "version": "0.16.0+8.10.0",
-      "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/librocksdb-sys/0.16.0+8.10.0/download",
-          "sha256": "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "librocksdb_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "librocksdb_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "static"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            },
-            {
-              "id": "librocksdb-sys 0.16.0+8.10.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.16.0+8.10.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bindgen 0.69.4",
-              "target": "bindgen"
-            },
-            {
-              "id": "cc 1.2.48",
-              "target": "cc"
-            },
-            {
-              "id": "glob 0.3.1",
-              "target": "glob"
-            }
-          ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "NUM_JOBS": "8"
-          },
-          "selects": {}
-        },
-        "links": "rocksdb"
-      },
-      "license": "MIT/Apache-2.0/BSD-3-Clause",
-      "license_ids": [
-        "Apache-2.0",
-        "BSD-3-Clause",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "libsqlite3-sys 0.35.0": {
       "name": "libsqlite3-sys",
       "version": "0.35.0",
@@ -69121,57 +68921,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "rocksdb 0.22.0": {
-      "name": "rocksdb",
-      "version": "0.22.0",
-      "package_url": "https://github.com/rust-rocksdb/rust-rocksdb",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rocksdb/0.22.0/download",
-          "sha256": "6bd13e55d6d7b8cd0ea569161127567cd587676c99f4472f779a0279aa60a7a7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rocksdb",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rocksdb",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            },
-            {
-              "id": "librocksdb-sys 0.16.0+8.10.0",
-              "target": "librocksdb_sys"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.22.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
     },
     "rolling-file 0.2.0": {
       "name": "rolling-file",
@@ -101788,7 +101537,6 @@
     "ring 0.17.14",
     "ripemd 0.1.3",
     "rlp 0.5.2",
-    "rocksdb 0.22.0",
     "rolling-file 0.2.0",
     "rsa 0.9.10",
     "rstest 0.19.0",

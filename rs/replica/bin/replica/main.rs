@@ -331,9 +331,6 @@ fn main() -> io::Result<()> {
 #[cfg(feature = "profiler")]
 fn frames_post_processor() -> impl Fn(&mut pprof::Frames) {
     let thread_rename = [
-        (Regex::new(r"^rocksdb:bg\d*$").unwrap(), "rocksdb:bg"),
-        (Regex::new(r"^rocksdb:low\d*$").unwrap(), "rocksdb:low"),
-        (Regex::new(r"^rocksdb:high\d*$").unwrap(), "rocksdb:high"),
         (Regex::new(r"^snap sender\d*$").unwrap(), "snap-sender"),
         (Regex::new(r"^apply-\d*$").unwrap(), "apply"),
         (Regex::new(r"^future-poller-\d*$").unwrap(), "future-poller"),

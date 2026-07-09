@@ -1,8 +1,5 @@
-use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-
-const PERSISTENT_POOL_VALIDATED_PURGE_INTERVAL: u64 = 5000;
 
 /// The number of height folders we store grouped inside a single "shard" folder
 /// (to avoid running into inode limits on potentially misconfigured file
@@ -74,11 +71,10 @@ pub struct ArtifactPoolConfig {
     pub backup_config: Option<BackupConfig>,
 }
 
-/// Choice of persistent pool database is either LMDB or RocksDB.
+/// Choice of persistent pool database backend.
 #[derive(Clone, Debug)]
 pub enum PersistentPoolBackend {
     Lmdb(LMDBConfig),
-    RocksDB(RocksDBConfig),
 }
 
 /// LMDB specific configuration
@@ -87,22 +83,6 @@ pub struct LMDBConfig {
     /// The path at which the validated section of the persistent pool is
     /// stored.
     pub persistent_pool_validated_persistent_db_path: PathBuf,
-}
-
-/// RocksDB specific configuration
-#[derive(Clone, Debug)]
-pub struct RocksDBConfig {
-    /// Whether the validated section on the artifact pool, which is persistent
-    /// should skips fsync calls, for tests.
-    ///
-    /// NOTE: This nullifies all durability guarantees and thus should
-    /// only be used in tests.
-    pub persistent_pool_validated_skip_fsync_for_tests: bool,
-    /// The path at which the validated section of the persistent pool is
-    /// stored.
-    pub persistent_pool_validated_persistent_db_path: PathBuf,
-    /// Consensus pool is purged at a fixed interval.
-    pub persistent_pool_validated_purge_interval: Height,
 }
 
 impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
@@ -114,17 +94,8 @@ impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
             "lmdb" => PersistentPoolBackend::Lmdb(LMDBConfig {
                 persistent_pool_validated_persistent_db_path: toml_config.consensus_pool_path,
             }),
-            "rocksdb" => PersistentPoolBackend::RocksDB(RocksDBConfig {
-                persistent_pool_validated_skip_fsync_for_tests: false,
-                persistent_pool_validated_persistent_db_path: toml_config.consensus_pool_path,
-                persistent_pool_validated_purge_interval: Height::from(
-                    PERSISTENT_POOL_VALIDATED_PURGE_INTERVAL,
-                ),
-            }),
             _ => {
-                panic!(
-                    "Unsupported persistent_pool_backend: {backend}, must be either \"lmdb\" or \"rocksdb\"."
-                );
+                panic!("Unsupported persistent_pool_backend: {backend}, must be \"lmdb\".");
             }
         };
         ArtifactPoolConfig {
@@ -146,9 +117,6 @@ impl ArtifactPoolConfig {
     pub fn persistent_pool_db_path(&self) -> PathBuf {
         match &self.persistent_pool_backend {
             PersistentPoolBackend::Lmdb(config) => {
-                config.persistent_pool_validated_persistent_db_path.clone()
-            }
-            PersistentPoolBackend::RocksDB(config) => {
                 config.persistent_pool_validated_persistent_db_path.clone()
             }
         }
