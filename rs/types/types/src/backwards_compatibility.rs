@@ -61,6 +61,12 @@ impl<T: Hash, const SETTABLE: bool> Hash for BackwardsCompatible<T, SETTABLE> {
     }
 }
 
+impl<T> BackwardsCompatible<T, false> {
+    pub const fn empty() -> Self {
+        Self(None)
+    }
+}
+
 impl<T> BackwardsCompatible<T, true> {
     pub const fn new(value: T) -> Self {
         Self(Some(value))
@@ -194,7 +200,7 @@ mod tests {
         assert_eq!(opt.as_ref(), Some(&123));
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Hash)]
     struct Value(u64);
 
     struct ValidProto(u64);
@@ -256,5 +262,220 @@ mod tests {
             result_not_settable,
             Err(ProxyDecodeError::MissingField("Value"))
         ));
+    }
+
+    /// Showcases the full backwards-compatible rollout *and* rollback of a new struct field, as
+    /// documented on [`BackwardsCompatible`]. Each `V0`..`V3` struct models a replica version;
+    /// during a rollout/rollback adjacent versions run side by side, so for the same logical state
+    /// they must agree on the struct hash and must be able to exchange the field over the wire
+    /// without losing it.
+    mod rollout {
+        use super::*;
+
+        // Base fields shared by every version; only the new field evolves across versions.
+        const A: u64 = 7;
+        const B: &str = "ic";
+
+        // Protobuf-like wire format exchanged between replicas. Like a freshly added proto field,
+        // `new_field` is optional.
+        struct Wire {
+            a: u64,
+            b: String,
+            new_field: Option<ValidProto>,
+        }
+
+        // Before the field existed.
+        #[derive(Hash)]
+        struct V0 {
+            a: u64,
+            b: String,
+        }
+
+        // Step 1: field added as `<_, false>` — understood on the wire, but never populated.
+        #[derive(Hash)]
+        struct V1 {
+            a: u64,
+            b: String,
+            new_field: BackwardsCompatible<Value, false>,
+        }
+
+        // Step 2: field switched to `<_, true>` — now allowed to be populated.
+        #[derive(Hash)]
+        struct V2 {
+            a: u64,
+            b: String,
+            new_field: BackwardsCompatible<Value, true>,
+        }
+
+        // Step 3: field replaced with the bare type `T` — now mandatory.
+        #[derive(Hash)]
+        struct V3 {
+            a: u64,
+            b: String,
+            new_field: Value,
+        }
+
+        impl V0 {
+            fn to_wire(&self) -> Wire {
+                // V0 knows nothing about the field...
+                Wire {
+                    a: self.a,
+                    b: self.b.clone(),
+                    new_field: None,
+                }
+            }
+            fn from_wire(wire: Wire) -> Self {
+                // ...and ignores it on the way in.
+                Self {
+                    a: wire.a,
+                    b: wire.b,
+                }
+            }
+        }
+
+        impl V1 {
+            fn to_wire(&self) -> Wire {
+                Wire {
+                    a: self.a,
+                    b: self.b.clone(),
+                    new_field: self.new_field.as_ref().map(|v| ValidProto(v.0)),
+                }
+            }
+            fn from_wire(wire: Wire) -> Result<Self, ProxyDecodeError> {
+                Ok(Self {
+                    a: wire.a,
+                    b: wire.b,
+                    new_field: BackwardsCompatible::try_from_proto(wire.new_field)?,
+                })
+            }
+        }
+
+        impl V2 {
+            fn to_wire(&self) -> Wire {
+                Wire {
+                    a: self.a,
+                    b: self.b.clone(),
+                    new_field: self.new_field.as_ref().map(|v| ValidProto(v.0)),
+                }
+            }
+            fn from_wire(wire: Wire) -> Result<Self, ProxyDecodeError> {
+                Ok(Self {
+                    a: wire.a,
+                    b: wire.b,
+                    new_field: BackwardsCompatible::try_from_proto(wire.new_field)?,
+                })
+            }
+        }
+
+        impl V3 {
+            fn to_wire(&self) -> Wire {
+                Wire {
+                    a: self.a,
+                    b: self.b.clone(),
+                    new_field: Some(ValidProto(self.new_field.0)),
+                }
+            }
+            fn from_wire(wire: Wire) -> Result<Self, ProxyDecodeError> {
+                let new_field = wire
+                    .new_field
+                    .map(Value::try_from)
+                    .transpose()?
+                    .ok_or(ProxyDecodeError::MissingField("V3::new_field"))?;
+                Ok(Self {
+                    a: wire.a,
+                    b: wire.b,
+                    new_field,
+                })
+            }
+        }
+
+        #[test]
+        fn full_rollout_and_rollback_preserve_cross_version_hashes() {
+            let v0 = V0 {
+                a: A,
+                b: B.to_string(),
+            };
+            let v1_unset = V1 {
+                a: A,
+                b: B.to_string(),
+                new_field: BackwardsCompatible::empty(),
+            };
+
+            // === Rollout step 1 — introduce the field as `<_, false>` (V0 <-> V1) ===
+            // Adding an unset backwards-compatible field must not change the struct hash, so V0 and
+            // V1 replicas agree while both are in the fleet.
+            assert_eq!(hash_of(&v0), hash_of(&v1_unset));
+            // The (absent) field round-trips: a V0 wire decodes into an unset V1 with an equal hash.
+            let v1_from_v0 = V1::from_wire(v0.to_wire()).unwrap();
+            assert_eq!(v1_from_v0.new_field.as_ref(), None);
+            assert_eq!(hash_of(&v1_from_v0), hash_of(&v0));
+
+            // === Rollout step 2 — make the field settable `<_, true>` (V1 <-> V2) ===
+            // A pure type change; in production the field is still unset, so the switch is
+            // hash-neutral. We build the V2 state by decoding a V1 wire, exactly like a replica
+            // migrating its own state across the upgrade.
+            let v2_unset = V2::from_wire(v1_unset.to_wire()).unwrap();
+            assert_eq!(v2_unset.new_field.as_ref(), None);
+            assert_eq!(hash_of(&v1_unset), hash_of(&v2_unset));
+
+            // === All replicas at V2 — start populating the field ===
+            let v2_set = V2 {
+                a: A,
+                b: B.to_string(),
+                new_field: BackwardsCompatible::new(Value(42)),
+            };
+            // Populating the field now genuinely changes the hash (it is no longer `None`).
+            assert_ne!(hash_of(&v2_unset), hash_of(&v2_set));
+
+            // === Rollout step 3 — replace with the bare type `T` (V2 <-> V3) ===
+            // `Some(v)` hashes like `v`, so a populated V2 and a mandatory-field V3 agree.
+            let v3 = V3 {
+                a: A,
+                b: B.to_string(),
+                new_field: Value(42),
+            };
+            assert_eq!(hash_of(&v2_set), hash_of(&v3));
+            // The value round-trips from V2 to V3.
+            let v3_from_v2 = V3::from_wire(v2_set.to_wire()).unwrap();
+            assert_eq!(v3_from_v2.new_field, Value(42));
+            assert_eq!(hash_of(&v3_from_v2), hash_of(&v2_set));
+
+            // Trying to rollout to V3 with an unset field fails, as expected.
+            let v3_from_v2_unset = V3::from_wire(v2_unset.to_wire());
+            assert!(matches!(
+                v3_from_v2_unset,
+                Err(ProxyDecodeError::MissingField("V3::new_field"))
+            ));
+
+            // ============================= Rollback =============================
+
+            // --- Rollback step 3 -> 2 (V3 -> V2) ---
+            // A replica downgraded from V3 ingests the now-optional value and still agrees on hash.
+            let v2_from_v3 = V2::from_wire(v3.to_wire()).unwrap();
+            assert_eq!(v2_from_v3.new_field.as_ref(), Some(&Value(42)));
+            assert_eq!(hash_of(&v2_from_v3), hash_of(&v3));
+
+            // --- Rollback step 2 -> 1 (V2 -> V1), field already populated (the crux) ---
+            // A `<_, false>` field cannot *produce* a value, but it still *understands* one decoded
+            // from a newer replica, and hashes it identically. This is what makes rolling back a
+            // populated fleet safe.
+            let v1_from_v2_set = V1::from_wire(v2_set.to_wire()).unwrap();
+            assert_eq!(v1_from_v2_set.new_field.as_ref(), Some(&Value(42)));
+            assert_eq!(hash_of(&v1_from_v2_set), hash_of(&v2_set));
+            // Sanity check also for the V2 unset case
+            let v1_from_v2_unset = V1::from_wire(v2_unset.to_wire()).unwrap();
+            assert_eq!(v1_from_v2_unset.new_field.as_ref(), None);
+            assert_eq!(hash_of(&v1_from_v2_unset), hash_of(&v2_unset));
+
+            // --- Rollback step 1 -> 0 (V1 -> V0), only safe while the field is unset ---
+            let v0_from_v1 = V0::from_wire(v1_unset.to_wire());
+            assert_eq!(hash_of(&v0_from_v1), hash_of(&v0));
+
+            // --- Safety floor: once populated, rolling back to V0 would diverge ---
+            // A no-field V0 replica cannot match a populated field. This is exactly why the field
+            // is rolled out as "understood" (step 1) everywhere before any value is produced, and
+            // why the safe rollback floor rises to V1 once the field is populated.
+            assert_ne!(hash_of(&v0), hash_of(&v1_from_v2_set));
+        }
     }
 }
