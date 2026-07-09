@@ -353,7 +353,7 @@ genrule(
     outs = ["OVMF_CODE_4M.fd"],
     cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_deb//file) | tar -xO ./usr/share/OVMF/OVMF_CODE_4M.fd > $@",
     target_compatible_with = [
-        "@platforms//os:linux", # technically: Ubuntu/Debian with dpkg-deb
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
     ],
 )
 
@@ -364,6 +364,6 @@ genrule(
     outs = ["OVMF_VARS_4M.fd"],
     cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_deb//file) | tar -xO ./usr/share/OVMF/OVMF_VARS_4M.fd > $@",
     target_compatible_with = [
-        "@platforms//os:linux", # technically: Ubuntu/Debian with dpkg-deb
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
     ],
 )
