@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::eth_logs::{LedgerSubaccount, principal_to_bytes32};
+use crate::eth_logs::LedgerSubaccount;
 use candid::Principal;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
@@ -62,8 +62,14 @@ pub fn deposit_derivation_path(
 ) -> Vec<ByteBuf> {
     vec![
         ByteBuf::from(vec![schema.tag()]),
-        ByteBuf::from(principal_to_bytes32(owner).to_vec()),
-        ByteBuf::from(subaccount_to_bytes32(subaccount).to_vec()),
+        ByteBuf::from(owner.as_slice().to_vec()),
+        ByteBuf::from(
+            subaccount
+                .cloned()
+                .map(LedgerSubaccount::to_bytes)
+                .unwrap_or([0_u8; 32])
+                .to_vec(),
+        ),
     ]
 }
 
@@ -86,11 +92,4 @@ fn derive_address(
     let (derived_public_key, _derived_chain_code) =
         master_public_key.derive_subkey_with_chain_code(&derivation_path, chain_code);
     ecdsa_public_key_to_address(&derived_public_key)
-}
-
-fn subaccount_to_bytes32(subaccount: Option<&LedgerSubaccount>) -> [u8; 32] {
-    subaccount
-        .cloned()
-        .map(LedgerSubaccount::to_bytes)
-        .unwrap_or([0_u8; 32])
 }

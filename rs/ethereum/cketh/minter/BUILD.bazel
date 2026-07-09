@@ -188,7 +188,6 @@ rust_binary(
     srcs = ["bin/principal_to_hex.rs"],
     deps = [
         # Keep sorted.
-        ":minter",
         "@crate_index//:candid",
         "@crate_index//:hex",
     ],

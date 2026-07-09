@@ -22,6 +22,10 @@ fn main() {
             std::process::exit(1)
         }
     };
-    let fixed_bytes = ic_cketh_minter::eth_logs::principal_to_bytes32(&principal);
+    let n = principal.as_slice().len();
+    assert!(n <= 29);
+    let mut fixed_bytes = [0_u8; 32];
+    fixed_bytes[0] = n as u8;
+    fixed_bytes[1..=n].copy_from_slice(principal.as_slice());
     println!("0x{}", hex::encode(fixed_bytes));
 }
