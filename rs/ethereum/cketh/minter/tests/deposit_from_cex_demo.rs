@@ -31,7 +31,7 @@
 //! `ANVIL_BIN` points at it. Requires EIP-7702 support (foundry >= v1.0).
 
 use candid::Principal;
-use ethers_core::abi::{decode, encode, ParamType, Token};
+use ethers_core::abi::{ParamType, Token};
 use ethers_core::types::{Address as EthAddress, U256};
 use ic_cketh_minter::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
 use ic_cketh_minter::tx::{
@@ -41,7 +41,7 @@ use ic_cketh_minter::tx::{
 use ic_ethereum_types::Address;
 use ic_secp256k1::{PrivateKey, PublicKey};
 use ic_sha3::Keccak256;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -924,7 +924,7 @@ fn sign_authorization(
 /// A function call: the 4-byte selector followed by the ABI-encoded arguments.
 fn call(signature: &str, tokens: &[Token]) -> Vec<u8> {
     let selector = &Keccak256::hash(signature.as_bytes())[..4];
-    [selector, &encode(tokens)].concat()
+    [selector, &ethers_core::abi::encode(tokens)].concat()
 }
 
 fn address_token(address: &Address) -> Token {
@@ -941,7 +941,7 @@ fn bytes32_token(value: [u8; 32]) -> Token {
 
 /// Decodes a single ABI-encoded return value.
 fn decode_one(param: ParamType, data: &[u8]) -> Token {
-    decode(&[param], data)
+    ethers_core::abi::decode(&[param], data)
         .expect("ABI decode failed")
         .pop()
         .unwrap()
@@ -998,7 +998,7 @@ fn compile(source_var: &str, contract: &str) -> Vec<u8> {
 }
 
 fn deploy_code(bytecode: &[u8], constructor_args: &[Token]) -> Vec<u8> {
-    [bytecode, &encode(constructor_args)].concat()
+    [bytecode, &ethers_core::abi::encode(constructor_args)].concat()
 }
 
 struct ReceivedEvent {
@@ -1077,7 +1077,9 @@ impl Anvil {
     fn rpc(&self, method: &str, params: Value) -> Value {
         let body: Value = reqwest::blocking::Client::new()
             .post(&self.url)
-            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))
+            .json(
+                &serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+            )
             .send()
             .unwrap()
             .json()
@@ -1091,29 +1093,32 @@ impl Anvil {
     }
 
     fn chain_id(&self) -> u64 {
-        hex_to_u64(&self.rpc("eth_chainId", json!([])))
+        hex_to_u64(&self.rpc("eth_chainId", serde_json::json!([])))
     }
 
     fn nonce(&self, address: &Address) -> u64 {
         hex_to_u64(&self.rpc(
             "eth_getTransactionCount",
-            json!([to_hex(address.as_ref()), "latest"]),
+            serde_json::json!([to_hex(address.as_ref()), "latest"]),
         ))
     }
 
     fn balance(&self, address: &Address) -> u128 {
         let balance = self.rpc(
             "eth_getBalance",
-            json!([to_hex(address.as_ref()), "latest"]),
+            serde_json::json!([to_hex(address.as_ref()), "latest"]),
         );
         u128::from_str_radix(balance.as_str().unwrap().trim_start_matches("0x"), 16).unwrap()
     }
 
     fn code(&self, address: &Address) -> Vec<u8> {
         from_hex(
-            self.rpc("eth_getCode", json!([to_hex(address.as_ref()), "latest"]))
-                .as_str()
-                .unwrap(),
+            self.rpc(
+                "eth_getCode",
+                serde_json::json!([to_hex(address.as_ref()), "latest"]),
+            )
+            .as_str()
+            .unwrap(),
         )
     }
 
@@ -1121,7 +1126,7 @@ impl Anvil {
         from_hex(
             self.rpc(
                 "eth_call",
-                json!([{"to": to_hex(to.as_ref()), "input": to_hex(data)}, "latest"]),
+                serde_json::json!([{"to": to_hex(to.as_ref()), "input": to_hex(data)}, "latest"]),
             )
             .as_str()
             .unwrap(),
@@ -1143,21 +1148,21 @@ impl Anvil {
         data: &[u8],
         gas: Option<u64>,
     ) -> String {
-        let mut tx = json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
+        let mut tx = serde_json::json!({"from": to_hex(from.as_ref()), "input": to_hex(data)});
         if let Some(to) = to {
-            tx["to"] = json!(to_hex(to.as_ref()));
+            tx["to"] = serde_json::json!(to_hex(to.as_ref()));
         }
         if let Some(gas) = gas {
-            tx["gas"] = json!(format!("0x{gas:x}"));
+            tx["gas"] = serde_json::json!(format!("0x{gas:x}"));
         }
-        self.rpc("eth_sendTransaction", json!([tx]))
+        self.rpc("eth_sendTransaction", serde_json::json!([tx]))
             .as_str()
             .unwrap()
             .to_string()
     }
 
     fn send_raw(&self, raw: &[u8]) -> String {
-        self.rpc("eth_sendRawTransaction", json!([to_hex(raw)]))
+        self.rpc("eth_sendRawTransaction", serde_json::json!([to_hex(raw)]))
             .as_str()
             .unwrap()
             .to_string()
@@ -1217,7 +1222,7 @@ impl Anvil {
     fn await_receipt(&self, tx_hash: &str) -> Value {
         let deadline = Instant::now() + Duration::from_secs(10);
         while Instant::now() < deadline {
-            let receipt = self.rpc("eth_getTransactionReceipt", json!([tx_hash]));
+            let receipt = self.rpc("eth_getTransactionReceipt", serde_json::json!([tx_hash]));
             if !receipt.is_null() {
                 return receipt;
             }
@@ -1242,7 +1247,7 @@ fn wait_until_ready(child: &mut Child, bin: &str, url: &str) {
         }
         let ready = reqwest::blocking::Client::new()
             .post(url)
-            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}))
+            .json(&serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}))
             .send()
             .map(|r| r.status().is_success())
             .unwrap_or(false);
