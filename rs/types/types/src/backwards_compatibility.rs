@@ -8,6 +8,9 @@ use std::hash::{Hash, Hasher};
 /// Compared to [`Option`], its [`Hash`] implementation:
 ///  - ignores `None` (so adding an unset field preserves the surrounding struct hash), and
 ///  - hashes `Some(v)` like `v` (so later replacing it with `T` preserves hashes).
+/// The purpose of this is to have a compatible `Hash` implementation across versions of a struct,
+/// so that replicas running different versions of the code can still agree on the hash of a struct
+/// instance.
 ///
 /// IMPORTANT: there should be only one field of type `BackwardsCompatible` in a struct. Otherwise,
 /// two different instances of the struct could have the same hash. For example:
@@ -28,29 +31,8 @@ use std::hash::{Hash, Hasher};
 /// 2. When the change is deployed to all replicas, we can switch the type to
 ///    `BackwardsCompatible<T, true>` and the field can begin to be populated.
 /// 3. When the change is deployed to all replicas, we can replace the type with `T`.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BackwardsCompatible<T, const SETTABLE: bool>(Option<T>);
-
-impl<T: Serialize, const SETTABLE: bool> Serialize for BackwardsCompatible<T, SETTABLE> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-impl<'de, T: Deserialize<'de>, const SETTABLE: bool> Deserialize<'de>
-    for BackwardsCompatible<T, SETTABLE>
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = Option::<T>::deserialize(deserializer)?;
-        Ok(Self(value))
-    }
-}
 
 impl<T: Default> Default for BackwardsCompatible<T, false> {
     fn default() -> Self {
