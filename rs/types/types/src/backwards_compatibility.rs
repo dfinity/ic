@@ -2,7 +2,6 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 /// A helper struct for introducing new fields to structs that must stay backwards compatible.
 /// Its inner value can be read with [`as_ref`](BackwardsCompatible::as_ref).
 ///
@@ -18,6 +17,7 @@ use std::hash::{Hash, Hasher};
 /// 2. When the change is deployed to all replicas, we can switch the type to
 ///    `BackwardsCompatible<T, true>` and the field can begin to be populated.
 /// 3. When the change is deployed to all replicas, we can replace the type with `T`.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BackwardsCompatible<T, const SETTABLE: bool>(Option<T>);
 
 impl<T: Default> Default for BackwardsCompatible<T, false> {
