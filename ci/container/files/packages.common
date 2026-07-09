@@ -46,11 +46,11 @@ zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
 # Local system-test backend (see rs/tests/driver/src/driver/local_backend.rs),
-# which launches KVM-accelerated QEMU VMs. `ovmf` provides the guests' UEFI
-# firmware.
+# which launches KVM-accelerated QEMU VMs. The guests' UEFI (OVMF) firmware is
+# provided by the `@ovmf` Bazel repo (see bazel/ovmf.bzl) rather than this
+# package set.
 qemu-system-x86
 qemu-utils
-ovmf
 # Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
 # plus `setcap`/`getcap`; see ci/container/Dockerfile.
 libcap2-bin
