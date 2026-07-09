@@ -9,6 +9,17 @@ use std::hash::{Hash, Hasher};
 ///  - ignores `None` (so adding an unset field preserves the surrounding struct hash), and
 ///  - hashes `Some(v)` like `v` (so later replacing it with `T` preserves hashes).
 ///
+/// IMPORTANT: there should be only one field of type `BackwardsCompatible` in a struct. Otherwise,
+/// two different instances of the struct could have the same hash. For example:
+/// ```
+/// #[derive(Hash)]
+/// struct S { a: BackwardsCompatible<u8, false>, b: BackwardsCompatible<u8, false> }
+///
+/// S { a: Some(1), b: None }
+/// S { a: None, b: Some(1) }
+/// ```
+/// would have the same hash.
+///
 /// Lifecycle of adding a new field to a struct in a backwards compatible way:
 /// 1. Add a new field to the struct with type `BackwardsCompatible<T, false>`. At this point the
 ///    field is *NOT* allowed to be instantiated with any value other than `None`. Though, it still
