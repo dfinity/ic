@@ -87,7 +87,9 @@ pub fn test(env: TestEnv) {
         .collect::<Vec<_>>();
     let app_subnet = app_subnet.first().unwrap();
     let app_nodes: Vec<IcNodeSnapshot> = app_subnet.nodes().collect();
-    let app_node = &app_nodes[0];
+    let app_node = app_nodes
+        .first()
+        .expect("expected the Application subnet to have at least one node");
     let app_node_ids = BTreeSet::from_iter(app_nodes.iter().map(|x| x.node_id));
     let vapp_subnet = topology_snapshot
         .subnets()
@@ -101,7 +103,9 @@ pub fn test(env: TestEnv) {
         .collect::<Vec<_>>();
     let engine_subnet = engine_subnet.first().unwrap();
     let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
-    let engine_node = &engine_nodes[0];
+    let engine_node = engine_nodes
+        .first()
+        .expect("expected the CloudEngine subnet to have at least one node");
     let engine_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
     assert!(
         topology_snapshot
