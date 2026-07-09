@@ -138,4 +138,3 @@ fn ensure_only_allowed_fields_set_rejects_non_default_gossip_flag() {
         "error must mention the non-default bool: {err}"
     );
 }
-
