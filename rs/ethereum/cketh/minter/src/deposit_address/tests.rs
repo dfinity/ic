@@ -6,14 +6,18 @@ use crate::test_fixtures::arb::arb_principal;
 use candid::Principal;
 use ic_secp256k1::{PrivateKey, PublicKey};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use proptest::array::uniform32;
 use proptest::collection::btree_set;
+use proptest::option;
+use proptest::prelude::any;
 use proptest::{prop_assert_eq, proptest};
 use std::collections::BTreeSet;
 
 proptest! {
     #[test]
     fn should_derive_distinct_addresses_for_distinct_principals(
-        owners in btree_set(arb_principal(), 1..=100)
+        owners in btree_set(arb_principal(), 1..=100),
+        subaccount in option::of(uniform32(any::<u8>())),
     ) {
         let (pk, cc) = master_key();
 
@@ -24,37 +28,35 @@ proptest! {
                     &pk,
                     &cc,
                     DepositAddressSchema::CkErc20,
-                    &account(*owner, None),
+                    &account(*owner, subaccount),
                 )
             })
             .collect();
 
         prop_assert_eq!(addresses.len(), owners.len());
     }
-}
 
-#[test]
-fn should_derive_distinct_addresses_for_distinct_subaccounts() {
-    let (pk, cc) = master_key();
-    let owner = principal(1);
+    #[test]
+    fn should_derive_distinct_addresses_for_distinct_subaccounts(
+        owner in arb_principal(),
+        subaccounts in btree_set(uniform32(any::<u8>()), 1..=100),
+    ) {
+        let (pk, cc) = master_key();
 
-    let mut addresses = BTreeSet::new();
-    addresses.insert(deposit_address(
-        &pk,
-        &cc,
-        DepositAddressSchema::CkErc20,
-        &account(owner, None),
-    ));
-    for i in 1..16_u8 {
-        addresses.insert(deposit_address(
-            &pk,
-            &cc,
-            DepositAddressSchema::CkErc20,
-            &account(owner, Some(subaccount(i))),
-        ));
+        let addresses: BTreeSet<_> = subaccounts
+            .iter()
+            .map(|subaccount| {
+                deposit_address(
+                    &pk,
+                    &cc,
+                    DepositAddressSchema::CkErc20,
+                    &account(owner, Some(*subaccount)),
+                )
+            })
+            .collect();
+
+        prop_assert_eq!(addresses.len(), subaccounts.len());
     }
-
-    assert_eq!(addresses.len(), 16);
 }
 
 #[test]
