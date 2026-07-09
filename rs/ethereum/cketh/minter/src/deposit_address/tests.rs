@@ -78,6 +78,56 @@ proptest! {
     }
 }
 
+#[test]
+fn should_derive_stable_addresses() {
+    let (pk, cc) = master_key();
+    let p1 = Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+    let p2 = Principal::from_text("ss2fx-dyaaa-aaaar-qacoq-cai").unwrap();
+    let s1 = [0_u8; 32];
+    let mut s2 = [0_u8; 32];
+    s2[31] = 1;
+
+    // (owner, subaccount, expected ckERC20 address, expected ckETH address)
+    let cases = [
+        (
+            p1,
+            s1,
+            "0xD89FE581Db8Dbcb45736c5A9d6abdBE78913bD89",
+            "0xBdB75DE85a7E7221525180d559F57FdE80a3709f",
+        ),
+        (
+            p1,
+            s2,
+            "0xB4fB9b1fA6820deF3E4417a074497000F58ef167",
+            "0x8c08A03915F5E15AC41381500219100f92d8e4d5",
+        ),
+        (
+            p2,
+            s1,
+            "0x98c8C7b65485928e6cffDAA806a8eE27Cf1fF39C",
+            "0xE9400F21Ef90d541A605725114F59037919E05b7",
+        ),
+        (
+            p2,
+            s2,
+            "0x5D396800716451E5202Fb935e436Ab82aCe52881",
+            "0x7513b3849F4B53301f620487cD5304240A5E963d",
+        ),
+    ];
+
+    for (owner, subaccount, expected_ckerc20, expected_cketh) in cases {
+        let account = account(owner, Some(subaccount));
+        assert_eq!(
+            deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account).to_string(),
+            expected_ckerc20
+        );
+        assert_eq!(
+            deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account).to_string(),
+            expected_cketh
+        );
+    }
+}
+
 fn master_key() -> (PublicKey, [u8; 32]) {
     let (private_key, chain_code) = master_private_key();
     (private_key.public_key(), chain_code)
