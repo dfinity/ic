@@ -731,7 +731,7 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
         let instruction_limit = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_instruction_limit(instruction_limit)
-            .with_slice_instruction_limit(500_000)
+            .with_slice_instruction_limit(200_000)
             .with_manual_execution()
             .build();
 
@@ -739,6 +739,10 @@ fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
 
         let a = wasm()
             .stable64_grow(1)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
@@ -794,7 +798,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
         let instruction_limit = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_instruction_limit(instruction_limit)
-            .with_slice_instruction_limit(500_000)
+            .with_slice_instruction_limit(200_000)
             .with_manual_execution()
             .build();
 
@@ -802,6 +806,10 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
 
         let a = wasm()
             .stable64_grow(1)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
@@ -1084,7 +1092,7 @@ fn dts_uninstall_with_aborted_replicated_execution() {
         let instruction_limit = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_instruction_limit(instruction_limit)
-            .with_slice_instruction_limit(500_000)
+            .with_slice_instruction_limit(200_000)
             .with_manual_execution()
             .build();
 
@@ -1092,6 +1100,10 @@ fn dts_uninstall_with_aborted_replicated_execution() {
 
         let wasm_payload = wasm()
             .stable64_grow(1)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
             .stable64_fill(0, 0, 50_000)
