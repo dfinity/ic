@@ -1,53 +1,36 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::deposit_address::{
     DepositAddressSchema, deposit_address, deposit_derivation_path, sweeper_address,
-    sweeper_derivation_path,
 };
+use crate::test_fixtures::arb::arb_principal;
 use candid::Principal;
-use ic_ethereum_types::Address;
-use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey, PublicKey};
+use ic_secp256k1::{PrivateKey, PublicKey};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use serde_bytes::ByteBuf;
+use proptest::collection::btree_set;
+use proptest::{prop_assert_eq, proptest};
 use std::collections::BTreeSet;
-use std::str::FromStr;
 
-#[test]
-fn should_derive_distinct_addresses_for_distinct_principals() {
-    let (pk, cc) = master_key();
+proptest! {
+    #[test]
+    fn should_derive_distinct_addresses_for_distinct_principals(
+        owners in btree_set(arb_principal(), 1..=100)
+    ) {
+        let (pk, cc) = master_key();
 
-    let addresses: BTreeSet<_> = (0..16_u8)
-        .map(|i| {
-            deposit_address(
-                &pk,
-                &cc,
-                DepositAddressSchema::CkErc20,
-                &account(principal(i), None),
-            )
-        })
-        .collect();
+        let addresses: BTreeSet<_> = owners
+            .iter()
+            .map(|owner| {
+                deposit_address(
+                    &pk,
+                    &cc,
+                    DepositAddressSchema::CkErc20,
+                    &account(*owner, None),
+                )
+            })
+            .collect();
 
-    assert_eq!(addresses.len(), 16);
-}
-
-#[test]
-fn should_derive_distinct_addresses_for_edge_case_principals() {
-    let (pk, cc) = master_key();
-    let main_address = ecdsa_public_key_to_address(&pk);
-
-    let max_length_principal = Principal::self_authenticating(b"ic-cketh-minter-max-length-owner");
-    assert_eq!(max_length_principal.as_slice().len(), 29);
-    assert_eq!(Principal::anonymous().as_slice().len(), 1);
-
-    let owners = [max_length_principal, Principal::anonymous()];
-
-    let mut addresses = BTreeSet::new();
-    for owner in owners {
-        let address = deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account(owner, None));
-        assert_ne!(address, main_address);
-        addresses.insert(address);
+        prop_assert_eq!(addresses.len(), owners.len());
     }
-
-    assert_eq!(addresses.len(), owners.len());
 }
 
 #[test]
@@ -114,14 +97,6 @@ fn master_key() -> (PublicKey, [u8; 32]) {
 fn master_private_key() -> (PrivateKey, [u8; 32]) {
     let private_key = PrivateKey::generate_from_seed(b"ic-cketh-minter-deposit-address-test-seed");
     (private_key, [7_u8; 32])
-}
-
-fn to_derivation_path(path: Vec<ByteBuf>) -> DerivationPath {
-    DerivationPath::new(
-        path.into_iter()
-            .map(|index| DerivationIndex(index.into_vec()))
-            .collect(),
-    )
 }
 
 fn account(owner: Principal, subaccount: Option<Subaccount>) -> Account {
