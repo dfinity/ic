@@ -45,7 +45,7 @@ jobs:
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
-    timeout-minutes: 120
+    timeout-minutes: 150
     if: >-
       github.repository == 'dfinity/ic' &&
       ( github.event_name != 'pull_request' ||
@@ -59,6 +59,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
       - name: Bazel Test with RBE (no system-tests)
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
@@ -110,6 +111,7 @@ jobs:
       - name: Bazel Test with RBE (only system-tests)
         # Run even if the previous "no system-tests" step failed, but not when the job is cancelled.
         if: ${{ !cancelled() }}
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
