@@ -960,7 +960,7 @@ impl LocalBackend {
                 primary_disk.display(),
                 base.display()
             );
-            let mut cmd = Command::new("qemu-img");
+            let mut cmd = Command::new(get_dependency_path_from_env("ENV_DEPS__QEMU_IMG_PATH"));
             cmd.arg("create")
                 .arg("-q")
                 .arg("-f")
@@ -1084,6 +1084,12 @@ impl LocalBackend {
             }};
         }
 
+        // Specify the path for qemu data (e.g. the virtio-net PXE ROM), otherwise qemu tries to
+        // find it at /usr/share/qemu.
+        arg!(
+            "-L",
+            get_dependency_path_from_env("ENV_DEPS__QEMU_SYSTEM_DATA_PATH").display()
+        );
         arg!("-name", format!("guest={domain_name}"));
         arg!("-machine", "q35,accel=kvm");
         arg!("-cpu", "host");
@@ -1205,13 +1211,15 @@ impl LocalBackend {
         // With `-daemonize` the foreground process exits once the guest is up (or
         // nonzero, having printed the error to stderr, if startup failed), while
         // the VM runs on as a reparented process.
-        let output = Command::new("qemu-system-x86_64")
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .with_context(|| format!("launching qemu-system-x86_64 for {domain_name}"))?;
+        let output = Command::new(get_dependency_path_from_env(
+            "ENV_DEPS__QEMU_SYSTEM_X86_64_PATH",
+        ))
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("launching qemu-system-x86_64 for {domain_name}"))?;
         if !output.status.success() {
             bail!(
                 "qemu-system-x86_64 failed to start VM {domain_name} (status {}): {}",

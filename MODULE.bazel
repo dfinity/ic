@@ -56,6 +56,18 @@ archive_override(
 bazel_dep(name = "pigz", version = "2.8.bcr.1")  # (parallel) gzip
 bazel_dep(name = "zstd", version = "1.5.7.bcr.1")  # zstd can change format across versions
 
+# QEMU, for the local system test backend. We only use the prebuilt (hermetic)
+# qemu binaries; calling qemu is handled by the system test driver.
+bazel_dep(name = "rules_qemu", version = "0.3.0")
+
+qemu = use_extension("@rules_qemu//qemu/extension:qemu.bzl", "qemu")
+use_repo(
+    qemu,
+    "qemu_img_prebuilt_linux_amd64",
+    "qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu",
+    "qemu_system_data_prebuilt_linux_amd64",
+)
+
 # Rust
 
 include("//bazel:rust.MODULE.bazel")
