@@ -21,13 +21,15 @@ pub(crate) fn fetch_canister_logs(
     let canister_id = canister.canister_id();
     let (reply, record_count) =
         fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
-    // The caller is authorized (the visibility check inside
-    // `fetch_canister_logs_response` passed). Account for the work of reading and
-    // encoding the logs against the round's instruction budget, approximated from
-    // the number of records returned (see `fetch_canister_logs_instructions`). No
-    // cycles are charged for this work: the caller already pays the per-byte
-    // message transmission fee on the (potentially large) response, which
-    // dominates the execution cost.
+    // Account for the read/encode work — approximated from the number of records
+    // returned (see `fetch_canister_logs_instructions`) — against the round's
+    // instruction budget. No cycles fee is charged for the call: the fetch's own
+    // compute is at most a few ms, which the caller already covers via the flat
+    // per-message execution fee it pays for its response callback; and for any
+    // non-empty response the per-byte message transmission fee the caller prepays
+    // dominates the execution cost (by ~20-400x in the benchmarks). A caller on a
+    // "free" cost schedule pays neither, and is rejected upstream (see
+    // `ic00_permissions`) so the read work is never done entirely for free.
     let instructions = fetch_canister_logs_instructions(record_count);
     round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
@@ -52,36 +54,32 @@ pub(crate) fn fetch_canister_logs(
 /// the record content is folded into the fixed term at its worst case, so the
 /// response content size no longer needs to be tracked.
 ///
-/// This is a conservative linear upper bound on the measured
-/// `fetch_canister_logs` execution time (see the `fetch_canister_log` benchmark
-/// in `rs/execution_environment/benches/management_canister/canister_logging.rs`),
+/// This is a conservative linear upper bound on the measured `fetch_canister_logs`
+/// execution time (see the `fetch_canister_log` benchmark in
+/// `rs/execution_environment/benches/management_canister/canister_logging.rs`;
+/// the benchmark returns its harness from the timed routine so the measurement
+/// excludes the state teardown, which is what actually scales with the buffer),
 /// chosen so the deduction never falls below the measured cost of any case:
 ///
 /// ```text
-/// time ≲ 12 ms + 0.45 µs × record_count
+/// time ≲ 6 ms + 0.45 µs × record_count
 /// ```
 ///
 /// The per-record term comes from the record-dominated worst case: a full 2 MiB
-/// buffer of 0-byte log messages returns 50_000 records in ~27 ms, i.e. ~0.44
-/// µs/record above the fixed cost. The fixed term covers a full-buffer fetch that
-/// returns nothing (~5 ms) plus the content-copy cost of the largest possible
-/// response (up to the 2 MB `MAX_FETCH_CANISTER_LOGS_RESULT_BYTES` result-size
-/// limit); it is sized so the bound also stays above the mixed record-and-content
-/// cases — the tightest, a full 2 MiB buffer of 100-byte messages, measures ~17 ms
-/// against an ~18 ms bound. At 2 billion instructions per second (2_000_000
-/// instructions per millisecond):
+/// buffer of 0-byte log messages returns 50_000 records in ~22 ms, i.e. ~0.43
+/// µs/record. The fixed term covers the fixed/content work of the mixed cases —
+/// the tightest, a full 2 MiB buffer of 100-byte messages, returns 14_285 records
+/// with ~1.4 MB of content in ~11 ms against a ~12 ms bound. At 2 billion
+/// instructions per second (2_000_000 instructions per millisecond):
 ///
 /// ```text
-/// instructions ≈ 24_000_000 + 900 × record_count
+/// instructions ≈ 12_000_000 + 900 × record_count
 /// ```
 pub(crate) fn fetch_canister_logs_instructions(record_count: u64) -> NumInstructions {
-    // Fixed cost of ~12 ms, at 2_000_000 instructions/ms (2 billion per second),
-    // covering a full-buffer fetch that returns nothing (~5 ms) plus the content
-    // copy of the largest possible response (up to the 2 MB
-    // `MAX_FETCH_CANISTER_LOGS_RESULT_BYTES` result-size limit); sized so the bound
-    // stays above the mixed cases too (a full 2 MiB buffer of 100-byte messages
-    // measures ~17 ms).
-    const BASE_INSTRUCTIONS: u64 = 24_000_000;
+    // Fixed cost of ~6 ms, at 2_000_000 instructions/ms (2 billion per second),
+    // sized so the bound stays above the mixed record-and-content cases (a full
+    // 2 MiB buffer of 100-byte messages measures ~11 ms).
+    const BASE_INSTRUCTIONS: u64 = 12_000_000;
     // ~0.45 µs/record: the per-record decode/encode overhead dominates the cost.
     const INSTRUCTIONS_PER_RECORD: u64 = 900;
     NumInstructions::new(
@@ -157,19 +155,19 @@ mod tests {
 
     #[test]
     fn fetch_canister_logs_instructions_matches_linear_approximation() {
-        // Empty response → only the ~12 ms fixed cost (24_000_000 instructions).
+        // Empty response → only the ~6 ms fixed cost (12_000_000 instructions).
         assert_eq!(
             fetch_canister_logs_instructions(0),
-            NumInstructions::new(24_000_000)
+            NumInstructions::new(12_000_000)
         );
-        // 24_000_000 + 900 × record_count instructions.
+        // 12_000_000 + 900 × record_count instructions.
         assert_eq!(
             fetch_canister_logs_instructions(50_000),
-            NumInstructions::new(24_000_000 + 900 * 50_000)
+            NumInstructions::new(12_000_000 + 900 * 50_000)
         );
         assert_eq!(
             fetch_canister_logs_instructions(10),
-            NumInstructions::new(24_000_000 + 900 * 10)
+            NumInstructions::new(12_000_000 + 900 * 10)
         );
         // Monotonically non-decreasing in the record count.
         assert!(fetch_canister_logs_instructions(100) < fetch_canister_logs_instructions(200));
