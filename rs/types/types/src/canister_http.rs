@@ -142,7 +142,7 @@ pub struct CanisterHttpRequestContext {
     pub refund_status: RefundStatus,
     /// The registry version at which this request is being processed.
     pub registry_version: RegistryVersion,
-    /// The number of nodes on the subnet processing this request.
+    /// The subnet size at the registry version above.
     pub subnet_size: NumberOfNodes,
 }
 
