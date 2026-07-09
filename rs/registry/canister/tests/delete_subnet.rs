@@ -81,9 +81,7 @@ async fn delete_subnet(
             Encode!(&payload).unwrap(),
         )
         .await
-        .unwrap_or_else(|err| {
-            panic!("delete_subnet call by {caller} was unexpectedly rejected: {err:?}")
-        });
+        .unwrap();
     Decode!(&response, Result<(), String>).unwrap()
 }
 

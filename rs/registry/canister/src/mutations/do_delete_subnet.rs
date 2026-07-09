@@ -29,9 +29,9 @@ impl Registry {
     ///
     /// Authorization by subnet type (the calling principal is already restricted to governance or the
     /// engine controller at the endpoint):
-    /// - System subnets (e.g. the NNS) may never be deleted.
+    /// - Governance may delete any non-System subnet (including CloudEngine subnets).
     /// - The engine controller may only delete CloudEngine subnets.
-    /// - Governance may delete any non-System subnet.
+    /// - As a corollary of the above, no one may delete a System subnet (e.g. the NNS).
     pub fn do_delete_subnet(
         &mut self,
         caller: PrincipalId,
@@ -44,14 +44,14 @@ impl Registry {
         let subnet_record = self.get_subnet(subnet_id_, self.latest_version())?;
 
         // System subnets (e.g. the NNS) may never be deleted.
-        if subnet_record.subnet_type == i32::from(SubnetType::System) {
+        if subnet_record.subnet_type == SubnetType::System as i32 {
             return Err("System subnets may not be deleted".to_string());
         }
 
         // The engine controller may only delete CloudEngine subnets; governance may
         // delete any non-System subnet.
         if caller == ENGINE_CONTROLLER_CANISTER_ID.get()
-            && subnet_record.subnet_type != i32::from(SubnetType::CloudEngine)
+            && subnet_record.subnet_type != SubnetType::CloudEngine as i32
         {
             return Err("The engine controller may only delete CloudEngine subnets".to_string());
         }
