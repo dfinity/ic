@@ -1496,10 +1496,11 @@ crate.spec(
 crate.spec(
     features = [
         "global-context",
-        "rand-std",
+        "rand",
+        "std",
     ],
     package = "secp256k1",
-    version = "^0.22",
+    version = "^0.29",
 )
 crate.spec(
     package = "security-framework",
@@ -1837,7 +1838,7 @@ crate.spec(
 )
 crate.spec(
     package = "tower_governor",
-    version = "^0.7.0",
+    version = "^0.8.0",
 )
 crate.spec(
     package = "tower-request-id",
@@ -2195,13 +2196,15 @@ crate.annotation_select(
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
-crate.annotation(
+
+# cfg flag to avoid linking issues. The cfg is scoped to wasm32 (the canister
+# target) because on native targets the vendored C library exports
+# version-renamed symbols, and the cfg makes the Rust bindings reference the
+# un-renamed names, breaking linking.
+crate.annotation_select(
     crate = "secp256k1-sys",
     rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
-    # This specific version is used by ic-btc-kyt canister, which
-    # requires an extra cfg flag to avoid linking issues.
-    # Applying the same cfg to other versions of secp256k1-sys
-    # may break other programs or tests.
+    triples = ["wasm32-unknown-unknown"],
     version = "0.10.0",
 )
 crate.annotation(
