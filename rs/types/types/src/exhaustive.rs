@@ -238,16 +238,13 @@ impl ExhaustiveSet for String {
 
 impl<T: Clone + Default> ExhaustiveSet for BackwardsCompatible<T, false> {
     fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
-        vec![Default::default()]
+        vec![Self::empty()]
     }
 }
 
 impl<T: Clone + ExhaustiveSet> ExhaustiveSet for BackwardsCompatible<T, true> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        Option::<T>::exhaustive_set(rng)
-            .into_iter()
-            .map(Self::new_for_test_only)
-            .collect()
+        T::exhaustive_set(rng).into_iter().map(Self::new).collect()
     }
 }
 
