@@ -2763,7 +2763,7 @@ impl StateMachine {
         contents: Vec<CanisterHttpResponseContent>,
     ) {
         assert_eq!(contents.len(), self.nodes.len());
-        for (node, content) in std::iter::zip(self.nodes.iter(), contents.into_iter()) {
+        for (node, content) in std::iter::zip(self.nodes.iter(), contents) {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2773,7 +2773,6 @@ impl StateMachine {
             let receipt_share = CanisterHttpResponseReceipt {
                 metadata: CanisterHttpResponseMetadata {
                     id: CallbackId::from(request_id),
-                    registry_version,
                     content_hash: ic_types::crypto::crypto_hash(&response),
                     content_size: content.count_bytes() as u32,
                     is_reject: content.is_reject(),

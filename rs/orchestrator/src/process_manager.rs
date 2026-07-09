@@ -8,17 +8,20 @@ use std::{
     ffi::OsString,
     fmt::Debug,
     io::Result,
-    path::Path,
+    os::unix::process::CommandExt,
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
+use crate::error::OrchestratorResult;
+
 type PIDCell = Arc<Mutex<Option<Pid>>>;
 
-/// Captures a process that should be run by the [`ProcessManager`]
+/// Captures a process that should be run by a [`ProcessRunner`]
 pub(crate) trait Process {
     /// Name of the type of process
     ///
-    /// Used only for logging purposes
+    /// Used for logging and metrics
     const NAME: &'static str;
 
     /// Version type of the process
@@ -27,22 +30,34 @@ pub(crate) trait Process {
     /// We only impose that we can check that versions are equal and have
     /// a debug representation
     type Version: Eq + Debug;
+    /// Static configuration of the process, such as the path to the binary
+    /// and static arguments.
+    type Config;
+    /// Dynamic arguments of the process, such as the subnet ID for the replica
+    /// (which could change across the orchestrator's lifetime).
+    type Args;
+
+    /// Build a new instance of the process with the given configuration and
+    /// arguments.
+    fn build(config: &Self::Config, args: Self::Args) -> OrchestratorResult<Self>
+    where
+        Self: Sized;
 
     /// Return the version of the [`Process`]
     fn get_version(&self) -> &Self::Version;
 
     /// Return the path to the binary of the [`Process`]
-    fn get_binary(&self) -> &Path;
+    fn get_binary(&self) -> PathBuf;
 
     /// Return the arguments passed to the [`Process`]
-    fn get_args(&self) -> &[OsString];
+    fn get_args(&self) -> Vec<OsString>;
 
     /// Return the env vars passed to the [`Process`]
     fn get_env(&self) -> HashMap<OsString, OsString>;
 }
 
-/// Trait for managing a single versioned [`Process`]
-pub(crate) trait ProcessManager<P: Process>: Send {
+/// Trait for running a single versioned [`Process`]
+pub(crate) trait ProcessRunner<P: Process>: Send {
     /// Start the given process.
     fn start(&mut self, process: P) -> Result<()>;
 
@@ -57,15 +72,15 @@ pub(crate) trait ProcessManager<P: Process>: Send {
     fn get_pid(&self) -> Option<Pid>;
 }
 
-/// A [`ProcessManagerImpl`] manages running a single versioned [`Process`]
-pub(crate) struct ProcessManagerImpl<P: Process> {
+/// A [`SingleProcessRunner`] manages running a single versioned [`Process`]
+pub(crate) struct SingleProcessRunner<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
     log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
-impl<P: Process> ProcessManagerImpl<P> {
+impl<P: Process> SingleProcessRunner<P> {
     pub(crate) fn new(logger: ReplicaLogger) -> Self {
         Self {
             process: None,
@@ -91,14 +106,17 @@ impl<P: Process> ProcessManagerImpl<P> {
     /// running, a log message is printed.
     ///
     /// It is critical that we signal and terminate the whole
-    /// process group of which the [`Process`] should be the
-    /// leader. The process may spawn other
-    /// sub-processes under the same process group. For correctness
-    /// -- the processes may access state file paths and
-    /// handles -- it is important we signal the sub-processes
-    /// processes too. This is possible because we shall
-    /// restrict setgpid() in production -- by default disabled
-    /// by SELinux type enforcement.
+    /// process group of which the [`Process`] is the leader. The
+    /// process may spawn other sub-processes under the same process
+    /// group. For correctness -- the processes may access state file
+    /// paths and handles -- it is important we signal the sub-processes
+    /// too.
+    ///
+    /// We guarantee that the [`Process`] is its own process group leader
+    /// (so its PID equals its PGID, which is what the negation below
+    /// relies on) by setting its process group at spawn time via
+    /// `Command::process_group(0)` -- see `start`. We therefore do not
+    /// rely on the managed binary calling `setpgid` itself.
     ///
     /// We still depend on init to handle reaping of adopted children,
     /// as the orchestrator has no way of adopting or even knowing the
@@ -125,7 +143,7 @@ impl<P: Process> ProcessManagerImpl<P> {
     }
 }
 
-impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
+impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
     fn start(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
         if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())
@@ -166,6 +184,16 @@ impl<P: Process + Send> ProcessManager<P> for ProcessManagerImpl<P> {
             let child = std::process::Command::new(process.get_binary())
                 .args(process.get_args())
                 .envs(process.get_env())
+                // Put the child into a new process group of which it is the
+                // leader (PGID == PID). Any sub-processes it spawns inherit this
+                // group, which lets `kill()` reliably signal the whole group by
+                // negating the PID. We establish the group here, in the
+                // orchestrator, rather than relying on each managed binary to
+                // call `setpgid` itself. This is equivalent to `setpgid(0, 0)`
+                // run in the forked child before `exec`, while it is still in
+                // the orchestrator's SELinux domain -- which is permitted to set
+                // its own process group.
+                .process_group(0)
                 .spawn()?;
             debug!(self.log, "Process started. Pid: {}", child.id());
             self.set_pid(Pid::from_raw(child.id() as i32));

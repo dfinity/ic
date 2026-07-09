@@ -11,6 +11,48 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-03: Proposal 142680
+
+http://dashboard.internetcomputer.org/proposal/142680
+
+## Changed
+
+* A hardcoded allowlist of trusted node providers is now granted elevated
+  (10x) node operator and node provider rate limits. The elevated limits apply
+  to all node operator operations (node add/remove and the direct node config
+  updates), mirroring the scope of the standard node operator rate limiter.
+  This is a temporary measure to allow these providers to onboard nodes in bulk
+  (e.g. on-demand cloud provisioning). All other node providers remain subject
+  to the standard limits, and the per-IP `add_node` rate limit continues to
+  apply to everyone.
+* `change_subnet_membership` may now be called by the engine controller canister
+  in addition to the governance canister. When invoked by the engine controller,
+  the target subnet must be of type `CloudEngine`; governance retains
+  unrestricted access to any subnet.
+
+
+# 2026-06-26: Proposal 142586
+
+http://dashboard.internetcomputer.org/proposal/142586
+
+## Added
+
+* The firewall rule endpoints (`add_firewall_rules`, `remove_firewall_rules`, and
+  `update_firewall_rules`) now accept a new `cloud_engines` scope
+  (`FirewallRulesScope::CloudEngines`). Firewall rules registered under this scope are
+  applied by assigned cloud engine nodes.
+
+## Changed
+* Tightened chain-key config validation and invariants:
+  `pre_signatures_to_create_in_advance` must be non-zero for keys that require pre-signatures,
+  and must be `None` for keys that do not.
+
+## Removed
+* Removed the completed `fix_vetkd_pre_signatures_field` post-upgrade data migration and its
+  migration-specific unit test.
+* The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
+
+
 # 2026-06-19: Proposal 142453
 
 http://dashboard.internetcomputer.org/proposal/142453

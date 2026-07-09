@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{BasicSigOf, CryptoHashOf},
     messages::{CallbackId, RejectContext, Request},
@@ -62,7 +62,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     state::system_metadata::v1 as pb_metadata,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::RngCore;
 use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
@@ -89,6 +89,9 @@ pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
 
 /// Maximum number of response bytes for a canister http request.
 pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
+
+/// Maximum size of a canister http reject message.
+pub const MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES: usize = 1024; // 1KB
 
 /// Maximum number of bytes to represent URL for a canister http request.
 pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
@@ -182,13 +185,30 @@ pub enum Replication {
 }
 
 impl Replication {
-    /// Returns true if the given node is authorized to sign a share, assuming
-    /// it is part of the canister HTTP committee.
-    pub fn is_authorized_signer(&self, signer: &NodeId) -> bool {
+    /// Returns the [`ReplicationKind`] of this request.
+    pub fn kind(&self) -> ReplicationKind {
         match self {
-            Replication::FullyReplicated => true,
-            Replication::NonReplicated(node_id) => node_id == signer,
-            Replication::Flexible { committee, .. } => committee.contains(signer),
+            Replication::FullyReplicated => ReplicationKind::FullyReplicated,
+            Replication::Flexible { .. } => ReplicationKind::Flexible,
+            Replication::NonReplicated(_) => ReplicationKind::NonReplicated,
+        }
+    }
+}
+
+/// The kind of replication of a request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplicationKind {
+    FullyReplicated,
+    Flexible,
+    NonReplicated,
+}
+
+impl ReplicationKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ReplicationKind::FullyReplicated => "fully_replicated",
+            ReplicationKind::Flexible => "flexible",
+            ReplicationKind::NonReplicated => "non_replicated",
         }
     }
 }
@@ -814,6 +834,12 @@ pub struct CanisterHttpRequest {
     /// The addresses should be sent in the following format: `socks5://[<ip>]:<port>`, for example:
     /// `socks5://[2602:fb2b:110:10:506f:cff:feff:fe69]:1080`
     pub socks_proxy_addrs: Vec<String>,
+    /// The subnet's cycles cost schedule in effect at the request context's
+    /// registry version.
+    pub cost_schedule: CanisterCyclesCostSchedule,
+    /// The number of nodes on the subnet at the request context's registry
+    /// version.
+    pub subnet_size: NumberOfNodes,
 }
 
 /// The content of a response after the transformation
@@ -1041,7 +1067,6 @@ pub struct CanisterHttpResponseMetadata {
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub content_size: u32,
     pub is_reject: bool,
-    pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
 
@@ -1052,14 +1077,12 @@ impl CountBytes for CanisterHttpResponseMetadata {
             content_hash,
             content_size,
             is_reject,
-            registry_version,
             replica_version,
         } = self;
         size_of_val(id)
             + content_hash.get_ref().0.len()
             + size_of_val(content_size)
             + size_of_val(is_reject)
-            + size_of_val(registry_version)
             + replica_version.as_ref().len()
     }
 }
@@ -1099,10 +1122,6 @@ impl CanisterHttpResponseReceipt {
 
     pub fn is_reject(&self) -> bool {
         self.metadata.is_reject
-    }
-
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
     }
 
     pub fn replica_version(&self) -> &ReplicaVersion {
@@ -1164,12 +1183,6 @@ impl CountBytes for CanisterHttpResponseProof {
                 .values()
                 .map(|s| std::mem::size_of::<NodeId>() + s.count_bytes())
                 .sum::<usize>()
-    }
-}
-
-impl CanisterHttpResponseProof {
-    pub fn registry_version(&self) -> RegistryVersion {
-        self.metadata.registry_version
     }
 }
 
@@ -1380,28 +1393,6 @@ mod tests {
             let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
             assert_eq!(initial, round_trip);
         }
-    }
-
-    #[test]
-    fn replication_authorized_signer() {
-        let node1 = node_test_id(1);
-        let node2 = node_test_id(2);
-
-        let fully_replicated = Replication::FullyReplicated;
-        assert!(fully_replicated.is_authorized_signer(&node1));
-        assert!(fully_replicated.is_authorized_signer(&node2));
-
-        let non_replicated = Replication::NonReplicated(node1);
-        assert!(non_replicated.is_authorized_signer(&node1));
-        assert!(!non_replicated.is_authorized_signer(&node2));
-
-        let flexible = Replication::Flexible {
-            committee: BTreeSet::from([node1, node_test_id(3)]),
-            min_responses: 1,
-            max_responses: 2,
-        };
-        assert!(flexible.is_authorized_signer(&node1));
-        assert!(!flexible.is_authorized_signer(&node2));
     }
 
     #[rstest]

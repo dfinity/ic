@@ -109,6 +109,9 @@ class Args:
     # Path to the setupos-inject-config tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
+    # Path to the mcopy tool from mtools
+    mcopy_tool: Optional[str] = None
+
     # Time to wait between each remote deployment, in minutes
     wait_time: int = field(default=DEFAULT_SETUPOS_WAIT_TIME_MINS, alias="-t")
 
@@ -160,6 +163,7 @@ class Args:
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
+            assert self.mcopy_tool, "mcopy tool required to modify image"
         ipv4_args = [
             self.inject_image_ipv4_address,
             self.inject_image_ipv4_gateway,
@@ -716,6 +720,7 @@ def upload_to_file_share(
 
 def inject_config_into_image(
     setupos_inject_config_path: Path,
+    mcopy_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
     node_reward_type: str,
@@ -741,6 +746,9 @@ def inject_config_into_image(
         return os.access(p, os.X_OK)
 
     assert setupos_inject_config_path.exists() and is_executable(setupos_inject_config_path)
+
+    # Absolute path: setupos-inject-config runs mcopy with its own working directory.
+    mcopy = os.path.abspath(mcopy_path)
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
@@ -774,6 +782,7 @@ def inject_config_into_image(
     invoke.run(
         f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
         echo=True,
+        env={"MCOPY": mcopy},
     )
 
     # Reuse the name of the compressed image path in the working directory
@@ -846,6 +855,7 @@ def main():
             tmpdir = tempfile.mkdtemp()
             modified_image_path = inject_config_into_image(
                 Path(args.inject_configuration_tool),
+                Path(args.mcopy_tool),
                 Path(tmpdir),
                 Path(args.upload_img),
                 args.inject_image_node_reward_type,

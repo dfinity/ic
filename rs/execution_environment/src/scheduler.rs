@@ -525,7 +525,7 @@ impl SchedulerImpl {
                 active_canisters_partitioned_by_cores,
                 current_round,
                 state.time(),
-                Arc::new(state.metadata.network_topology.clone()),
+                Arc::clone(&state.metadata.network_topology),
                 subnet_cycles_config,
                 &mut round_limits,
                 state.resource_limits(),
@@ -1832,6 +1832,22 @@ fn can_execute_subnet_msg(
     canister_states: &CanisterStates,
     round_limits: &mut RoundLimits,
 ) -> bool {
+    let msg_method = match msg {
+        SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
+        SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
+        SubnetMessage::Response { .. } => None,
+    };
+
+    // Some heavy methods use round instructions.
+    let instructions_reached = round_limits.instructions_reached();
+
+    // `list_canisters` iterates over the subnet's canisters and thus consumes
+    // round instructions, even though it has no effective canister ID. Defer it
+    // to a later round if the round instruction limit has already been reached.
+    if let Some(Ic00Method::ListCanisters) = msg_method {
+        return !instructions_reached;
+    }
+
     let Some(effective_canister_id) = msg.effective_canister_id() else {
         // If there is no effective canister ID, execute the subnet message.
         return true;
@@ -1840,12 +1856,7 @@ fn can_execute_subnet_msg(
         // If there is no effective canister state, execute the subnet message.
         return true;
     };
-    let maybe_method = match msg {
-        SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
-        SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
-        SubnetMessage::Response { .. } => None,
-    };
-    let Some(method) = maybe_method else {
+    let Some(method) = msg_method else {
         // If this is a response or the method name is not valid, execute the message.
         return true;
     };
@@ -1870,9 +1881,6 @@ fn can_execute_subnet_msg(
                 return false;
             }
         };
-
-    // Some heavy methods use round instructions.
-    let instructions_reached = round_limits.instructions_reached();
 
     let permissions = Ic00MethodPermissions::new(method);
     permissions.can_be_executed(
@@ -1908,6 +1916,7 @@ fn get_instruction_limits_for_subnet_message(
             CanisterStatus
             | CanisterInfo
             | CanisterMetadata
+            | ListCanisters
             | CreateCanister
             | DeleteCanister
             | DepositCycles

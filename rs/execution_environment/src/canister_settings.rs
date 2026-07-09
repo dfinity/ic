@@ -12,9 +12,10 @@ use std::convert::TryFrom;
 #[cfg(test)]
 mod tests;
 
-/// These limit comes from the spec and is not expected to change,
-/// which is why it is not part of the replica config.
+/// These limits come from the spec and are not expected to change,
+/// which is why they are not part of the replica config.
 const MAX_WASM_MEMORY_LIMIT: u64 = 1 << 48;
+const MAX_WASM_MEMORY_THRESHOLD: u64 = 1 << 48;
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
@@ -185,6 +186,11 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
                     .0
                     .to_u64()
                     .ok_or(UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided: wmt })?;
+                if wmt > MAX_WASM_MEMORY_THRESHOLD {
+                    return Err(UpdateSettingsError::WasmMemoryThresholdOutOfRange {
+                        provided: wmt.into(),
+                    });
+                }
                 Some(NumBytes::new(wmt))
             }
             None => None,
@@ -431,7 +437,7 @@ impl From<UpdateSettingsError> for UserError {
             UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {provided}"
+                    "Wasm memory threshold expected to be in the range of [0..2^48], got {provided}"
                 ),
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(

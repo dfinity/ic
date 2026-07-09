@@ -24,6 +24,7 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     CanisterId, NumBytes, SubnetId, Time,
@@ -894,6 +895,9 @@ impl ReplicatedState {
                 .subnets()
                 .contains_key(subnet_id)
         });
+        // Cycles in dropped stream messages (refunds in responses, payments in requests)
+        // are intentionally not observed as lost: the deleted subnet may have partially
+        // executed the message and consumed some or all of those cycles.
         self.put_streams(streams);
     }
 
@@ -984,8 +988,12 @@ impl ReplicatedState {
         self.canister_states.callback_count()
     }
 
+    pub fn subnet_features(&self) -> SubnetFeatures {
+        self.metadata.own_subnet_info.subnet_features
+    }
+
     pub fn resource_limits(&self) -> ResourceLimits {
-        self.metadata.own_resource_limits
+        self.metadata.own_subnet_info.resource_limits
     }
 
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
