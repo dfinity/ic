@@ -14,13 +14,13 @@ use std::hash::{Hash, Hasher};
 ///
 /// IMPORTANT: there should be only one field of type `BackwardsCompatible` in a struct. Otherwise,
 /// two different instances of the struct could have the same hash. For example:
-/// ```
+///
 /// #[derive(Hash)]
 /// struct S { a: BackwardsCompatible<u8, false>, b: BackwardsCompatible<u8, false> }
 ///
 /// S { a: Some(1), b: None }
 /// S { a: None, b: Some(1) }
-/// ```
+///
 /// would have the same hash.
 ///
 /// Lifecycle of adding a new field to a struct in a backwards compatible way:
