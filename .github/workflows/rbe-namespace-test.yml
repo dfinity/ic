@@ -36,6 +36,15 @@ jobs:
         --privileged --mount type=tmpfs,target="/tmp/containers"
       volumes:
         - /var/run/nsc/:/var/run/nsc/
+      # Forward the Namespace credentials into the container so the
+      # namespace-actions/upload-artifact step can authenticate against Namespace
+      # Artifact Storage from inside the job container. See:
+      # https://namespace.so/docs/reference/github-actions/upload-artifact
+      env:
+        NSC_TOKEN_FILE: ${{ env.NSC_TOKEN_FILE }}
+        NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
+        NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
+        NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
     timeout-minutes: 120
     if: >-
       github.repository == 'dfinity/ic' &&
@@ -55,6 +64,10 @@ jobs:
           set -euo pipefail
 
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:65f912a41be8cf3e9247d8dc34f317ddfc11badf8dc93f137c1702d6a2cd2790"
+
+          # Directory for the Build Event Protocol and execution profile files,
+          # later uploaded to Namespace Artifact Storage for offline analysis.
+          mkdir -p /tmp/bep
 
           bazel_args=(
             --noworkspace_rc
@@ -81,6 +94,14 @@ jobs:
             --experimental_remote_cache_lease_extension
             --experimental_remote_cache_eviction_retries=10
 
+            # Capture the Build Event Protocol and the execution profile so this
+            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
+            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
+            # by the "Upload Bazel BEP" step below.
+            --build_event_binary_file=/tmp/bep/bazel-bep-notests.pb
+            --profile=/tmp/bep/profile-notests.json
+            --experimental_profile_include_target_label
+
             --keep_going
           )
 
@@ -94,6 +115,10 @@ jobs:
           set -euo pipefail
 
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:65f912a41be8cf3e9247d8dc34f317ddfc11badf8dc93f137c1702d6a2cd2790"
+
+          # Directory for the Build Event Protocol and execution profile files,
+          # later uploaded to Namespace Artifact Storage for offline analysis.
+          mkdir -p /tmp/bep
 
           bazel_args=(
             --noworkspace_rc
@@ -120,7 +145,30 @@ jobs:
             --experimental_remote_cache_lease_extension
             --experimental_remote_cache_eviction_retries=10
 
+            # Capture the Build Event Protocol and the execution profile so this
+            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
+            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
+            # by the "Upload Bazel BEP" step below.
+            --build_event_binary_file=/tmp/bep/bazel-bep-systests.pb
+            --profile=/tmp/bep/profile-systests.json
+            --experimental_profile_include_target_label
+
             --keep_going
           )
 
           bazel "${bazel_args[@]}" //rs/tests/...
+
+      - name: Upload Bazel BEP and profile to Namespace Artifact Storage
+        # Store the Build Event Protocol (.pb) and execution profile (.json) from
+        # both bazel invocations in Namespace's private, workspace-scoped Artifact
+        # Storage. Runs on success or failure so we always capture insight, but not
+        # when the job is cancelled. Retrieve later with
+        # namespace-actions/download-artifact or `nsc artifact`. No GPG encryption
+        # is needed: the storage is private to the workspace and access-controlled.
+        if: ${{ !cancelled() }}
+        uses: namespace-actions/upload-artifact@v1
+        with:
+          name: bazel-bep-rbe
+          path: /tmp/bep/*
+          if-no-files-found: ignore
+          retention-days: 14
