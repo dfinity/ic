@@ -75,9 +75,11 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            // `fetch_canister_logs` charges no cycles fee, so it must not be
-            // called by a sender that is not charged the message transmission
-            // fee either (a subnet on a "free" cost schedule).
+            // `fetch_canister_logs` charges no cycles fee; its cost is covered by
+            // the message transmission and per-message execution fees the caller
+            // pays. On a subnet with a "free" cost schedule the caller pays none of
+            // those, so it would get the read work for free — hence it must not be
+            // allowed to call it.
             Ic00Method::FetchCanisterLogs => Self {
                 method,
                 allow_remote_subnet_sender: true,

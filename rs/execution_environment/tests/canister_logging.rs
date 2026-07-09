@@ -2642,10 +2642,10 @@ fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
 
 #[test]
 fn test_fetch_canister_logs_rejected_from_free_cost_schedule_subnet() {
-    // On a subnet with a free cost schedule the caller pays no message
-    // transmission fee and cannot attach cycles, so `fetch_canister_logs` (which
-    // charges no cycles fee) rejects the call rather than perform the read work
-    // entirely for free.
+    // On a subnet with a free cost schedule the caller pays neither the message
+    // transmission fee nor the per-message execution fee that otherwise cover the
+    // fetch, so `fetch_canister_logs` (which charges no cycles fee of its own)
+    // rejects the call rather than perform the read work entirely for free.
     let env = setup_env_with_cost_schedule(FlagStatus::Enabled, CanisterCyclesCostSchedule::Free);
     let canister_a = create_and_install_canister(
         &env,
@@ -2677,8 +2677,8 @@ fn test_fetch_canister_logs_rejected_from_free_cost_schedule_subnet() {
 #[test]
 fn test_fetch_canister_logs_update_call_refunds_all_attached_cycles() {
     // `fetch_canister_logs` charges no cycles fee, so every cycle the caller
-    // attaches to the call is refunded (transmission fees are paid separately
-    // from the caller's balance, not from the attached payment).
+    // attaches to the call is refunded (the incidental transmission and execution
+    // fees are paid from the caller's balance, not from the attached payment).
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();
     let canister_a = create_and_install_canister(
