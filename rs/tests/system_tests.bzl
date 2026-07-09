@@ -294,6 +294,12 @@ def system_test(
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
 
+    # Split OVMF (UEFI) firmware for the QEMU VMs (see local_backend.rs). The
+    # code image is mounted read-only and shared; the vars image is a per-VM
+    # writable varstore template.
+    _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
+    _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
+
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()

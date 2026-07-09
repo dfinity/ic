@@ -312,6 +312,19 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_jar = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
 
+# OVMF (UEFI) firmware for the local system-test backend's QEMU VMs. At the
+# moment there are no official prebuilt firmwares so we extract one for a
+# `.deb`. We download the `.deb` instead of going through the
+# `rules_distroless` snapshot to avoid bloating the lockfile with (unused)
+# dependencies from the ovmf package.
+# https://github.com/tianocore/tianocore.github.io/issues/101
+http_file(
+    name = "ovmf_deb",
+    downloaded_file_path = "ovmf-generic-hwe.deb",
+    sha256 = "619680e1be05bf501ef723b40665c494de96e41804dc37f3ea5f9558a717e099",
+    url = "https://snapshot.ubuntu.com/ubuntu/20260422T000000Z/pool/main/e/edk2-hwe/ovmf-generic-hwe_2025.11-3ubuntu8_all.deb",
+)
+
 # TLA+ tools
 bazel_dep(name = "rules_java", version = "9.3.0")
 
