@@ -57,6 +57,7 @@ message NetworkTopology {
   repeated ChainKeySubnetEntry chain_key_enabled_subnets = 8;
   FullTopology full_topology = 9;
   types.v1.SubnetId default_initial_dkg_subnet_id = 10;
+  repeated ApiBoundaryNodeEntry api_boundary_nodes = 11;
 }
 
 message FullTopology {

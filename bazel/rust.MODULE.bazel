@@ -588,7 +588,7 @@ crate.spec(
 )
 crate.spec(
     package = "hickory-resolver",
-    version = "0.25.2",
+    version = "0.26.1",
 )
 crate.spec(
     package = "hkdf",
@@ -1335,6 +1335,7 @@ crate.spec(
         "json",
         "multipart",
         "rustls",
+        "socks",
         "stream",
     ],
     package = "reqwest",
@@ -1776,11 +1777,11 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.12.3",
+    version = "^0.13.1",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.12.3",
+    version = "^0.13.1",
 )
 crate.spec(
     features = ["full"],
