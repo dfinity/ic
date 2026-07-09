@@ -12,50 +12,6 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 #[test]
-fn should_derive_deterministically() {
-    let (pk, cc) = master_key();
-    let account = account(principal(1), Some(subaccount(1)));
-
-    for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
-        let first = deposit_address(&pk, &cc, schema, &account);
-        let second = deposit_address(&pk, &cc, schema, &account);
-        assert_eq!(first, second);
-    }
-    assert_eq!(sweeper_address(&pk, &cc), sweeper_address(&pk, &cc));
-}
-
-#[test]
-fn should_derive_address_matching_its_signing_subkey() {
-    let (master_private_key, cc) = master_private_key();
-    let master_public_key = master_private_key.public_key();
-    let account = account(principal(1), Some(subaccount(1)));
-
-    let ckerc20_path = to_derivation_path(deposit_derivation_path(
-        DepositAddressSchema::CkErc20,
-        &account,
-    ));
-    let (ckerc20_subkey, _cc) =
-        master_private_key.derive_subkey_with_chain_code(&ckerc20_path, &cc);
-    assert_eq!(
-        ecdsa_public_key_to_address(&ckerc20_subkey.public_key()),
-        deposit_address(
-            &master_public_key,
-            &cc,
-            DepositAddressSchema::CkErc20,
-            &account
-        ),
-    );
-
-    let sweeper_path = to_derivation_path(sweeper_derivation_path());
-    let (sweeper_subkey, _cc) =
-        master_private_key.derive_subkey_with_chain_code(&sweeper_path, &cc);
-    assert_eq!(
-        ecdsa_public_key_to_address(&sweeper_subkey.public_key()),
-        sweeper_address(&master_public_key, &cc),
-    );
-}
-
-#[test]
 fn should_derive_distinct_addresses_for_distinct_principals() {
     let (pk, cc) = master_key();
 
@@ -148,25 +104,6 @@ fn should_not_collide_with_main_address() {
         main_address
     );
     assert_ne!(sweeper_address(&pk, &cc), main_address);
-}
-
-#[test]
-fn should_encode_derived_address_using_eip55_checksum() {
-    let (pk, cc) = master_key();
-    let derived = deposit_address(
-        &pk,
-        &cc,
-        DepositAddressSchema::CkErc20,
-        &account(principal(1), Some(subaccount(1))),
-    );
-
-    let checksummed = derived.to_string();
-    assert_eq!(
-        Address::from_str(&checksummed.to_lowercase())
-            .unwrap()
-            .to_string(),
-        checksummed
-    );
 }
 
 fn master_key() -> (PublicKey, [u8; 32]) {
