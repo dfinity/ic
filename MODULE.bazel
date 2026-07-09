@@ -1319,14 +1319,14 @@ canisters(
 bazel_dep(name = "rules_motoko", version = "1.0.0")
 archive_override(
     module_name = "rules_motoko",
-    integrity = "sha256-cheylLgUCNaODuEtYla4/oVrj6F0FMp7nRjui1AvCo4=",
-    strip_prefix = "rules_motoko-9b6d6311db8f1c1fe4c24b70414edf149913ae44",
+    integrity = "sha256-skEVw/tHSuYMLJxh8rWuwt6bjyYWpoay0JBZNYz4+5U=",
+    strip_prefix = "rules_motoko-0c3d815c0c07c5696a4cb3fa8da25834594a5294",
     type = "tar.gz",
-    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/9b6d6311db8f1c1fe4c24b70414edf149913ae44"],
+    urls = ["https://codeload.github.com/dfinity/rules_motoko/tar.gz/0c3d815c0c07c5696a4cb3fa8da25834594a5294"],
 )
 
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
-motoko.toolchain(version = "0.16.3")  # NOTE: keep version in line with Dockerfile
+motoko.toolchain(version = "1.11.0")  # NOTE: keep version in line with Dockerfile
 
 # Universal VM and Prometheus VM disk images for the Local system-test backend.
 # These are vendored copies of the same artifacts the Farm backend references

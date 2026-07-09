@@ -296,39 +296,13 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
     }
 }
 
-/// Ensures that the configured `AUTHORIZED_CALLER` (the engine controller's
-/// "super admin") is always present in the resulting admin list, even if the
-/// caller forgot to include it.
-fn normalize_subnet_admins(admins: Vec<PrincipalId>) -> Vec<PrincipalId> {
-    let super_admin = PrincipalId(AUTHORIZED_CALLER.with(|c| *c.borrow()));
-    let mut admins = admins;
-    if !admins.contains(&super_admin) {
-        admins.push(super_admin);
-    }
-    admins
-}
-
 /// Proxies to the registry's `update_subnet` endpoint. Only `subnet_admins`
 /// and `is_halted` may be updated through this path; every other field must be
 /// left at its default value (`None` / `false`) or the call is rejected.
-///
-/// The `subnet_admins` list is always normalized to include the engine
-/// controller's authorized caller (the super admin), so callers cannot
-/// accidentally lock the controller out of the subnet.
 #[update]
 async fn update_subnet(payload: UpdateSubnetPayload) -> Result<(), String> {
     ensure_authorized()?;
     ensure_only_allowed_fields_set(&payload)?;
-
-    // Normalize `subnet_admins` so the super admin is always present.
-    // The caller may omit the field entirely (no change requested), but if
-    // they do supply one, we treat it as the source of truth and add the
-    // super admin if missing.
-    #[allow(unused_mut)]
-    let mut payload = payload;
-    if let Some(admins) = payload.subnet_admins {
-        payload.subnet_admins = Some(normalize_subnet_admins(admins));
-    }
 
     Call::unbounded_wait(REGISTRY_CANISTER_ID.into(), "update_subnet")
         .with_arg(payload)

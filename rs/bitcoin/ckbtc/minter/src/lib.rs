@@ -305,7 +305,7 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
         requests.len(),
         state.retrieve_btc_min_amount
     );
-    for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
+    for (request, fee) in requests.into_iter().zip(fees) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
             if amount > 0 {

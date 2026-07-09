@@ -19,8 +19,8 @@ use crate::test_fixtures::{
     initial_state,
 };
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
-    ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
+    AccessList, AccessListItem, Eip1559TransactionRequest, GasFeeEstimate, ResubmissionStrategy,
+    SignedEip1559TransactionRequest, StorageKey, TransactionSignature,
 };
 use candid::{Nat, Principal};
 use ethnum::u256;
@@ -699,7 +699,7 @@ prop_compose! {
     ) -> SignedEip1559TransactionRequest {
         SignedEip1559TransactionRequest::from((
             unsigned_tx,
-            Eip1559Signature {
+            TransactionSignature {
                 r,
                 s,
                 signature_y_parity,
@@ -804,7 +804,8 @@ fn state_equivalence() {
     };
     use crate::state::{InvalidEventReason, MintedEvent};
     use crate::tx::{
-        Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+        Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+        TransactionSignature,
     };
     use ic_cdk::management_canister::EcdsaPublicKeyResult;
     use maplit::{btreemap, btreeset};
@@ -905,7 +906,7 @@ fn state_equivalence() {
                         data: vec![],
                         access_list: Default::default(),
                     },
-                    Eip1559Signature {
+                    TransactionSignature {
                         signature_y_parity: true,
                         r: Default::default(),
                         s: Default::default(),
@@ -933,7 +934,7 @@ fn state_equivalence() {
                     data: vec![],
                     access_list: Default::default(),
                 },
-                Eip1559Signature {
+                TransactionSignature {
                     signature_y_parity: true,
                     r: Default::default(),
                     s: Default::default(),
@@ -1293,7 +1294,7 @@ mod eth_balance {
     use crate::state::tests::{initial_state, received_eth_event};
     use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
     use crate::state::{EthBalance, State};
-    use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest};
+    use crate::tx::{SignedEip1559TransactionRequest, TransactionSignature};
     use maplit::btreemap;
 
     #[test]
@@ -1602,7 +1603,7 @@ mod eth_balance {
                 },
             );
 
-            let dummy_signature = Eip1559Signature {
+            let dummy_signature = TransactionSignature {
                 signature_y_parity: false,
                 r: Default::default(),
                 s: Default::default(),
