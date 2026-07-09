@@ -186,6 +186,38 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
     }
 }
 
+impl From<&OwnSubnetInfo> for pb_metadata::OwnSubnetInfo {
+    fn from(item: &OwnSubnetInfo) -> Self {
+        Self {
+            subnet_features: Some(item.subnet_features.into()),
+            resource_limits: Some(item.resource_limits.into()),
+            node_public_keys: item
+                .node_public_keys
+                .iter()
+                .map(|(node_id, public_key)| pb_metadata::NodePublicKeyEntry {
+                    node_id: Some(node_id_into_protobuf(*node_id)),
+                    public_key: public_key.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<pb_metadata::OwnSubnetInfo> for OwnSubnetInfo {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_metadata::OwnSubnetInfo) -> Result<Self, Self::Error> {
+        let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
+        for entry in item.node_public_keys {
+            node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
+        }
+        Ok(Self {
+            subnet_features: item.subnet_features.unwrap_or_default().into(),
+            resource_limits: item.resource_limits.unwrap_or_default().into(),
+            node_public_keys,
+        })
+    }
+}
+
 impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
     fn from(item: &SubnetTopology) -> Self {
         Self {
@@ -395,8 +427,11 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
             state_sync_version: item.state_sync_version as u32,
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
-            own_subnet_features: Some(item.own_subnet_features.into()),
-            own_resource_limits: Some(item.own_resource_limits.into()),
+            // `own_subnet_features`, `own_resource_limits` and `node_public_keys` are
+            // legacy mirrors of the fields now held in `own_subnet_info`.
+            own_subnet_features: Some(item.own_subnet_info.subnet_features.into()),
+            own_resource_limits: Some(item.own_subnet_info.resource_limits.into()),
+            own_subnet_info: Some((&*item.own_subnet_info).into()),
             subnet_metrics: Some((&item.subnet_metrics).into()),
             bitcoin_get_successors_follow_up_responses: item
                 .bitcoin_get_successors_follow_up_responses
@@ -410,6 +445,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             node_public_keys: item
+                .own_subnet_info
                 .node_public_keys
                 .iter()
                 .map(|(node_id, public_key)| pb_metadata::NodePublicKeyEntry {
@@ -524,10 +560,24 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
 
         let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
 
-        let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
-        for entry in item.node_public_keys {
-            node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
-        }
+        // `own_subnet_info` was previously stored as the top-level `own_subnet_features`,
+        // `own_resource_limits` and `node_public_keys` fields. Fall back to those when the
+        // new field is absent (i.e. reading a checkpoint written before the move).
+        let own_subnet_info = match item.own_subnet_info {
+            Some(own_subnet_info) => OwnSubnetInfo::try_from(own_subnet_info)?,
+            None => {
+                let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
+                for entry in item.node_public_keys {
+                    node_public_keys
+                        .insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
+                }
+                OwnSubnetInfo {
+                    subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+                    resource_limits: item.own_resource_limits.unwrap_or_default().into(),
+                    node_public_keys,
+                }
+            }
+        };
 
         let mut network_topology: NetworkTopology =
             try_from_option_field(item.network_topology, "SystemMetadata::network_topology")?;
@@ -557,9 +607,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // actual value when we serialize SystemMetadata. We rely on `load_checkpoint()` to
             // properly set this value.
             own_subnet_type: SubnetType::default(),
-            own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
-            own_resource_limits: item.own_resource_limits.unwrap_or_default().into(),
-            node_public_keys,
+            own_subnet_info: Arc::new(own_subnet_info),
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,

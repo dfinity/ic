@@ -869,7 +869,7 @@ impl RosettaRequestHandler {
         });
 
         // Sort the transactions by block index in descending order
-        transactions.sort_by(|a, b| b.block_identifier.index.cmp(&a.block_identifier.index));
+        transactions.sort_by_key(|b| std::cmp::Reverse(b.block_identifier.index));
 
         // If rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
         let last_traversed_block_index = blocks.iter().map(|block| block.index).min().unwrap_or(0);

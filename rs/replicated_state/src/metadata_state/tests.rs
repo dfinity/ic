@@ -364,7 +364,7 @@ fn system_metadata_roundtrip_encoding() {
         .unwrap()
         .serialize_rfc8410_der();
 
-    system_metadata.node_public_keys = btreemap! {
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
     system_metadata.bitcoin_get_successors_follow_up_responses =

@@ -498,12 +498,13 @@ impl SandboxManager {
         // and later or concurrent uses of the same cache entry would fail. But
         // we can mmap the data without mutating the fd.
         let initial_state_data: InitialStateData = {
-            use nix::sys::mman::{MapFlags, ProtFlags, mmap};
+            use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
             use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
 
             let mmap_size = initial_state_data.metadata().unwrap().size() as usize;
-            let data = if mmap_size == 0 {
-                &[]
+            if mmap_size == 0 {
+                let data: &[u8] = &[];
+                bincode::deserialize(data).unwrap()
             } else {
                 // SAFETY: The address is valid because it is null, we have checked
                 // the size is positive and the fd is valid since it comes from a
@@ -523,9 +524,16 @@ impl SandboxManager {
                 // SAFETY: We've mmapped `mmap_size` and gotten a succesful
                 // reply at address `mmap_ptr` and the mapping is readonly
                 // private.
-                unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }
-            };
-            bincode::deserialize(data).unwrap()
+                let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
+                let initial_state_data = bincode::deserialize(data).unwrap();
+                // SAFETY: `mmap_ptr`/`mmap_size` are exactly what `mmap` returned;
+                // `data` is not used past this point.
+                unsafe {
+                    munmap(mmap_ptr as *mut std::ffi::c_void, mmap_size)
+                        .expect("Unable to unmap initial state data file");
+                }
+                initial_state_data
+            }
         };
 
         let (wasm_memory_modifications, exported_globals) = self

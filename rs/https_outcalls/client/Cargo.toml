@@ -23,6 +23,7 @@ ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }

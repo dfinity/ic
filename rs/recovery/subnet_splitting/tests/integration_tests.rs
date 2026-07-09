@@ -182,36 +182,36 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 17,
-                destination: 22,
+                source: 22,
+                destination: 17,
             }
         );
         assert_eq!(
             remote_subnet_messages_executed_lower_bound,
-            Estimates {
-                source: 4,
-                destination: 6,
-            }
-        );
-        assert_eq!(
-            local_subnet_messages_executed_upper_bound,
-            Estimates {
-                source: 13,
-                destination: 15,
-            }
-        );
-        assert_eq!(
-            http_outcalls_executed,
             Estimates {
                 source: 6,
                 destination: 4,
             }
         );
         assert_eq!(
+            local_subnet_messages_executed_upper_bound,
+            Estimates {
+                source: 15,
+                destination: 13,
+            }
+        );
+        assert_eq!(
+            http_outcalls_executed,
+            Estimates {
+                source: 4,
+                destination: 6,
+            }
+        );
+        assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 355,
-                destination: 339,
+                source: 339,
+                destination: 355,
             }
         );
         // Check if the split finder found a split satisfying the load constraints
