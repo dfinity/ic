@@ -53,16 +53,17 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     }
 
     /// Insert `value` under `key`, evicting expired then oldest entries as needed to respect the
-    /// `ttl` and `capacity`. Re-inserting an existing key refreshes its value and lifetime without
-    /// counting against capacity. Returns the entries evicted by this call.
+    /// `ttl` and `capacity`. Re-inserting an existing key refreshes its value and lifetime; the
+    /// previous value is dropped and never reported as an eviction. Returns the entries evicted by
+    /// this call.
     pub fn insert(&mut self, now: Timestamp, key: K, value: V) -> Vec<(K, V)> {
-        let mut evicted = self.evict_expired(now);
         self.remove(&key);
+        let mut evicted = self.evict_expired(now);
         while self.entries.len() >= self.capacity.get() {
-            match self.evict_oldest() {
-                Some(entry) => evicted.push(entry),
-                None => break,
-            }
+            evicted.push(
+                self.evict_oldest()
+                    .expect("BUG: entries is non-empty but the time index is empty"),
+            );
         }
         self.entries.insert(
             key.clone(),

@@ -115,6 +115,19 @@ fn should_extend_lifetime_on_refresh() {
 }
 
 #[test]
+fn should_not_report_refresh_of_expired_key_as_eviction() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+    map.insert(ts(0), "a", 1);
+
+    let evicted = map.insert(ts(20), "a", 2);
+
+    assert!(evicted.is_empty());
+    assert_eq!(map.get(ts(20), &"a"), Some(&2));
+    assert_eq!(map.len(), 1);
+    assert_consistent(&map);
+}
+
+#[test]
 fn should_evict_expired_then_oldest_under_both_pressures() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(2));
     map.insert(ts(0), "a", 1);
