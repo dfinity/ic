@@ -229,7 +229,7 @@ fn a_non_minter_cannot_sweep_a_deposit() {
     } = deploy_contracts(&anvil, &minter, &cex);
 
     // A single funded deposit address.
-    let principal = Principal::self_authenticating([42u8]);
+    let principal = Principal::self_authenticating([42_u8]);
     let key = derive_deposit_key(&principal);
     let deposit = eth_address(&key.public_key());
     let tx = anvil.send_transaction(
@@ -287,7 +287,7 @@ fn a_non_minter_cannot_sweep_a_deposit() {
             &[
                 Token::Array(vec![address_token(&usdt)]),
                 bytes32_token(encode_principal(&Principal::anonymous())),
-                bytes32_token([0u8; 32]),
+                bytes32_token([0_u8; 32]),
             ],
         ),
         Some(300_000),
@@ -309,7 +309,7 @@ fn a_non_minter_cannot_sweep_a_deposit() {
         &[
             Token::Array(vec![address_token(&usdt)]),
             bytes32_token(encode_principal(&principal)),
-            bytes32_token([0u8; 32]),
+            bytes32_token([0_u8; 32]),
         ],
     );
     let receipt = anvil.send_eip1559(&minter_key, chain_id, &deposit, sweep);
@@ -446,7 +446,7 @@ fn attested_sweep_rejects_a_forged_attestation() {
         chain_id,
         &helper,
         &attacker_principal,
-        &[0u8; 32],
+        &[0_u8; 32],
     );
     let attack = anvil.send_transaction(
         &attacker,
@@ -456,7 +456,7 @@ fn attested_sweep_rejects_a_forged_attestation() {
             &[
                 Token::Array(vec![address_token(&usdt)]),
                 bytes32_token(encode_principal(&attacker_principal)),
-                bytes32_token([0u8; 32]),
+                bytes32_token([0_u8; 32]),
                 bytes32_token(forged.r),
                 bytes32_token(forged.s),
                 uint_token(forged.v as u128),
@@ -476,13 +476,13 @@ fn attested_sweep_rejects_a_forged_attestation() {
 
     // The genuine attestation (deposit key over the real principal) sweeps it,
     // even when submitted by the attacker — sweeping is permissionless.
-    let attestation = attest(&key, chain_id, &helper, &principal, &[0u8; 32]);
+    let attestation = attest(&key, chain_id, &helper, &principal, &[0_u8; 32]);
     let sweep = call(
         "sweepErc20(address[],bytes32,bytes32,bytes32,bytes32,uint8)",
         &[
             Token::Array(vec![address_token(&usdt)]),
             bytes32_token(encode_principal(&principal)),
-            bytes32_token([0u8; 32]),
+            bytes32_token([0_u8; 32]),
             bytes32_token(attestation.r),
             bytes32_token(attestation.s),
             uint_token(attestation.v as u128),
@@ -607,7 +607,7 @@ fn sweep_batch(
                     .map(|p| bytes32_token(encode_principal(p)))
                     .collect(),
             ),
-            Token::Array(vec![bytes32_token([0u8; 32]); n]),
+            Token::Array(vec![bytes32_token([0_u8; 32]); n]),
             Token::Array(vec![address_token(usdt)]),
         ],
     );
@@ -758,11 +758,11 @@ fn sweep_batch_attested(
         .zip(&deposits)
         .zip(&principals)
         .map(|((key, deposit), principal)| {
-            let a = attest(key, chain_id, helper, principal, &[0u8; 32]);
+            let a = attest(key, chain_id, helper, principal, &[0_u8; 32]);
             Token::Tuple(vec![
                 address_token(deposit),
                 bytes32_token(encode_principal(principal)),
-                bytes32_token([0u8; 32]), // subaccount
+                bytes32_token([0_u8; 32]), // subaccount
                 bytes32_token(a.r),
                 bytes32_token(a.s),
                 uint_token(a.v as u128),
@@ -838,7 +838,7 @@ fn attest(
     // The packed preimage mirrors the contract's
     // `abi.encodePacked("ck-deposit-owner", block.chainid, HELPER, principal,
     // subaccount)`: fixed-length fields, no padding between them.
-    let mut chain_id_bytes = [0u8; 32];
+    let mut chain_id_bytes = [0_u8; 32];
     chain_id_bytes[24..].copy_from_slice(&chain_id.to_be_bytes());
     let preimage: Vec<u8> = [
         b"ck-deposit-owner".as_ref(),
@@ -874,7 +874,7 @@ fn derive_deposit_key(principal: &Principal) -> PrivateKey {
 fn eth_address(public_key: &PublicKey) -> Address {
     let uncompressed = public_key.serialize_sec1(false);
     let hash = Keccak256::hash(&uncompressed[1..]);
-    let mut address = [0u8; 20];
+    let mut address = [0_u8; 20];
     address.copy_from_slice(&hash[12..]);
     Address::new(address)
 }
@@ -885,7 +885,7 @@ fn sign(key: &PrivateKey, digest: &[u8; 32]) -> TransactionSignature {
         .public_key()
         .try_recovery_from_digest(digest, &signature)
         .expect("failed to recover the signing key");
-    let (mut r, mut s) = ([0u8; 32], [0u8; 32]);
+    let (mut r, mut s) = ([0_u8; 32], [0_u8; 32]);
     r.copy_from_slice(&signature[..32]);
     s.copy_from_slice(&signature[32..]);
     TransactionSignature {
@@ -955,7 +955,7 @@ fn to_address(token: Token) -> Address {
 /// by the principal bytes.
 fn encode_principal(principal: &Principal) -> [u8; 32] {
     let bytes = principal.as_slice();
-    let mut encoded = [0u8; 32];
+    let mut encoded = [0_u8; 32];
     encoded[0] = bytes.len() as u8;
     encoded[1..=bytes.len()].copy_from_slice(bytes);
     encoded
