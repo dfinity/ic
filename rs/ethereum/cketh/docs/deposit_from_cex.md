@@ -21,6 +21,7 @@ tags: [cketh, ckerc20, minter, deposit, eip-7702]
   - [Constraints](#constraints)
   - [EIP-7702 primer](#eip-7702-primer-the-sweep-one-transaction-at-a-time)
   - [EIP-7702 transaction layer](#eip-7702-support-in-the-transaction-layer-srctxrs)
+  - [Address derivation, signing, and nonces](#address-derivation-tree-signing-and-nonces)
   - [Sweeper delegate contract](#sweeper-delegate-contract)
   - [Test plan](#test-plan)
   - [Delivery / PR sequence](#delivery--pr-sequence)
@@ -844,6 +845,58 @@ control, which is the recovery story of step 1.
   the EOA nonce, tracked in state to avoid re-fetching. Deposit EOAs never send
   transactions themselves (Phase 1), so races are limited to re-delegation.
 * Resubmission with fee bumping mirrors the existing `Resubmittable` logic.
+
+### Address derivation tree, signing, and nonces
+
+Every address the minter controls is a non-hardened BIP32/SLIP-10 subkey of its
+single master threshold-ECDSA key (the cached master public key plus the root chain
+code): the address is `ecdsa_public_key_to_address(derive_subkey(master, path))`, and
+the minter can `sign_with_ecdsa` for it under the same `path`. The paths are
+**siblings, never nested**:
+
+```
+master key (+ root chain code)
+├── []          → minter main address        (MAIN_DERIVATION_PATH; withdrawals, R6 destination)
+├── [1, p, s]   → ckERC20 deposit EOA addr(p, s)
+├── [2, p, s]   → ckETH   deposit EOA addr(p, s)   (Phase 2)
+└── [3]         → dedicated sweeper address   (R17; its own schema tag, no account components)
+```
+
+A deposit EOA is **not** derived beneath the sweeper. Tree position carries no
+authority here: the minter holds the master key, so it can sign for every sibling
+independently, and a parent public key confers nothing that the master does not
+already confer. The 1-byte schema tag as the first path element is only there to keep
+the four families disjoint (and disjoint from the empty main path). Nesting the
+deposit paths under `[3]` would change none of the properties below and is therefore
+not done.
+
+**Who signs what.** A single sweep uses two independent signatures on two unrelated
+sibling paths, alongside the unchanged withdrawal path:
+
+| Signature | Signed with derivation path | Purpose |
+|---|---|---|
+| EIP-7702 authorization tuple `(chain_id, S, nonce)` over `keccak256(0x05 ‖ rlp(...))` | the deposit EOA, `[1\|2, p, s]` | `ecrecover` must yield `addr(p, s)`, so the delegation designator installs on the deposit EOA |
+| type-`0x04` sweep transaction (sender / gas payer) | the sweeper address, `[3]` | `R17`: sweeps are issued from the dedicated sweeper address |
+| type-`0x02` withdrawal transaction (sender) | the main address, `[]` | unchanged; withdrawals are sent from the main address |
+
+EIP-7702 requires no relationship between the authorization key and the
+transaction-sender key — the authority and the sender are independent by design —
+which is exactly why the transaction layer takes the signing derivation path as a
+parameter rather than hard-coding one.
+
+**Nonces are per-address and independent of the tree.** An Ethereum nonce belongs to
+the on-chain account, not to key derivation, so each sibling has its own lane:
+
+* **Main address** — one nonce sequence, advanced by each withdrawal.
+* **Sweeper address (`[3]`)** — one nonce sequence for *all* sweeps, deliberately
+  separate from the main address' so that a stuck sweep can never delay a withdrawal
+  (`R17`).
+* **Each deposit EOA (`[1|2, p, s]`)** — its own nonce, starting at 0. Incoming CEX
+  transfers never touch it (they move only the token contract's storage); it advances
+  by 1 only when one of *its own* authorizations is applied, since EIP-7702 bumps the
+  authority's nonce. That nonce is fetched via `eth_getTransactionCount` and tracked in
+  state; because the delegation designator persists, later sweeps of the same address
+  need no new authorization and consume no further nonce.
 
 ### Sweeper delegate contract
 
