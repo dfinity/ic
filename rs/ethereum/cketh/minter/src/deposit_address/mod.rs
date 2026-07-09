@@ -49,11 +49,7 @@ pub fn sweeper_address(master_public_key: &PublicKey, chain_code: &[u8; 32]) -> 
     derive_address(master_public_key, chain_code, sweeper_derivation_path())
 }
 
-/// Derivation path of an IC account's deposit address for the given schema.
-///
-/// The path is non-empty and therefore never collides with the empty
-/// [`crate::MAIN_DERIVATION_PATH`] used for the minter's main address.
-pub fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
+fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
     vec![
         ByteBuf::from(vec![schema.tag()]),
         ByteBuf::from(account.owner.as_slice().to_vec()),
@@ -61,8 +57,7 @@ pub fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) 
     ]
 }
 
-/// Derivation path of the minter's dedicated sweeper address.
-pub fn sweeper_derivation_path() -> Vec<ByteBuf> {
+fn sweeper_derivation_path() -> Vec<ByteBuf> {
     vec![ByteBuf::from(vec![SWEEPER_SCHEMA_TAG])]
 }
 
