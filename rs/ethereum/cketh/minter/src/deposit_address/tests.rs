@@ -3,10 +3,10 @@ use crate::deposit_address::{
     DepositAddressSchema, deposit_address, deposit_derivation_path, sweeper_address,
     sweeper_derivation_path,
 };
-use crate::eth_logs::LedgerSubaccount;
 use candid::Principal;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey, PublicKey};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeSet;
 use std::str::FromStr;
@@ -14,12 +14,11 @@ use std::str::FromStr;
 #[test]
 fn should_derive_deterministically() {
     let (pk, cc) = master_key();
-    let owner = principal(1);
-    let subaccount = subaccount(1);
+    let account = account(principal(1), Some(subaccount(1)));
 
     for schema in [DepositAddressSchema::CkErc20, DepositAddressSchema::CkEth] {
-        let first = deposit_address(&pk, &cc, schema, &owner, Some(&subaccount));
-        let second = deposit_address(&pk, &cc, schema, &owner, Some(&subaccount));
+        let first = deposit_address(&pk, &cc, schema, &account);
+        let second = deposit_address(&pk, &cc, schema, &account);
         assert_eq!(first, second);
     }
     assert_eq!(sweeper_address(&pk, &cc), sweeper_address(&pk, &cc));
@@ -29,13 +28,11 @@ fn should_derive_deterministically() {
 fn should_derive_address_matching_its_signing_subkey() {
     let (master_private_key, cc) = master_private_key();
     let master_public_key = master_private_key.public_key();
-    let owner = principal(1);
-    let subaccount = subaccount(1);
+    let account = account(principal(1), Some(subaccount(1)));
 
     let ckerc20_path = to_derivation_path(deposit_derivation_path(
         DepositAddressSchema::CkErc20,
-        &owner,
-        Some(&subaccount),
+        &account,
     ));
     let (ckerc20_subkey, _cc) =
         master_private_key.derive_subkey_with_chain_code(&ckerc20_path, &cc);
@@ -45,8 +42,7 @@ fn should_derive_address_matching_its_signing_subkey() {
             &master_public_key,
             &cc,
             DepositAddressSchema::CkErc20,
-            &owner,
-            Some(&subaccount),
+            &account
         ),
     );
 
@@ -64,7 +60,14 @@ fn should_derive_distinct_addresses_for_distinct_principals() {
     let (pk, cc) = master_key();
 
     let addresses: BTreeSet<_> = (0..16_u8)
-        .map(|i| deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &principal(i), None))
+        .map(|i| {
+            deposit_address(
+                &pk,
+                &cc,
+                DepositAddressSchema::CkErc20,
+                &account(principal(i), None),
+            )
+        })
         .collect();
 
     assert_eq!(addresses.len(), 16);
@@ -82,8 +85,8 @@ fn should_derive_distinct_addresses_for_edge_case_principals() {
     let owners = [max_length_principal, Principal::anonymous()];
 
     let mut addresses = BTreeSet::new();
-    for owner in &owners {
-        let address = deposit_address(&pk, &cc, DepositAddressSchema::CkEth, owner, None);
+    for owner in owners {
+        let address = deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account(owner, None));
         assert_ne!(address, main_address);
         addresses.insert(address);
     }
@@ -101,16 +104,14 @@ fn should_derive_distinct_addresses_for_distinct_subaccounts() {
         &pk,
         &cc,
         DepositAddressSchema::CkErc20,
-        &owner,
-        None,
+        &account(owner, None),
     ));
     for i in 1..16_u8 {
         addresses.insert(deposit_address(
             &pk,
             &cc,
             DepositAddressSchema::CkErc20,
-            &owner,
-            Some(&subaccount(i)),
+            &account(owner, Some(subaccount(i))),
         ));
     }
 
@@ -120,23 +121,10 @@ fn should_derive_distinct_addresses_for_distinct_subaccounts() {
 #[test]
 fn should_derive_distinct_addresses_for_distinct_schema_tags() {
     let (pk, cc) = master_key();
-    let owner = principal(1);
-    let subaccount = subaccount(1);
+    let account = account(principal(1), Some(subaccount(1)));
 
-    let ckerc20 = deposit_address(
-        &pk,
-        &cc,
-        DepositAddressSchema::CkErc20,
-        &owner,
-        Some(&subaccount),
-    );
-    let cketh = deposit_address(
-        &pk,
-        &cc,
-        DepositAddressSchema::CkEth,
-        &owner,
-        Some(&subaccount),
-    );
+    let ckerc20 = deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account);
+    let cketh = deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account);
     let sweeper = sweeper_address(&pk, &cc);
 
     let distinct: BTreeSet<_> = [ckerc20, cketh, sweeper].into_iter().collect();
@@ -147,16 +135,16 @@ fn should_derive_distinct_addresses_for_distinct_schema_tags() {
 fn should_not_collide_with_main_address() {
     let (pk, cc) = master_key();
     let main_address = ecdsa_public_key_to_address(&pk);
-    let owner = principal(1);
+    let account = account(principal(1), None);
 
-    assert!(!deposit_derivation_path(DepositAddressSchema::CkErc20, &owner, None).is_empty());
+    assert!(!deposit_derivation_path(DepositAddressSchema::CkErc20, &account).is_empty());
 
     assert_ne!(
-        deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &owner, None),
+        deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account),
         main_address
     );
     assert_ne!(
-        deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &owner, None),
+        deposit_address(&pk, &cc, DepositAddressSchema::CkEth, &account),
         main_address
     );
     assert_ne!(sweeper_address(&pk, &cc), main_address);
@@ -169,8 +157,7 @@ fn should_encode_derived_address_using_eip55_checksum() {
         &pk,
         &cc,
         DepositAddressSchema::CkErc20,
-        &principal(1),
-        Some(&subaccount(1)),
+        &account(principal(1), Some(subaccount(1))),
     );
 
     let checksummed = derived.to_string();
@@ -200,12 +187,16 @@ fn to_derivation_path(path: Vec<ByteBuf>) -> DerivationPath {
     )
 }
 
+fn account(owner: Principal, subaccount: Option<Subaccount>) -> Account {
+    Account { owner, subaccount }
+}
+
 fn principal(i: u8) -> Principal {
     Principal::from_slice(&[i, 1, 2, 3, 4, 5, 6, 7, 8, 9])
 }
 
-fn subaccount(i: u8) -> LedgerSubaccount {
+fn subaccount(i: u8) -> Subaccount {
     let mut bytes = [0_u8; 32];
     bytes[31] = i;
-    LedgerSubaccount::from_bytes(bytes).expect("non-zero subaccount")
+    bytes
 }

@@ -1,8 +1,7 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::eth_logs::LedgerSubaccount;
-use candid::Principal;
 use ic_ethereum_types::Address;
 use ic_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+use icrc_ledger_types::icrc1::account::Account;
 use serde_bytes::ByteBuf;
 
 #[cfg(test)]
@@ -35,13 +34,12 @@ pub fn deposit_address(
     master_public_key: &PublicKey,
     chain_code: &[u8; 32],
     schema: DepositAddressSchema,
-    owner: &Principal,
-    subaccount: Option<&LedgerSubaccount>,
+    account: &Account,
 ) -> Address {
     derive_address(
         master_public_key,
         chain_code,
-        deposit_derivation_path(schema, owner, subaccount),
+        deposit_derivation_path(schema, account),
     )
 }
 
@@ -55,21 +53,11 @@ pub fn sweeper_address(master_public_key: &PublicKey, chain_code: &[u8; 32]) -> 
 ///
 /// The path is non-empty and therefore never collides with the empty
 /// [`crate::MAIN_DERIVATION_PATH`] used for the minter's main address.
-pub fn deposit_derivation_path(
-    schema: DepositAddressSchema,
-    owner: &Principal,
-    subaccount: Option<&LedgerSubaccount>,
-) -> Vec<ByteBuf> {
+pub fn deposit_derivation_path(schema: DepositAddressSchema, account: &Account) -> Vec<ByteBuf> {
     vec![
         ByteBuf::from(vec![schema.tag()]),
-        ByteBuf::from(owner.as_slice().to_vec()),
-        ByteBuf::from(
-            subaccount
-                .cloned()
-                .map(LedgerSubaccount::to_bytes)
-                .unwrap_or([0_u8; 32])
-                .to_vec(),
-        ),
+        ByteBuf::from(account.owner.as_slice().to_vec()),
+        ByteBuf::from(account.effective_subaccount().to_vec()),
     ]
 }
 
