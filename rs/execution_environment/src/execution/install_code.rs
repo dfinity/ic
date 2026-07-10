@@ -23,9 +23,7 @@ use ic_replicated_state::canister_state::system_state::{
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
-use ic_types::{
-    CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
-};
+use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmHash;
 
