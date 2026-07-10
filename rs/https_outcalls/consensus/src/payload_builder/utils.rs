@@ -77,14 +77,9 @@ pub(crate) fn check_response_consistency(
 
 /// Enforces the per-replica allowance from the request context: the amount the
 /// replica claims to have `spent` in the payment receipt must never exceed the
-/// `per_replica_allowance` derived from the request's context. This bounds a
-/// Byzantine node's claim, which could otherwise be as large as `u128::MAX` and
-/// corrupt the downstream cycles accounting.
+/// `per_replica_allowance` derived from the request's context.
 ///
-/// NOTE: on a free cost schedule the allowance is zero, so this forces the
-/// reported spend to zero. Recording a nonzero per-replica spend on free
-/// subnets (e.g. for user-space cost accounting) would require bounding against
-/// a cost-based maximum instead of the allowance.
+/// TODO: Allow free subnets to spend more than their allowance.
 pub(crate) fn check_spent_allowance(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,

@@ -140,14 +140,7 @@ impl BudgetTracker for PayAsYouGoTracker {
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
-        // Cap the reported spend at the allowance: an over-budget outcall (which
-        // accumulates `spent` past the allowance before failing) reports having
-        // consumed exactly its allowance, deriving a zero refund downstream, and
-        // the gossiped value can never exceed what the per-replica validation
-        // permits. On a free cost schedule the allowance is zero and nothing was
-        // charged, so this reports zero. (Recording a nonzero per-replica spend
-        // on free subnets would require a different, cost-based bound; see the
-        // note on `check_spent_allowance`.)
+        // TODO: Allow free subnets to spend more than their allowance.
         CanisterHttpPaymentReceipt {
             spent: Cycles::new(self.spent.min(self.allowance)),
         }
