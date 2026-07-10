@@ -27,7 +27,7 @@ jobs:
     name: Bazel Test (Remote Build Execution @ Namespace)
     runs-on: namespace-profile-amd64-linux-32x64
     container:
-      image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:7dc37b193456f1dfa9d40d800fb0b26b4e1da8e5f61d9cf715bf037213e3d028
+      image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:afa43d13f2a5bed077e01385cc2c41ce0463f6aeba8e06ca2007fecded27a4c7
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
       # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
       # Rootless podman needs to create user namespaces, which fails in an unprivileged
@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:7dc37b193456f1dfa9d40d800fb0b26b4e1da8e5f61d9cf715bf037213e3d028"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:afa43d13f2a5bed077e01385cc2c41ce0463f6aeba8e06ca2007fecded27a4c7"
 
           # Directory for the Build Event Protocol and execution profile files,
           # later uploaded to Namespace Artifact Storage for offline analysis.
@@ -120,7 +120,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:7dc37b193456f1dfa9d40d800fb0b26b4e1da8e5f61d9cf715bf037213e3d028"
+          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:afa43d13f2a5bed077e01385cc2c41ce0463f6aeba8e06ca2007fecded27a4c7"
 
           # Directory for the Build Event Protocol and execution profile files,
           # later uploaded to Namespace Artifact Storage for offline analysis.

@@ -25,7 +25,7 @@ jobs:
       labels: dind-small
     environment: CREATE_PR
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:b938ef3de01009a54225ca400aa4bd0a637440c755c32acd4c8a2f8f563b7951
+      image: ghcr.io/dfinity/ic-build@sha256:9a534707a73969ed6aaf0f83a8aafb3951e0a0b9a2e060a192bf58983082a8f9
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/tmp/containers"
     env:
