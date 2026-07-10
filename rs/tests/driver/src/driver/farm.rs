@@ -57,6 +57,14 @@ pub struct Farm {
 impl Farm {
     pub fn new(base_url: Url, logger: Logger) -> Self {
         let client = reqwest::blocking::ClientBuilder::new()
+            // Force HTTP/1.1: Farm's warp-tls server advertises
+            // SETTINGS_MAX_CONCURRENT_STREAMS=64 and tears down the whole
+            // connection (RST_STREAM + GOAWAY) if a burst of multiplexed
+            // HTTP/2 streams exceeds that limit before the client has
+            // processed the server's SETTINGS frame. With many parallel
+            // uploads over a single multiplexed connection this kills all
+            // in-flight requests at once (`SendError { kind: Disconnected }`).
+            .http1_only()
             .timeout(TIMEOUT_SETTINGS.max_http_timeout)
             .build()
             .expect("This should not fail.");
@@ -70,6 +78,8 @@ impl Farm {
 
     pub fn from_test_env(env: &TestEnv, context: &str) -> Self {
         let client = reqwest::blocking::ClientBuilder::new()
+            // Force HTTP/1.1, see `Farm::new` for why.
+            .http1_only()
             .timeout(TIMEOUT_SETTINGS.max_http_timeout)
             .build()
             .expect("This should not fail.");

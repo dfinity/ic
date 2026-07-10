@@ -358,7 +358,7 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
     for (index, (ledger_block, index_block)) in ledger_blocks
         .blocks
         .into_iter()
-        .zip(index_blocks.blocks.into_iter())
+        .zip(index_blocks.blocks)
         .enumerate()
     {
         // If the hash matches then they are the same block.

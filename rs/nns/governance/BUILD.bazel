@@ -458,7 +458,7 @@ rust_ic_test(
     env = {
         "NEURON_CSV_PATH": "$(rootpath :tests/neurons.csv)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
-        "TLA_MODULES": "$(locations :tla_models)",
+        "TLA_MODULES": "$(rootpaths :tla_models)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     tags = ["long_test"],
@@ -487,7 +487,7 @@ rust_ic_test(
     env = {
         "NEURON_CSV_PATH": "$(rootpath :tests/neurons.csv)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
-        "TLA_MODULES": "$(locations :tla_models)",
+        "TLA_MODULES": "$(rootpaths :tla_models)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + ["//rs/tla_instrumentation:proc_macros"],
     tags = ["long_test"],

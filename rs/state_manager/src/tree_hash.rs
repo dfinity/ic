@@ -80,7 +80,8 @@ mod tests {
             CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
         },
         metadata_state::{
-            ApiBoundaryNodeEntry, Stream, SubnetMetrics, testing::NetworkTopologyTesting,
+            ApiBoundaryNodeEntry, Stream, SubnetMetrics,
+            testing::{NetworkTopologyTesting, SystemMetadataTesting},
         },
         page_map::{PAGE_SIZE, PageIndex},
         testing::{ReplicatedStateTesting, StreamTesting},
@@ -245,6 +246,9 @@ mod tests {
             stream.push_reject_signal(RejectReason::OutOfMemory);
             stream.push_reject_signal(RejectReason::Unknown);
             stream.push_reject_signal(RejectReason::CanisterStopping);
+            if certification_version >= CertificationVersion::V26 {
+                stream.push_reject_signal(RejectReason::EngineNotAllowed);
+            }
 
             let loopback_stream = Stream::new(
                 StreamIndexedQueue::with_begin(StreamIndex::from(13)),
@@ -279,12 +283,12 @@ mod tests {
                 |_| {},
             );
 
-            state.metadata.node_public_keys = btreemap! {
+            std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],
                 node_test_id(2) => vec![2; 44],
             };
 
-            state.metadata.api_boundary_nodes = btreemap! {
+            std::sync::Arc::make_mut(&mut state.metadata.network_topology).api_boundary_nodes = btreemap! {
                 node_test_id(11) => ApiBoundaryNodeEntry {
                     domain: "api-bn11-example.com".to_string(),
                     ipv4_address: Some("127.0.0.1".to_string()),
@@ -318,14 +322,13 @@ mod tests {
             })
             .unwrap();
 
-            state.metadata.network_topology.set_subnets(btreemap! {
-                own_subnet_id => Default::default(),
-                other_subnet_id => Default::default(),
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.set_subnets(btreemap! {
+                    own_subnet_id => Default::default(),
+                    other_subnet_id => Default::default(),
+                });
+                network_topology.set_routing_table(routing_table);
             });
-            state
-                .metadata
-                .network_topology
-                .set_routing_table(routing_table);
             state.metadata.prev_state_hash =
                 Some(CryptoHashOfPartialState::new(CryptoHash(vec![3, 2, 1])));
 
@@ -392,6 +395,7 @@ mod tests {
             "07797459A2F82D6F64628C0668C5BDB7F83447680DDB178208A40C2256409E8D",
             "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
             "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
+            "057FA1842C06C958F79C6394C54E12F9C9DCF5036D186EBBB9A49CDB4E3683BF",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

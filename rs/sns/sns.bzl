@@ -15,7 +15,7 @@ but other things could be added here later.
 
 CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = {
     "sns-governance-canister.wasm.gz": 19,
-    "sns-governance-canister_test.wasm.gz": 19,
+    "sns-governance-canister_test.wasm.gz": 20,
     "sns-root-canister.wasm.gz": 5,
-    "sns-swap-canister.wasm.gz": 8,
+    "sns-swap-canister.wasm.gz": 10,
 }

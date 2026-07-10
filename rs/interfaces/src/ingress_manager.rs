@@ -5,7 +5,7 @@ use crate::{
     validation::ValidationError,
 };
 use ic_types::{
-    CanisterId, Height, NumBytes,
+    CanisterId, Height, NumBytes, RegistryVersion,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -63,6 +63,9 @@ pub enum InvalidIngressPayloadReason {
     IngressValidationError(MessageId, String),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
+    /// The cumulative in-memory size of the ingress payload (`.0`) exceeds the
+    /// per-block limit `max_ingress_bytes_per_block` (`.1`).
+    IngressPayloadTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
@@ -77,6 +80,7 @@ pub enum InvalidIngressPayloadReason {
 pub enum IngressPayloadValidationFailure {
     StateManagerError(Height, StateManagerError),
     IngressHistoryError(Height, IngressHistoryError),
+    GetIngressMessageSettingsFailed(RegistryVersion, String),
 }
 
 pub type IngressPayloadValidationError =

@@ -26,4 +26,5 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-test-utilities-privileges = { path = "../test_utilities/privileges" }
 tempfile = { workspace = true }

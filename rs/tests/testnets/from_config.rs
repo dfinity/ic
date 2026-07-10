@@ -23,38 +23,20 @@
 //
 // You can setup this testnet by executing the following commands:
 //
-//   $ ./ci/tools/docker-run
-//   $ ict testnet create --from-ic-config-path <(cat <<EOF
-// {
-//   "subnets": [
-//     {
-//       "subnet_type": "application",
-//       "num_nodes": 1
-//    },
-//     {
-//       "subnet_type": "system",
-//       "num_nodes": 1
-//     }
-//   ],
-//   "num_unassigned_nodes": 2
-// }
-// EOF
-// )
-//
-// Note that you can get the  address of the IC node from the ict console output:
-//
+//   $ ./ci/tools/container-run.sh
+//   $ bazel run //rs/tests/testnets:from_config --test_env=IC_CONFIG='
 //   {
-//     nodes: [
-//       {
-//         id: y4g5e-dpl4n-swwhv-la7ec-32ngk-w7f3f-pr5bt-kqw67-2lmfy-agipc-zae,
-//         ipv6: 2a0b:21c0:4003:2:5034:46ff:fe3c:e76f
-//       }
+//     "subnets": [
+//       { "subnet_type": "application", "num_nodes": 1 },
+//       { "subnet_type": "system", "num_nodes": 1 }
 //     ],
-//     subnet_id: 5hv4k-srndq-xgw53-r6ldt-wtv4x-6xvbj-6lvpf-sbu5n-sqied-63bgv-eqe,
-//     subnet_type: application
-//   },
+//     "target_version": { "version_id": "..." }
+//   }
+//   ' -- --keepalive
 //
-// To get access to P8s and Grafana look for the following lines in the ict console output:
+// Note that you can get the address of the IC node from the farm_vm_created_events in theoutput.
+//
+// To get access to P8s and Grafana look for the following lines in the output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.from_config--1692597750709.testnet.farm.dfinity.systems,
 //     grafana: Grafana at http://grafana.from_config--1692597750709.testnet.farm.dfinity.systems,

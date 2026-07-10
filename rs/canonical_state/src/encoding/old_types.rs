@@ -7,6 +7,7 @@
 //! be removed.
 
 use std::{
+    collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
     sync::Arc,
 };
@@ -17,7 +18,11 @@ use crate::encoding::types::{
     Bytes, Cycles, Funds, Payload, Refund, RejectSignals, STREAM_SUPPORTED_FLAGS, StreamFlagBits,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{Time, time::CoarseTime};
+use ic_types::{
+    Time,
+    time::CoarseTime,
+    xnet::{RejectReason, RejectSignal, StreamIndex},
+};
 use serde::{Deserialize, Serialize};
 
 /// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V19.
@@ -503,6 +508,216 @@ impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
         };
 
         let reject_signals = types::try_from_deltas(&header.reject_signals, header.signals_end)?;
+
+        Ok(Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
+            reject_signals,
+            flags,
+        ))
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RejectSignalsV25 {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_migrating_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_not_found_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_stopped_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub canister_stopping_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queue_full_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub out_of_memory_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknown_deltas: Vec<u64>,
+}
+
+impl RejectSignalsV25 {
+    pub fn is_empty(&self) -> bool {
+        let Self {
+            canister_migrating_deltas,
+            canister_not_found_deltas,
+            canister_stopped_deltas,
+            canister_stopping_deltas,
+            queue_full_deltas,
+            out_of_memory_deltas,
+            unknown_deltas,
+        } = self;
+        canister_migrating_deltas.is_empty()
+            && canister_not_found_deltas.is_empty()
+            && canister_stopped_deltas.is_empty()
+            && canister_stopping_deltas.is_empty()
+            && queue_full_deltas.is_empty()
+            && out_of_memory_deltas.is_empty()
+            && unknown_deltas.is_empty()
+    }
+}
+
+impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for RejectSignalsV25 {
+    fn from(
+        (reject_signals, signals_end, _certification_version): (
+            &VecDeque<RejectSignal>,
+            StreamIndex,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        // Demux `reject_signals` into vectors of `StreamIndex`.
+        let mut demuxed = HashMap::<RejectReason, Vec<StreamIndex>>::new();
+        for RejectSignal { reason, index } in reject_signals.iter() {
+            demuxed.entry(*reason).or_default().push(*index)
+        }
+        let mut deltas_for = |reason| -> Vec<u64> {
+            demuxed
+                .remove(&reason)
+                .map(|signals| {
+                    let mut next_index = signals_end;
+                    let mut reject_signal_deltas = vec![0; signals.len()];
+                    for (i, stream_index) in signals.iter().enumerate().rev() {
+                        assert!(next_index > *stream_index);
+                        reject_signal_deltas[i] = next_index.get() - stream_index.get();
+                        next_index = *stream_index;
+                    }
+                    reject_signal_deltas
+                })
+                .unwrap_or_default()
+        };
+
+        assert!(deltas_for(RejectReason::EngineNotAllowed).is_empty());
+
+        RejectSignalsV25 {
+            canister_migrating_deltas: deltas_for(RejectReason::CanisterMigrating),
+            canister_not_found_deltas: deltas_for(RejectReason::CanisterNotFound),
+            canister_stopped_deltas: deltas_for(RejectReason::CanisterStopped),
+            canister_stopping_deltas: deltas_for(RejectReason::CanisterStopping),
+            queue_full_deltas: deltas_for(RejectReason::QueueFull),
+            out_of_memory_deltas: deltas_for(RejectReason::OutOfMemory),
+            unknown_deltas: deltas_for(RejectReason::Unknown),
+        }
+    }
+}
+
+fn try_from_deltas_v25(
+    reject_signals: &RejectSignalsV25,
+    signals_end: u64,
+) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
+    use RejectReason::*;
+
+    let mut reject_signals_map = BTreeMap::<StreamIndex, RejectReason>::new();
+    for (reason, deltas) in [
+        (CanisterMigrating, &reject_signals.canister_migrating_deltas),
+        (CanisterNotFound, &reject_signals.canister_not_found_deltas),
+        (CanisterStopped, &reject_signals.canister_stopped_deltas),
+        (CanisterStopping, &reject_signals.canister_stopping_deltas),
+        (QueueFull, &reject_signals.queue_full_deltas),
+        (OutOfMemory, &reject_signals.out_of_memory_deltas),
+        (Unknown, &reject_signals.unknown_deltas),
+    ] {
+        let mut stream_index = StreamIndex::new(signals_end);
+        for delta in deltas.iter().rev() {
+            if *delta == 0 {
+                // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
+                // lead to duplicates or a stream_index of `signals_end`.
+                return Err(ProxyDecodeError::Other(format!(
+                    "StreamHeader: {reason:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {deltas:?}",
+                )));
+            }
+            if stream_index < StreamIndex::new(*delta) {
+                // Reject signal deltas are invalid.
+                return Err(ProxyDecodeError::Other(format!(
+                    "StreamHeader: {reason:?} reject signals are invalid, got `signals_end` {signals_end:?}, `reject_signal_deltas` {deltas:?}",
+                )));
+            }
+            stream_index -= StreamIndex::new(*delta);
+
+            if reject_signals_map.insert(stream_index, reason).is_some() {
+                return Err(ProxyDecodeError::Other(
+                    "StreamHeader: reject signals are invalid, got duplicates".to_string(),
+                ));
+            }
+        }
+    }
+
+    Ok(reject_signals_map
+        .iter()
+        .map(|(index, reason)| RejectSignal::new(*reason, *index))
+        .collect())
+}
+
+/// Canonical representation of `ic_types::xnet::StreamHeader` at certification version V25.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamHeaderV25 {
+    pub begin: u64,
+    pub end: u64,
+    pub signals_end: u64,
+    #[serde(default, skip_serializing_if = "types::is_zero")]
+    pub reserved_3: u64,
+    #[serde(default, skip_serializing_if = "types::is_zero")]
+    pub flags: u64,
+    #[serde(default, skip_serializing_if = "RejectSignalsV25::is_empty")]
+    pub reject_signals: RejectSignalsV25,
+}
+
+impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV25 {
+    fn from(
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+    ) -> Self {
+        let mut flags = 0;
+        let ic_types::xnet::StreamFlags {
+            deprecated_responses_only,
+        } = *header.flags();
+        if deprecated_responses_only {
+            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
+        }
+
+        // Generate deltas representation based on `certification_version` to ensure unique
+        // encoding.
+        let reject_signals = (
+            header.reject_signals(),
+            header.signals_end(),
+            certification_version,
+        )
+            .into();
+
+        Self {
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
+            reserved_3: 0,
+            flags,
+            reject_signals,
+        }
+    }
+}
+
+impl TryFrom<StreamHeaderV25> for ic_types::xnet::StreamHeader {
+    type Error = ProxyDecodeError;
+    fn try_from(header: StreamHeaderV25) -> Result<Self, Self::Error> {
+        if header.reserved_3 != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: field index 3 is populated: {:?}",
+                header.reserved_3,
+            )));
+        }
+        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
+                header.flags, STREAM_SUPPORTED_FLAGS,
+            )));
+        }
+        let flags = ic_types::xnet::StreamFlags {
+            deprecated_responses_only: header.flags
+                & StreamFlagBits::DeprecatedResponsesOnly as u64
+                != 0,
+        };
+
+        let reject_signals = try_from_deltas_v25(&header.reject_signals, header.signals_end)?;
 
         Ok(Self::new(
             header.begin.into(),

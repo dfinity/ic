@@ -49,6 +49,17 @@ use std::time::Duration;
 const FOUNDRY_VM_NAME: &str = "foundry";
 const DOCKER_NETWORK_NAME: &str = "ethereum";
 const FOUNDRY_PORT: u16 = 8545;
+/// File names of the `solc` compilers vendored via Bazel (see `MODULE.bazel`)
+/// and shipped in the foundry UVM config image. They are used by
+/// `deploy_smart_contract` so that `forge` compiles the helper smart contracts
+/// offline instead of downloading `solc` at runtime. Each compiler must satisfy
+/// the `pragma solidity` of the contracts it compiles.
+///
+/// Most contracts are compiled with `SOLC`. `EthDepositHelper.sol` pins an older
+/// Solidity version to stay faithful to its immutable mainnet deployment, so it
+/// is compiled with its own `SOLC_ETH_DEPOSIT_HELPER`.
+const SOLC: &str = "solc";
+const SOLC_ETH_DEPOSIT_HELPER: &str = "solc_eth_deposit_helper";
 const ENCODED_PRINCIPAL: &str =
     "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000";
 
@@ -86,18 +97,25 @@ fn setup_with_system_and_application_subnets(env: TestEnv) {
 fn setup_anvil(env: &TestEnv) {
     UniversalVm::new(String::from(FOUNDRY_VM_NAME))
         .with_config_img(get_dependency_path_from_env("CKETH_UVM_CONFIG_PATH"))
-        .enable_ipv4() //forge needs to download the version of the solidity compiler indicated in the smart contracts that are being deployed
         .start(env)
         .expect("failed to setup universal VM");
 
     let deployed_universal_vm = env.get_deployed_universal_vm(FOUNDRY_VM_NAME).unwrap();
 
+    // Copy the vendored `solc` compilers out of the read-only config image into a
+    // writable location and mark them executable (vfat does not preserve the
+    // executable bit). `deploy_smart_contract` bind-mounts them into the foundry
+    // container so that `forge` can compile the helper smart contracts offline
+    // (the foundry image ships no `solc`).
     deployed_universal_vm
             .block_on_bash_script(&format!(
                 r#"
 docker load -i /config/foundry.tar
 docker network create {DOCKER_NETWORK_NAME}
 docker run --net {DOCKER_NETWORK_NAME} --detach --rm --name anvil -p {FOUNDRY_PORT}:{FOUNDRY_PORT} foundry:latest "anvil --host 0.0.0.0"
+cp /config/{SOLC_ETH_DEPOSIT_HELPER} /tmp/{SOLC_ETH_DEPOSIT_HELPER}
+cp /config/{SOLC} /tmp/{SOLC}
+chmod +x /tmp/{SOLC_ETH_DEPOSIT_HELPER} /tmp/{SOLC}
 "#
             ))
             .unwrap();
@@ -384,6 +402,7 @@ fn deploy_eth_deposit_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "EthDepositHelper.sol",
+        SOLC_ETH_DEPOSIT_HELPER,
         "CkEthDeposit",
         &minter_address.to_string(),
         logger,
@@ -716,6 +735,7 @@ fn deploy_erc20_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "ERC20DepositHelper.sol",
+        SOLC,
         "CkErc20Deposit",
         &minter_address.to_string(),
         logger,
@@ -741,6 +761,7 @@ fn deploy_erc20_contract(
         foundry,
         &EthereumAccount::Erc20Deployer,
         "ERC20.sol",
+        SOLC,
         "EXLToken",
         &format!("0x{initial_supply:x}"),
         logger,
@@ -772,6 +793,7 @@ fn deploy_deposit_with_subaccount_helper_contract(
         docker_host,
         &EthereumAccount::HelperContractDeployer,
         "DepositHelperWithSubaccount.sol",
+        SOLC,
         "CkDeposit",
         &minter_address.to_string(),
         logger,
@@ -814,16 +836,24 @@ fn deploy_smart_contract(
     foundry: &DeployedUniversalVm,
     sender: &EthereumAccount,
     filename: &str,
+    solc: &str,
     contract_name: &str,
     constructor_args: &str,
     logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let sender_private_key = sender.private_key();
+    // `--use /{solc}` points `forge` at the vendored `solc` binary bind-mounted
+    // from the UVM (see `setup_anvil`), so compilation happens offline instead of
+    // `forge` downloading `solc` from the internet.
+    // `-w /tmp` gives `forge` a writable working directory for its `out`/`cache`
+    // compilation artifacts: since foundry v1, the container runs as the non-root
+    // `foundry` user, which cannot write to the default working directory `/`.
     let cmd = format!(
         "\
-        docker run --net {DOCKER_NETWORK_NAME} --rm \
+        docker run --net {DOCKER_NETWORK_NAME} --rm -w /tmp \
         -v /config/{filename}:/contracts/{filename} \
-        foundry \"forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --broadcast --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}\"\
+        -v /tmp/{solc}:/{solc} \
+        foundry \"forge create --json --use /{solc} --rpc-url http://anvil:{FOUNDRY_PORT} --broadcast --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}\"\
     "
     );
     let json_output = foundry.block_on_bash_script(&cmd).unwrap();

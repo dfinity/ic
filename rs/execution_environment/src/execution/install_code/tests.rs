@@ -14,7 +14,7 @@ use ic_replicated_state::{
     canister_state::{
         NextExecution, execution_state::WasmExecutionMode, system_state::wasm_chunk_store,
     },
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
 };
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
@@ -23,7 +23,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
@@ -100,8 +100,7 @@ fn dts_resume_works_in_install_code() {
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE,
                     )
                     .real(),
@@ -154,8 +153,7 @@ fn dts_abort_works_in_install_code() {
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
                     .real(),
@@ -181,8 +179,7 @@ fn dts_abort_works_in_install_code() {
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(INSTRUCTION_LIMIT),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
                     .real(),
@@ -441,8 +438,7 @@ fn execute_install_code_message_dts_helper(
                     .cycles_account_manager()
                     .execution_cost(
                         NumInstructions::from(1_000_000),
-                        test.subnet_size(),
-                        CanisterCyclesCostSchedule::Normal,
+                        test.get_own_subnet_cycles_config(),
                         WASM_EXECUTION_MODE
                     )
                     .real(),
@@ -644,8 +640,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         NumBytes::new(canister_history_memory_usage as u64 + canister_log_memory_store_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
     let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
@@ -1210,14 +1205,14 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     // A no-op subnet split (no canisters migrated).
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, own_subnet_id);
-    test.state_mut()
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, own_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, own_subnet_id);
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, own_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Retains the `InstallCodeCall` and does not produce a response.
@@ -1233,9 +1228,11 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     // Simulate a subnet split that migrates canister 1 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `InstallCodeCall` and produced a reject response.
@@ -1302,9 +1299,11 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
     // Simulate a subnet split that migrates canister 2 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `InstallCodeCall` and set the ingress state to `Failed`.
@@ -2346,8 +2345,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(wasm_chunk_store::chunk_size().get()),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             WASM_EXECUTION_MODE,
         )
         .real();
@@ -2426,8 +2424,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(0),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             WASM_EXECUTION_MODE,
         )
         .real();
@@ -2435,8 +2432,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(wasm_chunk_store::chunk_size().get()),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             WASM_EXECUTION_MODE,
         )
         .real()

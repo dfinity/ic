@@ -81,6 +81,7 @@ ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
+ic-test-utilities-privileges = { path = "../../../test_utilities/privileges" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }

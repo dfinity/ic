@@ -22,7 +22,6 @@ use nested::{
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .allocate_testnet_to_local_dc()
         .with_setup(nested::setup)
         .add_test(systest!(upgrade_guestos))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
@@ -39,7 +38,7 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     let original_version = get_guestos_version();
     let target_version = get_guestos_update_img_version();
-    let upgrade_url = get_guestos_update_img_url().to_string();
+    let upgrade_url = get_guestos_update_img_url(&env).to_string();
     let sha256 = get_guestos_update_img_sha256();
     let guest_launch_measurements = get_guestos_update_launch_measurements();
 

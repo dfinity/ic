@@ -204,6 +204,7 @@ pub enum ErrorCode {
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
     CanisterInvalidControllerOrSubnetAdmin = 541,
+    CanisterStatusAccessDenied = 542,
     /// 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -298,6 +299,7 @@ impl ErrorCode {
             Self::CanisterInvalidControllerOrSubnetAdmin => {
                 "ERROR_CODE_CANISTER_INVALID_CONTROLLER_OR_SUBNET_ADMIN"
             }
+            Self::CanisterStatusAccessDenied => "ERROR_CODE_CANISTER_STATUS_ACCESS_DENIED",
             Self::DeadlineExpired => "ERROR_CODE_DEADLINE_EXPIRED",
             Self::ResponseDropped => "ERROR_CODE_RESPONSE_DROPPED",
         }
@@ -396,6 +398,7 @@ impl ErrorCode {
             "ERROR_CODE_CANISTER_INVALID_CONTROLLER_OR_SUBNET_ADMIN" => {
                 Some(Self::CanisterInvalidControllerOrSubnetAdmin)
             }
+            "ERROR_CODE_CANISTER_STATUS_ACCESS_DENIED" => Some(Self::CanisterStatusAccessDenied),
             "ERROR_CODE_DEADLINE_EXPIRED" => Some(Self::DeadlineExpired),
             "ERROR_CODE_RESPONSE_DROPPED" => Some(Self::ResponseDropped),
             _ => None,

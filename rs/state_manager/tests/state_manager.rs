@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
+use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
 use ic_canonical_state::lazy_tree_conversion::state_height_as_tree;
 use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
@@ -27,7 +28,10 @@ use ic_replicated_state::{
     ReplicatedState, Stream, SubnetTopology,
     canister_state::canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
-    metadata_state::{ApiBoundaryNodeEntry, testing::NetworkTopologyTesting},
+    metadata_state::{
+        ApiBoundaryNodeEntry,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    },
     page_map::{PageIndex, Shard, StorageLayout},
     testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
@@ -5532,8 +5536,9 @@ fn certified_read_can_certify_node_public_keys_since_v12() {
         network_topology.nns_subnet_id = subnet_test_id(42);
         network_topology.set_subnets(subnets);
 
-        state.metadata.network_topology = network_topology;
-        state.metadata.node_public_keys = node_public_keys;
+        state.metadata.network_topology = Arc::new(network_topology);
+        std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).node_public_keys =
+            node_public_keys;
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 
@@ -5585,7 +5590,7 @@ fn certified_read_can_certify_api_boundary_nodes_since_v16() {
     state_manager_test(|_metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
 
-        state.metadata.api_boundary_nodes = btreemap! {
+        std::sync::Arc::make_mut(&mut state.metadata.network_topology).api_boundary_nodes = btreemap! {
             node_test_id(11) => ApiBoundaryNodeEntry {
                 domain: "api-bn11-example.com".to_string(),
                 ipv4_address: Some("127.0.0.1".to_string()),
@@ -5941,7 +5946,7 @@ fn certified_read_can_exclude_canister_ranges() {
         network_topology.set_subnets(subnets);
         network_topology.set_routing_table(routing_table);
 
-        state.metadata.network_topology = network_topology;
+        state.metadata.network_topology = Arc::new(network_topology);
 
         state_manager.commit_and_certify_sync(state, CertificationScope::Metadata, None);
 
@@ -8163,10 +8168,9 @@ fn can_split_with_inflight_restore_snapshot() {
                 CanisterIdRange {start: CANISTER_3, end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
             })
             .unwrap();
-            state
-                .metadata
-                .network_topology
-                .set_routing_table(routing_table.clone());
+            state.metadata.modify_network_topology(|network_topology| {
+                network_topology.set_routing_table(routing_table.clone());
+            });
 
             // Expected state after splitting.
             let mut expected = state.clone();
@@ -8325,6 +8329,7 @@ fn stream_store_encode_decode(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8354,6 +8359,7 @@ fn stream_store_decode_with_modified_hash_fails(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8386,6 +8392,7 @@ fn stream_store_decode_with_empty_witness_fails(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8415,6 +8422,7 @@ fn stream_store_decode_slice_push_additional_message(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8467,6 +8475,7 @@ fn stream_store_decode_slice_modify_message_begin(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8506,6 +8515,7 @@ fn stream_store_decode_slice_modify_signals_end(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8542,6 +8552,7 @@ fn stream_store_decode_slice_push_signal(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
 ) {
@@ -8580,6 +8591,7 @@ fn stream_store_decode_with_invalid_destination(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8610,6 +8622,7 @@ fn stream_store_decode_with_rejecting_verifier(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8642,6 +8655,7 @@ fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     stream: Stream,
     #[strategy(0..20_usize)] size_limit: usize,
@@ -8671,6 +8685,7 @@ fn stream_store_encode_partial(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
     #[strategy(0..1000_usize)] byte_limit: usize,
@@ -8689,6 +8704,7 @@ fn stream_store_encode_partial_bad_indices(
         10, // max_size
         0, // min_signal_count
         10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
     ))]
     test_slice: (Stream, StreamIndex, usize),
     #[strategy(0..1000_usize)] byte_limit: usize,

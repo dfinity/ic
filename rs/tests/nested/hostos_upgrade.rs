@@ -17,7 +17,6 @@ use nested::util::{
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .allocate_testnet_to_local_dc()
         .with_setup(nested::setup)
         .add_test(systest!(upgrade_hostos))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
@@ -34,7 +33,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     let original_version = get_hostos_version();
     let target_version = get_hostos_update_img_version();
-    let update_image_url = get_hostos_update_img_url();
+    let update_image_url = get_hostos_update_img_url(&env);
     let update_image_sha256 = get_hostos_update_img_sha256();
 
     info!(logger, "Image configuration:");

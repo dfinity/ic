@@ -2,6 +2,7 @@
 Utilities for building IC replica and canisters.
 """
 
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
@@ -96,7 +97,8 @@ def _mcopy(ctx):
                 dest_path = dest + src_file.basename
             else:
                 dest_path = dest
-            command += "&& mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
+            command += "&& {mcopy} -mi {output} -sQ {src_path} ::/{dest} ".format(
+                mcopy = ctx.file._mcopy.path,
                 output = out.path,
                 src_path = src_file.path,
                 dest = dest_path.removeprefix("/"),
@@ -104,7 +106,7 @@ def _mcopy(ctx):
 
     ctx.actions.run_shell(
         command = command,
-        inputs = inputs + [ctx.file.fs],
+        inputs = inputs + [ctx.file.fs, ctx.file._mcopy],
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -114,6 +116,7 @@ mcopy = rule(
     attrs = {
         "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
+        "_mcopy": attr.label(default = "@mtools//:mcopy", cfg = "exec", allow_single_file = True),
     },
 )
 
@@ -378,6 +381,44 @@ def _volatile_status_impl(ctx):
 
 volatile_status = rule(
     implementation = _volatile_status_impl,
+)
+
+def _disable_hermetic_cc_transition(_settings, _attr):
+    return {
+        "//bazel:hermetic_cc": False,
+    }
+
+disable_hermetic_cc_transition = transition(
+    implementation = _disable_hermetic_cc_transition,
+    inputs = [],
+    outputs = [
+        "//bazel:hermetic_cc",
+    ],
+)
+
+def _disable_hermetic_cc_target_impl(ctx):
+    dep = ctx.attr.target[0]
+    providers = [dep[DefaultInfo]]
+
+    if CcInfo in dep:
+        providers.append(dep[CcInfo])
+    if OutputGroupInfo in dep:
+        providers.append(dep[OutputGroupInfo])
+
+    return providers
+
+disable_hermetic_cc_target = rule(
+    implementation = _disable_hermetic_cc_target_impl,
+    attrs = {
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+        "target": attr.label(
+            mandatory = True,
+            cfg = disable_hermetic_cc_transition,
+            allow_files = True,
+        ),
+    },
 )
 
 def file_size_check(

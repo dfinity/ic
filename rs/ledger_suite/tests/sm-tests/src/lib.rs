@@ -3,10 +3,7 @@ use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
@@ -1618,7 +1615,7 @@ where
     let mut prev_hash = None;
 
     // Check that the hash chain is correct.
-    for block in archived_blocks.into_iter().chain(resp.blocks.into_iter()) {
+    for block in archived_blocks.into_iter().chain(resp.blocks) {
         assert_eq!(
             prev_hash,
             get_phash(&block).expect("cannot get the hash of the previous block")
@@ -2072,7 +2069,7 @@ pub fn icrc1_test_block_transformation<T, Tokens>(
     for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
         .blocks
         .into_iter()
-        .zip(resp_post_upgrade.blocks.into_iter())
+        .zip(resp_post_upgrade.blocks)
     {
         assert!(
             equivalent_values(&block_pre_upgrade, &block_post_upgrade),
@@ -4394,7 +4391,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     let account = Account::from(PrincipalId::new_user_test_id(1).0);
     let initial_balances = vec![(account, 100_000_000_u64)];
 
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
@@ -5080,7 +5077,7 @@ pub mod archiving {
         }
 
         // Install a ledger with a lot of initial balances
-        let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+        let mut subnet_config = SubnetConfig::new(SubnetType::System);
         // Set max_instructions_per_round to max(max_instructions_per_slice, max_instructions_per_install_code_slice)
         // to ensure that at most one canister message can be executed per round.
         subnet_config.scheduler_config.max_instructions_per_round = subnet_config

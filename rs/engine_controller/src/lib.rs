@@ -10,6 +10,13 @@ use serde::Deserialize;
 // have to depend on `registry-canister` directly just to decode it.
 pub use registry_canister::mutations::do_create_subnet::NewSubnet;
 
+// Re-export the payload types accepted by the proxy endpoints
+// (`update_subnet` and `deploy_guestos_to_all_subnet_nodes`) so clients
+// don't have to depend on `registry-canister` directly to construct them.
+pub use registry_canister::mutations::do_change_subnet_membership::ChangeSubnetMembershipPayload;
+pub use registry_canister::mutations::do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload;
+pub use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct EngineControllerInitArgs {
     /// If `Some`, replaces the default authorized caller; if `None`, the

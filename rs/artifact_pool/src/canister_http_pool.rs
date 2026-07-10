@@ -232,9 +232,12 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        CanisterId, RegistryVersion, ReplicaVersion,
+        CanisterId, ReplicaVersion,
         artifact::IdentifiableArtifact,
-        canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
+        canister_http::{
+            CanisterHttpPaymentReceipt, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+            CanisterHttpResponseReceipt,
+        },
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
         signature::BasicSignature,
@@ -259,13 +262,15 @@ mod tests {
 
     fn fake_share(id: u64) -> CanisterHttpResponseShare {
         Signed {
-            content: CanisterHttpResponseMetadata {
-                id: CallbackId::from(id),
-                content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
-                content_size: 42,
-                is_reject: false,
-                registry_version: RegistryVersion::from(id),
-                replica_version: ReplicaVersion::default(),
+            content: CanisterHttpResponseReceipt {
+                metadata: CanisterHttpResponseMetadata {
+                    id: CallbackId::from(id),
+                    content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+                    content_size: 42,
+                    is_reject: false,
+                    replica_version: ReplicaVersion::default(),
+                },
+                payment_receipt: CanisterHttpPaymentReceipt::default(),
             },
             signature: BasicSignature::fake(node_test_id(id)),
         }

@@ -147,7 +147,6 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         &self,
         state: &mut ReplicatedState,
         msg: SignedIngress,
-        subnet_size: usize,
         current_round: ExecutionRound,
     ) {
         trace!(self.log, "induct_message");
@@ -159,7 +158,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         let time = state.time();
         let ingress_expiry = ingress_content.ingress_expiry();
 
-        let status = match self.enqueue(state, msg, subnet_size) {
+        let status = match self.enqueue(state, msg) {
             Ok(()) => {
                 self.observe_inducted_ingress_payload_size(payload_bytes);
                 self.ingress_history_writer.set_status(
@@ -247,7 +246,6 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         &self,
         state: &mut ReplicatedState,
         signed_ingress: SignedIngress,
-        subnet_size: usize,
     ) -> Result<(), IngressInductionError> {
         if state.metadata.own_subnet_type != SubnetType::System
             && state.metadata.ingress_history.len() >= self.ingress_history_max_messages
@@ -277,12 +275,11 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
         };
 
         // Compute the cost of induction.
-        let cost_schedule = state.get_own_cost_schedule();
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
         let induction_cost = self.cycles_account_manager.ingress_induction_cost(
             &signed_ingress,
             effective_canister_id,
-            subnet_size,
-            cost_schedule,
+            subnet_cycles_config,
         );
 
         let ingress = Ingress::from((signed_ingress.take_content(), effective_canister_id));
@@ -311,8 +308,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                     message_memory_usage,
                     compute_allocation,
                     cost,
-                    subnet_size,
-                    cost_schedule,
+                    subnet_cycles_config,
                     reveal_top_up,
                 ) {
                     return Err(IngressInductionError::CanisterOutOfCycles(err));
@@ -350,11 +346,10 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>> Valid
         msgs: Vec<SignedIngress>,
         current_round: ExecutionRound,
     ) {
-        let subnet_size = state.get_own_subnet_size();
         for msg in msgs {
             let message_id = msg.content().id();
             if !self.is_duplicate(state, &msg) {
-                self.induct_message(state, msg, subnet_size, current_round);
+                self.induct_message(state, msg, current_round);
             } else {
                 self.observe_inducted_ingress_status(LABEL_VALUE_DUPLICATE);
                 debug!(self.log, "Didn't induct duplicate message {}", message_id);

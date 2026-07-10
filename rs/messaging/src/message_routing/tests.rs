@@ -619,19 +619,13 @@ impl StateMachine for FakeStateMachine {
     fn execute_round(
         &self,
         mut state: ReplicatedState,
-        network_topology: NetworkTopology,
         _batch: Batch,
-        subnet_features: SubnetFeatures,
-        resource_limits: ResourceLimits,
+        network_topology: Arc<NetworkTopology>,
+        own_subnet_info: Arc<OwnSubnetInfo>,
         registry_settings: &RegistryExecutionSettings,
-        node_public_keys: NodePublicKeys,
-        api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         state.metadata.network_topology = network_topology;
-        state.metadata.own_subnet_features = subnet_features;
-        state.metadata.own_resource_limits = resource_limits;
-        state.metadata.node_public_keys = node_public_keys;
-        state.metadata.api_boundary_nodes = api_boundary_nodes;
+        state.metadata.own_subnet_info = own_subnet_info;
         state.put_canister_state(
             CanisterStateBuilder::new()
                 .with_canister_id(canister_test_id(1))
@@ -674,8 +668,12 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
         state_machine: Box::new(FakeStateMachine(registry_settings.clone())),
-        registry,
-        bitcoin_config: BitcoinConfig::default(),
+        registry_reader: RegistryReader::new(
+            registry,
+            BitcoinConfig::default(),
+            metrics.clone(),
+            log.clone(),
+        ),
         metrics: metrics.clone(),
         log,
         malicious_flags: MaliciousFlags::default(),
@@ -689,19 +687,11 @@ fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
     own_subnet_id: SubnetId,
-) -> Result<
-    (
-        NetworkTopology,
-        SubnetFeatures,
-        ResourceLimits,
-        RegistryExecutionSettings,
-        NodePublicKeys,
-        ApiBoundaryNodes,
-    ),
-    ReadRegistryError,
-> {
+) -> Result<(NetworkTopology, OwnSubnetInfo, RegistryExecutionSettings), ReadRegistryError> {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
-    batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
+    batch_processor
+        .registry_reader
+        .try_to_read_registry(registry.get_latest_version(), own_subnet_id)
 }
 
 /// Tests that `BatchProcessorImpl::try_to_read_registry()` returns `Ok(_)`; and checks that the
@@ -888,16 +878,15 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, metrics, state_manager, registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (
-            network_topology,
-            own_subnet_features,
-            own_resource_limits,
-            registry_execution_settings,
-            node_public_keys,
-            api_boundary_nodes,
-        ) = batch_processor
+        let (network_topology, own_subnet_info, registry_execution_settings) = batch_processor
+            .registry_reader
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap();
+        let OwnSubnetInfo {
+            subnet_features: own_subnet_features,
+            resource_limits: own_resource_limits,
+            node_public_keys,
+        } = own_subnet_info;
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
         // critical error counter is untouched.
@@ -951,6 +940,30 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         assert_eq!(&routing_table, network_topology.routing_table().as_ref());
         assert_eq!(canister_migrations, *network_topology.canister_migrations);
 
+        // Check API Boundary Nodes.
+        let api_boundary_nodes = &network_topology.api_boundary_nodes;
+        assert_eq!(api_boundary_nodes.len(), 2);
+        let entry_1 = api_boundary_nodes.get(&node_test_id(11)).unwrap();
+        assert_eq!(
+            entry_1,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn11.example.org".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            }
+        );
+        let entry_2 = api_boundary_nodes.get(&node_test_id(12)).unwrap();
+        assert_eq!(
+            entry_2,
+            &ApiBoundaryNodeEntry {
+                domain: "api-bn12.example.org".to_string(),
+                ipv4_address: None,
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                pubkey: None,
+            }
+        );
+
         // Check registry execution settings.
         assert_eq!(
             own_subnet_record.max_number_of_canisters,
@@ -990,29 +1003,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             );
         }
 
-        // Check API Boundary Nodes.
-        assert_eq!(api_boundary_nodes.len(), 2);
-        let entry_1 = api_boundary_nodes.get(&node_test_id(11)).unwrap();
-        assert_eq!(
-            entry_1,
-            &ApiBoundaryNodeEntry {
-                domain: "api-bn11.example.org".to_string(),
-                ipv4_address: Some("127.0.0.1".to_string()),
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-                pubkey: None,
-            }
-        );
-        let entry_2 = api_boundary_nodes.get(&node_test_id(12)).unwrap();
-        assert_eq!(
-            entry_2,
-            &ApiBoundaryNodeEntry {
-                domain: "api-bn12.example.org".to_string(),
-                ipv4_address: None,
-                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
-                pubkey: None,
-            }
-        );
-
         // Commit a state with `own_subnet_id` in its metadata to ensure the latest
         // state corresponds to the registry records written above.
         let (height, mut state) = state_manager.take_tip();
@@ -1025,10 +1015,13 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         // defined above). Additionally check the `registry_execution_settings` are also passed
         // correctly (they are stored in the internal `Arc` of the fake state machine itself).
         let latest_state = state_manager.get_latest_state().take();
-        assert_ne!(&network_topology, &latest_state.metadata.network_topology);
+        assert_ne!(
+            &network_topology,
+            latest_state.metadata.network_topology.as_ref()
+        );
         assert_ne!(
             own_subnet_features,
-            latest_state.metadata.own_subnet_features
+            latest_state.metadata.own_subnet_info.subnet_features
         );
         assert_ne!(
             *registry_settings.lock().unwrap(),
@@ -1050,24 +1043,18 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             replica_version: ReplicaVersion::default(),
         });
         let latest_state = state_manager.get_latest_state().take();
-        assert_eq!(&network_topology, &latest_state.metadata.network_topology);
         assert_eq!(
-            own_subnet_features,
-            latest_state.metadata.own_subnet_features
+            &network_topology,
+            latest_state.metadata.network_topology.as_ref()
         );
+        assert_eq!(own_subnet_features, latest_state.subnet_features());
+        assert_eq!(own_resource_limits, latest_state.resource_limits());
         assert_eq!(
-            own_resource_limits,
-            latest_state.metadata.own_resource_limits
-        );
-        assert_eq!(
-            latest_state.metadata.own_resource_limits.maximum_state_size,
+            latest_state.resource_limits().maximum_state_size,
             Some(own_maximum_state_size)
         );
         assert_eq!(
-            latest_state
-                .metadata
-                .own_resource_limits
-                .maximum_state_delta,
+            latest_state.resource_limits().maximum_state_delta,
             Some(own_maximum_state_delta)
         );
         assert_eq!(
@@ -1115,6 +1102,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
         let result = batch_processor
+            .registry_reader
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
         assert_matches!(result, Ok(_));
 
@@ -1122,7 +1110,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, _, registry_execution_settings, _, _) = result.unwrap();
+        let (_, _, registry_execution_settings) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -1173,6 +1161,81 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             try_to_read_registry(fixture.registry, log, own_subnet_id),
             Err(Persistent(err)) if err.ends_with("not found")
         );
+    });
+}
+
+/// Tests that `RegistryReader::read_registry()` caches the values read at the most
+/// recent registry version: a second read at the same version returns `Arc` clones
+/// of the cached values, while a read at a different version reads the registry anew.
+#[test]
+fn read_registry_caches_values_by_registry_version() {
+    with_test_replica_logger(|log| {
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let own_subnet_record = SubnetRecord {
+            max_number_of_canisters: 784,
+            ..Default::default()
+        };
+        let own_transcript = dummy_transcript_for_tests();
+        let nns_subnet_id = subnet_test_id(42);
+
+        let input = TestRecords {
+            subnet_ids: Valid([own_subnet_id]),
+            subnet_records: [Valid(&own_subnet_record)],
+            ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+            nns_subnet_id: Valid(nns_subnet_id),
+            chain_key_enabled_subnets: &BTreeMap::default(),
+            provisional_whitelist: Missing,
+            routing_table: Missing,
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
+        };
+
+        let fixture = RegistryFixture::new();
+        fixture.write_test_records(&input).unwrap();
+        let version_1 = fixture.registry.get_latest_version();
+
+        let (batch_processor, _, _, _) =
+            make_batch_processor(fixture.registry.clone(), log.clone());
+
+        // Two reads at the same registry version return `Arc` clones of the same
+        // (cached) values.
+        let (nt_1, osi_1, res_1) = batch_processor
+            .registry_reader
+            .read_registry(version_1, own_subnet_id);
+        let (nt_2, osi_2, res_2) = batch_processor
+            .registry_reader
+            .read_registry(version_1, own_subnet_id);
+        assert!(Arc::ptr_eq(&nt_1, &nt_2));
+        assert!(Arc::ptr_eq(&osi_1, &osi_2));
+        assert!(Arc::ptr_eq(&res_1, &res_2));
+
+        // Writing the same records again bumps the registry to a new version.
+        fixture.write_test_records(&input).unwrap();
+        let version_2 = fixture.registry.get_latest_version();
+        assert_ne!(version_1, version_2);
+
+        // A read at a different version bypasses the cache and returns freshly read
+        // values: distinct `Arc` instances, but equal in content.
+        let (nt_3, osi_3, res_3) = batch_processor
+            .registry_reader
+            .read_registry(version_2, own_subnet_id);
+        assert!(!Arc::ptr_eq(&nt_1, &nt_3));
+        assert!(!Arc::ptr_eq(&osi_1, &osi_3));
+        assert!(!Arc::ptr_eq(&res_1, &res_3));
+        assert_eq!(nt_1, nt_3);
+        assert_eq!(osi_1, osi_3);
+
+        // The freshly read values are now the cached ones.
+        let (nt_4, osi_4, res_4) = batch_processor
+            .registry_reader
+            .read_registry(version_2, own_subnet_id);
+        assert!(Arc::ptr_eq(&nt_3, &nt_4));
+        assert!(Arc::ptr_eq(&osi_3, &osi_4));
+        assert!(Arc::ptr_eq(&res_3, &res_4));
     });
 }
 
@@ -1436,6 +1499,7 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
         let res = batch_processor
+            .registry_reader
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
         assert_matches!(res, Ok(_));
 
@@ -1447,7 +1511,8 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
             2
         );
 
-        let (_, _, _, _, node_public_keys, _) = res.unwrap();
+        let (_, own_subnet_info, _) = res.unwrap();
+        let node_public_keys = &own_subnet_info.node_public_keys;
         assert_eq!(node_public_keys.len(), 1);
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
@@ -1581,12 +1646,14 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
         let res = batch_processor
+            .registry_reader
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
         assert_matches!(res, Ok(_));
 
         // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
         // Hence, only one nodes are retrieved.
-        let (_, _, _, _, _, api_boundary_nodes) = res.unwrap();
+        let (network_topology, _, _) = res.unwrap();
+        let api_boundary_nodes = &network_topology.api_boundary_nodes;
         assert_eq!(api_boundary_nodes.len(), 1);
         assert!(api_boundary_nodes.contains_key(&node_test_id(11)));
 
@@ -1657,6 +1724,7 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
         let (batch_processor, _, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
         let network_topology = batch_processor
+            .registry_reader
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap()
             .0;
@@ -1670,8 +1738,8 @@ fn try_read_registry_succeeds_and_populates_subnet_admins() {
             rental_subnet_record_from_topo.subnet_admins,
             btreeset! {rental_subnet_admin.get()}
         );
-        // CloudEngine subnets are filtered out of the topology on non-NNS subnets.
-        assert!(network_topology.subnets().get(&engine_subnet_id).is_none());
+        // CloudEngine subnets are visible in the full topology on all subnets.
+        assert!(network_topology.subnets().get(&engine_subnet_id).is_some());
     });
 }
 
@@ -1736,6 +1804,7 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
         let network_topology = batch_processor
+            .registry_reader
             .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
             .unwrap()
             .0;
@@ -1743,8 +1812,8 @@ fn try_read_registry_succeeds_and_resets_subnet_admins() {
         // Check that subnet admins are reset and a critical error is raised.
         let own_subnet_record_from_topo = network_topology.subnets().get(&own_subnet_id).unwrap();
         assert_eq!(own_subnet_record_from_topo.subnet_admins, BTreeSet::new());
-        // CloudEngine subnets are filtered out of the topology on non-NNS subnets.
-        assert!(network_topology.subnets().get(&engine_subnet_id).is_none());
+        // CloudEngine subnets are visible in the full topology on all subnets.
+        assert!(network_topology.subnets().get(&engine_subnet_id).is_some());
         let nns_subnet_record_from_topo = network_topology.subnets().get(&nns_subnet_id).unwrap();
         assert_eq!(nns_subnet_record_from_topo.subnet_admins, BTreeSet::new());
         // The critical error is still raised for all 3 subnets (before filtering).
@@ -1815,70 +1884,23 @@ fn setup_three_subnet_registry() -> (Arc<FakeRegistryClient>, SubnetId, SubnetId
     )
 }
 
-/// Tests that a CloudEngine subnet sees only itself in the resulting topology:
-/// `subnets`, `routing_table`, `subnets_for_certification`, and `routing_table_for_certification`
-/// all contain only the own subnet.
+/// Tests that a CloudEngine subnet sees the full topology (all three subnets):
+/// `subnets`, `routing_table`, `subnets_for_certification`, and
+/// `routing_table_for_certification` all contain every subnet.
 #[test]
-fn try_read_registry_engine_subnet_sees_only_itself() {
+fn try_read_registry_engine_subnet_sees_full_topology() {
     with_test_replica_logger(|log| {
-        let (registry, _app_subnet_id, engine_subnet_id, _nns_subnet_id) =
+        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
             setup_three_subnet_registry();
 
         let network_topology = try_to_read_registry(registry, log, engine_subnet_id)
             .unwrap()
             .0;
 
-        // Filtered view: only the own engine subnet.
-        assert_eq!(
-            network_topology.subnets().keys().collect::<Vec<_>>(),
-            vec![&engine_subnet_id],
-        );
-        assert_eq!(
-            network_topology
-                .routing_table()
-                .iter()
-                .map(|(_, sid)| *sid)
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([engine_subnet_id]),
-        );
-
-        // Engine accessors also return only the own subnet (no full_topology on engines).
-        assert_eq!(
-            network_topology
-                .subnets_for_certification()
-                .keys()
-                .collect::<Vec<_>>(),
-            vec![&engine_subnet_id],
-        );
-        assert_eq!(
-            network_topology
-                .routing_table_for_certification()
-                .iter()
-                .map(|(_, sid)| *sid)
-                .collect::<BTreeSet<_>>(),
-            BTreeSet::from([engine_subnet_id]),
-        );
-    });
-}
-
-/// Tests that an Application subnet filters out CloudEngine subnets from its
-/// topology: `subnets`, `routing_table`, `subnets_for_certification`, and
-/// `routing_table_for_certification` all exclude the engine subnet.
-#[test]
-fn try_read_registry_application_subnet_filters_out_engines() {
-    with_test_replica_logger(|log| {
-        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
-            setup_three_subnet_registry();
-
-        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
-            .unwrap()
-            .0;
-
-        // Filtered view: app and NNS subnets are visible, engine is excluded.
         let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
         assert!(subnet_keys.contains(&app_subnet_id));
+        assert!(subnet_keys.contains(&engine_subnet_id));
         assert!(subnet_keys.contains(&nns_subnet_id));
-        assert!(!subnet_keys.contains(&engine_subnet_id));
 
         let rt_subnets: BTreeSet<_> = network_topology
             .routing_table()
@@ -1886,10 +1908,10 @@ fn try_read_registry_application_subnet_filters_out_engines() {
             .map(|(_, sid)| *sid)
             .collect();
         assert!(rt_subnets.contains(&app_subnet_id));
+        assert!(rt_subnets.contains(&engine_subnet_id));
         assert!(rt_subnets.contains(&nns_subnet_id));
-        assert!(!rt_subnets.contains(&engine_subnet_id));
 
-        // Engine accessors also exclude the engine (no full_topology on non-NNS subnets).
+        // No full_topology on engine subnets; certification accessors fall back to subnets().
         assert_eq!(
             network_topology.subnets_for_certification(),
             network_topology.subnets(),
@@ -1901,9 +1923,47 @@ fn try_read_registry_application_subnet_filters_out_engines() {
     });
 }
 
-/// Tests that the NNS subnet filters out CloudEngine subnets from `subnets()`
-/// and `routing_table()`, but `subnets_for_certification()` and
-/// `routing_table_for_certification()` include all subnets (via `full_topology`).
+/// Tests that an Application subnet sees the full topology (all three subnets),
+/// including CloudEngine subnets.
+#[test]
+fn try_read_registry_application_subnet_sees_full_topology() {
+    with_test_replica_logger(|log| {
+        let (registry, app_subnet_id, engine_subnet_id, nns_subnet_id) =
+            setup_three_subnet_registry();
+
+        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
+            .unwrap()
+            .0;
+
+        // Full view: all three subnets are visible, including the engine.
+        let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
+        assert!(subnet_keys.contains(&app_subnet_id));
+        assert!(subnet_keys.contains(&nns_subnet_id));
+        assert!(subnet_keys.contains(&engine_subnet_id));
+
+        let rt_subnets: BTreeSet<_> = network_topology
+            .routing_table()
+            .iter()
+            .map(|(_, sid)| *sid)
+            .collect();
+        assert!(rt_subnets.contains(&app_subnet_id));
+        assert!(rt_subnets.contains(&nns_subnet_id));
+        assert!(rt_subnets.contains(&engine_subnet_id));
+
+        // No full_topology on non-NNS subnets; certification accessors fall back to subnets().
+        assert_eq!(
+            network_topology.subnets_for_certification(),
+            network_topology.subnets(),
+        );
+        assert_eq!(
+            network_topology.routing_table_for_certification(),
+            network_topology.routing_table(),
+        );
+    });
+}
+
+/// Tests that the NNS subnet sees all subnets in both `subnets()` and
+/// `subnets_for_certification()` (via `full_topology`), including engines.
 #[test]
 fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
     with_test_replica_logger(|log| {
@@ -1914,31 +1974,163 @@ fn try_read_registry_nns_subnet_has_full_topology_with_engines() {
             .unwrap()
             .0;
 
-        // Filtered view: app and NNS subnets are visible, engine is excluded.
+        // subnets() includes all three subnets.
         let subnet_keys: Vec<_> = network_topology.subnets().keys().copied().collect();
         assert!(subnet_keys.contains(&app_subnet_id));
         assert!(subnet_keys.contains(&nns_subnet_id));
-        assert!(!subnet_keys.contains(&engine_subnet_id));
+        assert!(subnet_keys.contains(&engine_subnet_id));
 
-        // subnets_for_certification includes all three subnets via full_topology.
-        let all_keys: Vec<_> = network_topology
+        // subnets_for_certification also includes all three (via full_topology).
+        let cert_keys: Vec<_> = network_topology
             .subnets_for_certification()
             .keys()
             .copied()
             .collect();
-        assert!(all_keys.contains(&app_subnet_id));
-        assert!(all_keys.contains(&engine_subnet_id));
-        assert!(all_keys.contains(&nns_subnet_id));
+        assert!(cert_keys.contains(&app_subnet_id));
+        assert!(cert_keys.contains(&engine_subnet_id));
+        assert!(cert_keys.contains(&nns_subnet_id));
 
         // routing_table_for_certification includes ranges for all three subnets.
-        let rt_with_engines_subnets: BTreeSet<_> = network_topology
+        let rt_cert: BTreeSet<_> = network_topology
             .routing_table_for_certification()
             .iter()
             .map(|(_, sid)| *sid)
             .collect();
-        assert!(rt_with_engines_subnets.contains(&app_subnet_id));
-        assert!(rt_with_engines_subnets.contains(&engine_subnet_id));
-        assert!(rt_with_engines_subnets.contains(&nns_subnet_id));
+        assert!(rt_cert.contains(&app_subnet_id));
+        assert!(rt_cert.contains(&engine_subnet_id));
+        assert!(rt_cert.contains(&nns_subnet_id));
+    });
+}
+
+/// Like `setup_three_subnet_registry`, but also enables chain keys: `shared_key`
+/// on both the Application and CloudEngine subnets, and `engine_only_key` on the
+/// CloudEngine subnet alone.
+fn setup_three_subnet_registry_with_chain_keys()
+-> (Arc<FakeRegistryClient>, SubnetId, SubnetId, SubnetId) {
+    use Integrity::*;
+
+    let dummy_transcript = dummy_transcript_for_tests();
+
+    let app_subnet_id = subnet_test_id(1);
+    let app_subnet_record = SubnetRecord {
+        subnet_type: SubnetType::Application,
+        ..Default::default()
+    };
+    let engine_subnet_id = subnet_test_id(2);
+    let engine_subnet_record = SubnetRecord {
+        subnet_type: SubnetType::CloudEngine,
+        ..Default::default()
+    };
+    let nns_subnet_id = subnet_test_id(3);
+    let nns_subnet_record = SubnetRecord {
+        subnet_type: SubnetType::System,
+        ..Default::default()
+    };
+
+    let mut routing_table = RoutingTable::new();
+    routing_table_insert_subnet(&mut routing_table, app_subnet_id).unwrap();
+    routing_table_insert_subnet(&mut routing_table, engine_subnet_id).unwrap();
+    routing_table_insert_subnet(&mut routing_table, nns_subnet_id).unwrap();
+
+    let chain_key_enabled_subnets = btreemap! {
+        shared_chain_key() => Valid(vec![app_subnet_id, engine_subnet_id]),
+        engine_only_chain_key() => Valid(vec![engine_subnet_id]),
+    };
+
+    let fixture = RegistryFixture::new();
+    fixture
+        .write_test_records(&TestRecords {
+            subnet_ids: Valid([app_subnet_id, engine_subnet_id, nns_subnet_id]),
+            subnet_records: [
+                Valid(&app_subnet_record),
+                Valid(&engine_subnet_record),
+                Valid(&nns_subnet_record),
+            ],
+            ni_dkg_transcripts: [Valid(Some(&dummy_transcript)); 3],
+            nns_subnet_id: Valid(nns_subnet_id),
+            chain_key_enabled_subnets: &chain_key_enabled_subnets,
+            provisional_whitelist: Missing,
+            routing_table: Valid(&routing_table),
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+            api_boundary_node_records: &BTreeMap::default(),
+            node_records: &BTreeMap::default(),
+        })
+        .unwrap();
+
+    (
+        fixture.registry,
+        app_subnet_id,
+        engine_subnet_id,
+        nns_subnet_id,
+    )
+}
+
+fn shared_chain_key() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "shared_key".to_string(),
+    })
+}
+
+fn engine_only_chain_key() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: "engine_only_key".to_string(),
+    })
+}
+
+/// A non-engine (Application) subnet must not list a CloudEngine subnet as a
+/// signing subnet for a chain key, since a chain-key request to it would be
+/// rejected at the engine boundary. A key held *only* on an engine is pruned
+/// entirely.
+#[test]
+fn chain_key_enabled_subnets_prune_engine_signers_on_application_subnet() {
+    with_test_replica_logger(|log| {
+        let (registry, app_subnet_id, _engine_subnet_id, _nns_subnet_id) =
+            setup_three_subnet_registry_with_chain_keys();
+
+        let network_topology = try_to_read_registry(registry, log, app_subnet_id)
+            .unwrap()
+            .0;
+
+        // The shared key keeps only the Application subnet; the engine is pruned.
+        assert_eq!(
+            network_topology.chain_key_enabled_subnets(&shared_chain_key()),
+            &[app_subnet_id],
+        );
+        // The engine-only key is pruned to an empty list and thus dropped.
+        assert!(
+            network_topology
+                .chain_key_enabled_subnets(&engine_only_chain_key())
+                .is_empty()
+        );
+    });
+}
+
+/// A CloudEngine subnet may serve chain keys it holds itself (loopback never
+/// crosses the boundary), but must not list a non-engine signing subnet, as a
+/// chain-key request to it would be rejected at the engine boundary.
+#[test]
+fn chain_key_enabled_subnets_keep_only_loopback_on_engine_subnet() {
+    with_test_replica_logger(|log| {
+        let (registry, _app_subnet_id, engine_subnet_id, _nns_subnet_id) =
+            setup_three_subnet_registry_with_chain_keys();
+
+        let network_topology = try_to_read_registry(registry, log, engine_subnet_id)
+            .unwrap()
+            .0;
+
+        // The shared key keeps only the engine itself; the Application subnet is pruned.
+        assert_eq!(
+            network_topology.chain_key_enabled_subnets(&shared_chain_key()),
+            &[engine_subnet_id],
+        );
+        // The engine-only key is kept (loopback).
+        assert_eq!(
+            network_topology.chain_key_enabled_subnets(&engine_only_chain_key()),
+            &[engine_subnet_id],
+        );
     });
 }
 
@@ -1986,13 +2178,17 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
 
         // Try reading the registry at the next version; should return `Err(_)`.
         assert_matches!(
-            batch_processor.try_to_read_registry(next_registry_version, own_subnet_id),
+            batch_processor
+                .registry_reader
+                .try_to_read_registry(next_registry_version, own_subnet_id),
             Err(ReadRegistryError::Transient(_))
         );
         // Write minimal records to the registry, reading the registry should now work.
         fixture.write_test_records(&minimal_input).unwrap();
         assert_matches!(
-            batch_processor.try_to_read_registry(next_registry_version, own_subnet_id),
+            batch_processor
+                .registry_reader
+                .try_to_read_registry(next_registry_version, own_subnet_id),
             Ok(_)
         );
 
@@ -2003,7 +2199,9 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
         // Spawn a thread trying to read from the registry at the next version; this will fail
         // until we update the registry.
         let handle = std::thread::spawn(move || {
-            batch_processor.read_registry(next_registry_version, own_subnet_id)
+            batch_processor
+                .registry_reader
+                .read_registry(next_registry_version, own_subnet_id)
         });
         // Wait 150ms, then update the registry and join the thread above.
         std::thread::sleep(Duration::from_millis(150));
@@ -2041,11 +2239,15 @@ fn reading_mainnet_registry_succeeds() {
 
         let (batch_processor, _, _, _) = make_batch_processor(registry, log);
         assert_matches!(
-            batch_processor.try_to_read_registry(registry_version, mainnet_nns_subnet()),
+            batch_processor
+                .registry_reader
+                .try_to_read_registry(registry_version, mainnet_nns_subnet()),
             Ok(_)
         );
         assert_matches!(
-            batch_processor.try_to_read_registry(registry_version, mainnet_app_subnet()),
+            batch_processor
+                .registry_reader
+                .try_to_read_registry(registry_version, mainnet_app_subnet()),
             Ok(_)
         );
     });

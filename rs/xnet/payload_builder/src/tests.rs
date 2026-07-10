@@ -17,6 +17,7 @@ use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNE
 use ic_types::state_manager::StateManagerError;
 use maplit::btreemap;
 use mockall::predicate::eq;
+use std::sync::{Arc, Mutex};
 
 #[tokio::test]
 async fn build_payload_no_subnets() {
@@ -522,81 +523,237 @@ impl PayloadBuilderTestFixture {
     }
 }
 
-/// CloudEngine subnets must produce an empty XNet payload.
+/// A minimal `XNetSlicePool` for testing: stores one slice per subnet and
+/// never garbage collects (neither `garbage_collect` nor `garbage_collect_slice`
+/// removes or trims slices).
+struct TestSlicePool(Mutex<BTreeMap<SubnetId, CertifiedStreamSlice>>);
+
+impl XNetSlicePool for TestSlicePool {
+    fn take_slice(
+        &self,
+        subnet_id: SubnetId,
+        _begin: Option<&ExpectedIndices>,
+        _msg_limit: Option<usize>,
+        _byte_limit: Option<usize>,
+    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
+        Ok(self.0.lock().unwrap().remove(&subnet_id).map(|s| (s, 1)))
+    }
+
+    fn observe_pool_size_bytes(&self) {}
+
+    fn garbage_collect(&self, _: BTreeMap<SubnetId, ExpectedIndices>) {}
+
+    fn garbage_collect_slice(&self, _: SubnetId, _: ExpectedIndices) {}
+}
+
+/// `get_xnet_payload` must not include a slice from a deleted subnet even if
+/// the pool contains one (e.g., populated just before deletion). The deleted
+/// subnet is absent from `expected_stream_indices`, so it is never iterated
+/// over during payload assembly and never appears in the result.
 #[tokio::test]
-async fn cloud_engine_get_xnet_payload_returns_empty() {
+async fn get_xnet_payload_excludes_deleted_subnet_slice() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            0,
-            btreemap![],
-            Some(SubnetType::CloudEngine),
+        // State with an outgoing stream to SUBNET_2 committed at CERTIFIED_HEIGHT.
+        let state_manager = Arc::new(FakeStateManager::new());
+        put_replicated_state_for_testing(
+            state_manager.as_ref(),
+            btreemap! {
+                SUBNET_2 => generate_stream(&StreamConfig {
+                    message_begin: 0,
+                    message_end: 5,
+                    signal_end: 3,
+                }),
+            },
         );
-        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
-        let (payload, byte_size) = xnet_payload_builder.get_xnet_payload(
-            &fixture.validation_context,
-            &[],
-            PAYLOAD_BYTES_LIMIT,
+        // Seed the pool with SUBNET_2's slice, simulating a pool populated just
+        // before SUBNET_2 was deleted from the registry.
+        let slice = make_certified_stream_slice(
+            SUBNET_2,
+            StreamConfig {
+                message_begin: 3,
+                message_end: 5,
+                signal_end: 3,
+            },
         );
+        let slice_pool = Box::new(TestSlicePool(Mutex::new(btreemap! { SUBNET_2 => slice })));
 
-        assert!(payload.stream_slices.is_empty());
-        assert_eq!(byte_size, NumBytes::from(0));
+        // Registry with only SUBNET_1; SUBNET_2 is absent (deleted).
+        let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+
+        let metrics_registry = MetricsRegistry::new();
+        let (refill_trigger, _refill_receiver) = tokio::sync::mpsc::channel(1);
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            registry as Arc<_>,
+            Arc::new(None),
+            None,
+            slice_pool,
+            RefillTaskHandle(Mutex::new(refill_trigger)),
+            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+            log,
+        )
+        .with_count_bytes_fn(|_| Ok(1));
+
+        let validation_context = get_validation_context_for_test();
+        let (payload, _) =
+            xnet_payload_builder.get_xnet_payload(&validation_context, &[], PAYLOAD_BYTES_LIMIT);
+
+        assert!(
+            !payload.stream_slices.contains_key(&SUBNET_2),
+            "deleted SUBNET_2's slice must not appear in the payload"
+        );
     });
 }
 
-/// CloudEngine subnets must reject non-empty XNet payloads during validation.
+/// A payload containing a certified stream slice from a deleted subnet (absent
+/// from the registry at the block's registry version) must be rejected by
+/// `validate_xnet_payload`, even if the deleted subnet still had a non-empty
+/// stream of messages to deliver.
+///
+/// This is the key invariant that makes `discard_streams_for_deleted_subnets`
+/// safe: no block can carry a certified slice from the deleted subnet after
+/// deletion takes effect, so after the outgoing stream is discarded, no new
+/// certified stream slices from the deleted subnet can be pulled and refer to
+/// the deleted outgoing stream.
 #[tokio::test]
-async fn cloud_engine_validate_rejects_non_empty_payload() {
+async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            0,
-            btreemap![],
-            Some(SubnetType::CloudEngine),
-        );
-        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
-
-        // A non-empty payload with a slice from SUBNET_1.
-        let slice = make_certified_stream_slice(
-            SUBNET_1,
-            StreamConfig {
-                message_begin: 0,
-                message_end: 2,
-                signal_end: 0,
+        // State with an outgoing stream to SUBNET_2 (prior communication before
+        // its deletion) committed at CERTIFIED_HEIGHT.
+        let state_manager = FakeStateManager::new();
+        put_replicated_state_for_testing(
+            &state_manager,
+            btreemap! {
+                SUBNET_2 => generate_stream(&StreamConfig {
+                    message_begin: 0,
+                    message_end: 5,
+                    signal_end: 3,
+                }),
             },
         );
+
+        // Registry with only SUBNET_1; SUBNET_2 is absent (deleted).
+        let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+        let state_manager = Arc::new(state_manager);
+        let xnet_payload_builder = XNetPayloadBuilderImpl::new(
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
+            Arc::new(MockTlsConfig::new()) as Arc<_>,
+            registry,
+            tokio::runtime::Handle::current(),
+            LOCAL_NODE,
+            LOCAL_SUBNET,
+            &MetricsRegistry::new(),
+            log,
+        )
+        .with_count_bytes_fn(|_| Ok(1));
+
+        let validation_context = get_validation_context_for_test();
+
+        // Payload with SUBNET_2's certified slice: messages 3..5 still to deliver
+        // (it GCed 0..3 after A sent signals), signals_end = 3.
         let payload = XNetPayload {
-            stream_slices: btreemap![SUBNET_1 => slice],
+            stream_slices: btreemap! {
+                SUBNET_2 => make_certified_stream_slice(
+                    SUBNET_2,
+                    StreamConfig {
+                        message_begin: 3,
+                        message_end: 5,
+                        signal_end: 3,
+                    },
+                ),
+            },
         };
 
         assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                &payload,
-                &fixture.validation_context,
-                &[],
-            ),
+            xnet_payload_builder.validate_xnet_payload(&payload, &validation_context, &[]),
             Err(ValidationError::InvalidArtifact(
-                InvalidXNetPayload::InvalidSlice(msg)
-            )) if msg.contains("CloudEngine")
-        );
-
-        // An empty payload should still be accepted.
-        let empty_payload = XNetPayload::default();
-        assert_eq!(
-            NumBytes::from(0),
-            xnet_payload_builder
-                .validate_xnet_payload(&empty_payload, &fixture.validation_context, &[])
-                .unwrap()
+                InvalidXNetPayload::InvalidSlice(_)
+            ))
         );
     });
 }
 
-/// Non-CloudEngine subnets must reject slices originating from a CloudEngine subnet.
+/// CloudEngine subnets now participate in XNet. At the unit level this checks
+/// that `expected_stream_indices` returns entries for an engine's Application
+/// peers (no filter excluding them), so the engine will attempt to pull from
+/// them. The end-to-end behavior — that a CloudEngine subnet actually builds and
+/// validates XNet payloads and completes a best-effort cross-subnet call (which
+/// requires `get_xnet_payload`/`validate_xnet_payload` to no longer short-circuit
+/// for engines) — is covered by `xnet_cloud_engine_isolation_test`.
 #[tokio::test]
-async fn validate_rejects_slice_from_cloud_engine_subnet() {
+async fn cloud_engine_get_xnet_payload_participates() {
+    with_test_replica_logger(|log| {
+        let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
+            4,
+            btreemap![],
+            Some(SubnetType::CloudEngine),
+        );
+        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
+
+        let state = fixture
+            .state_manager
+            .get_state_at(fixture.validation_context.certified_height)
+            .unwrap()
+            .take();
+        let past_payloads = fixture.past_payloads();
+        let stream_positions = xnet_payload_builder
+            .expected_stream_indices(
+                &fixture.validation_context,
+                state.as_ref(),
+                past_payloads.as_slice(),
+            )
+            .unwrap();
+
+        // The engine produces non-empty stream positions — it will try to pull
+        // from peers (Application subnets SUBNET_1..SUBNET_4 are all present).
+        assert!(!stream_positions.is_empty());
+        for subnet in &[SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4] {
+            assert!(
+                stream_positions.contains_key(subnet),
+                "CloudEngine should pull from Application subnet {subnet:?}"
+            );
+        }
+    });
+}
+
+/// CloudEngine subnets must accept non-empty XNet payloads during validation.
+#[tokio::test]
+async fn cloud_engine_validate_accepts_non_empty_payload() {
+    with_test_replica_logger(|log| {
+        let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
+            0,
+            btreemap![],
+            Some(SubnetType::CloudEngine),
+        );
+        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
+
+        // Use a pre-built payload from the fixture — indices are consistent with
+        // the state, so validation passes for any subnet type including CloudEngine.
+        let payload = fixture.payloads.last().unwrap();
+        assert!(
+            !payload.stream_slices.is_empty(),
+            "fixture payload must be non-empty for this test to be meaningful"
+        );
+
+        assert!(
+            xnet_payload_builder
+                .validate_xnet_payload(payload, &fixture.validation_context, &[])
+                .is_ok(),
+            "CloudEngine subnet should accept non-empty XNet payloads"
+        );
+    });
+}
+
+/// Non-CloudEngine subnets must accept slices originating from a CloudEngine subnet.
+#[tokio::test]
+async fn validate_accepts_slice_from_cloud_engine_subnet() {
     with_test_replica_logger(|log| {
         let cloud_engine_subnet = SUBNET_1;
         let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            1,
+            0,
             btreemap![cloud_engine_subnet => SubnetType::CloudEngine],
             None,
         );
@@ -604,28 +761,19 @@ async fn validate_rejects_slice_from_cloud_engine_subnet() {
         // This is an Application subnet validating an incoming payload.
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
-        // A payload containing a slice from the CloudEngine subnet.
-        let slice = make_certified_stream_slice(
-            cloud_engine_subnet,
-            StreamConfig {
-                message_begin: 0,
-                message_end: 2,
-                signal_end: 0,
-            },
+        // Use a pre-built payload from the fixture. SUBNET_1 is the CloudEngine
+        // subnet; a slice from it must now be accepted by a non-engine subnet.
+        let payload = fixture.payloads.last().unwrap();
+        assert!(
+            payload.stream_slices.contains_key(&cloud_engine_subnet),
+            "fixture payload must contain a slice from the CloudEngine subnet"
         );
-        let payload = XNetPayload {
-            stream_slices: btreemap![cloud_engine_subnet => slice],
-        };
 
-        assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                &payload,
-                &fixture.validation_context,
-                &[],
-            ),
-            Err(ValidationError::InvalidArtifact(
-                InvalidXNetPayload::InvalidSlice(msg)
-            )) if msg.contains("CloudEngine")
+        assert!(
+            xnet_payload_builder
+                .validate_xnet_payload(payload, &fixture.validation_context, &[])
+                .is_ok(),
+            "Application subnet should accept slices from a CloudEngine subnet"
         );
     });
 }
@@ -665,9 +813,9 @@ async fn validate_rejects_slice_from_unknown_subnet() {
     });
 }
 
-/// An Application subnet with a registered CloudEngine peer must not pull from it.
+/// An Application subnet with a registered CloudEngine peer must pull from it.
 #[tokio::test]
-async fn build_payload_skips_cloud_engine_subnet() {
+async fn build_payload_includes_cloud_engine_subnet() {
     with_test_replica_logger(|log| {
         // Register 2 subnets: SUBNET_1 as CloudEngine, SUBNET_2 as Application.
         let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
@@ -692,8 +840,8 @@ async fn build_payload_skips_cloud_engine_subnet() {
             )
             .unwrap();
 
-        // SUBNET_2 (Application) is included, SUBNET_1 (CloudEngine) is not.
+        // Both SUBNET_1 (CloudEngine) and SUBNET_2 (Application) are included.
+        assert!(stream_positions.contains_key(&SUBNET_1));
         assert!(stream_positions.contains_key(&SUBNET_2));
-        assert!(!stream_positions.contains_key(&SUBNET_1));
     });
 }

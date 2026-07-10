@@ -553,13 +553,14 @@ fn revise_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload
 
 #[unsafe(export_name = "canister_update deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes() {
-    check_caller_is_governance_and_log("deploy_guestos_to_all_subnet_nodes");
+    check_caller_is_governance_or_engine_controller_and_log("deploy_guestos_to_all_subnet_nodes");
     over(candid_one, deploy_guestos_to_all_subnet_nodes_);
 }
 
 #[candid_method(update, rename = "deploy_guestos_to_all_subnet_nodes")]
 fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPayload) {
-    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
+    let caller = dfn_core::api::caller();
+    registry_mut().do_deploy_guestos_to_all_subnet_nodes(caller, payload);
     recertify_registry();
 }
 
@@ -662,7 +663,8 @@ fn delete_subnet() {
 
 #[candid_method(update, rename = "delete_subnet")]
 fn delete_subnet_(payload: DeleteSubnetPayload) -> Result<(), String> {
-    registry_mut().do_delete_subnet(payload)?;
+    let caller = dfn_core::api::caller();
+    registry_mut().do_delete_subnet(caller, payload)?;
     recertify_registry();
     Ok(())
 }
@@ -711,7 +713,7 @@ fn remove_nodes_from_subnet_(payload: RemoveNodesFromSubnetPayload) {
 
 #[unsafe(export_name = "canister_update change_subnet_membership")]
 fn change_subnet_membership() {
-    check_caller_is_governance_and_log("change_subnet_membership");
+    check_caller_is_governance_or_engine_controller_and_log("change_subnet_membership");
     over(candid_one, |payload: ChangeSubnetMembershipPayload| {
         change_subnet_membership_(payload)
     });
@@ -869,7 +871,7 @@ fn remove_node_operators_(payload: RemoveNodeOperatorsPayload) {
 
 #[unsafe(export_name = "canister_update update_subnet")]
 fn update_subnet() {
-    check_caller_is_governance_and_log("update_subnet");
+    check_caller_is_governance_or_engine_controller_and_log("update_subnet");
     over(candid_one, |payload: UpdateSubnetPayload| {
         update_subnet_(payload)
     });
@@ -877,7 +879,8 @@ fn update_subnet() {
 
 #[candid_method(update, rename = "update_subnet")]
 fn update_subnet_(payload: UpdateSubnetPayload) {
-    registry_mut().do_update_subnet(payload);
+    let caller = dfn_core::api::caller();
+    registry_mut().do_update_subnet(caller, payload);
     recertify_registry();
 }
 

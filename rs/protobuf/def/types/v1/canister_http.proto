@@ -29,10 +29,9 @@ message CanisterHttpResponse {
 }
 
 message CanisterHttpResponseMetadata {
+  reserved 2, 4;
   uint64 id = 1;
-  reserved 2;
   bytes content_hash = 3;
-  uint64 registry_version = 4;
   string replica_version = 5;
   uint32 content_size = 6;
   bool is_reject = 7;
@@ -56,16 +55,14 @@ message CanisterHttpReject {
 message CanisterHttpResponseSignature {
   bytes signer = 1;
   bytes signature = 2;
+  CanisterHttpPaymentReceipt payment_receipt = 3;
 }
 
 message CanisterHttpResponseWithConsensus {
+  reserved 3, 4, 5, 6;
   CanisterHttpResponse response = 1;
   bytes hash = 2;
-  uint64 registry_version = 3;
   string replica_version = 8;
-  reserved 4;
-  reserved 5;
-  reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
   bool is_reject = 10;
