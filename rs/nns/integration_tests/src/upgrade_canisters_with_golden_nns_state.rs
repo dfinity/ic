@@ -455,10 +455,17 @@ mod sanity_check {
         state_machine.advance_time(std::time::Duration::from_secs(
             seconds_to_node_provider_reward_distribution - 1,
         ));
-        for _ in 0..100 {
-            state_machine.advance_time(std::time::Duration::from_secs(1));
-            state_machine.tick();
-        }
+
+        // Node provider rewards are minted by the governance heartbeat, but only once
+        // the node-rewards canister has synced its node metrics up to the requested
+        // period (its sync runs on an hourly timer) and the minting call has fully
+        // completed. That call makes one inter-canister call per day in the reward
+        // period and one ledger transfer per node provider, so the number of ticks it
+        // needs grows with how far the golden state's last reward is behind the current
+        // time. A fixed number of ticks is therefore not enough, so we tick until the
+        // reward is actually distributed (i.e. its timestamp increases). If the cap is
+        // hit without a new reward, the assertion in `check_all` surfaces the failure.
+        tick_until_node_provider_rewards_distributed(state_machine, before_timestamp);
 
         // Advance time in the state machine by one month to ensure that voting rewards
         // are also distributed.
@@ -468,6 +475,36 @@ mod sanity_check {
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
+        }
+    }
+
+    /// Ticks the state machine (advancing time by one second per tick) until a new
+    /// monthly node provider reward has been distributed, i.e. its timestamp has
+    /// increased past `before_timestamp`, up to a generous cap on the number of ticks.
+    fn tick_until_node_provider_rewards_distributed(
+        state_machine: &StateMachine,
+        before_timestamp: u64,
+    ) {
+        // Generous upper bound. Reaching the reward distribution requires the
+        // node-rewards canister to sync (hourly timer) plus a minting call whose length
+        // scales with the reward period and the number of node providers, so this needs
+        // to comfortably exceed a few hundred rounds.
+        const MAX_TICKS: usize = 2000;
+        // Only poll periodically, since each poll is an ingress call to governance.
+        const POLL_EVERY_TICKS: usize = 25;
+
+        for tick in 0..MAX_TICKS {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
+            state_machine.tick();
+
+            if (tick + 1) % POLL_EVERY_TICKS == 0 {
+                let timestamp = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
+                    .unwrap()
+                    .timestamp;
+                if timestamp > before_timestamp {
+                    return;
+                }
+            }
         }
     }
 
