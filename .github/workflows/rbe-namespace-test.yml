@@ -82,7 +82,8 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
-            --jobs=64
+            # Namespace currently limits the number of workers to 15
+            --jobs=15
 
             --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
@@ -138,7 +139,8 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
-            --jobs=64
+            # Namespace currently limits the number of workers to 15
+            --jobs=15
 
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
