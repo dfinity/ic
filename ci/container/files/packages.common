@@ -45,12 +45,9 @@ rsync
 zstd
 iputils-ping # for ping6 required by the bazel-test-bare-metal
 
-# Local system-test backend (see rs/tests/driver/src/driver/local_backend.rs),
-# which launches KVM-accelerated QEMU VMs. `ovmf` provides the guests' UEFI
-# firmware.
-ovmf
-# Provides `capsh` (source of the baked-in /usr/local/bin/ic-net-admin launcher)
-# plus `setcap`/`getcap`; see ci/container/Dockerfile.
+# Provides `capsh` for local system tests (source of the baked-in
+# /usr/local/bin/ic-net-admin launcher) plus `setcap`/`getcap`; see
+# ci/container/Dockerfile.
 libcap2-bin
 
 # For ci/githubstats/query.py
