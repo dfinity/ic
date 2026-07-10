@@ -7696,6 +7696,7 @@ dependencies = [
  "phantom_newtype",
  "proptest",
  "rand 0.8.6",
+ "reqwest",
  "rlp",
  "scopeguard",
  "scraper",
