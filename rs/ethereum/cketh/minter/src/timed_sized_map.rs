@@ -32,14 +32,24 @@ struct Entry<V> {
 
 /// A map of at most `capacity` entries, each living for at most `ttl`.
 ///
-/// On insertion, entries that have outlived their `ttl` are evicted first; if the map is still
-/// at capacity, the oldest remaining entries are evicted to make room. Time is supplied by the
-/// caller on every operation, so the structure holds no clock and is deterministic in tests.
+/// On insertion, entries that have outlived their `ttl` are evicted first; if the map is still at
+/// capacity with only live entries, the insertion is rejected rather than evicting a live entry.
+/// Time is supplied by the caller on every operation, so the structure holds no clock and is
+/// deterministic in tests.
 pub struct TimedSizedMap<K, V> {
     ttl: Duration,
     capacity: NonZeroUsize,
     entries: BTreeMap<K, Entry<V>>,
     by_time: BTreeMap<Timestamp, VecDeque<K>>,
+}
+
+/// Returned by [`TimedSizedMap::insert`] when the map is already at capacity with only live
+/// (unexpired) entries, so a new key cannot be admitted without evicting a live one. The rejected
+/// `key` and `value` are handed back to the caller.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AtCapacity<K, V> {
+    pub key: K,
+    pub value: V,
 }
 
 impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
@@ -52,18 +62,21 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         }
     }
 
-    /// Insert `value` under `key`, evicting expired then oldest entries as needed to respect the
-    /// `ttl` and `capacity`. Re-inserting an existing key refreshes its value and lifetime; the
-    /// previous value is dropped and never reported as an eviction. Returns the entries evicted by
-    /// this call.
-    pub fn insert(&mut self, now: Timestamp, key: K, value: V) -> Vec<(K, V)> {
-        self.remove(&key);
-        let mut evicted = self.evict_expired(now);
-        while self.entries.len() >= self.capacity.get() {
-            evicted.push(
-                self.evict_oldest()
-                    .expect("BUG: entries is non-empty but the time index is empty"),
-            );
+    /// Insert `value` under `key`, first evicting any entries that have outlived their `ttl`.
+    /// Re-inserting an existing key refreshes its value and lifetime; the previous value is dropped
+    /// and never reported as an eviction. Returns the expired entries evicted by this call, or
+    /// [`AtCapacity`] if admitting a new key would require evicting a live entry (live entries are
+    /// never evicted, since a still-armed address may already have received funds).
+    pub fn insert(
+        &mut self,
+        now: Timestamp,
+        key: K,
+        value: V,
+    ) -> Result<Vec<(K, V)>, AtCapacity<K, V>> {
+        let refreshed = self.remove(&key).is_some();
+        let evicted = self.evict_expired(now);
+        if !refreshed && self.entries.len() >= self.capacity.get() {
+            return Err(AtCapacity { key, value });
         }
         self.entries.insert(
             key.clone(),
@@ -73,7 +86,7 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
             },
         );
         self.by_time.entry(now).or_default().push_back(key);
-        evicted
+        Ok(evicted)
     }
 
     /// The live value under `key`, or `None` if absent or expired as of `now`.
@@ -148,22 +161,5 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         if is_empty {
             self.by_time.remove(&inserted_at);
         }
-    }
-
-    fn evict_oldest(&mut self) -> Option<(K, V)> {
-        let inserted_at = *self.by_time.keys().next()?;
-        let bucket = self
-            .by_time
-            .get_mut(&inserted_at)
-            .expect("BUG: bucket must exist");
-        let key = bucket.pop_front().expect("BUG: bucket must be non-empty");
-        if bucket.is_empty() {
-            self.by_time.remove(&inserted_at);
-        }
-        let entry = self
-            .entries
-            .remove(&key)
-            .expect("BUG: indexed key must exist");
-        Some((key, entry.value))
     }
 }
