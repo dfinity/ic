@@ -7,7 +7,10 @@ use crate::erc20::CkTokenSymbol;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex};
+use crate::state::{DEPOSIT_ADDRESS_SCAN_WINDOW, MAX_ACTIVE_DEPOSIT_ADDRESSES};
 use crate::storage::{record_event, with_event_iter};
+use crate::timed_sized_map::{TimedSizedMap, Timestamp};
+use icrc_ledger_types::icrc1::account::Account;
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event
@@ -163,6 +166,22 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state.log_scrapings.set_last_scraped_block_number(
                 LogScrapingId::EthOrErc20DepositWithSubaccount,
                 *block_number,
+            );
+        }
+        EventType::RegisteredDepositAddresses(registrations) => {
+            state.deposit_addresses = TimedSizedMap::from_entries(
+                DEPOSIT_ADDRESS_SCAN_WINDOW,
+                MAX_ACTIVE_DEPOSIT_ADDRESSES,
+                registrations.iter().map(|r| {
+                    (
+                        Timestamp::from_nanos(r.registered_at_nanos),
+                        Account {
+                            owner: r.owner,
+                            subaccount: r.subaccount,
+                        },
+                        r.address,
+                    )
+                }),
             );
         }
     }

@@ -212,6 +212,26 @@ pub struct WithdrawalArg {
     pub from_subaccount: Option<Subaccount>,
 }
 
+/// How the fee for a ckERC20 deposit address registration is settled.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositMode {
+    /// The registration fee is deducted from the deposited amount.
+    DeductFromDeposit,
+    /// The registration fee is paid upfront by the caller.
+    Sponsored {
+        from_subaccount: Option<[u8; 32]>,
+        max_fee: Nat,
+    },
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositErc20Error {
+    /// The maximum number of concurrently armed deposit addresses has been reached.
+    TooManyActiveAddresses,
+    /// The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable(String),
+}
+
 #[derive(PartialEq, Debug, CandidType, Deserialize)]
 pub enum WithdrawalError {
     AmountTooLow { min_withdrawal_amount: Nat },

@@ -171,6 +171,23 @@ pub enum EventType {
         #[n(0)]
         block_number: BlockNumber,
     },
+    /// Full snapshot of the ckERC20 deposit addresses registered via `deposit_erc20`.
+    /// Emitted at pre-upgrade and replayed to restore the in-heap registry.
+    #[n(25)]
+    RegisteredDepositAddresses(#[n(0)] Vec<DepositAddressRegistration>),
+}
+
+/// A single entry of the ckERC20 deposit address registry snapshot.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct DepositAddressRegistration {
+    #[cbor(n(0), with = "icrc_cbor::principal")]
+    pub owner: Principal,
+    #[cbor(n(1), with = "minicbor::bytes")]
+    pub subaccount: Option<[u8; 32]>,
+    #[n(2)]
+    pub address: Address,
+    #[n(3)]
+    pub registered_at_nanos: u64,
 }
 
 impl ReceivedEvent {

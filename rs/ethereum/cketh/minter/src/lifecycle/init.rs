@@ -3,7 +3,10 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{BlockNumber, TransactionNonce, Wei};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::EthTransactions;
-use crate::state::{InvalidStateError, State};
+use crate::state::{
+    DEPOSIT_ADDRESS_SCAN_WINDOW, InvalidStateError, MAX_ACTIVE_DEPOSIT_ADDRESSES, State,
+};
+use crate::timed_sized_map::TimedSizedMap;
 use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::types::number::Nat;
 use candid::types::principal::Principal;
@@ -107,6 +110,10 @@ impl TryFrom<InitArg> for State {
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
             log_scrapings,
+            deposit_addresses: TimedSizedMap::new(
+                DEPOSIT_ADDRESS_SCAN_WINDOW,
+                MAX_ACTIVE_DEPOSIT_ADDRESSES,
+            ),
         };
         state.validate_config()?;
         Ok(state)

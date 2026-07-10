@@ -4,6 +4,7 @@ mod cbor;
 pub mod checked_amount;
 pub mod deposit;
 pub mod deposit_address;
+pub mod deposit_erc20;
 pub mod endpoints;
 pub mod erc20;
 pub mod eth_logs;

@@ -129,6 +129,30 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.entries.iter().map(|(key, entry)| (key, &entry.value))
     }
 
+    /// Iterate over every entry together with the time it was inserted.
+    pub fn iter_with_time(&self) -> impl Iterator<Item = (Timestamp, &K, &V)> {
+        self.entries
+            .iter()
+            .map(|(key, entry)| (entry.inserted_at, key, &entry.value))
+    }
+
+    /// Rebuild a map from a previously captured snapshot, preserving each entry's original
+    /// insertion time. This is a trusted restore of an already-valid snapshot: it performs no
+    /// eviction, capacity, or refresh checks.
+    pub fn from_entries(
+        ttl: Duration,
+        capacity: NonZeroUsize,
+        entries: impl IntoIterator<Item = (Timestamp, K, V)>,
+    ) -> Self {
+        let mut map = Self::new(ttl, capacity);
+        for (inserted_at, key, value) in entries {
+            map.entries
+                .insert(key.clone(), Entry { value, inserted_at });
+            map.by_time.entry(inserted_at).or_default().push_back(key);
+        }
+        map
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }

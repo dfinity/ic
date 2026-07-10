@@ -381,6 +381,21 @@ type WithdrawalError = variant {
     TemporarilyUnavailable : text;
 };
 
+// How the fee for a ckERC20 deposit address registration is settled.
+type DepositMode = variant {
+    // The registration fee is deducted from the deposited amount.
+    DeductFromDeposit;
+    // The registration fee is paid upfront by the caller.
+    Sponsored : record { from_subaccount : opt blob; max_fee : nat };
+};
+
+type DepositErc20Error = variant {
+    // The maximum number of concurrently armed deposit addresses has been reached.
+    TooManyActiveAddresses;
+    // The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable : text;
+};
+
 type WithdrawErc20Arg = record {
     // Amount of tokens to withdraw.
     // The amount is in the smallest unit of the token, e.g.,
@@ -721,6 +736,10 @@ service : (MinterArg) -> {
 
     // Withdraw the specified amount of ERC-20 tokens to the given Ethereum address.
     withdraw_erc20 : (WithdrawErc20Arg) -> (variant { Ok : RetrieveErc20Request; Err : WithdrawErc20Error });
+
+    // Derive and register the ckERC20 deposit address for the given account.
+    // Returns the EIP-55 checksummed Ethereum deposit address.
+    deposit_erc20 : (Account, DepositMode) -> (variant { Ok : text; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);

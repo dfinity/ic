@@ -1043,6 +1043,10 @@ fn state_equivalence() {
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
         evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
+        deposit_addresses: crate::timed_sized_map::TimedSizedMap::new(
+            crate::state::DEPOSIT_ADDRESS_SCAN_WINDOW,
+            crate::state::MAX_ACTIVE_DEPOSIT_ADDRESSES,
+        ),
     };
 
     assert_eq!(
@@ -1841,4 +1845,63 @@ fn checked_sub(lhs: Erc20Balances, rhs: Erc20Balances) -> BTreeMap<Address, Erc2
         }
     }
     result
+}
+
+mod deposit_addresses_snapshot {
+    use super::*;
+    use crate::deposit_erc20::register_deposit_address;
+    use crate::endpoints::DepositMode;
+    use crate::state::event::DepositAddressRegistration;
+    use crate::timed_sized_map::Timestamp;
+    use ic_secp256k1::PrivateKey;
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_round_trip_deposit_addresses_through_snapshot_event() {
+        let private_key =
+            PrivateKey::generate_from_seed(b"ic-cketh-minter-deposit-erc20-snapshot-seed");
+        let (pk, cc) = (private_key.public_key(), [3_u8; 32]);
+
+        let mut original = initial_state();
+        for (i, owner) in ["2chl6-4hpzw-vqaaa-aaaaa-c", "ss2fx-dyaaa-aaaar-qacoq-cai"]
+            .into_iter()
+            .enumerate()
+        {
+            let account = Account {
+                owner: Principal::from_text(owner).unwrap(),
+                subaccount: Some([i as u8; 32]),
+            };
+            register_deposit_address(
+                &mut original,
+                &pk,
+                &cc,
+                Timestamp::from_nanos(i as u64 + 1),
+                account,
+                DepositMode::DeductFromDeposit,
+            )
+            .unwrap();
+        }
+        assert_eq!(original.deposit_addresses.len(), 2);
+
+        let snapshot = EventType::RegisteredDepositAddresses(
+            original
+                .deposit_addresses
+                .iter_with_time()
+                .map(
+                    |(registered_at, account, address)| DepositAddressRegistration {
+                        owner: account.owner,
+                        subaccount: account.subaccount,
+                        address: *address,
+                        registered_at_nanos: registered_at.as_nanos(),
+                    },
+                )
+                .collect(),
+        );
+
+        let mut replayed = initial_state();
+        apply_state_transition(&mut replayed, &snapshot);
+
+        assert_eq!(replayed.deposit_addresses, original.deposit_addresses);
+        assert_eq!(replayed.is_equivalent_to(&original), Ok(()));
+    }
 }

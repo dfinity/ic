@@ -5,6 +5,7 @@ use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
 use ic_cketh_minter::deposit::scrape_logs;
+use ic_cketh_minter::deposit_erc20::register_deposit_address;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
@@ -12,9 +13,10 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
-    RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Error, DepositMode,
+    Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -28,6 +30,7 @@ use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
+use ic_cketh_minter::state::event::DepositAddressRegistration;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -35,6 +38,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
+use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
     CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -128,6 +132,23 @@ fn emit_preupgrade_events() {
             storage::record_event(event);
         }
     });
+
+    let deposit_addresses = read_state(|s| {
+        s.deposit_addresses
+            .iter_with_time()
+            .map(
+                |(registered_at, account, address)| DepositAddressRegistration {
+                    owner: account.owner,
+                    subaccount: account.subaccount,
+                    address: *address,
+                    registered_at_nanos: registered_at.as_nanos(),
+                },
+            )
+            .collect::<Vec<_>>()
+    });
+    if !deposit_addresses.is_empty() {
+        storage::record_event(EventType::RegisteredDepositAddresses(deposit_addresses));
+    }
 }
 
 #[pre_upgrade]
@@ -151,6 +172,14 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 #[update]
 async fn minter_address() -> String {
     state::minter_address().await.to_string()
+}
+
+#[update]
+async fn deposit_erc20(account: Account, mode: DepositMode) -> Result<String, DepositErc20Error> {
+    validate_ckerc20_active();
+    let (public_key, chain_code) = state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    mutate_state(|s| register_deposit_address(s, &public_key, &chain_code, now, account, mode))
 }
 
 #[query]
@@ -665,11 +694,12 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         }
     }
 
-    fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
+    fn map_event(Event { timestamp, payload }: Event) -> Option<CandidEvent> {
         use ic_cketh_minter::endpoints::events::EventPayload as EP;
-        CandidEvent {
+        Some(CandidEvent {
             timestamp,
             payload: match payload {
+                EventType::RegisteredDepositAddresses(_) => return None,
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),
                 EventType::AcceptedDeposit(ReceivedEthEvent {
@@ -865,13 +895,13 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     index: map_reimbursement_index(index),
                 },
             },
-        }
+        })
     }
 
     let events = storage::with_event_iter(|it| {
         it.skip(arg.start as usize)
             .take(arg.length.min(MAX_EVENTS_PER_RESPONSE) as usize)
-            .map(map_event)
+            .filter_map(map_event)
             .collect()
     });
 
