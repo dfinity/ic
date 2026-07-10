@@ -73,9 +73,9 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         key: K,
         value: V,
     ) -> Result<Vec<(K, V)>, AtCapacity<K, V>> {
-        let refreshed = self.remove(&key).is_some();
+        self.remove(&key);
         let evicted = self.evict_expired(now);
-        if !refreshed && self.entries.len() >= self.capacity.get() {
+        if self.entries.len() >= self.capacity.get() {
             return Err(AtCapacity { key, value });
         }
         self.entries.insert(
