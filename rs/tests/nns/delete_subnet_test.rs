@@ -168,7 +168,7 @@ pub fn test(env: TestEnv) {
         // The deleted subnets should no longer be in the subnet list; only the
         // System (NNS) subnet should remain.
         let final_subnets = get_subnet_list_from_registry(&registry_client).await;
-        assert_eq!(final_subnets, vec![nns_subnet_id]);
+        assert_eq!(final_subnets, vec![nns_subnet.subnet_id]);
 
         // The subnet records and routing table entries of the deleted subnets should be gone.
         for deleted_subnet_id in [
