@@ -70,6 +70,7 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 maplit = "1"
 proptest = { workspace = true }
 rand = { workspace = true }
+reqwest = { workspace = true }
 scraper = "0.17.1"
 tempfile = { workspace = true }
 tokio = { workspace = true }
