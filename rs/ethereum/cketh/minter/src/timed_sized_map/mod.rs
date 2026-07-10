@@ -43,13 +43,14 @@ pub struct TimedSizedMap<K, V> {
     by_time: BTreeMap<Timestamp, VecDeque<K>>,
 }
 
-/// Returned by [`TimedSizedMap::insert`] when the map is already at capacity with only live
-/// (unexpired) entries, so a new key cannot be admitted without evicting a live one. The rejected
-/// `key` and `value` are handed back to the caller.
+/// Returned by [`TimedSizedMap::insert`] when a new entry cannot be admitted. The rejected `key`
+/// and `value` are handed back to the caller.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct AtCapacity<K, V> {
-    pub key: K,
-    pub value: V,
+pub enum InsertError<K, V> {
+    /// A live (unexpired) entry already exists under this key; refreshing it is not allowed.
+    AlreadyPresent { key: K, value: V },
+    /// The map is at capacity with only live entries, so no room can be freed by evicting expired.
+    AtCapacity { key: K, value: V },
 }
 
 impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
@@ -62,21 +63,24 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         }
     }
 
-    /// Insert `value` under `key`, first evicting any entries that have outlived their `ttl`.
-    /// Re-inserting an existing key refreshes its value and lifetime; the previous value is dropped
-    /// and never reported as an eviction. Returns the expired entries evicted by this call, or
-    /// [`AtCapacity`] if admitting a new key would require evicting a live entry (live entries are
-    /// never evicted, since a still-armed address may already have received funds).
+    /// Insert `value` under `key`, after evicting any entries that have outlived their `ttl`.
+    /// Returns the expired entries evicted by this call, or an [`InsertError`] if the key still has
+    /// a live entry ([`InsertError::AlreadyPresent`] — refreshing a live entry is not allowed, so a
+    /// caller cannot extend an entry's lifetime by re-inserting it) or the map is full of live
+    /// entries ([`InsertError::AtCapacity`] — a live entry is never evicted, since a still-armed
+    /// address may already have received funds).
     pub fn insert(
         &mut self,
         now: Timestamp,
         key: K,
         value: V,
-    ) -> Result<Vec<(K, V)>, AtCapacity<K, V>> {
-        self.remove(&key);
+    ) -> Result<Vec<(K, V)>, InsertError<K, V>> {
         let evicted = self.evict_expired(now);
+        if self.entries.contains_key(&key) {
+            return Err(InsertError::AlreadyPresent { key, value });
+        }
         if self.entries.len() >= self.capacity.get() {
-            return Err(AtCapacity { key, value });
+            return Err(InsertError::AtCapacity { key, value });
         }
         self.entries.insert(
             key.clone(),
@@ -140,27 +144,5 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     fn is_expired(&self, inserted_at: Timestamp, now: Timestamp) -> bool {
         now.checked_duration_since(inserted_at)
             .is_some_and(|age| age > self.ttl)
-    }
-
-    fn remove(&mut self, key: &K) -> Option<V> {
-        let entry = self.entries.remove(key)?;
-        self.remove_from_time_index(key, entry.inserted_at);
-        Some(entry.value)
-    }
-
-    fn remove_from_time_index(&mut self, key: &K, inserted_at: Timestamp) {
-        let bucket = self
-            .by_time
-            .get_mut(&inserted_at)
-            .expect("BUG: entry timestamp missing from the time index");
-        let position = bucket
-            .iter()
-            .position(|indexed| indexed == key)
-            .expect("BUG: entry missing from its timestamp bucket");
-        bucket.remove(position);
-        let is_empty = bucket.is_empty();
-        if is_empty {
-            self.by_time.remove(&inserted_at);
-        }
     }
 }

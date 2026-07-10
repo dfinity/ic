@@ -48,8 +48,28 @@ fn should_reject_new_key_when_full_of_live_entries() {
 
     let rejected = map.insert(ts(4), "d", 4);
 
-    assert_eq!(rejected, Err(AtCapacity { key: "d", value: 4 }));
+    assert_eq!(
+        rejected,
+        Err(InsertError::AtCapacity { key: "d", value: 4 })
+    );
     assert_eq!(map, before);
+    assert_consistent(&map);
+}
+
+#[test]
+fn should_reject_refresh_of_live_key() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(1000), cap(5));
+    map.insert(ts(1), "a", 1).unwrap();
+    let before = map.clone();
+
+    let rejected = map.insert(ts(2), "a", 2);
+
+    assert_eq!(
+        rejected,
+        Err(InsertError::AlreadyPresent { key: "a", value: 2 })
+    );
+    assert_eq!(map, before);
+    assert_eq!(map.get(ts(2), &"a"), Some(&1));
     assert_consistent(&map);
 }
 
@@ -65,6 +85,19 @@ fn should_admit_new_key_after_expired_entries_free_room() {
     assert_eq!(evicted, vec![("a", 1), ("b", 2)]);
     assert_eq!(map.len(), 1);
     assert_eq!(map.get(ts(12), &"c"), Some(&3));
+    assert_consistent(&map);
+}
+
+#[test]
+fn should_readmit_expired_key_as_fresh_entry() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+    map.insert(ts(0), "a", 1).unwrap();
+
+    let evicted = map.insert(ts(20), "a", 2).unwrap();
+
+    assert_eq!(evicted, vec![("a", 1)]);
+    assert_eq!(map.get(ts(20), &"a"), Some(&2));
+    assert_eq!(map.len(), 1);
     assert_consistent(&map);
 }
 
@@ -85,44 +118,6 @@ fn should_expire_entries_after_ttl() {
 }
 
 #[test]
-fn should_refresh_live_key_without_growing_even_at_capacity() {
-    let mut map = TimedSizedMap::new(Duration::from_nanos(1000), cap(2));
-    map.insert(ts(1), "a", 1).unwrap();
-    map.insert(ts(2), "b", 2).unwrap();
-
-    let evicted = map.insert(ts(3), "a", 11).unwrap();
-
-    assert!(evicted.is_empty());
-    assert_eq!(map.len(), 2);
-    assert_eq!(map.get(ts(3), &"a"), Some(&11));
-    assert_eq!(map.get(ts(3), &"b"), Some(&2));
-    assert_consistent(&map);
-}
-
-#[test]
-fn should_extend_lifetime_on_refresh() {
-    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
-    map.insert(ts(0), "a", 1).unwrap();
-    map.insert(ts(5), "a", 2).unwrap();
-
-    assert_eq!(map.get(ts(15), &"a"), Some(&2));
-    assert_eq!(map.get(ts(16), &"a"), None);
-}
-
-#[test]
-fn should_not_report_refresh_of_expired_key_as_eviction() {
-    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
-    map.insert(ts(0), "a", 1).unwrap();
-
-    let evicted = map.insert(ts(20), "a", 2).unwrap();
-
-    assert!(evicted.is_empty());
-    assert_eq!(map.get(ts(20), &"a"), Some(&2));
-    assert_eq!(map.len(), 1);
-    assert_consistent(&map);
-}
-
-#[test]
 fn should_keep_indices_consistent_through_churn() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(100), cap(4));
     for (i, key) in ["a", "b", "c", "d"].into_iter().enumerate() {
@@ -131,11 +126,14 @@ fn should_keep_indices_consistent_through_churn() {
     assert_eq!(map.len(), 4);
     assert_consistent(&map);
 
-    assert!(map.insert(ts(5), "e", 4).is_err());
-    assert_eq!(map.len(), 4);
-    assert_consistent(&map);
-
-    map.insert(ts(6), "a", 99).unwrap();
+    assert!(matches!(
+        map.insert(ts(5), "e", 4),
+        Err(InsertError::AtCapacity { .. })
+    ));
+    assert!(matches!(
+        map.insert(ts(6), "a", 99),
+        Err(InsertError::AlreadyPresent { .. })
+    ));
     assert_eq!(map.len(), 4);
     assert_consistent(&map);
 
