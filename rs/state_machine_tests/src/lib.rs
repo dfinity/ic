@@ -5030,7 +5030,8 @@ impl StateMachine {
         let canister_state = replicated_state
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        canister_state.system_state.canister_log.clone()
+        let log_memory_store = &canister_state.system_state.log_memory_store;
+        CanisterLog::new_aggregate(log_memory_store.next_idx(), log_memory_store.records(None))
     }
 
     /// Sets the content of the stable memory for the specified canister.

@@ -25,7 +25,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CallbackId, CanisterMessage, Ingress, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
-    CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
@@ -626,19 +626,16 @@ impl CanisterState {
 
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.clear();
     }
 
     /// Removes the canister log.
     pub fn remove_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.deallocate();
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, (canister_log, log_memory_store): (CanisterLog, LogMemoryStore)) {
-        self.system_state.canister_log = canister_log;
+    pub fn set_log(&mut self, log_memory_store: LogMemoryStore) {
         self.system_state.log_memory_store = log_memory_store;
     }
 
