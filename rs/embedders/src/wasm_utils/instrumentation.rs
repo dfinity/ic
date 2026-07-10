@@ -1218,13 +1218,15 @@ impl InjectionPoint {
 fn injections(
     code: &[wirm::wasmparser::Operator],
     mem_type: WasmMemoryType,
+    locals_cost: u64,
 ) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use wirm::wasmparser::Operator::*;
     // The function itself is a re-entrant code block.
     // Start with at least one fuel being consumed because even empty
     // functions should consume at least some fuel.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
+    // Also charge the cost for allocating locals at the very beginning.
+    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1 + locals_cost);
     for (position, i) in code.iter().enumerate() {
         curr.cost_detail
             .increment_cost(instruction_to_cost(i, mem_type));
@@ -1306,9 +1308,15 @@ fn inject_metering(
     metering_type: MeteringType,
     mem_type: WasmMemoryType,
 ) {
+    // Calculate instructions for allocating Wasm locals when creating call frame.
+    let locals_cost = body
+        .locals
+        .iter()
+        .map(|(num, typ)| *num as u64 * local_cost(typ, mem_type))
+        .sum();
     let points = match metering_type {
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections(body.instructions.get_ops(), mem_type),
+        MeteringType::New => injections(body.instructions.get_ops(), mem_type, locals_cost),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1386,6 +1394,19 @@ fn inject_metering(
     let num_instructions = elems.len();
     *orig_elems = elems;
     body.num_instructions = num_instructions;
+}
+
+fn local_cost(local_type: &DataType, mem_type: WasmMemoryType) -> u64 {
+    // Charge by byte.
+    match local_type {
+        DataType::I32 | DataType::F32 => 4,
+        DataType::I64 | DataType::F64 => 8,
+        DataType::V128 => 16,
+        _ => match mem_type {
+            WasmMemoryType::Wasm32 => 4,
+            WasmMemoryType::Wasm64 => 8,
+        },
+    }
 }
 
 // Scans through the function and adds instrumentation after each `memory.grow`
@@ -1675,7 +1696,6 @@ pub(super) fn instrument(
         // instruction will be added during encoding.
         wasm_instruction_count += 2;
     }
-
     let result = module.encode().map_err(|err| {
         WasmInstrumentationError::WasmSerializeError(WasmError::new(err.to_string()))
     })?;
