@@ -8,8 +8,8 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::CanisterId;
-use ic_types::batch::ConsensusResponse;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::messages::Response;
 use ic_types_cycles::NominalCycles;
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
@@ -232,7 +232,7 @@ impl ExecutionEnvironmentMetrics {
     pub(crate) fn observe_http_outcall_request(
         &self,
         context: &CanisterHttpRequestContext,
-        response: &ConsensusResponse,
+        response: &Response,
     ) {
         self.http_outcalls_metrics
             .request_size
@@ -250,7 +250,7 @@ impl ExecutionEnvironmentMetrics {
 
         self.http_outcalls_metrics
             .payload_size
-            .observe(response.payload.size_bytes().get() as f64);
+            .observe(response.payload_size_bytes().get() as f64);
     }
 
     pub(crate) fn observe_http_outcall_price_change(

@@ -18,7 +18,6 @@ pub use self::http::{
     RawHttpRequestVal, RawSignedSenderInfo, ReplicaHealthStatus, SenderInfoContent,
     SignedDelegation, SignedSenderInfo,
 };
-use crate::batch::ConsensusResponse;
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
@@ -347,7 +346,7 @@ impl Display for CanisterMessage {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SubnetMessage {
     Request(Arc<Request>),
-    ConsensusResponse(Arc<ConsensusResponse>),
+    Response(Arc<Response>),
     Ingress(Arc<Ingress>),
 }
 
@@ -357,7 +356,7 @@ impl SubnetMessage {
         match &self {
             SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
             SubnetMessage::Request(request) => request.extract_effective_canister_id(),
-            SubnetMessage::ConsensusResponse { .. } => None,
+            SubnetMessage::Response { .. } => None,
         }
     }
 }

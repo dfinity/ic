@@ -695,11 +695,11 @@ impl ExecutionEnvironment {
         let since = Instant::now(); // Start logging execution time.
 
         let mut msg = match msg {
-            SubnetMessage::ConsensusResponse(response) => {
+            SubnetMessage::Response(response) => {
                 let context = state
                     .metadata
                     .subnet_call_context_manager
-                    .retrieve_context(response.callback, &self.log);
+                    .retrieve_context(response.originator_reply_callback, &self.log);
                 return match context {
                     None => (state, ExecuteSubnetMessageResultType::Finished),
                     Some(context) => {
@@ -718,7 +718,7 @@ impl ExecutionEnvironment {
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 state.get_own_subnet_cycles_config(),
-                                response.payload.size_bytes(),
+                                NumBytes::from(response.payload_size_bytes()),
                             );
 
                             self.metrics.observe_http_outcall_price_change(
@@ -737,7 +737,7 @@ impl ExecutionEnvironment {
                             info!(
                                 self.log,
                                 "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
-                                response.payload.size_bytes().get(),
+                                response.payload_size_bytes().get(),
                                 max_response_size,
                                 registry_settings.subnet_size,
                                 context.request.sender_reply_callback,
@@ -749,7 +749,7 @@ impl ExecutionEnvironment {
                         self.metrics.observe_subnet_message(
                             &request.method_name,
                             time_elapsed.as_secs_f64(),
-                            &match &response.payload {
+                            &match &response.response_payload {
                                 Payload::Data(_) => Ok(()),
                                 Payload::Reject(_) => Err(ErrorCode::CanisterRejectedMessage),
                             },
@@ -758,7 +758,7 @@ impl ExecutionEnvironment {
                         if let (
                             SubnetCallContext::SignWithThreshold(threshold_context),
                             Payload::Data(_),
-                        ) = (&context, &response.payload)
+                        ) = (&context, &response.response_payload)
                         {
                             *state
                                 .metadata
@@ -788,7 +788,7 @@ impl ExecutionEnvironment {
                                 respondent: CanisterId::from(self.own_subnet_id),
                                 originator_reply_callback: request.sender_reply_callback,
                                 refund,
-                                response_payload: response.payload.clone(),
+                                response_payload: response.response_payload.clone(),
                                 deadline: request.deadline,
                             }
                             .into(),

@@ -1574,7 +1574,7 @@ impl ExecutionTest {
             "expected_cycles_metrics_change assumes that some instructions were actually used"
         );
         let message = match message {
-            SubnetMessage::ConsensusResponse(_) => return NominalCycles::zero(),
+            SubnetMessage::Response(_) => return NominalCycles::zero(),
             SubnetMessage::Request(request) => CanisterCall::Request(request),
             SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
         };
@@ -1684,7 +1684,7 @@ impl ExecutionTest {
         let cycles_used = cycles_used_after - cycles_used_before;
         if instructions_used.get() != 0 {
             let method_name = match message {
-                SubnetMessage::ConsensusResponse(_) => None,
+                SubnetMessage::Response(_) => None,
                 SubnetMessage::Request(ref request) => Some(request.method_name.clone()),
                 SubnetMessage::Ingress(ref ingress) => Some(ingress.method_name.clone()),
             };
@@ -3270,7 +3270,7 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
 
 fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
     match message {
-        SubnetMessage::ConsensusResponse(_) => None,
+        SubnetMessage::Response(_) => None,
         SubnetMessage::Request(request) => request.extract_effective_canister_id(),
         SubnetMessage::Ingress(ingress) => {
             let signed_ingress_content = SignedIngressContent::new_for_testing(
@@ -3289,7 +3289,7 @@ fn get_effective_canister_id(message: SubnetMessage) -> Option<CanisterId> {
 
 fn check_is_install_code(message: SubnetMessage) -> bool {
     let message = match message {
-        SubnetMessage::ConsensusResponse(_) => return false,
+        SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
@@ -3298,7 +3298,7 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
 
 fn check_is_list_canisters(message: SubnetMessage) -> bool {
     let message = match message {
-        SubnetMessage::ConsensusResponse(_) => return false,
+        SubnetMessage::Response(_) => return false,
         SubnetMessage::Request(request) => CanisterCall::Request(request),
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
