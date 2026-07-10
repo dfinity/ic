@@ -187,7 +187,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.node_operator",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
+        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]",
     );
     config.type_attribute(
         ".registry.nns",
