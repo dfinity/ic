@@ -20646,8 +20646,7 @@ dependencies = [
  "itertools 0.10.5",
  "log",
  "multimap",
- "once_cell",
- "petgraph 0.6.5",
+ "petgraph 0.8.3",
  "prettyplease",
  "prost 0.14.3",
  "prost-types 0.14.3",
@@ -20666,19 +20665,6 @@ checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
  "itertools 0.12.1",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "prost-derive"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
-dependencies = [
- "anyhow",
- "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
