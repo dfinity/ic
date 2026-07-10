@@ -63,9 +63,8 @@ bazel_dep(name = "rules_qemu", version = "0.3.0")
 qemu = use_extension("@rules_qemu//qemu/extension:qemu.bzl", "qemu")
 use_repo(
     qemu,
-    "qemu_img_prebuilt_linux_amd64",
-    "qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu",
-    "qemu_system_data_prebuilt_linux_amd64",
+    "qemu_system_toolchains",
+    "qemu_user_toolchains",
 )
 
 # Rust
