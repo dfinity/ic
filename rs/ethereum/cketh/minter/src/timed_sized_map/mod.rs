@@ -129,16 +129,21 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.entries.iter().map(|(key, entry)| (key, &entry.value))
     }
 
-    /// Iterate over every entry together with the time it was inserted.
-    pub fn iter_with_time(&self) -> impl Iterator<Item = (Timestamp, &K, &V)> {
-        self.entries
-            .iter()
-            .map(|(key, entry)| (entry.inserted_at, key, &entry.value))
+    /// Iterate over the live (unexpired as of `now`) entries together with the time each was
+    /// inserted.
+    pub fn iter_live(&self, now: Timestamp) -> impl Iterator<Item = (Timestamp, &K, &V)> {
+        self.entries.iter().filter_map(move |(key, entry)| {
+            if self.is_expired(entry.inserted_at, now) {
+                None
+            } else {
+                Some((entry.inserted_at, key, &entry.value))
+            }
+        })
     }
 
     /// Rebuild a map from a previously captured snapshot, preserving each entry's original
     /// insertion time. This is a trusted restore of an already-valid snapshot: it performs no
-    /// eviction, capacity, or refresh checks.
+    /// eviction, capacity, or refresh checks, and requires the entries to have distinct keys.
     pub fn from_entries(
         ttl: Duration,
         capacity: NonZeroUsize,
@@ -146,8 +151,13 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     ) -> Self {
         let mut map = Self::new(ttl, capacity);
         for (inserted_at, key, value) in entries {
-            map.entries
+            let previous = map
+                .entries
                 .insert(key.clone(), Entry { value, inserted_at });
+            assert!(
+                previous.is_none(),
+                "BUG: from_entries received a duplicate key"
+            );
             map.by_time.entry(inserted_at).or_default().push_back(key);
         }
         map

@@ -133,29 +133,24 @@ fn should_expire_entries_after_ttl() {
 }
 
 #[test]
-fn should_iterate_with_insertion_time() {
-    let mut map = TimedSizedMap::new(Duration::from_nanos(1000), cap(5));
-    map.insert(ts(1), "a", 1).unwrap();
-    map.insert(ts(2), "b", 2).unwrap();
-    map.insert(ts(2), "c", 3).unwrap();
+fn should_iterate_only_live_entries_with_insertion_time() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+    map.insert(ts(0), "a", 1).unwrap();
+    map.insert(ts(5), "b", 2).unwrap();
 
-    let mut entries: Vec<_> = map.iter_with_time().map(|(t, k, v)| (t, *k, *v)).collect();
-    entries.sort();
+    let live: Vec<_> = map.iter_live(ts(12)).map(|(t, k, v)| (t, *k, *v)).collect();
 
-    assert_eq!(
-        entries,
-        vec![(ts(1), "a", 1), (ts(2), "b", 2), (ts(2), "c", 3)]
-    );
+    assert_eq!(live, vec![(ts(5), "b", 2)]);
 }
 
 #[test]
-fn should_round_trip_through_iter_with_time_and_from_entries() {
+fn should_round_trip_through_iter_live_and_from_entries() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(1000), cap(5));
     map.insert(ts(1), "a", 1).unwrap();
     map.insert(ts(5), "b", 2).unwrap();
     map.insert(ts(5), "c", 3).unwrap();
 
-    let snapshot: Vec<_> = map.iter_with_time().map(|(t, k, v)| (t, *k, *v)).collect();
+    let snapshot: Vec<_> = map.iter_live(ts(6)).map(|(t, k, v)| (t, *k, *v)).collect();
     let rebuilt = TimedSizedMap::from_entries(Duration::from_nanos(1000), cap(5), snapshot);
 
     assert_eq!(rebuilt, map);
@@ -171,6 +166,13 @@ fn should_preserve_timestamps_and_not_evict_or_cap_in_from_entries() {
     assert_eq!(map.get(ts(0), &"a"), Some(&1));
     assert_eq!(map.get(ts(1_000_000), &"b"), Some(&2));
     assert_consistent(&map);
+}
+
+#[test]
+#[should_panic(expected = "duplicate key")]
+fn should_panic_when_from_entries_receives_duplicate_key() {
+    let entries = vec![(ts(0), "a", 1), (ts(1), "a", 2)];
+    let _ = TimedSizedMap::from_entries(Duration::from_nanos(10), cap(5), entries);
 }
 
 #[test]

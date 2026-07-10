@@ -1886,7 +1886,7 @@ mod deposit_addresses_snapshot {
         let snapshot = EventType::RegisteredDepositAddresses(
             original
                 .deposit_addresses
-                .iter_with_time()
+                .iter_live(Timestamp::from_nanos(3))
                 .map(
                     |(registered_at, account, address)| DepositAddressRegistration {
                         owner: account.owner,

@@ -133,9 +133,10 @@ fn emit_preupgrade_events() {
         }
     });
 
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
     let deposit_addresses = read_state(|s| {
         s.deposit_addresses
-            .iter_with_time()
+            .iter_live(now)
             .map(
                 |(registered_at, account, address)| DepositAddressRegistration {
                     owner: account.owner,
