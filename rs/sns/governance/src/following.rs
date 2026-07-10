@@ -490,7 +490,7 @@ impl TopicFollowees {
                         ValidatedFolloweesForTopic::try_from(followees_for_topic.clone())
                             .map_err(SetFollowingError::InvalidExistingFollowing)?;
 
-                    all_followees.extend(followees_for_topic.followees.into_iter());
+                    all_followees.extend(followees_for_topic.followees);
                 }
 
                 continue;

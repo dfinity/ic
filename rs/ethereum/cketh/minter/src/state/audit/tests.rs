@@ -164,7 +164,7 @@ impl GetEventsFile {
         }
 
         fn map_signed_transaction(raw_transaction: &str) -> SignedEip1559TransactionRequest {
-            use crate::tx::Eip1559Signature;
+            use crate::tx::TransactionSignature;
             use ethers_core::types::transaction::eip2718::TypedTransaction;
             use ethnum::u256;
             use ic_ethereum_types::Address;
@@ -229,7 +229,7 @@ impl GetEventsFile {
                 ),
             };
 
-            let signature = Eip1559Signature {
+            let signature = TransactionSignature {
                 signature_y_parity: decoded_sig.recovery_id().unwrap().is_y_odd(),
                 r: map_ethers_u256(decoded_sig.r),
                 s: map_ethers_u256(decoded_sig.s),

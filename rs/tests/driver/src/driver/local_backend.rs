@@ -37,11 +37,13 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// UEFI firmware (OVMF) split-image paths, provided by the container's `ovmf`
-/// package. The code image is read-only and shared; each VM gets a writable copy
-/// of the variable store (its per-VM UEFI NVRAM).
-const OVMF_CODE: &str = "/usr/share/OVMF/OVMF_CODE_4M.fd";
-const OVMF_VARS_TEMPLATE: &str = "/usr/share/OVMF/OVMF_VARS_4M.fd";
+/// Environment variables holding the runfiles paths of the split OVMF (UEFI)
+/// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
+/// Ubuntu `ovmf-generic-hwe` package; see `bazel/ovmf.bzl`). The code image is
+/// read-only and shared; each VM gets a writable copy of the variable store (its
+/// per-VM UEFI NVRAM).
+const OVMF_CODE_ENV: &str = "ENV_DEPS__OVMF_CODE_PATH";
+const OVMF_VARS_TEMPLATE_ENV: &str = "ENV_DEPS__OVMF_VARS_PATH";
 
 /// Persistent record (in the root TestEnv) of the backend's working dir, so
 /// forked task subprocesses resolve the same paths (VM disks, per-VM metadata,
@@ -958,7 +960,7 @@ impl LocalBackend {
                 primary_disk.display(),
                 base.display()
             );
-            let mut cmd = Command::new("qemu-img");
+            let mut cmd = Command::new(get_dependency_path_from_env("ENV_DEPS__QEMU_IMG_PATH"));
             cmd.arg("create")
                 .arg("-q")
                 .arg("-f")
@@ -1036,10 +1038,11 @@ impl LocalBackend {
         // second pflash. Persisting it across restarts mirrors a real VM's NVRAM.
         let ovmf_vars = vm_dir.join("OVMF_VARS.fd");
         if !ovmf_vars.exists() {
-            std::fs::copy(OVMF_VARS_TEMPLATE, &ovmf_vars).with_context(|| {
+            let ovmf_vars_template = get_dependency_path_from_env(OVMF_VARS_TEMPLATE_ENV);
+            std::fs::copy(&ovmf_vars_template, &ovmf_vars).with_context(|| {
                 format!(
                     "copying OVMF vars template {} -> {}",
-                    OVMF_VARS_TEMPLATE,
+                    ovmf_vars_template.display(),
                     ovmf_vars.display()
                 )
             })?;
@@ -1081,6 +1084,12 @@ impl LocalBackend {
             }};
         }
 
+        // Specify the path for qemu data (e.g. the virtio-net PXE ROM), otherwise qemu tries to
+        // find it at /usr/share/qemu.
+        arg!(
+            "-L",
+            get_dependency_path_from_env("ENV_DEPS__QEMU_SYSTEM_DATA_PATH").display()
+        );
         arg!("-name", format!("guest={domain_name}"));
         arg!("-machine", "q35,accel=kvm");
         arg!("-cpu", "host");
@@ -1091,10 +1100,19 @@ impl LocalBackend {
         arg!("-nodefaults");
         arg!("-no-user-config");
         arg!("-display", "none");
-        // Split OVMF firmware: read-only code + writable per-VM varstore.
+        // Split OVMF firmware: read-only code + writable per-VM varstore. The
+        // code image comes from runfiles (a relative path); canonicalize it to
+        // an absolute path so the daemonized QEMU (which `chdir`s away) can still
+        // open it. The varstore is already under the absolute `working_dir`.
+        let ovmf_code = get_dependency_path_from_env(OVMF_CODE_ENV)
+            .canonicalize()
+            .context("resolving OVMF code firmware path")?;
         arg!(
             "-drive",
-            format!("if=pflash,format=raw,unit=0,readonly=on,file={OVMF_CODE}")
+            format!(
+                "if=pflash,format=raw,unit=0,readonly=on,file={}",
+                ovmf_code.display()
+            )
         );
         arg!(
             "-drive",
@@ -1193,13 +1211,15 @@ impl LocalBackend {
         // With `-daemonize` the foreground process exits once the guest is up (or
         // nonzero, having printed the error to stderr, if startup failed), while
         // the VM runs on as a reparented process.
-        let output = Command::new("qemu-system-x86_64")
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .with_context(|| format!("launching qemu-system-x86_64 for {domain_name}"))?;
+        let output = Command::new(get_dependency_path_from_env(
+            "ENV_DEPS__QEMU_SYSTEM_X86_64_PATH",
+        ))
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .with_context(|| format!("launching qemu-system-x86_64 for {domain_name}"))?;
         if !output.status.success() {
             bail!(
                 "qemu-system-x86_64 failed to start VM {domain_name} (status {}): {}",
