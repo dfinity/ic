@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 65
+assertion_line: 66
 expression: out
 ---
 (module
@@ -32,7 +32,7 @@ expression: out
   (func $compute (;5;) (type 0) (param i64) (result i64)
     (local i64)
     global.get 0
-    i64.const 16
+    i64.const 24
     i64.sub
     global.set 0
     global.get 0
