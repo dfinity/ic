@@ -1,5 +1,5 @@
 {
-  "checksum": "e841dfcec9174ce8904a03843eaaa081012da2bfeb0764c10705a19bc35392cd",
+  "checksum": "872bc54fbe6201ac14379b1bf41f532c3c0cb3460a3b17ddf4cb9bce5a2622ef",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22116,7 +22116,7 @@
               "target": "ethers_core"
             },
             {
-              "id": "ethnum 1.3.2",
+              "id": "ethnum 1.5.3",
               "target": "ethnum"
             },
             {
@@ -23563,7 +23563,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -26365,14 +26365,14 @@
       ],
       "license_file": null
     },
-    "ethnum 1.3.2": {
+    "ethnum 1.5.3": {
       "name": "ethnum",
-      "version": "1.3.2",
+      "version": "1.5.3",
       "package_url": "https://github.com/nlordell/ethnum-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ethnum/1.3.2/download",
-          "sha256": "0198b9d0078e0f30dedc7acbb21c974e838fc8fae3ee170128658a98cb2c1c04"
+          "url": "https://static.crates.io/crates/ethnum/1.5.3/download",
+          "sha256": "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
         }
       },
       "targets": [
@@ -26410,7 +26410,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.3.2"
+        "version": "1.5.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -34634,7 +34634,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.5.9",
+              "id": "socket2 0.6.1",
               "target": "socket2"
             },
             {
@@ -63712,7 +63712,7 @@
             ],
             "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
               {
-                "id": "socket2 0.5.9",
+                "id": "socket2 0.6.1",
                 "target": "socket2"
               }
             ]
@@ -70312,7 +70312,7 @@
                 "alias": "libc_errno"
               },
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -71268,7 +71268,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -71383,7 +71383,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -81524,7 +81524,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -101374,7 +101374,7 @@
     "erased-serde 0.3.28",
     "escargot 0.5.7",
     "ethers-core 2.0.8",
-    "ethnum 1.3.2",
+    "ethnum 1.5.3",
     "evm_rpc_client 0.4.0",
     "evm_rpc_types 3.1.1",
     "exec 0.3.1",

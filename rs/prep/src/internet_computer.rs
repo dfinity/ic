@@ -190,15 +190,15 @@ impl TopologyConfig {
 
     /// Set node operator on nodes that don't already have one set.
     pub fn with_initial_node_operator(mut self, node_operator: PrincipalId) -> Self {
-        for (_, sc) in self.subnets.iter_mut() {
-            for (_, nc) in sc.membership.iter_mut() {
+        for sc in self.subnets.values_mut() {
+            for nc in sc.membership.values_mut() {
                 if nc.node_operator_principal_id.is_none() {
                     nc.node_operator_principal_id = Some(node_operator);
                 }
             }
         }
 
-        for (_, nc) in self.unassigned_nodes.iter_mut() {
+        for nc in self.unassigned_nodes.values_mut() {
             if nc.node_operator_principal_id.is_none() {
                 nc.node_operator_principal_id = Some(node_operator);
             }

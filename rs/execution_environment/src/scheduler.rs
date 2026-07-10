@@ -2131,13 +2131,7 @@ fn subnet_heap_delta_capacity(
 ) -> NumBytes {
     resource_limits
         .maximum_state_delta
-        .and_then(|maximum_state_delta| {
-            if maximum_state_delta.get() != 0 {
-                Some(maximum_state_delta)
-            } else {
-                None
-            }
-        })
+        .filter(|&maximum_state_delta| maximum_state_delta.get() != 0)
         .unwrap_or(config.subnet_heap_delta_capacity)
 }
 
