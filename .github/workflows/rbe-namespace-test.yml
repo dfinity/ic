@@ -75,6 +75,8 @@ jobs:
             --bazelrc=./bazel/conf/.bazelrc.build
             --bazelrc=/tmp/bazel-rbe.bazelrc
 
+            --config=flaky_retry
+
             test
 
             --spawn_strategy=remote,sandboxed,local
@@ -128,6 +130,8 @@ jobs:
             --noworkspace_rc
             --bazelrc=./bazel/conf/.bazelrc.build
             --bazelrc=/tmp/bazel-rbe.bazelrc
+
+            --config=flaky_retry
 
             test
 
