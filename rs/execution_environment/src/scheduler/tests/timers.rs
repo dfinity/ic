@@ -5,7 +5,6 @@ use super::super::*;
 use super::zero_instruction_overhead_config;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_types::methods::SystemMethod;
-use ic_types_cycles::Cycles;
 
 #[test]
 fn execute_heartbeat_once_per_round_in_system_subnet() {

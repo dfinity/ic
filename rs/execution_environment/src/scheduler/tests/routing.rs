@@ -6,7 +6,7 @@ use super::zero_instruction_overhead_config;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::OutputRequestBuilder;
-use ic_types::messages::{MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE};
+use ic_types::messages::MAX_RESPONSE_COUNT_BYTES;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types_test_utils::ids::canister_test_id;
 

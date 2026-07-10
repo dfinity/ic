@@ -14,7 +14,6 @@ use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
 use ic_types::time::UNIX_EPOCH;
-use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::canister_test_id;
 use std::time::Duration;
 
