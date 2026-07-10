@@ -1,5 +1,5 @@
 {
-  "checksum": "170a16d3dc7fb0eb0f3a9ec3df892b8a79b4e2371ca4cc7a509728fe168457ef",
+  "checksum": "e841dfcec9174ce8904a03843eaaa081012da2bfeb0764c10705a19bc35392cd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -23278,7 +23278,7 @@
               "target": "x509_cert"
             },
             {
-              "id": "x509-parser 0.16.0",
+              "id": "x509-parser 0.18.1",
               "target": "x509_parser"
             },
             {
@@ -101619,7 +101619,7 @@
     "wsl 0.1.0",
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
-    "x509-parser 0.16.0",
+    "x509-parser 0.18.1",
     "xz2 0.1.7",
     "yansi 0.5.1",
     "zeroize 1.8.1",
