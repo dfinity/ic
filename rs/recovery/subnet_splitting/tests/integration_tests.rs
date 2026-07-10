@@ -177,8 +177,8 @@ fn load_metrics_e2e_test() {
         // returned values are not too ridiculous and they might have to be updated once in a while.
         assert_near!(states_sizes_bytes.source, 4572692, 0.1);
         assert_near!(states_sizes_bytes.destination, 4572736, 0.1);
-        assert_near!(instructions_executed.source, 7664789, 0.1);
-        assert_near!(instructions_executed.destination, 7663691, 0.1);
+        assert_near!(instructions_executed.source, 8736261, 0.1);
+        assert_near!(instructions_executed.destination, 8736025, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
@@ -210,8 +210,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 418,
-                destination: 276,
+                source: 379,
+                destination: 315,
             }
         );
         // Check if the split finder found a split satisfying the load constraints
