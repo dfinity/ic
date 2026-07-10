@@ -488,8 +488,10 @@ mod sanity_check {
         // Generous upper bound. Reaching the reward distribution requires the
         // node-rewards canister to sync (hourly timer) plus a minting call whose length
         // scales with the reward period and the number of node providers, so this needs
-        // to comfortably exceed a few hundred rounds.
-        const MAX_TICKS: usize = 2000;
+        // to comfortably exceed a few hundred rounds. Since each tick advances time by
+        // one second, this keeps trying for one hour of simulated time, which is an
+        // improbably long time for the distribution to take.
+        const MAX_TICKS: usize = 3600;
         // Only poll periodically, since each poll is an ingress call to governance.
         const POLL_EVERY_TICKS: usize = 25;
 
