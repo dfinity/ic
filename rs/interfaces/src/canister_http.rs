@@ -57,6 +57,14 @@ pub enum InvalidCanisterHttpPayloadReason {
         spent: Cycles,
         per_replica_allowance: Cycles,
     },
+    /// The collective initial spent cycles included in the payload do not match
+    /// the value recomputed from the request context's subnet size and the
+    /// signed per-replica receipts.
+    InitialSpentMismatch {
+        callback_id: CallbackId,
+        payload_spent: Cycles,
+        computed_spent: Cycles,
+    },
     /// Some of the signatures in the canister http proof were not members of
     /// the canister http committee.
     SignersNotMembers {

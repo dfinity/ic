@@ -66,6 +66,7 @@ message CanisterHttpResponseWithConsensus {
   repeated CanisterHttpResponseSignature signatures = 7;
   uint32 content_size = 9;
   bool is_reject = 10;
+  state.queues.v1.Cycles initial_spent = 11;
 }
 
 message CanisterHttpShare {
@@ -85,6 +86,7 @@ message FlexibleCanisterHttpResponseWithProof {
 message FlexibleCanisterHttpResponses {
   uint64 callback_id = 1;
   repeated FlexibleCanisterHttpResponseWithProof responses = 2;
+  state.queues.v1.Cycles initial_spent = 3;
 }
 
 message FlexibleCanisterHttpTimeout {}
@@ -97,6 +99,7 @@ message FlexibleCanisterHttpResponsesTooLarge {
 
 message FlexibleCanisterHttpTooManyRejects {
   repeated FlexibleCanisterHttpResponseWithProof reject_responses = 1;
+  state.queues.v1.Cycles initial_spent = 2;
 }
 
 message FlexibleCanisterHttpError {
