@@ -82,8 +82,7 @@ uvm_config_image(
         ":ERC20.sol": "ERC20.sol",
         ":foundry.tar": "foundry.tar",
         "//rs/ethereum/cketh/minter:helper_contracts": "/",
-        "@solc//file": "solc",
-        "@solc_eth_deposit_helper//file": "solc_eth_deposit_helper",
+        "//:solc": "solc",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
