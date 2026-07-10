@@ -875,6 +875,7 @@ fn subnet_call_contexts_deserialization() {
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
+        cost_schedule: None,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,

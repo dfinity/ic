@@ -739,6 +739,7 @@ mod tests {
             refund_status: RefundStatus::default(),
             registry_version,
             subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 

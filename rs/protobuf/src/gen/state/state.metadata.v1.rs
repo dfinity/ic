@@ -233,6 +233,11 @@ pub struct CanisterHttpRequestContext {
     pub registry_version: u64,
     #[prost(uint32, tag = "15")]
     pub subnet_size: u32,
+    #[prost(
+        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
+        tag = "16"
+    )]
+    pub cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RefundStatus {

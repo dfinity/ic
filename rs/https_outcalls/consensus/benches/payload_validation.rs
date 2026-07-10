@@ -490,6 +490,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
+        cost_schedule: None,
     }
 }
 
