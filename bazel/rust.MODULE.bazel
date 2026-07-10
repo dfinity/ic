@@ -2016,7 +2016,7 @@ crate.spec(
 )
 crate.spec(
     package = "x509-parser",
-    version = "^0.16.0",
+    version = "^0.18.1",
 )
 crate.spec(
     features = [
