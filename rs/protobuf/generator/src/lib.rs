@@ -237,7 +237,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         );
     }
     config.type_attribute(
-        format!(".registry.replica_version.v1.GuestLaunchMeasurements"),
+        ".registry.replica_version.v1.GuestLaunchMeasurements",
         "#[derive(Eq, candid::CandidType, comparable::Comparable)]",
     );
 
