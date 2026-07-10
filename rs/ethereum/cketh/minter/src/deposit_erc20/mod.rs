@@ -36,11 +36,15 @@ pub fn register_deposit_address(
         DepositAddressSchema::CkErc20,
         &account,
     );
-    let address_string = address.to_string();
+    let derived_address = address.to_string();
 
     match state.deposit_addresses.insert(now, account, address) {
-        Ok(_) => Ok(address_string),
-        Err(InsertError::AlreadyPresent { .. }) => Ok(address_string),
+        Ok(_) => Ok(derived_address),
+        Err(InsertError::AlreadyPresent { .. }) => Ok(state
+            .deposit_addresses
+            .get(now, &account)
+            .expect("BUG: AlreadyPresent implies a live stored entry")
+            .to_string()),
         Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveAddresses),
     }
 }
