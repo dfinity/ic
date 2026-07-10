@@ -59,12 +59,12 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
-    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadCanisterSnapshotMetadataResponse,
+    self as ic00, CanisterIdRecord, CanisterLogRecord, CanisterSnapshotDataKind,
+    CanisterSnapshotDataOffset, InstallCodeArgs, ListCanisterSnapshotArgs,
+    ListCanisterSnapshotResponse, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -141,9 +141,8 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
-    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
-    SubnetId, UserId,
+    CanisterId, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes,
+    PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId, SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
@@ -5024,14 +5023,25 @@ impl StateMachine {
         dst
     }
 
-    /// Returns the canister log of the specified canister.
-    pub fn canister_log(&self, canister_id: CanisterId) -> CanisterLog {
+    /// Returns all canister log records of the specified canister.
+    pub fn canister_log_records(&self, canister_id: CanisterId) -> Vec<CanisterLogRecord> {
         let replicated_state = self.state_manager.get_latest_state().take();
         let canister_state = replicated_state
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        let log_memory_store = &canister_state.system_state.log_memory_store;
-        CanisterLog::new_aggregate(log_memory_store.next_idx(), log_memory_store.records(None))
+        canister_state
+            .system_state
+            .log_memory_store
+            .all_records_for_testing()
+    }
+
+    /// Returns the number of bytes used by the canister log of the specified canister.
+    pub fn canister_log_bytes_used(&self, canister_id: CanisterId) -> usize {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        let canister_state = replicated_state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
+        canister_state.system_state.log_memory_store.bytes_used()
     }
 
     /// Sets the content of the stable memory for the specified canister.

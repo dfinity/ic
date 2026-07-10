@@ -1000,7 +1000,7 @@ fn test_canister_log_in_state_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
     }
     // Expect that the total size of the log in canister state is not zero and less than the limit.
-    let log_size = env.canister_log(canister_id).bytes_used();
+    let log_size = env.canister_log_bytes_used(canister_id);
     assert_lt!(0, log_size);
     assert_le!(log_size, TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
