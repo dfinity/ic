@@ -100,7 +100,7 @@ jobs:
             # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
             # by the "Upload Bazel BEP" step below.
             --build_event_binary_file=/tmp/bep/bazel-bep-tests.pb
-            --profile=/tmp/bep/profile-notests.json
+            --profile=/tmp/bep/profile-tests.json
             --experimental_profile_include_target_label
 
             --keep_going
