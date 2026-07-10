@@ -44,14 +44,12 @@ fn should_reject_new_key_when_full_of_live_entries() {
     map.insert(ts(1), "a", 1).unwrap();
     map.insert(ts(2), "b", 2).unwrap();
     map.insert(ts(3), "c", 3).unwrap();
-    assert_eq!(map.len(), 3);
+    let before = map.clone();
 
     let rejected = map.insert(ts(4), "d", 4);
 
     assert_eq!(rejected, Err(AtCapacity { key: "d", value: 4 }));
-    assert_eq!(map.len(), 3);
-    assert_eq!(map.get(ts(4), &"a"), Some(&1));
-    assert_eq!(map.get(ts(4), &"d"), None);
+    assert_eq!(map, before);
     assert_consistent(&map);
 }
 
@@ -61,12 +59,12 @@ fn should_admit_new_key_after_expired_entries_free_room() {
     map.insert(ts(0), "a", 1).unwrap();
     map.insert(ts(1), "b", 2).unwrap();
 
-    let mut evicted = map.insert(ts(11), "c", 3).unwrap();
+    let mut evicted = map.insert(ts(12), "c", 3).unwrap();
     evicted.sort();
 
     assert_eq!(evicted, vec![("a", 1), ("b", 2)]);
     assert_eq!(map.len(), 1);
-    assert_eq!(map.get(ts(11), &"c"), Some(&3));
+    assert_eq!(map.get(ts(12), &"c"), Some(&3));
     assert_consistent(&map);
 }
 
@@ -75,11 +73,11 @@ fn should_expire_entries_after_ttl() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(10));
     map.insert(ts(0), "a", 1).unwrap();
 
-    assert_eq!(map.get(ts(9), &"a"), Some(&1));
-    assert_eq!(map.get(ts(10), &"a"), None);
+    assert_eq!(map.get(ts(10), &"a"), Some(&1));
+    assert_eq!(map.get(ts(11), &"a"), None);
     assert_eq!(map.len(), 1);
 
-    let evicted = map.evict_expired(ts(10));
+    let evicted = map.evict_expired(ts(11));
 
     assert_eq!(evicted, vec![("a", 1)]);
     assert!(map.is_empty());
@@ -107,8 +105,8 @@ fn should_extend_lifetime_on_refresh() {
     map.insert(ts(0), "a", 1).unwrap();
     map.insert(ts(5), "a", 2).unwrap();
 
-    assert_eq!(map.get(ts(12), &"a"), Some(&2));
-    assert_eq!(map.get(ts(15), &"a"), None);
+    assert_eq!(map.get(ts(15), &"a"), Some(&2));
+    assert_eq!(map.get(ts(16), &"a"), None);
 }
 
 #[test]

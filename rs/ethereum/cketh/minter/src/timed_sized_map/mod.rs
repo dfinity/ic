@@ -18,9 +18,8 @@ impl Timestamp {
         self.0
     }
 
-    fn saturating_add(self, duration: Duration) -> Self {
-        let nanos = u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX);
-        Self(self.0.saturating_add(nanos))
+    fn checked_duration_since(self, earlier: Timestamp) -> Option<Duration> {
+        self.0.checked_sub(earlier.0).map(Duration::from_nanos)
     }
 }
 
@@ -36,6 +35,7 @@ struct Entry<V> {
 /// capacity with only live entries, the insertion is rejected rather than evicting a live entry.
 /// Time is supplied by the caller on every operation, so the structure holds no clock and is
 /// deterministic in tests.
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TimedSizedMap<K, V> {
     ttl: Duration,
     capacity: NonZeroUsize,
@@ -138,7 +138,8 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     }
 
     fn is_expired(&self, inserted_at: Timestamp, now: Timestamp) -> bool {
-        inserted_at.saturating_add(self.ttl) <= now
+        now.checked_duration_since(inserted_at)
+            .is_some_and(|age| age > self.ttl)
     }
 
     fn remove(&mut self, key: &K) -> Option<V> {
