@@ -5,14 +5,7 @@
 /// Note that while a node operator might host nodes for more than
 /// one funding partner, its principal ID must be unique.
 #[derive(
-    candid::CandidType,
-    serde::Serialize,
-    candid::Deserialize,
-    Eq,
-    Hash,
-    Clone,
-    PartialEq,
-    ::prost::Message,
+    candid::CandidType, serde::Serialize, candid::Deserialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct NodeOperatorRecord {
     /// The principal id of the node operator. This principal is the entity that

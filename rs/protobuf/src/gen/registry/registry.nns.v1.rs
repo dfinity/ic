@@ -3,7 +3,7 @@
 ///
 /// Corresponding mutations are handled by the `root` handler:
 /// See /rs/nns/handlers/root/impl
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NnsCanisterRecord {
     #[prost(message, optional, tag = "1")]
     pub id: ::core::option::Option<super::super::super::types::v1::CanisterId>,

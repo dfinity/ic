@@ -3,13 +3,14 @@
 ///
 /// This struct is used as storage medium in the node's public key store.
 /// Depending on the `version` field different public keys are expected:
+///
 /// 1. `version 0`
-///      * Node signing public key `node_signing_pk`
-///      * Committee signing public key `committee_signing_pk`
-///      * TLS certificate `tls_certificate`
-///      * DKG public key `dkg_dealing_encryption_pk`
-/// 2. `version 1`
-///      * Contains additionally the I-DKG public key `idkg_dealing_encryption_pk`
+///    * Node signing public key `node_signing_pk`
+///    * Committee signing public key `committee_signing_pk`
+///    * TLS certificate `tls_certificate`
+///    * DKG public key `dkg_dealing_encryption_pk`
+/// 1. `version 1`
+///    * Contains additionally the I-DKG public key `idkg_dealing_encryption_pk`
 ///
 /// Note that version 0 was used to transition existing nodes to version 1 by
 /// generating the corresponding I-DKG public key.
