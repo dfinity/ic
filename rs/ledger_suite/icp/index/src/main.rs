@@ -659,16 +659,16 @@ fn get_account_identifier_transactions(
         .max_results
         .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(msg_caller())) as u64)
         .min(usize::MAX as u64) as usize;
-    // TODO: deal with the user setting start to u64::MAX
-    let start = arg.start.map_or(u64::MAX, |n| n);
-    let key = account_identifier_block_ids_key(arg.account_identifier, start);
+    let start = arg.start;
+    let scan_from = start.unwrap_or(u64::MAX);
+    let key = account_identifier_block_ids_key(arg.account_identifier, scan_from);
     let mut settled_transactions = vec![];
     let indices = with_account_identifier_block_ids(|account_identifier_block_ids| {
         account_identifier_block_ids
             .range(key..)
             // old txs of the requested account_identifier and skip the start index
             .take_while(|(k, _)| k.0 == key.0)
-            .filter(|(k, _)| k.1.0 < start)
+            .filter(|(k, _)| start.is_none_or(|s| k.1.0 < s))
             .take(length)
             .map(|(k, _)| k.1.0)
             .collect::<Vec<BlockIndex>>()

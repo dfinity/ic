@@ -1274,6 +1274,47 @@ fn test_get_account_transactions_start_length() {
 }
 
 #[test]
+fn test_get_account_identifier_transactions_without_start_matches_unbounded_start() {
+    let initial_balances = HashMap::new();
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+
+    transfer(
+        env,
+        ledger_id,
+        Account {
+            owner: MINTER_PRINCIPAL.into(),
+            subaccount: None,
+        },
+        account(1, 0),
+        10_000,
+    );
+    transfer(
+        env,
+        ledger_id,
+        Account {
+            owner: MINTER_PRINCIPAL.into(),
+            subaccount: None,
+        },
+        account(1, 0),
+        20_000,
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let without_start =
+        get_account_identifier_transactions(env, index_id, account(1, 0), None, 100);
+    let with_unbounded_start =
+        get_account_identifier_transactions(env, index_id, account(1, 0), Some(u64::MAX), 100);
+
+    assert_eq!(without_start.transactions.len(), 2);
+    assert_eq!(
+        without_start.transactions,
+        with_unbounded_start.transactions
+    );
+}
+
+#[test]
 fn test_get_account_identifier_transactions_pagination() {
     // 10_000 mint transactions to index for the same account_identifier
     let initial_balances = HashMap::new();

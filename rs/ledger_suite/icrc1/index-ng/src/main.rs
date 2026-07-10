@@ -1268,18 +1268,18 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
         .expect("The length must be a u64!")
         .min(with_state(|opts| opts.max_blocks_per_response))
         .min(usize::MAX as u64) as usize;
-    // TODO: deal with the user setting start to u64::MAX
     let start = arg
         .start
-        .map_or(u64::MAX, |n| n.0.to_u64().expect("start must be a u64!"));
-    let key = account_block_ids_key(arg.account, start);
+        .map(|n| n.0.to_u64().expect("start must be a u64!"));
+    let scan_from = start.unwrap_or(u64::MAX);
+    let key = account_block_ids_key(arg.account, scan_from);
     let mut transactions = vec![];
     let indices = with_account_block_ids(|account_block_ids| {
         account_block_ids
             .range(key..)
             // old txs of the requested account and skip the start index
             .take_while(|(k, _)| k.0 == key.0)
-            .filter(|(k, _)| k.1.0 < start)
+            .filter(|(k, _)| start.is_none_or(|s| k.1.0 < s))
             .take(length)
             .map(|(k, _)| k.1.0)
             .collect::<Vec<BlockIndex64>>()

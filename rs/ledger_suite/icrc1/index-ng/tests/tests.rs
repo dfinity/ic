@@ -905,6 +905,35 @@ fn test_get_account_transactions_start_length() {
 }
 
 #[test]
+fn test_get_account_transactions_without_start_matches_unbounded_start() {
+    let initial_balances = vec![(account(1, 0), 1_000_000_000_000u64)];
+    let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 1_000);
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let without_start = get_account_transactions(env, index_id, account(1, 0), None, 100);
+    let with_unbounded_start =
+        get_account_transactions(env, index_id, account(1, 0), Some(u64::MAX), 100);
+
+    assert_eq!(without_start.transactions.len(), 3);
+    assert_eq!(
+        without_start.transactions,
+        with_unbounded_start.transactions
+    );
+}
+
+#[test]
 fn test_get_account_transactions_pagination() {
     // 10_000 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10_000).map(|i| (account(1, 0), i * 10_000)).collect();
