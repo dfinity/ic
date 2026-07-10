@@ -11,6 +11,19 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-10: Proposal 142805
+
+http://dashboard.internetcomputer.org/proposal/142805
+
+## Changed
+
+* `delete_subnet` may now delete any non-System subnet, lifting the previous
+  restriction to `CloudEngine` subnets. Authorization by subnet type:
+  System subnets (e.g. the NNS) may never be deleted; the engine controller
+  canister may only delete `CloudEngine` subnets; governance may delete any
+  non-System subnet.
+
+
 # 2026-07-03: Proposal 142680
 
 http://dashboard.internetcomputer.org/proposal/142680

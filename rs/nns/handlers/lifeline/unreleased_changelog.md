@@ -10,7 +10,6 @@ on the process that this file is part of, see
 ## Added
 
 ## Changed
-* Compile the `lifeline` canister with the latest Motoko compiler (1.11.0) (compared to compiling with 0.16.3 before).
 
 ## Deprecated
 
