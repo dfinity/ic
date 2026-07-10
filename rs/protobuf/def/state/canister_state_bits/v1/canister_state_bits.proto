@@ -503,8 +503,7 @@ message CanisterStateBits {
   // `log_memory_store_migrated`, used by the legacy `CanisterLog` store and the
   // one-time migration to the LogMemoryStore.
   reserved 43, 44, 66;
-  reserved "canister_log_records", "next_canister_log_record_idx",
-      "log_memory_store_migrated";
+  reserved "canister_log_records", "next_canister_log_record_idx", "log_memory_store_migrated";
   // The persistent high-water mark for log record indexing in LogMemoryStore.
   uint64 log_memory_store_persistent_next_idx = 67;
   // The Wasm memory limit. This is a field in developer-visible canister
