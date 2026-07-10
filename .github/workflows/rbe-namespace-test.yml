@@ -80,6 +80,8 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
+            --jobs=64
+
             --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
             --remote_default_exec_properties=container-image="$worker_image"
@@ -89,11 +91,11 @@ jobs:
             # mid-build, actions fail with "Lost inputs no longer available remotely" or
             # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
             # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs. (If evictions
-            # persist, add --remote_download_all, as bazel/conf/.bazelrc.internal does for the
-            # DFINITY cache, to keep outputs on the runner instead of relying on the CAS.)
+            # so the CAS extends their TTL and stops evicting live inputs.
             --experimental_remote_cache_lease_extension
             --experimental_remote_cache_eviction_retries=10
+
+            --remote_download_minimal
 
             # Capture the Build Event Protocol and the execution profile so this
             # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
@@ -132,6 +134,8 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
+            --jobs=64
+
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
             --remote_default_exec_properties=container-image="$worker_image"
@@ -141,11 +145,11 @@ jobs:
             # mid-build, actions fail with "Lost inputs no longer available remotely" or
             # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
             # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs. (If evictions
-            # persist, add --remote_download_all, as bazel/conf/.bazelrc.internal does for the
-            # DFINITY cache, to keep outputs on the runner instead of relying on the CAS.)
+            # so the CAS extends their TTL and stops evicting live inputs.
             --experimental_remote_cache_lease_extension
             --experimental_remote_cache_eviction_retries=10
+
+            --remote_download_minimal
 
             # Capture the Build Event Protocol and the execution profile so this
             # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
