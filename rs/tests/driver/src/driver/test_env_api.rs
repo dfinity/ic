@@ -168,6 +168,7 @@ use ic_nns_test_utils::{
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
     node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord, subnet::v1 as pb_subnet,
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
@@ -175,6 +176,7 @@ use ic_registry_client_helpers::{
     replica_version::ReplicaVersionRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
+    unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
@@ -555,6 +557,15 @@ impl TopologySnapshot {
             env: self.env.clone(),
             ic_name: self.ic_name.clone(),
         }
+    }
+
+    /// The unassigned nodes config record, if it exists.
+    pub fn unassigned_nodes_config(&self) -> Option<UnassignedNodesConfigRecord> {
+        let registry_version = self.registry_version;
+
+        self.local_registry
+            .get_unassigned_nodes_config(registry_version)
+            .expect("Could not deserialize unassigned nodes config from local registry.")
     }
 
     /// This method blocks and repeatedly fetches updates from the registry
