@@ -107,13 +107,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(strum_macros::EnumIter)]",
     );
 
-    // Eq
-    // --
-
-    config.type_attribute("ic_nns_governance.pb.v1.BallotInfo", "#[derive(Eq)]");
-    config.type_attribute("ic_nns_governance.pb.v1.NeuronInfo", "#[derive(Eq)]");
-    config.type_attribute("ic_nns_governance.pb.v1.KnownNeuronData", "#[derive(Eq)]");
-
     // self_describing
     // ---------------
 
