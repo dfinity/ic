@@ -230,10 +230,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
 
-    for type_name in [
-        "GuestLaunchMeasurement",
-        "GuestLaunchMeasurementMetadata",
-    ] {
+    for type_name in ["GuestLaunchMeasurement", "GuestLaunchMeasurementMetadata"] {
         config.type_attribute(
             format!(".registry.replica_version.v1.{type_name}"),
             "#[derive(candid::CandidType, comparable::Comparable)]",
