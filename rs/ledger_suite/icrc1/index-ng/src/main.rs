@@ -1249,7 +1249,7 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         (start..limit)
-            .map(|i| decoder(start + i, blocks.get(i).unwrap()))
+            .map(|i| decoder(i, blocks.get(i).unwrap()))
             .collect()
     })
 }

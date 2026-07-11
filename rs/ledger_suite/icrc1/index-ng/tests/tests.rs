@@ -2032,3 +2032,41 @@ mod fees_in_burn_and_mint_blocks {
         );
     }
 }
+
+#[test]
+fn test_get_blocks_returns_correct_block_ids_for_non_zero_start() {
+    // Test that get_blocks returns blocks with correct IDs when start > 0.
+    // Before the fix, decoder(start + i, ...) was used instead of decoder(i, ...),
+    // causing block IDs to be doubled (e.g. start=5 would return IDs 10,11,12 instead of 5,6,7).
+    let initial_balances = vec![(account(1, 0), 1_000_000_000_000_u64)];
+    let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    // Create 10 blocks (1 mint + 9 transfers = 10 total)
+    for i in 0..9_u64 {
+        transfer(env, ledger_id, account(1, 0), account(2, 0), 1_000 + i);
+    }
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Request blocks starting from block 5
+    let res = index_get_blocks(env, index_id, 5, 3);
+    assert_eq!(res.blocks.len(), 3, "Expected 3 blocks");
+
+    // Each returned block's id must match its position: 5, 6, 7
+    for (offset, block) in res.blocks.iter().enumerate() {
+        let expected_id = 5 + offset as u64;
+        assert_eq!(
+            block.id, expected_id,
+            "Block at offset {} has wrong id: got {}, expected {}",
+            offset, block.id, expected_id
+        );
+    }
+}
