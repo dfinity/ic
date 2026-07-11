@@ -361,6 +361,7 @@ impl<'a> PayloadAssembler<'a> {
                     metadata,
                     signatures,
                 },
+                initial_refund: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -384,6 +385,7 @@ impl<'a> PayloadAssembler<'a> {
                     metadata,
                     signatures,
                 },
+                initial_refund: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),
@@ -430,6 +432,7 @@ impl<'a> PayloadAssembler<'a> {
             flexible_responses.push(FlexibleCanisterHttpResponses {
                 callback_id: CallbackId::new(callback_id),
                 responses: entries,
+                initial_refund: ic_types_cycles::Cycles::zero(),
             });
             self.contexts.push((
                 CallbackId::new(callback_id),

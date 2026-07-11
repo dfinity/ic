@@ -19,6 +19,7 @@ use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
+use ic_types_cycles::Cycles;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
@@ -54,6 +55,9 @@ pub enum FlexibleCanisterHttpError {
     TooManyRejects {
         callback_id: CallbackId,
         reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+        /// Collective initial refund, computed during payload building from the
+        /// subnet size in the request context and validated during validation.
+        initial_refund: Cycles,
     },
 }
 
@@ -77,6 +81,9 @@ impl FlexibleCanisterHttpError {
 pub struct FlexibleCanisterHttpResponses {
     pub callback_id: CallbackId,
     pub responses: Vec<FlexibleCanisterHttpResponseWithProof>,
+    /// Collective initial refund, computed during payload building from the
+    /// subnet size in the request context and validated during validation.
+    pub initial_refund: Cycles,
 }
 
 /// A single flexible HTTP outcall response paired with its single-signer proof.
@@ -134,12 +141,14 @@ impl CountBytes for FlexibleCanisterHttpError {
             Self::TooManyRejects {
                 callback_id,
                 reject_responses,
+                initial_refund,
             } => {
                 callback_id.count_bytes()
                     + reject_responses
                         .iter()
                         .map(|r| r.count_bytes())
                         .sum::<usize>()
+                    + std::mem::size_of_val(initial_refund)
             }
         }
     }
@@ -229,6 +238,7 @@ impl From<CanisterHttpResponseWithConsensus> for pb::CanisterHttpResponseWithCon
                 .collect(),
             content_size: metadata.content_size,
             is_reject: metadata.is_reject,
+            initial_refund: Some(payload.initial_refund.into()),
         }
     }
 }
@@ -292,6 +302,10 @@ impl TryFrom<pb::CanisterHttpResponseWithConsensus> for CanisterHttpResponseWith
                 },
                 signatures,
             },
+            initial_refund: try_from_option_field(
+                payload.initial_refund,
+                "CanisterHttpResponseWithConsensus::initial_refund",
+            )?,
         })
     }
 }
@@ -451,6 +465,7 @@ impl From<FlexibleCanisterHttpResponses> for pb::FlexibleCanisterHttpResponses {
         pb::FlexibleCanisterHttpResponses {
             callback_id: responses.callback_id.get(),
             responses: responses.responses.into_iter().map(Into::into).collect(),
+            initial_refund: Some(responses.initial_refund.into()),
         }
     }
 }
@@ -466,6 +481,10 @@ impl TryFrom<pb::FlexibleCanisterHttpResponses> for FlexibleCanisterHttpResponse
                 .into_iter()
                 .map(TryFrom::try_from)
                 .collect::<Result<Vec<_>, _>>()?,
+            initial_refund: try_from_option_field(
+                responses.initial_refund,
+                "FlexibleCanisterHttpResponses::initial_refund",
+            )?,
         })
     }
 }
@@ -492,12 +511,15 @@ impl From<FlexibleCanisterHttpError> for pb::FlexibleCanisterHttpError {
                 min_responses,
             }),
             FlexibleCanisterHttpError::TooManyRejects {
-                reject_responses, ..
+                reject_responses,
+                initial_refund,
+                ..
             } => ErrorDetails::TooManyRejects(pb::FlexibleCanisterHttpTooManyRejects {
                 reject_responses: reject_responses
                     .into_iter()
                     .map(pb::FlexibleCanisterHttpResponseWithProof::from)
                     .collect(),
+                initial_refund: Some(initial_refund.into()),
             }),
         };
         pb::FlexibleCanisterHttpError {
@@ -539,6 +561,10 @@ impl TryFrom<pb::FlexibleCanisterHttpError> for FlexibleCanisterHttpError {
                 Ok(FlexibleCanisterHttpError::TooManyRejects {
                     callback_id,
                     reject_responses,
+                    initial_refund: try_from_option_field(
+                        details.initial_refund,
+                        "FlexibleCanisterHttpTooManyRejects::initial_refund",
+                    )?,
                 })
             }
             None => Err(ProxyDecodeError::MissingField(

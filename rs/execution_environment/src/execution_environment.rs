@@ -768,12 +768,26 @@ impl ExecutionEnvironment {
                                 .or_default() += 1;
                         }
 
+                        // Refund the cycles left unspent upfront (`request.payment`).
+                        // For HTTP outcalls, additionally refund the per-replica
+                        // shares that the messaging layer accumulated into the
+                        // request context's `refund_status` before execution. For
+                        // non-HTTP responses there is no such accumulation, so this
+                        // preserves the previous behavior.
+                        let http_refund = match &context {
+                            SubnetCallContext::CanisterHttpRequest(context) => {
+                                context.refund_status.refunded_cycles
+                            }
+                            _ => Cycles::new(0),
+                        };
+                        let refund = request.payment + http_refund;
+
                         state.push_subnet_output_response(
                             Response {
                                 originator: request.sender,
                                 respondent: CanisterId::from(self.own_subnet_id),
                                 originator_reply_callback: request.sender_reply_callback,
-                                refund: request.payment,
+                                refund,
                                 response_payload: response.response_payload.clone(),
                                 deadline: request.deadline,
                             }

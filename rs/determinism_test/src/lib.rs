@@ -14,7 +14,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::{
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
-    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics, CanisterHttpRefunds},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
@@ -33,6 +33,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             },
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            refunds: CanisterHttpRefunds::default(),
             requires_full_state_hash: false,
         },
         randomness: Randomness::from([0; 32]),
@@ -51,6 +52,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
             batch_messages: BatchMessages::default(),
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            refunds: CanisterHttpRefunds::default(),
             requires_full_state_hash: true,
         },
         randomness: Randomness::from([0; 32]),

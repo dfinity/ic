@@ -1,6 +1,6 @@
 use ic_types::{
     Height, Randomness, RegistryVersion, ReplicaVersion, Time,
-    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics, CanisterHttpRefunds},
     time::UNIX_EPOCH,
 };
 
@@ -19,6 +19,7 @@ impl Default for BatchBuilder {
                     batch_messages: BatchMessages::default(),
                     chain_key_data: Default::default(),
                     consensus_responses: vec![],
+                    refunds: CanisterHttpRefunds::default(),
                     requires_full_state_hash: false,
                 },
                 randomness: Randomness::from([0; 32]),
@@ -49,6 +50,7 @@ impl BatchBuilder {
             batch_messages: messages,
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            refunds: CanisterHttpRefunds::default(),
             requires_full_state_hash: false,
         };
         self

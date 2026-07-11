@@ -163,10 +163,18 @@ impl CanisterHttpPoolManagerImpl {
             self.requested_id_cache.borrow_mut().remove(callback_id);
         }
 
+        // Shares whose context's response was already delivered to execution
+        // must not be purged: such contexts are retained (until they time out)
+        // so that replicas responding late can still be refunded, which
+        // requires keeping their shares around. We therefore retain shares for
+        // both active and delivered contexts.
+        let mut retained_callback_ids = active_callback_ids;
+        retained_callback_ids.extend(self.delivered_callback_ids());
+
         canister_http_pool
             .get_validated_shares()
             .filter_map(|share| {
-                if active_callback_ids.contains(&share.content.id()) {
+                if retained_callback_ids.contains(&share.content.id()) {
                     None
                 } else {
                     Some(CanisterHttpChangeAction::RemoveValidated(share.clone()))
@@ -179,7 +187,7 @@ impl CanisterHttpPoolManagerImpl {
                     .filter(|artifact| artifact.share.content.id() < next_callback_id)
                     .filter_map(|artifact| {
                         let share = &artifact.share;
-                        if active_callback_ids.contains(&share.content.id()) {
+                        if retained_callback_ids.contains(&share.content.id()) {
                             None
                         } else {
                             Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()))
@@ -190,7 +198,7 @@ impl CanisterHttpPoolManagerImpl {
                 canister_http_pool
                     .get_response_content_items()
                     .filter_map(|content| {
-                        if active_callback_ids.contains(&content.1.id) {
+                        if retained_callback_ids.contains(&content.1.id) {
                             None
                         } else {
                             Some(CanisterHttpChangeAction::RemoveContent(content.0.clone()))
@@ -483,11 +491,15 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["validate_shares"])
             .start_timer();
 
-        let active_contexts = &self
-            .latest_state()
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts;
+        // Validate shares for both active request contexts and contexts whose
+        // responses have already been delivered to execution. The latter are
+        // retained (until they time out) so that replicas responding late can
+        // still be refunded, which requires validating their late shares.
+        let latest_state = self.latest_state();
+        let subnet_call_context_manager = &latest_state.metadata.subnet_call_context_manager;
+        let active_contexts = &subnet_call_context_manager.canister_http_request_contexts;
+        let delivered_contexts =
+            &subnet_call_context_manager.delivered_canister_http_request_contexts;
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -514,7 +526,10 @@ impl CanisterHttpPoolManagerImpl {
                     };
                 }
 
-                let Some(context) = active_contexts.get(&share.content.id()) else {
+                let Some(context) = active_contexts
+                    .get(&share.content.id())
+                    .or_else(|| delivered_contexts.get(&share.content.id()))
+                else {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
@@ -651,6 +666,22 @@ impl CanisterHttpPoolManagerImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts
+            .keys()
+            .copied()
+            .collect()
+    }
+
+    /// Callback ids of contexts whose responses have already been delivered to
+    /// execution. These contexts are retained (until they time out) so that
+    /// replicas responding late can still be refunded; their shares must
+    /// therefore be kept around and validated as well.
+    fn delivered_callback_ids(&self) -> BTreeSet<CallbackId> {
+        self.state_reader
+            .get_latest_state()
+            .get_ref()
+            .metadata
+            .subnet_call_context_manager
+            .delivered_canister_http_request_contexts
             .keys()
             .copied()
             .collect()

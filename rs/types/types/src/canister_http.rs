@@ -1016,12 +1016,20 @@ impl From<HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
+    /// The collective initial refund to credit to the calling canister,
+    /// computed during payload building from the subnet size in the request
+    /// context and validated during payload validation.
+    pub initial_refund: Cycles,
 }
 
 impl CountBytes for CanisterHttpResponseWithConsensus {
     fn count_bytes(&self) -> usize {
-        let CanisterHttpResponseWithConsensus { content, proof } = &self;
-        proof.count_bytes() + content.count_bytes()
+        let CanisterHttpResponseWithConsensus {
+            content,
+            proof,
+            initial_refund,
+        } = &self;
+        proof.count_bytes() + content.count_bytes() + size_of_val(initial_refund)
     }
 }
 

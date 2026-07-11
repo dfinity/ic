@@ -32,7 +32,7 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::batch::BatchBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics};
+use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics, CanisterHttpRefunds};
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::time::Time;
@@ -1033,6 +1033,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
+                refunds: CanisterHttpRefunds::default(),
                 chain_key_data: Default::default(),
                 requires_full_state_hash: false,
             },
@@ -2399,6 +2400,7 @@ fn process_batch_updates_subnet_metrics() {
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
+                refunds: CanisterHttpRefunds::default(),
                 chain_key_data: Default::default(),
                 requires_full_state_hash: false,
             },
@@ -2469,6 +2471,7 @@ fn process_batch_resets_split_marker() {
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
                 consensus_responses: Vec::new(),
+                refunds: CanisterHttpRefunds::default(),
                 chain_key_data: Default::default(),
                 requires_full_state_hash: false,
             },
