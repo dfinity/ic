@@ -906,7 +906,7 @@ fn test_get_account_transactions_start_length() {
 
 #[test]
 fn test_get_account_transactions_without_start_matches_unbounded_start() {
-    let initial_balances = vec![(account(1, 0), 1_000_000_000_000u64)];
+    let initial_balances = vec![(account(1, 0), 1_000_000_000_000_u64)];
     let env = &StateMachine::new();
     let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(
