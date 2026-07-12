@@ -154,7 +154,7 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                         artifact,
                         is_latency_sensitive: true,
                     }));
-                    // Response should be gossiped
+                    // Response content should be gossiped
                     self.validated.insert(share, ResponseGossip::Include);
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
@@ -168,24 +168,23 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
                         artifact,
                         is_latency_sensitive: true,
                     }));
-                    // Response should not be gossiped
+                    // Response content should not be gossiped
                     self.validated.insert(share, ResponseGossip::Exclude);
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
                 }
                 CanisterHttpChangeAction::MoveToValidated(share) => {
                     if let Some(artifact) = self.unvalidated.remove(&share) {
-                        // A validated share carries a response exactly for
-                        // responses that should be gossiped.
-                        let response_gossip = if artifact.response.is_some() {
+                        // If there is a response associated with this share, we want to move it to the `content`
+                        // section of the pool, corresponding to valid responses. A validated share carries a
+                        // response exactly for responses that should be gossiped.
+                        let response_gossip = if let Some(content) = artifact.response {
+                            self.content
+                                .insert(ic_types::crypto::crypto_hash(&content), content);
                             ResponseGossip::Include
                         } else {
                             ResponseGossip::Exclude
                         };
-                        if let Some(content) = artifact.response {
-                            self.content
-                                .insert(ic_types::crypto::crypto_hash(&content), content);
-                        }
                         self.validated.insert(share, response_gossip);
                     }
                 }
@@ -219,13 +218,15 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
 
 impl ValidatedPoolReader<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
     fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseArtifact> {
+        // Important: this may be called by a peer that *pulls* a validated artifact,
+        // if the corresponding advert was stashed by the peer's bouncer.
         let response = match self.validated.get(id)? {
             ResponseGossip::Include => {
                 let Some(content) = self.content.get(id.content.content_hash()).cloned() else {
                     warn!(
                         every_n_seconds => 30,
                         self.log,
-                        "Validated non-fully-replicated share {:?} is missing its response \
+                        "Validated share {:?} is missing its expected response \
                          content in the pool; not serving the artifact.",
                         id.content.id()
                     );
