@@ -220,7 +220,7 @@ impl MutablePool<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
 impl ValidatedPoolReader<CanisterHttpResponseArtifact> for CanisterHttpPoolImpl {
     fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseArtifact> {
         // Important: this may be called by a peer that *pulls* a validated artifact,
-        // if the corresponding advert was stashed by the peer's bouncer.
+        // if the corresponding advert was previously stashed by the peer's bouncer.
         let response = match self.validated.get(id)? {
             ServedResponse::Include => {
                 let Some(content) = self.content.get(id.content.content_hash()).cloned() else {
