@@ -71,7 +71,7 @@ fn test_canister_wasm() -> Vec<u8> {
 async fn resume_killed_instance_impl(
     incomplete_state: Option<IncompleteStateFlag>,
 ) -> Result<(), String> {
-    let (mut server, server_url) = start_server(StartServerParams::default()).await;
+    let (server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
 
     let state = PocketIcState::new_from_path(temp_dir.path().to_path_buf());
@@ -125,7 +125,7 @@ async fn resume_killed_instance_impl(
     let time = pic.get_time().await;
     assert!(time >= now.into());
 
-    server.kill().unwrap();
+    server.kill_and_wait();
 
     let (_, server_url) = start_server(StartServerParams::default()).await;
     let client = reqwest::Client::new();

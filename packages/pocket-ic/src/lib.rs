@@ -85,7 +85,7 @@ use std::{
     fs::OpenOptions,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    process::{Child, Command},
+    process::Command,
     sync::{Arc, mpsc::channel},
     thread,
     thread::JoinHandle,
@@ -101,6 +101,9 @@ use wslpath::windows_to_wsl;
 
 pub mod common;
 pub mod nonblocking;
+mod server_process;
+
+pub use server_process::ServerHandle;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
@@ -2280,7 +2283,12 @@ pub struct StartServerParams {
 }
 
 /// Attempt to start a new PocketIC server.
-pub async fn start_server(params: StartServerParams) -> (Child, Url) {
+///
+/// The returned [`ServerHandle`] owns the spawned server process, which is registered in
+/// a process-global registry and automatically killed and reaped (together with its
+/// canister-sandbox children, on unix) once the test process exits. Callers that want to
+/// terminate the server earlier can call [`ServerHandle::kill_and_wait`].
+pub async fn start_server(params: StartServerParams) -> (ServerHandle, Url) {
     let default_bin_dir =
         std::env::temp_dir().join(format!("{POCKET_IC_SERVER_NAME}-{LATEST_SERVER_VERSION}"));
     let default_bin_path = default_bin_dir.join("pocket-ic");
@@ -2389,11 +2397,13 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         cmd.process_group(0);
     }
 
-    // TODO: SDK-1936
-    #[allow(clippy::zombie_processes)]
     let child = cmd
         .spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
+    // Transfer ownership of the server process to the process-global registry, which
+    // kills and reaps it (and its sandbox children) once all subtests have finished.
+    // See `server_process`.
+    let server_handle = server_process::register(child);
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
@@ -2404,7 +2414,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 .parse()
                 .expect("Failed to parse port to number");
             break (
-                child,
+                server_handle,
                 Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap(),
             );
         }

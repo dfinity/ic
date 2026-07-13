@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- `start_server` now returns a `ServerHandle` (instead of a `std::process::Child`). The
+  spawned PocketIC server is registered in a process-global registry and, on unix, is
+  automatically killed (its whole process group, so canister-sandbox children are
+  terminated too) and reaped when the test process exits — instead of being detached and
+  left to shut down on its TTL. This ensures the server no longer keeps the test action's
+  inherited stdout/stderr pipes open past process exit, which caused issues on some CI
+  runners. Callers that previously kept the `Child` to terminate the server themselves
+  should call `ServerHandle::kill_and_wait` instead.
+
 
 
 ## 15.0.0 - 2026-06-26
