@@ -177,18 +177,6 @@ pub struct SystemMetadata {
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 
-    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
-    /// or from `LogMemoryStore` to `CanisterLog`, as per the
-    /// `log_memory_store_feature` flag.
-    ///
-    /// This is a (temporary) transient field tracking whether all canisters are
-    /// definitely using the log store required by the `log_memory_store_feature`
-    /// flag. It is intended to be used as a one-time trigger (when `false`) to
-    /// launch the (idempotent, if already performed) logs migration exactly once
-    /// per replica process (since the flag is hardcoded into the binary).
-    #[validate_eq(Ignore)]
-    pub logs_migrated: bool,
-
     /// The subnet list from network topology that was last used by
     /// `generate_reject_responses_for_deleted_subnets()`. The function
     /// exits early if the subnet list has not changed since the last call.
@@ -581,7 +569,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
             subnet_ids_at_last_reject_generation: None,
         }
     }
@@ -887,7 +874,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            logs_migrated: _,
             subnet_ids_at_last_reject_generation: _,
         } = self;
 
@@ -990,7 +976,6 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            logs_migrated,
             subnet_ids_at_last_reject_generation: _,
         } = self;
 
@@ -1098,7 +1083,6 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
-            logs_migrated,
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
             subnet_ids_at_last_reject_generation: None,
@@ -2217,7 +2201,6 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
             subnet_ids_at_last_reject_generation: None,
         };
     }

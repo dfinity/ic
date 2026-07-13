@@ -432,7 +432,12 @@ message TaskQueue {
 
 // Next ID: 69
 message CanisterStateBits {
-  reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
+  reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 43, 44, 47, 48, 49, 52, 53, 66;
+  // Removed: canister logs are now stored exclusively in the LogMemoryStore.
+  // Previously: `canister_log_records`, `next_canister_log_record_idx` and
+  // `log_memory_store_migrated`, used by the legacy `CanisterLog` store and the
+  // one-time migration to the LogMemoryStore.
+  reserved "canister_log_records", "next_canister_log_record_idx", "log_memory_store_migrated";
 
   uint64 compute_allocation = 4;
   ExecutionStateBits execution_state_bits = 7;
@@ -498,13 +503,6 @@ message CanisterStateBits {
   LogVisibilityV2 log_visibility_v2 = 51;
   // The capacity of the canister log in bytes.
   uint64 log_memory_limit = 56;
-  // Log records of the canister.
-  repeated CanisterLogRecord canister_log_records = 43;
-  // The index of the next log record to be created.
-  uint64 next_canister_log_record_idx = 44;
-  // Whether the one-time migration from CanisterLog to LogMemoryStore has
-  // already been performed for this canister.
-  bool log_memory_store_migrated = 66;
   // The persistent high-water mark for log record indexing in LogMemoryStore.
   uint64 log_memory_store_persistent_next_idx = 67;
   // The Wasm memory limit. This is a field in developer-visible canister
