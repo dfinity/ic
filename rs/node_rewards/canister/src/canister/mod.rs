@@ -235,7 +235,7 @@ impl NodeRewardsCanister {
 /// First day (inclusive, UTC) on which the reduction applies.
 const REWARD_REDUCTION_START: (i32, u32, u32) = (2026, 7, 15);
 /// First day (exclusive, UTC) on which the reduction no longer applies.
-const REWARD_REDUCTION_END: (i32, u32, u32) = (2026, 10, 14);
+const REWARD_REDUCTION_END: (i32, u32, u32) = (2026, 10, 15);
 
 // Node providers subject to the reduction: those that failed to respond within the 24h window in
 // BOTH incident-response smoke tests (May 20 and June 13, 2026), per NNS motion proposal 142724.
@@ -578,7 +578,7 @@ mod reward_reduction_tests {
             results,
             &on,
             d(2026, 7, 15),
-            d(2026, 10, 14),
+            d(2026, 10, 15),
             &reduced.iter().cloned().collect(),
             Decimal::new(5, 1), // 0.5
         );
@@ -635,7 +635,7 @@ mod reward_reduction_tests {
 
         // End date is exclusive.
         let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
-        reduce(&mut results, d(2026, 10, 14), &[affected]);
+        reduce(&mut results, d(2026, 10, 15), &[affected]);
         assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
 
         // A day well after the window (reproducibility: a later query still yields full rewards
@@ -649,7 +649,7 @@ mod reward_reduction_tests {
     fn reduction_applies_on_start_and_last_in_window_day() {
         let affected = PrincipalId::new_node_test_id(1);
 
-        for day in [d(2026, 7, 15), d(2026, 10, 13)] {
+        for day in [d(2026, 7, 15), d(2026, 10, 14)] {
             let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
             reduce(&mut results, day, &[affected]);
             assert_eq!(
