@@ -1310,15 +1310,13 @@ fn inject_metering(
     injected_functions: &InjectedFunctions,
     metering_type: MeteringType,
     mem_type: WasmMemoryType,
-) { 
+) {
     // Calculate instructions for allocating Wasm locals when creating call frame.
     let arguments_cost: u64 = match func_signature {
         None => 0,
         Some(typ) => match typ {
-            Types::FuncType { params, .. } => {
-                params.iter().map(|t| local_cost(t, mem_type)).sum() 
-            },
-            _ => 0
+            Types::FuncType { params, .. } => params.iter().map(|t| local_cost(t, mem_type)).sum(),
+            _ => 0,
         },
     };
     let locals_cost: u64 = body
@@ -1328,7 +1326,11 @@ fn inject_metering(
         .sum();
     let points = match metering_type {
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections(body.instructions.get_ops(), mem_type, locals_cost + arguments_cost),
+        MeteringType::New => injections(
+            body.instructions.get_ops(),
+            mem_type,
+            locals_cost + arguments_cost,
+        ),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1629,7 +1631,7 @@ pub(super) fn instrument(
             *f.func_id != injected_counters.decr_instruction_counter_fn
                 && *f.func_id != injected_counters.count_clean_pages_fn
         })
-    {   
+    {
         let type_id = func_body.ty_id;
         let func_signature = module.types.get(type_id);
         inject_metering(
