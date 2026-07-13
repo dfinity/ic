@@ -20,6 +20,7 @@ rust_library(
         "@crate_index//:ic-certification",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-transport-types",
+        "@crate_index//:libc",
         "@crate_index//:reqwest",
         "@crate_index//:schemars",
         "@crate_index//:semver",
