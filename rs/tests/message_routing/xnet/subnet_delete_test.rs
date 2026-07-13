@@ -74,10 +74,12 @@ const NUM_NODES: usize = 4;
 const DKG_INTERVAL_LENGTH: u64 = 29;
 const CALL_TIMEOUT_SECS: u32 = 300;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
-// The test runs the scenario twice (once per deleted-subnet type), so the
-// timeouts are roughly doubled compared to a single run.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(2400);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(2400);
+// The test runs the scenario twice (once per deleted-subnet type). A full run
+// takes ~230s in practice; these safety timeouts leave ample headroom while
+// staying below the bazel default `test_timeout` ("long" = 900s), so an
+// in-test timeout fires with a clean error before bazel hard-kills the target.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(600);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(600);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
