@@ -2284,10 +2284,12 @@ pub struct StartServerParams {
 
 /// Attempt to start a new PocketIC server.
 ///
-/// The returned [`ServerHandle`] owns the spawned server process, which is registered in
-/// a process-global registry and automatically killed and reaped (together with its
-/// canister-sandbox children, on unix) once the test process exits. Callers that want to
-/// terminate the server earlier can call [`ServerHandle::kill_and_wait`].
+/// The returned [`ServerHandle`] owns the spawned server process. On unix it is
+/// registered in a process-global registry and, once the test process exits,
+/// automatically killed (its whole process group, so the canister-sandbox children are
+/// terminated too) and reaped; on other platforms the server is not killed automatically
+/// and shuts down on its TTL. Callers that want to terminate the server earlier can call
+/// [`ServerHandle::kill_and_wait`].
 pub async fn start_server(params: StartServerParams) -> (ServerHandle, Url) {
     let default_bin_dir =
         std::env::temp_dir().join(format!("{POCKET_IC_SERVER_NAME}-{LATEST_SERVER_VERSION}"));

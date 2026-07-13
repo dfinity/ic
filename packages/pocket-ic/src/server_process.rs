@@ -164,18 +164,49 @@ fn reap_one(proc: &mut ServerProc, signal: Signal) {
         let mut status: libc::c_int = 0;
         // SAFETY: reaping our own direct child by pid.
         match unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } {
-            // Reaped (`r == pid`), or already gone / not our child (`-1` => `ECHILD`).
-            r if r == pid || r == -1 => return,
-            // Still running (`0`, or an unexpected value): wait, then escalate.
+            // Reaped.
+            r if r == pid => return,
+            -1 => {
+                // `EINTR` (interrupted by a signal): retry — returning early here could
+                // let the server outlive process exit still holding the pipes, the exact
+                // failure this reaper prevents. Any other error is terminal; the expected
+                // one is `ECHILD` (the child was already reaped / is not ours).
+                if last_errno() == libc::EINTR {
+                    continue;
+                }
+                return;
+            }
+            // Still running (`0`): wait, escalating to `SIGKILL` at the deadline.
             _ => {
                 if Instant::now() >= deadline {
                     unsafe { libc::kill(-pgid, libc::SIGKILL) };
                     // Final blocking wait so the zombie is reaped before we return.
-                    let _ = unsafe { libc::waitpid(pid, &mut status, 0) };
+                    blocking_reap(pid);
                     return;
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
+    }
+}
+
+/// The calling thread's `errno`. Only meaningful immediately after a failed libc call.
+#[cfg(unix)]
+fn last_errno() -> libc::c_int {
+    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
+}
+
+/// Blocking `waitpid` on a direct child, retrying on `EINTR` so a signal cannot leave the
+/// child unreaped.
+#[cfg(unix)]
+fn blocking_reap(pid: libc::pid_t) {
+    let mut status: libc::c_int = 0;
+    loop {
+        // SAFETY: reaping our own direct child by pid.
+        let r = unsafe { libc::waitpid(pid, &mut status, 0) };
+        if r == -1 && last_errno() == libc::EINTR {
+            continue;
+        }
+        return;
     }
 }
