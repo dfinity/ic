@@ -7,7 +7,7 @@ import "types/v1/errors.proto";
 import "types/v1/types.proto";
 
 message CanisterHttpPaymentReceipt {
-  state.queues.v1.Cycles refund = 1;
+  state.queues.v1.Cycles spent = 1;
 }
 
 message HttpHeader {
