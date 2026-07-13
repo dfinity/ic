@@ -247,7 +247,7 @@ fn filtering_by_idx_and_timestamp() {
 }
 
 #[test]
-fn filter_range_below_live_records_returns_empty() {
+fn filter_range_outside_live_records_returns_empty() {
     // A valid filter whose range lies entirely below the live records must return
     // nothing. Its `start` is below every stored key, so the index seek lands at the
     // head and the first scanned record is already past the range's end; `records()`
