@@ -384,6 +384,7 @@ impl CanisterHttpPayloadBuilderImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
+        // TODO: Use cost schedule from the context instead, once it exists.
         let cost_schedule = state.get_ref().get_own_cost_schedule();
 
         // Validate the timed out calls
