@@ -2035,9 +2035,10 @@ mod fees_in_burn_and_mint_blocks {
 
 #[test]
 fn test_get_blocks_returns_correct_block_ids_for_non_zero_start() {
-    // Test that get_blocks returns blocks with correct IDs when start > 0.
+    // Test that get_blocks(start=5, length=3) returns exactly the same blocks
+    // as get_blocks(start=0, length=10)[5..8].
     // Before the fix, decoder(start + i, ...) was used instead of decoder(i, ...),
-    // causing block IDs to be doubled (e.g. start=5 would return IDs 10,11,12 instead of 5,6,7).
+    // causing the wrong blocks to be returned for non-zero start.
     let initial_balances = vec![(account(1, 0), 1_000_000_000_000_u64)];
     let env = &StateMachine::new();
     let minter = minter_identity().sender().unwrap();
@@ -2056,17 +2057,15 @@ fn test_get_blocks_returns_correct_block_ids_for_non_zero_start() {
     }
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // Request blocks starting from block 5
-    let res = index_get_blocks(env, index_id, 5, 3);
-    assert_eq!(res.blocks.len(), 3, "Expected 3 blocks");
+    // Fetch all 10 blocks as the ground truth
+    let all_blocks = index_get_blocks(env, index_id, 0, 10).blocks;
+    assert_eq!(all_blocks.len(), 10, "Expected 10 blocks total");
 
-    // Each returned block's id must match its position: 5, 6, 7
-    for (offset, block) in res.blocks.iter().enumerate() {
-        let expected_id = 5 + offset as u64;
-        assert_eq!(
-            block.id, expected_id,
-            "Block at offset {} has wrong id: got {}, expected {}",
-            offset, block.id, expected_id
-        );
-    }
+    // Request blocks 5, 6, 7 — must match the same slice from the full range
+    let subrange = index_get_blocks(env, index_id, 5, 3).blocks;
+    assert_eq!(
+        subrange,
+        all_blocks[5..8].to_vec(),
+        "get_blocks(start=5, length=3) returned wrong blocks"
+    );
 }
