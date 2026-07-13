@@ -81,7 +81,7 @@ pub(crate) fn check_response_consistency(
 ///
 /// On charging subnets this is the `per_replica_allowance`. Free subnets charge
 /// nothing, so their spend (used only for cost accounting) may exceed the (zero)
-/// allowance, but never [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+/// allowance, but may never exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
 pub(crate) fn check_spent_within_limit(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
