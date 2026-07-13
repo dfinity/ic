@@ -383,6 +383,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "alternative_guestos"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-certificate-verification",
+ "ic-certification 3.1.0",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "serde_cbor",
+]
+
+[[package]]
+name = "alternative_guestos_tool"
+version = "0.0.0"
+dependencies = [
+ "alternative_guestos",
+ "anyhow",
+ "candid",
+ "clap 4.6.0",
+ "ic-agent",
+ "ic-certification 3.1.0",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-governance-conversions",
+ "ic-protobuf",
+ "serde_cbor",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19140,6 +19172,7 @@ dependencies = [
 name = "open_rootfs"
 version = "0.0.0"
 dependencies = [
+ "alternative_guestos",
  "anyhow",
  "attestation",
  "candid",
