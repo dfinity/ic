@@ -59,7 +59,7 @@ use ic_state_machine_tests::{
     update_global_registry_records,
 };
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
-use ic_types::messages::MessageId;
+use ic_types::messages::{MessageId, StreamMessage};
 use ic_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
@@ -246,6 +246,35 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     }
     assert!(completed, "UC fire-and-forget ingress did not complete");
 
+    // The UC -> UT request must be sitting in the C -> T stream (T is halted, so
+    // it is never pulled), which is the state under test after C is deleted.
+    let c_state = c.get_latest_state();
+    let stream = c_state
+        .get_stream(&t_id)
+        .expect("expected a C -> T stream holding the UC -> UT request");
+    let stream_messages: Vec<&StreamMessage> = stream.messages().iter().map(|(_, m)| m).collect();
+    assert_eq!(
+        stream_messages.len(),
+        1,
+        "expected exactly the UC -> UT request in the C -> T stream, got {} messages",
+        stream_messages.len()
+    );
+    match stream_messages[0] {
+        StreamMessage::Request(req) => {
+            assert_eq!(req.sender, uc, "unexpected sender of the C -> T request");
+            assert_eq!(
+                req.receiver, ut,
+                "unexpected receiver of the C -> T request"
+            );
+            assert_eq!(
+                req.method_name, "update",
+                "unexpected method of the C -> T request"
+            );
+        }
+        other => panic!("expected a Request in the C -> T stream, got {other:?}"),
+    }
+    drop(c_state);
+
     // Step 4: Halt subnet C by not executing any more rounds on it.
 
     // Step 5: Submit 10 bounded-wait calls from US to UC, each producing a 2 MB
@@ -301,20 +330,38 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
         "US did not perform all calls before deleting C"
     );
 
-    // Assert that the S -> C stream is partially filled: some calls reached the
-    // stream and some are still in US's output queue.
+    // Assert that the S -> C stream is partially filled: some (but not all)
+    // US -> UC calls reached the stream and the rest are still in US's output
+    // queue. This partition is what yields both reject codes in step 7 (streamed
+    // calls -> CanisterReject, queued calls -> DestinationInvalid).
     let state = s.get_latest_state();
+    let stream = state
+        .get_stream(&c_id)
+        .expect("expected an S -> C stream partially filled with US -> UC requests");
+    let stream_request_count = stream
+        .messages()
+        .iter()
+        .filter(|(_, m)| {
+            matches!(
+                m,
+                StreamMessage::Request(req)
+                    if req.sender == us && req.receiver == uc && req.method_name == "update"
+            )
+        })
+        .count();
+    assert_eq!(
+        stream_request_count,
+        stream.messages().len(),
+        "expected only US -> UC requests in the S -> C stream"
+    );
     assert!(
-        state
-            .get_stream(&c_id)
-            .map(|stream| stream.messages().len())
-            .unwrap_or(0)
-            > 0,
-        "expected some messages in the S -> C stream before deleting C"
+        (1..NUM_CALLS).contains(&stream_request_count),
+        "expected some but not all US -> UC calls in the S -> C stream, \
+         got {stream_request_count} of {NUM_CALLS}"
     );
     assert!(
         state.canister_state(&us).unwrap().has_output(),
-        "expected some messages in US's output queue before deleting C"
+        "expected the remaining US -> UC calls in US's output queue before deleting C"
     );
     drop(state);
 
