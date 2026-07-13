@@ -48,45 +48,49 @@ pub(crate) fn fetch_canister_logs(
 /// `rs/execution_environment/benches/management_canister/canister_logging.rs`,
 /// which times `fetch_canister_logs_response` directly on a full log buffer — the
 /// exact read/encode work charged here, excluding the surrounding subnet-message
-/// machinery and per-iteration state setup), chosen so the deduction never falls
-/// below the measured cost of any case:
+/// machinery and per-iteration state setup), chosen so the deduction stays above
+/// the measured cost of every case with a modest (~1.3–1.5x) margin. The log buffer
+/// is capped at 2 MiB (`MAX_AGGREGATE_LOG_MEMORY_LIMIT`), so the benchmarked buffer
+/// sizes cover the whole configurable range:
 ///
 /// ```text
-/// time ≲ 2.5 ms + 0.45 µs × record_count + 2.5 ns × content_size
+/// time ≲ 75 µs + 0.45 µs × record_count + 0.5 ns × content_size
 /// ```
 ///
-/// The three terms are split so each is covered by a fee the caller already pays,
-/// which is why the call itself charges no cycles fee:
+/// Each term is calibrated to a measured worst case and stays below a fee the caller
+/// already pays, which is why the call itself charges no cycles fee:
 ///
-/// - The fixed 2.5 ms base (`5_000_000` instructions) is covered by the flat
-///   per-message execution fee (`update_message_execution_fee`, 5_000_000 cycles)
-///   the caller pays to run its response callback — hence the base is capped at
-///   that fee. It is far above the measured cost of a fetch that returns nothing
-///   (~15–30 µs even on a full 2 MiB buffer).
-/// - The per-record term (~0.45 µs/record, from the record-dominated worst case: a
+/// - The fixed 75 µs base (`150_000` instructions) covers the worst fixed/seek cost
+///   of a fetch that returns almost nothing: a single-record index lookup on a full
+///   2 MiB buffer measures ~48 µs (an empty or no-match fetch is cheaper, ~30 µs).
+///   It stays far below the flat per-message execution fee
+///   (`update_message_execution_fee`, 5_000_000 cycles) the caller pays to run its
+///   response callback.
+/// - The per-record term (~0.45 µs/record) bounds the record-dominated worst case: a
 ///   full 2 MiB buffer of 0-byte messages returns ~50_000 records in ~17 ms, i.e.
-///   ~0.34 µs/record measured) and the per-content-byte term (~2.5 ns/byte, well
-///   above the ~0.26 ns/byte measured for a full 2 MiB content payload) are
-///   dominated by the per-byte message transmission fee (1000 cycles/byte) the
-///   caller prepays on the response, since each record adds ~17 response bytes and
-///   each content byte adds one.
+///   ~0.35 µs/record measured. The per-content-byte term (~0.5 ns/byte) bounds the
+///   ~0.2 ns/byte measured for a full 2 MiB content payload. Both stay well below the
+///   per-byte message transmission fee (1000 cycles/byte) the caller prepays on the
+///   response, since each record adds ~17 response bytes and each content byte adds
+///   one.
 ///
 /// At 2 billion instructions per second (2_000_000 instructions per millisecond):
 ///
 /// ```text
-/// instructions ≈ 5_000_000 + 900 × record_count + 5 × content_size
+/// instructions ≈ 150_000 + 900 × record_count + 1 × content_size
 /// ```
 pub(crate) fn fetch_canister_logs_instructions(
     record_count: u64,
     content_size: NumBytes,
 ) -> NumInstructions {
-    // Fixed ~2.5 ms base, capped at the 5_000_000-cycle per-message execution fee
-    // the caller pays for its response callback (2_000_000 instructions/ms).
-    const BASE_INSTRUCTIONS: u64 = 5_000_000;
+    // Fixed ~75 µs base: the worst fixed/seek cost of a near-empty fetch (a
+    // single-record lookup on a full 2 MiB buffer, ~48 µs measured), well below the
+    // 5_000_000-cycle per-message execution fee (2_000_000 instructions/ms).
+    const BASE_INSTRUCTIONS: u64 = 150_000;
     // ~0.45 µs/record: the per-record decode/encode overhead.
     const INSTRUCTIONS_PER_RECORD: u64 = 900;
-    // ~2.5 ns/byte: the cost of copying and encoding the record content.
-    const INSTRUCTIONS_PER_CONTENT_BYTE: u64 = 5;
+    // ~0.5 ns/byte: the cost of copying and encoding the record content.
+    const INSTRUCTIONS_PER_CONTENT_BYTE: u64 = 1;
     NumInstructions::new(
         BASE_INSTRUCTIONS
             .saturating_add(INSTRUCTIONS_PER_RECORD.saturating_mul(record_count))
@@ -153,19 +157,19 @@ mod tests {
 
     #[test]
     fn fetch_canister_logs_instructions_matches_linear_approximation() {
-        // Empty response → only the ~2.5 ms fixed cost (5_000_000 instructions).
+        // Empty response → only the fixed ~75 µs base (150_000 instructions).
         assert_eq!(
             fetch_canister_logs_instructions(0, NumBytes::new(0)),
-            NumInstructions::new(5_000_000)
+            NumInstructions::new(150_000)
         );
-        // 5_000_000 + 900 × record_count + 5 × content_size instructions.
+        // 150_000 + 900 × record_count + 1 × content_size instructions.
         assert_eq!(
             fetch_canister_logs_instructions(50_000, NumBytes::new(0)),
-            NumInstructions::new(5_000_000 + 900 * 50_000)
+            NumInstructions::new(150_000 + 900 * 50_000)
         );
         assert_eq!(
             fetch_canister_logs_instructions(10, NumBytes::new(4_096)),
-            NumInstructions::new(5_000_000 + 900 * 10 + 5 * 4_096)
+            NumInstructions::new(150_000 + 900 * 10 + 4_096)
         );
         // Monotonically non-decreasing in both the record count and content size.
         assert!(
