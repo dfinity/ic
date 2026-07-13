@@ -964,15 +964,12 @@ fn compute_average_icp_xdr_rate_at_time(
     let size = filtered_rates.len() as u64;
     // If there are rates that meet the age requirement, compute the sum and compute
     // the average.
-    if size > 0 {
-        let sum: u64 = filtered_rates.into_iter().sum();
-        Some(IcpXdrConversionRate {
-            timestamp_seconds: day * 86_400,   // Start of the current day.
-            xdr_permyriad_per_icp: sum / size, // The average of the valid data points.
+    let sum: u64 = filtered_rates.into_iter().sum();
+    sum.checked_div(size)
+        .map(|xdr_permyriad_per_icp| IcpXdrConversionRate {
+            timestamp_seconds: day * 86_400, // Start of the current day.
+            xdr_permyriad_per_icp,           // The average of the valid data points.
         })
-    } else {
-        None
-    }
 }
 
 #[update(hidden = true)]

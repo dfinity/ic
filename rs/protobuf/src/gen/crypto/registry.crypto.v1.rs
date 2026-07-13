@@ -14,7 +14,7 @@ pub struct ChainKeyEnabledSubnetList {
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 /// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PublicKey {
     #[prost(uint32, tag = "1")]
     pub version: u32,
@@ -29,7 +29,7 @@ pub struct PublicKey {
     pub timestamp: ::core::option::Option<u64>,
 }
 /// DER-encoded X509 public key certificate
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct X509PublicKeyCert {
     #[prost(bytes = "vec", tag = "1")]
     pub certificate_der: ::prost::alloc::vec::Vec<u8>,

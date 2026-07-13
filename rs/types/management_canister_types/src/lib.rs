@@ -77,6 +77,7 @@ pub enum Method {
     CanisterStatus,
     CanisterInfo,
     CanisterMetadata,
+    ListCanisters,
     CreateCanister,
     DeleteCanister,
     DepositCycles,

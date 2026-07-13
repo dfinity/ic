@@ -175,10 +175,10 @@ fn load_metrics_e2e_test() {
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 4626905, 0.1);
-        assert_near!(states_sizes_bytes.destination, 4626909, 0.1);
-        assert_near!(instructions_executed.source, 8330575, 0.1);
-        assert_near!(instructions_executed.destination, 8336259, 0.1);
+        assert_near!(states_sizes_bytes.source, 4604164, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4604180, 0.1);
+        assert_near!(instructions_executed.source, 8296137, 0.1);
+        assert_near!(instructions_executed.destination, 8290079, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
@@ -210,8 +210,8 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 315,
-                destination: 379,
+                source: 328,
+                destination: 366,
             }
         );
         // Check if the split finder found a split satisfying the load constraints

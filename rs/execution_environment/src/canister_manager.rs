@@ -138,6 +138,8 @@ impl CanisterManager {
             Err(_)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
+            // `list_canisters` can only be called via inter-canister calls by subnet admins.
+            | Ok(Ic00Method::ListCanisters)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)

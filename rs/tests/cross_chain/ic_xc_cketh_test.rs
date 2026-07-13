@@ -845,9 +845,12 @@ fn deploy_smart_contract(
     // `--use /{solc}` points `forge` at the vendored `solc` binary bind-mounted
     // from the UVM (see `setup_anvil`), so compilation happens offline instead of
     // `forge` downloading `solc` from the internet.
+    // `-w /tmp` gives `forge` a writable working directory for its `out`/`cache`
+    // compilation artifacts: since foundry v1, the container runs as the non-root
+    // `foundry` user, which cannot write to the default working directory `/`.
     let cmd = format!(
         "\
-        docker run --net {DOCKER_NETWORK_NAME} --rm \
+        docker run --net {DOCKER_NETWORK_NAME} --rm -w /tmp \
         -v /config/{filename}:/contracts/{filename} \
         -v /tmp/{solc}:/{solc} \
         foundry \"forge create --json --use /{solc} --rpc-url http://anvil:{FOUNDRY_PORT} --broadcast --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}\"\

@@ -33,7 +33,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:8bafa91b3865839610cb81c58b3af5bfbb9e975ae5d8d68e609ee95c0b33b9ec
+      image: ghcr.io/dfinity/ic-build@sha256:88eab17245eb00929dddf0eadbab2e359952e06c440c890420ba257409e30149
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -188,8 +188,8 @@ jobs:
 
             # creates a list of targets suitable for --target_pattern_file and list
             # the targets on the step summary
-            ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
-            ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
+            /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
+            /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
 
       - name: Upload target files
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -321,7 +321,7 @@ jobs:
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
-          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+          nsc bazel cache setup --enable_remote_asset_api --bazelrc=/tmp/bazel-cache.bazelrc
           cat /tmp/bazel-cache.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc

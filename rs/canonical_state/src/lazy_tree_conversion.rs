@@ -459,7 +459,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
         FiniteMap::default()
             .with("api_boundary_nodes", move || {
                 api_boundary_nodes_as_tree(
-                    &state.metadata.api_boundary_nodes,
+                    &state.metadata.network_topology.api_boundary_nodes,
                     certification_version,
                 )
             })
@@ -480,7 +480,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 subnets_as_tree(
                     state.metadata.network_topology.subnets_for_certification(),
                     own_subnet_id,
-                    &state.metadata.node_public_keys,
+                    &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
                     certification_version,

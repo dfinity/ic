@@ -354,7 +354,7 @@ fn load_test(
         node_advert_map.insert(node, processor);
     }
     let (nodes, topology_watcher) = fully_connected_localhost_subnet(rt.handle(), log, id, nodes);
-    for ((node1, transport), (node2, cm)) in nodes.into_iter().zip(cms.into_iter()) {
+    for ((node1, transport), (node2, cm)) in nodes.into_iter().zip(cms) {
         assert!(node1 == node2);
         cm.start(transport, topology_watcher.clone());
     }
