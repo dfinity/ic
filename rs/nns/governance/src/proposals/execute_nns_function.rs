@@ -935,8 +935,8 @@ impl ValidNnsFunction {
             }
             ValidNnsFunction::DeleteSubnet => {
                 "Delete a subnet. The subnet record, catch-up package, threshold signing key \
-                and routing table entries are removed from the registry, and the subnet's \
-                nodes become unassigned. Currently limited to CloudEngine subnets."
+                and routing table entries are removed from the registry, the subnet is \
+                removed from the subnet list, and the subnet's nodes become unassigned."
             }
             ValidNnsFunction::SetDefaultInitialDkgSubnet => {
                 "Set or unset the default subnet to which `SetupInitialDKG` management canister \

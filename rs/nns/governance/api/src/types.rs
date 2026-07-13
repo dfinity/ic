@@ -4283,9 +4283,8 @@ pub enum NnsFunction {
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
     /// Delete a subnet. The subnet record, catch-up package, threshold signing key
-    /// and routing table entries are removed from the registry, and the subnet's
-    /// nodes become unassigned.
-    /// Currently limited to CloudEngine subnets.
+    /// and routing table entries are removed from the registry, the subnet is
+    /// removed from the subnet list, and the subnet's nodes become unassigned.
     DeleteSubnet = 57,
     /// Set or unset the default subnet to which `SetupInitialDKG` management
     /// canister calls are routed when no subnet is specified explicitly. If unset,

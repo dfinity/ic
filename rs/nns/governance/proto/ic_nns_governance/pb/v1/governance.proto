@@ -501,9 +501,8 @@ enum NnsFunction {
   NNS_FUNCTION_SPLIT_SUBNET = 56;
 
   // Delete a subnet. The subnet record, catch-up package, threshold signing key
-  // and routing table entries are removed from the registry, and the subnet's
-  // nodes become unassigned.
-  // Currently limited to CloudEngine subnets.
+  // and routing table entries are removed from the registry, the subnet is
+  // removed from the subnet list, and the subnet's nodes become unassigned.
   NNS_FUNCTION_DELETE_SUBNET = 57;
 
   // Set or unset the default subnet to which `SetupInitialDKG` management
