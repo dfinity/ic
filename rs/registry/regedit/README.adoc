@@ -111,28 +111,18 @@ $ vim snapshot.json # or jq, etc.
 Before you apply the update, you might want to make sure you know what will
 change. You can do this by calling the `show-diff` command. Let's say e.g. we
 took the example registry from above and the only change that we applied is that
-we updated a node's reward type. The output should look like this:
+we updated the subnet list. The output should look like this:
 
 ----
 $ ic-regedit show-diff /path/to/ic_registry_local_store snapshot.json
 {
   "__version": 3,
-  "node_record_635b7-ykceq-3uanz-33q36-5yf2v-l2yod-czr5t-pqyu7-vivl4-scd2f-zae": {
-    "chip_id": null,
-    "domain": null,
-    "hostos_version_id": null,
-    "http": {
-      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
-      "port": 8080
-    },
-    "node_operator_id": "(binary-data)",
-    "node_reward_type": 5,
-    "public_ipv4_config": null,
-    "ssh_node_state_write_access": "(binary-data)",
-    "xnet": {
-      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
-      "port": 2497
-    }
+  "subnet_list": {
+    "subnets": [
+      "(principal-id)ctkw5-pjdpp-oliv3-h7q4x-vd542-t6ezo-kbolh-yynez-7yewq-gq4bj-nqe",
+      "(principal-id)i5ubr-s2mcz-ghnc4-jxodo-uvrtp-rrx6m-pcv3n-xf7fe-oqxbp-efsg5-2qe",
+      "(principal-id)th2o5-oflhf-ixact-nhmok-hupll-gf67c-5hn6k-7hh5a-hcwhs-rvcdb-5ae"
+    ]
   }
 }
 ----
@@ -207,22 +197,12 @@ $ ic-regedit snapshot /path/to/ic_registry_local_store > latest.json
 $ ic-regedit show-diff --version -1 /path/to/ic_registry_local_store latest.json
 {
   "__version": 3,
-  "node_record_635b7-ykceq-3uanz-33q36-5yf2v-l2yod-czr5t-pqyu7-vivl4-scd2f-zae": {
-    "chip_id": null,
-    "domain": null,
-    "hostos_version_id": null,
-    "http": {
-      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
-      "port": 8080
-    },
-    "node_operator_id": "(binary-data)",
-    "node_reward_type": 5,
-    "public_ipv4_config": null,
-    "ssh_node_state_write_access": "(binary-data)",
-    "xnet": {
-      "ip_addr": "2602:fb2b:100:10:5000:25ff:fe89:bd2b",
-      "port": 2497
-    }
+  "subnet_list": {
+    "subnets": [
+      "(principal-id)ctkw5-pjdpp-oliv3-h7q4x-vd542-t6ezo-kbolh-yynez-7yewq-gq4bj-nqe",
+      "(principal-id)i5ubr-s2mcz-ghnc4-jxodo-uvrtp-rrx6m-pcv3n-xf7fe-oqxbp-efsg5-2qe",
+      "(principal-id)th2o5-oflhf-ixact-nhmok-hupll-gf67c-5hn6k-7hh5a-hcwhs-rvcdb-5ae"
+    ]
   }
 }
 ----
