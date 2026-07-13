@@ -398,7 +398,7 @@ fn fetch_canister_logs_response_within_limit() {
         128 * KIB,
         RESULT_MAX_SIZE.get() as usize - CanisterLogRecord::default().data_size(),
     ] {
-        let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+        let mut s = LogMemoryStore::new();
         s.resize_for_testing(aggregate_capacity);
         // Append records until at least `2 * RESULT_MAX_SIZE` bytes have been added
         // (so the buffer ends up larger than what can be returned in a single
