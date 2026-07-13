@@ -50,10 +50,11 @@ pub(crate) fn fetch_canister_logs(
 ///
 /// This is a conservative linear upper bound on the measured `fetch_canister_logs`
 /// execution time (see the `fetch_canister_log` benchmark in
-/// `rs/execution_environment/benches/management_canister/canister_logging.rs`;
-/// the benchmark returns its harness from the timed routine so the measurement
-/// excludes the state teardown, which is what actually scales with the buffer),
-/// chosen so the deduction never falls below the measured cost of any case:
+/// `rs/execution_environment/benches/management_canister/canister_logging.rs`,
+/// which times `fetch_canister_logs_response` directly on a full log buffer — the
+/// exact read/encode work charged here, excluding the surrounding subnet-message
+/// machinery and per-iteration state setup), chosen so the deduction never falls
+/// below the measured cost of any case:
 ///
 /// ```text
 /// time ≲ 2.5 ms + 0.45 µs × record_count + 2.5 ns × content_size
@@ -65,12 +66,15 @@ pub(crate) fn fetch_canister_logs(
 /// - The fixed 2.5 ms base (`5_000_000` instructions) is covered by the flat
 ///   per-message execution fee (`update_message_execution_fee`, 5_000_000 cycles)
 ///   the caller pays to run its response callback — hence the base is capped at
-///   that fee.
+///   that fee. It is far above the measured cost of a fetch that returns nothing
+///   (~15–30 µs even on a full 2 MiB buffer).
 /// - The per-record term (~0.45 µs/record, from the record-dominated worst case: a
-///   full 2 MiB buffer of 0-byte messages returns 50_000 records in ~22 ms) and the
-///   per-content-byte term (~2.5 ns/byte) are dominated by the per-byte message
-///   transmission fee (1000 cycles/byte) the caller prepays on the response, since
-///   each record adds ~17 response bytes and each content byte adds one.
+///   full 2 MiB buffer of 0-byte messages returns ~44_000 records in ~17 ms, i.e.
+///   ~0.38 µs/record measured) and the per-content-byte term (~2.5 ns/byte, well
+///   above the ~0.3 ns/byte measured for a full 2 MiB content payload) are
+///   dominated by the per-byte message transmission fee (1000 cycles/byte) the
+///   caller prepays on the response, since each record adds ~17 response bytes and
+///   each content byte adds one.
 ///
 /// At 2 billion instructions per second (2_000_000 instructions per millisecond):
 ///
@@ -123,6 +127,25 @@ pub(crate) fn fetch_canister_logs_response(
     })
     .unwrap();
     Ok((reply, record_count, NumBytes::new(content_size as u64)))
+}
+
+/// Benchmark-only entry point for the `management_canister_bench`: runs
+/// [`fetch_canister_logs_response`] and returns its result, panicking on error.
+///
+/// Exposed (via a `pub use` re-export from the crate root) so the benchmark can
+/// time the exact read/encode work that drives `fetch_canister_logs_instructions`
+/// directly, without the surrounding subnet-message and inter-canister-call
+/// machinery (which otherwise dominates the sub-millisecond read on large
+/// buffers and is not part of what the call is charged for).
+#[doc(hidden)]
+pub fn fetch_canister_logs_response_for_bench(
+    sender: PrincipalId,
+    canister: &CanisterState,
+    args: FetchCanisterLogsRequest,
+    log_memory_store_feature: FlagStatus,
+) -> (Vec<u8>, u64, NumBytes) {
+    fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)
+        .expect("fetch_canister_logs_response failed")
 }
 
 /// Checks if the caller has permission to access the logs based on the canister's log visibility settings.

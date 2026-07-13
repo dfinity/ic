@@ -4,10 +4,11 @@ use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE};
 use ic_config::flag_status::FlagStatus;
+use ic_execution_environment::fetch_canister_logs_response_for_bench;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgsBuilder,
-    FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
-    FetchCanisterLogsResponse, LogVisibilityV2, Payload,
+    CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgsBuilder, FetchCanisterLogsFilter,
+    FetchCanisterLogsRange, FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2,
+    Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
@@ -239,9 +240,10 @@ fn build_full_log_test(
 /// The `target` canister has its log buffer filled to capacity and its logs
 /// readable by the caller canister, so the fetch exercises the real read path.
 /// `make_payload` builds the management-canister method payload from the (already
-/// filled) test and the target canister id (e.g. `FetchCanisterLogsRequest` or
-/// `CanisterIdRecord`); it receives the test so a filter can be derived from the
-/// buffer's actual live records (e.g. an index in the middle of the idx range).
+/// filled) test and the target canister id (e.g. a `FetchCanisterLogsRequest`); it
+/// receives the test so a filter can be derived from the buffer's actual live
+/// records (e.g. an index in the middle of the idx range). Used by the one-off
+/// sanity checks that validate the end-to-end fetch path.
 fn setup_fetch_bench<F: FnOnce(&ExecutionTest, CanisterId) -> Vec<u8>>(
     method: &str,
     make_payload: F,
@@ -285,6 +287,16 @@ fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
     });
 }
 
+/// Times `fetch_canister_logs_response` — the read/encode work that drives
+/// `fetch_canister_logs_instructions` — directly on a `CanisterState` whose log
+/// buffer is filled to capacity.
+///
+/// The filled state is built once and reused across all iterations: the read is
+/// immutable, so there is no per-iteration setup or teardown to leak into the
+/// timed region. This measures exactly the costed operation, excluding the
+/// surrounding subnet-message and inter-canister-call machinery (which is not
+/// charged to the call and, being ~1000x the sub-millisecond read on large
+/// buffers, would otherwise swamp the measurement).
 fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
     group: &mut BenchmarkGroup<M>,
     bench_name: &str,
@@ -292,28 +304,27 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
     log_message_size: usize,
     filter: Option<FetchCanisterLogsFilter>,
 ) {
+    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
+    // The caller canister (a controller of the target) is allowed to read the logs.
+    let sender = canister_test_id(1).get();
+    let canister = test.canister_state(target);
     group.bench_function(bench_name, |b| {
         b.iter_batched(
             || {
-                setup_fetch_bench(
-                    "fetch_canister_logs",
-                    |_test, target| {
-                        let mut request = FetchCanisterLogsRequest::new(target);
-                        request.filter = filter;
-                        request.encode()
-                    },
-                    log_memory_limit,
-                    log_message_size,
+                let mut request = FetchCanisterLogsRequest::new(target);
+                request.filter = filter;
+                request
+            },
+            |request| {
+                fetch_canister_logs_response_for_bench(
+                    sender,
+                    canister,
+                    request,
+                    LOG_MEMORY_STORE_FEATURE,
                 )
             },
-            |mut test| {
-                // Measure only the execution of the `fetch_canister_logs` subnet
-                // message, not the surrounding inter-canister call machinery.
-                assert!(test.execute_subnet_message());
-                // Return the harness so criterion drops it (an expensive teardown
-                // that scales with the buffer) outside the timed region.
-                test
-            },
+            // The response (up to ~2 MiB) is dropped outside the timed region,
+            // with bounded memory across the batch.
             BatchSize::LargeInput,
         );
     });
@@ -331,40 +342,35 @@ fn run_bench_fetch_single_log_in_middle<M: criterion::measurement::Measurement>(
     log_memory_limit: u64,
     log_message_size: usize,
 ) {
+    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
+    let sender = canister_test_id(1).get();
+    let canister = test.canister_state(target);
+    // Pick a record in the middle of the live idx range and filter for exactly
+    // that one index (`[mid, mid + 1)`).
+    let log_memory_store = &canister.system_state.log_memory_store;
+    let records = log_memory_store.records(None);
+    let mid_idx = records[records.len() / 2].idx;
+    let filter = FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+        start: mid_idx,
+        end: mid_idx + 1,
+    });
+    // Guard against the benchmark silently measuring an empty result: the filter
+    // must match exactly the one record.
+    assert_eq!(log_memory_store.records(Some(filter)).len(), 1);
     group.bench_function(bench_name, |b| {
         b.iter_batched(
             || {
-                setup_fetch_bench(
-                    "fetch_canister_logs",
-                    |test, target| {
-                        // Pick a record in the middle of the live idx range and
-                        // filter for exactly that one index (`[mid, mid + 1)`).
-                        let log_memory_store =
-                            &test.canister_state(target).system_state.log_memory_store;
-                        let records = log_memory_store.records(None);
-                        let mid_idx = records[records.len() / 2].idx;
-                        let filter = FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
-                            start: mid_idx,
-                            end: mid_idx + 1,
-                        });
-                        // Guard against the benchmark silently measuring an empty
-                        // result: the filter must match exactly the one record.
-                        assert_eq!(log_memory_store.records(Some(filter)).len(), 1);
-                        let mut request = FetchCanisterLogsRequest::new(target);
-                        request.filter = Some(filter);
-                        request.encode()
-                    },
-                    log_memory_limit,
-                    log_message_size,
-                )
+                let mut request = FetchCanisterLogsRequest::new(target);
+                request.filter = Some(filter);
+                request
             },
-            |mut test| {
-                // Measure only the execution of the `fetch_canister_logs` subnet
-                // message, not the surrounding inter-canister call machinery.
-                assert!(test.execute_subnet_message());
-                // Return the harness so criterion drops it (an expensive teardown
-                // that scales with the buffer) outside the timed region.
-                test
+            |request| {
+                fetch_canister_logs_response_for_bench(
+                    sender,
+                    canister,
+                    request,
+                    LOG_MEMORY_STORE_FEATURE,
+                )
             },
             BatchSize::LargeInput,
         );
@@ -481,28 +487,6 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         let mut group = c.benchmark_group("fetch_canister_log");
         group.sample_size(60);
         group.warm_up_time(Duration::from_secs(1));
-
-        // Baseline: canister_status subnet message (same subnet-message
-        // machinery, no log reading). Subtract this from fetch results to
-        // isolate the fetch cost.
-        group.bench_function("baseline", |b| {
-            b.iter_batched(
-                || {
-                    setup_fetch_bench(
-                        "canister_status",
-                        |_test, target| CanisterIdRecord::from(target).encode(),
-                        128 * KIB,
-                        0,
-                    )
-                },
-                |mut test| {
-                    assert!(test.execute_subnet_message());
-                    // Return the harness so criterion drops it outside the timed region.
-                    test
-                },
-                BatchSize::LargeInput,
-            );
-        });
 
         // Worst case: 0-byte messages maximize records per buffer.
         run_bench_fetch_canister_log(&mut group, "fetch:128KiB/msg:0B", 128 * KIB, 0, None);
