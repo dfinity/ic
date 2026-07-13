@@ -792,8 +792,8 @@ prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "=1.6.0"
 proptest-derive = "0.5.0"
-prost = "0.13.3"
-prost-build = "0.13.3"
+prost = "0.14.3"
+prost-build = "0.14.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.11", default-features = false, features = [
@@ -887,8 +887,10 @@ tokio-rustls = { version = "0.26.0", default-features = false, features = [
 tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
-tonic = "0.13.1"
-tonic-build = "0.13.1"
+tonic = "0.14.5"
+tonic-build = "0.14.5"
+tonic-prost = "0.14.5"
+tonic-prost-build = "0.14.5"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
     "add-extension",

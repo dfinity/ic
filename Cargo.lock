@@ -883,8 +883,8 @@ dependencies = [
  "hex",
  "ic-utils 0.9.0",
  "ic-utils-rustfmt",
- "prost 0.13.5",
- "prost-build 0.13.5",
+ "prost 0.14.3",
+ "prost-build 0.14.3",
  "rand 0.8.6",
  "serde",
  "sev",
@@ -3952,7 +3952,7 @@ name = "dfn_protobuf"
 version = "0.9.0"
 dependencies = [
  "on_wire",
- "prost 0.13.5",
+ "prost 0.14.3",
 ]
 
 [[package]]
@@ -5396,7 +5396,7 @@ dependencies = [
  "sev",
  "sev_guest",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "x509-parser 0.18.1",
 ]
@@ -5426,7 +5426,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.26.4",
  "tokio-util",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "tower-http 0.6.8",
  "vsock_lib",
@@ -5439,9 +5439,10 @@ version = "0.0.0"
 dependencies = [
  "attestation",
  "der",
- "prost 0.13.5",
- "tonic 0.13.1",
- "tonic-build",
+ "prost 0.14.3",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
@@ -6251,7 +6252,7 @@ dependencies = [
  "protobuf",
  "slog",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
  "tower",
 ]
 
@@ -6266,17 +6267,18 @@ dependencies = [
  "protobuf",
  "slog",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
 ]
 
 [[package]]
 name = "ic-adapter-metrics-service"
 version = "0.9.0"
 dependencies = [
- "prost 0.13.5",
- "prost-build 0.13.5",
- "tonic 0.13.1",
- "tonic-build",
+ "prost 0.14.3",
+ "prost-build 0.14.3",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
@@ -6343,7 +6345,7 @@ dependencies = [
  "maplit",
  "pocket-ic",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "serde",
  "serde_json",
@@ -6549,7 +6551,7 @@ dependencies = [
  "lmdb-rkv-sys",
  "nix 0.24.3",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rocksdb",
  "serde",
@@ -6614,7 +6616,7 @@ dependencies = [
  "phantom_newtype",
  "proptest",
  "proptest-derive",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -6628,7 +6630,7 @@ name = "ic-base-types-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -6894,7 +6896,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "reqwest",
  "slog",
@@ -6952,7 +6954,7 @@ dependencies = [
  "parking_lot",
  "primitive-types",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "scrypt",
  "serde",
@@ -6965,7 +6967,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-socks",
- "tonic 0.13.1",
+ "tonic",
  "tower",
 ]
 
@@ -6987,7 +6989,7 @@ dependencies = [
  "serde_bytes",
  "slog",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "tracing",
 ]
@@ -7068,7 +7070,7 @@ dependencies = [
  "mockall 0.13.1",
  "prometheus",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "slog",
  "thiserror 2.0.18",
 ]
@@ -7101,9 +7103,10 @@ dependencies = [
 name = "ic-btc-service"
 version = "0.9.0"
 dependencies = [
- "prost 0.13.5",
- "tonic 0.13.1",
- "tonic-build",
+ "prost 0.14.3",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
@@ -7142,7 +7145,7 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "itertools 0.12.1",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rustls 0.23.37",
@@ -7873,7 +7876,7 @@ dependencies = [
  "num-traits",
  "prometheus",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rayon",
@@ -7950,7 +7953,7 @@ dependencies = [
  "ic-types-test-utils",
  "num-traits",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rayon",
  "slog",
  "strum 0.26.3",
@@ -7970,7 +7973,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "phantom_newtype",
- "prost 0.13.5",
+ "prost 0.14.3",
  "slog",
 ]
 
@@ -8007,7 +8010,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rayon",
  "slog",
 ]
@@ -8083,7 +8086,7 @@ dependencies = [
  "mockall 0.13.1",
  "phantom_newtype",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "slog",
  "tokio",
@@ -8231,7 +8234,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "proptest-derive",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rsa",
@@ -8505,7 +8508,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "proptest-derive",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rayon",
@@ -8556,7 +8559,7 @@ name = "ic-crypto-internal-csp-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -9197,7 +9200,7 @@ dependencies = [
  "ic-protobuf",
  "maplit",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "serde",
  "serde_bytes",
@@ -9306,7 +9309,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "tempfile",
  "tokio",
@@ -9627,7 +9630,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-types",
  "pocket-ic",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "serde",
  "tokio",
@@ -9904,7 +9907,7 @@ dependencies = [
  "rand 0.8.6",
  "slog",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
 ]
 
 [[package]]
@@ -9990,7 +9993,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "reqwest",
  "rstest",
  "rustls 0.23.37",
@@ -10052,7 +10055,7 @@ dependencies = [
  "ic-types",
  "maplit",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "reqwest",
  "serde",
  "serde_json",
@@ -10145,7 +10148,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls 0.26.4",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "uuid",
  "warp",
@@ -10176,7 +10179,7 @@ dependencies = [
  "prometheus",
  "slog",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "tower-test",
  "tracing",
@@ -10245,9 +10248,10 @@ dependencies = [
 name = "ic-https-outcalls-service"
 version = "0.9.0"
 dependencies = [
- "prost 0.13.5",
- "tonic 0.13.1",
- "tonic-build",
+ "prost 0.14.3",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
@@ -10836,7 +10840,7 @@ name = "ic-interfaces-registry"
 version = "0.9.0"
 dependencies = [
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
 ]
 
@@ -11464,7 +11468,7 @@ dependencies = [
  "icrc-ledger-types",
  "mockall 0.13.1",
  "pocket-ic",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rust_decimal",
  "serde",
  "tokio",
@@ -11477,7 +11481,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-stable-structures 0.6.9",
  "lazy_static",
- "prost 0.13.5",
+ "prost 0.14.3",
 ]
 
 [[package]]
@@ -11540,7 +11544,7 @@ dependencies = [
  "num-traits",
  "priority-queue",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rust_decimal",
  "serde",
  "serde_bytes",
@@ -11735,7 +11739,7 @@ dependencies = [
  "num-traits",
  "pocket-ic",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "rust_decimal",
  "rust_decimal_macros",
@@ -11789,7 +11793,7 @@ dependencies = [
  "ic-base-types",
  "ic-nervous-system-proto-protobuf-generator",
  "ic-test-utilities-compare-dirs",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rust_decimal",
  "serde",
  "tempfile",
@@ -11800,7 +11804,7 @@ name = "ic-nervous-system-proto-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12039,7 +12043,7 @@ dependencies = [
  "ic-stable-structures 0.6.9",
  "ic-test-utilities-compare-dirs",
  "num-traits",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_bytes",
  "tempfile",
@@ -12050,7 +12054,7 @@ name = "ic-nns-common-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12202,7 +12206,7 @@ dependencies = [
  "pretty_assertions",
  "prometheus-parse",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "registry-canister",
@@ -12234,7 +12238,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-utils 0.9.0",
  "icp-ledger",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_bytes",
  "strum 0.26.3",
@@ -12278,7 +12282,7 @@ name = "ic-nns-governance-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12304,7 +12308,7 @@ dependencies = [
  "ic-nns-test-utils-macros",
  "ic-secp256k1",
  "ic-test-utilities-compare-dirs",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "sha3",
  "tempfile",
@@ -12319,7 +12323,7 @@ name = "ic-nns-gtc-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12373,7 +12377,7 @@ dependencies = [
  "maplit",
  "on_wire",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "serde",
  "serde_bytes",
@@ -12401,7 +12405,7 @@ name = "ic-nns-handler-root-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12509,7 +12513,7 @@ dependencies = [
  "pocket-ic",
  "pretty_assertions",
  "prometheus-parse",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "regex",
  "registry-canister",
@@ -12592,7 +12596,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "prometheus-parse",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "registry-canister",
  "serde",
@@ -12667,7 +12671,7 @@ dependencies = [
  "mockall 0.13.1",
  "pocket-ic",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rewards-calculation",
  "serde_json",
  "tokio",
@@ -12692,7 +12696,7 @@ name = "ic-node-rewards-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12821,7 +12825,7 @@ dependencies = [
  "json5",
  "maplit",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "reqwest",
  "serde",
@@ -12847,7 +12851,7 @@ dependencies = [
  "ic-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "maplit",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_json",
  "slog",
@@ -12860,7 +12864,7 @@ name = "ic-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -12940,7 +12944,7 @@ dependencies = [
  "ic-types-test-utils",
  "phantom_newtype",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "quinn",
  "rstest",
  "rustls 0.23.37",
@@ -13003,7 +13007,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-test-utilities-types",
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
  "reqwest",
  "serde",
  "serde_cbor",
@@ -13037,7 +13041,7 @@ dependencies = [
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_json",
  "tempfile",
@@ -13070,7 +13074,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-stable-structures 0.6.9",
  "lazy_static",
- "prost 0.13.5",
+ "prost 0.14.3",
 ]
 
 [[package]]
@@ -13086,7 +13090,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-stable-structures 0.6.9",
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
 ]
 
 [[package]]
@@ -13143,7 +13147,7 @@ version = "0.9.0"
 dependencies = [
  "ic-registry-common-proto-generator",
  "ic-test-utilities-compare-dirs",
- "prost 0.13.5",
+ "prost 0.14.3",
  "tempfile",
 ]
 
@@ -13152,7 +13156,7 @@ name = "ic-registry-common-proto-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -13210,7 +13214,7 @@ dependencies = [
  "ic-registry-local-store-artifacts",
  "ic-sys",
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "tempfile",
 ]
@@ -13245,7 +13249,7 @@ dependencies = [
  "mockall 0.13.1",
  "pocket-ic",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "serde",
  "tokio",
@@ -13330,7 +13334,7 @@ dependencies = [
  "ic-types-test-utils",
  "pocket-ic",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rstest",
  "slog",
@@ -13400,7 +13404,7 @@ dependencies = [
  "lazy_static",
  "mockall 0.13.1",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "tempfile",
  "tokio",
@@ -13411,7 +13415,7 @@ name = "ic-registry-transport-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -13470,7 +13474,7 @@ dependencies = [
  "mockall 0.13.1",
  "pocket-ic",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rayon",
  "serde",
  "serde_json",
@@ -13632,12 +13636,12 @@ dependencies = [
  "ic-types-cycles",
  "ic-utils 0.9.0",
  "maplit",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "slog-scope",
  "tempfile",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "tracing-subscriber",
  "wat",
@@ -13693,7 +13697,7 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rayon",
@@ -13792,7 +13796,7 @@ dependencies = [
  "on_wire",
  "pocket-ic",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand_chacha 0.3.1",
  "registry-canister",
  "reqwest",
@@ -14076,8 +14080,8 @@ dependencies = [
  "num-traits",
  "pretty_assertions",
  "proptest",
- "prost 0.13.5",
- "prost-build 0.13.5",
+ "prost 0.14.3",
+ "prost-build 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rust_decimal",
@@ -14110,7 +14114,7 @@ dependencies = [
  "ic-utils 0.9.0",
  "icp-ledger",
  "itertools 0.12.1",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -14155,7 +14159,7 @@ name = "ic-sns-governance-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -14209,7 +14213,7 @@ dependencies = [
  "maplit",
  "num-traits",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -14220,7 +14224,7 @@ name = "ic-sns-init-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -14279,7 +14283,7 @@ dependencies = [
  "pretty-bytes",
  "pretty_assertions",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rust_decimal",
  "rust_decimal_macros",
@@ -14318,7 +14322,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
  "maplit",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "tempfile",
  "tokio",
@@ -14329,7 +14333,7 @@ name = "ic-sns-root-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -14372,7 +14376,7 @@ dependencies = [
  "maplit",
  "pretty_assertions",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
@@ -14391,7 +14395,7 @@ dependencies = [
  "ic-base-types",
  "ic-nervous-system-proto",
  "ic-utils 0.9.0",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_bytes",
 ]
@@ -14401,7 +14405,7 @@ name = "ic-sns-swap-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -14446,7 +14450,7 @@ dependencies = [
  "maplit",
  "num-traits",
  "on_wire",
- "prost 0.13.5",
+ "prost 0.14.3",
  "tokio",
 ]
 
@@ -14544,7 +14548,7 @@ dependencies = [
  "icrc-ledger-types",
  "maplit",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "serde",
  "serde_bytes",
@@ -14558,7 +14562,7 @@ name = "ic-sns-wasm-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -14607,7 +14611,7 @@ dependencies = [
  "libc",
  "prometheus",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "scoped_threadpool",
  "slog",
  "test-strategy 0.4.5",
@@ -14745,7 +14749,7 @@ dependencies = [
  "parking_lot",
  "prometheus",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "scoped_threadpool",
@@ -14782,7 +14786,7 @@ dependencies = [
  "ic-types-test-utils",
  "mockall 0.13.1",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "slog",
  "thiserror 2.0.18",
@@ -14810,7 +14814,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-state-manager",
  "ic-types",
- "prost 0.13.5",
+ "prost 0.14.3",
  "slog",
  "slog-term",
  "tempfile",
@@ -14867,7 +14871,7 @@ dependencies = [
  "libc",
  "nix 0.24.3",
  "phantom_newtype",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "tempfile",
  "thiserror 2.0.18",
@@ -15117,7 +15121,7 @@ dependencies = [
  "ic-types",
  "mockall 0.13.1",
  "phantom_newtype",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "strum 0.26.3",
 ]
@@ -15275,7 +15279,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-protobuf",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -15560,7 +15564,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "proptest-derive",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rstest",
@@ -16107,7 +16111,7 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
- "prost 0.13.5",
+ "prost 0.14.3",
  "serde_json",
  "slog",
  "ssh2",
@@ -16142,7 +16146,7 @@ dependencies = [
  "ic_consensus_threshold_sig_system_test_utils",
  "leb128",
  "openssh-keys",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "registry-canister",
  "reqwest",
@@ -16191,7 +16195,7 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "k256",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "registry-canister",
@@ -16412,7 +16416,7 @@ dependencies = [
  "on_wire",
  "pocket-ic",
  "proptest",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "serde",
@@ -17496,7 +17500,7 @@ name = "ledger-canister-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -18573,7 +18577,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "prost 0.13.5",
+ "prost 0.14.3",
  "regex",
  "reqwest",
  "serde_cbor",
@@ -18811,7 +18815,7 @@ dependencies = [
  "nns_dapp",
  "num-traits",
  "on_wire",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "reqwest",
  "serde",
@@ -19374,7 +19378,7 @@ dependencies = [
  "prost 0.14.3",
  "thiserror 2.0.18",
  "tokio",
- "tonic 0.14.5",
+ "tonic",
  "tonic-types",
 ]
 
@@ -19387,7 +19391,7 @@ dependencies = [
  "opentelemetry 0.32.0",
  "opentelemetry_sdk 0.32.1",
  "prost 0.14.3",
- "tonic 0.14.5",
+ "tonic",
  "tonic-prost",
 ]
 
@@ -19522,7 +19526,7 @@ dependencies = [
  "nix 0.24.3",
  "pem",
  "prometheus",
- "prost 0.13.5",
+ "prost 0.14.3",
  "qrcode",
  "rand 0.8.6",
  "rcgen 0.13.2",
@@ -19887,6 +19891,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "petgraph"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
+dependencies = [
+ "fixedbitset 0.5.7",
+ "hashbrown 0.15.5",
+ "indexmap 2.14.0",
+]
+
+[[package]]
 name = "phantom_newtype"
 version = "0.9.0"
 dependencies = [
@@ -20149,7 +20164,7 @@ dependencies = [
  "icrc-ledger-types",
  "k256",
  "maplit",
- "prost 0.13.5",
+ "prost 0.14.3",
  "registry-canister",
  "reqwest",
  "schemars 0.8.22",
@@ -20272,7 +20287,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
- "tonic 0.13.1",
+ "tonic",
  "tower",
  "tower-http 0.6.8",
  "tracing",
@@ -20694,16 +20709,6 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
-dependencies = [
- "bytes",
- "prost-derive 0.13.5",
-]
-
-[[package]]
-name = "prost"
 version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2ea70524a2f82d518bce41317d0fae74151505651af45faf1ffbd6fd33f0568"
@@ -20735,19 +20740,20 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.13.5"
+version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
+checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
  "heck 0.5.0",
  "itertools 0.14.0",
  "log",
  "multimap",
- "once_cell",
- "petgraph 0.7.1",
+ "petgraph 0.8.3",
  "prettyplease",
- "prost 0.13.5",
- "prost-types 0.13.5",
+ "prost 0.14.3",
+ "prost-types 0.14.3",
+ "pulldown-cmark",
+ "pulldown-cmark-to-cmark",
  "regex",
  "syn 2.0.117",
  "tempfile",
@@ -20761,19 +20767,6 @@ checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
  "itertools 0.12.1",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "prost-derive"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
-dependencies = [
- "anyhow",
- "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -20799,15 +20792,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091c90b0a32608e984ff2fa4091273cbdd755d54935c51d520887f4a1dbd5b0"
 dependencies = [
  "prost 0.12.6",
-]
-
-[[package]]
-name = "prost-types"
-version = "0.13.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
-dependencies = [
- "prost 0.13.5",
 ]
 
 [[package]]
@@ -20898,6 +20882,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e"
+dependencies = [
+ "bitflags 2.11.0",
+ "memchr",
+ "unicase",
+]
+
+[[package]]
+name = "pulldown-cmark-to-cmark"
+version = "22.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50793def1b900256624a709439404384204a5dc3a6ec580281bfaac35e882e90"
+dependencies = [
+ "pulldown-cmark",
 ]
 
 [[package]]
@@ -21574,7 +21578,7 @@ dependencies = [
  "on_wire",
  "pocket-ic",
  "pretty_assertions",
- "prost 0.13.5",
+ "prost 0.14.3",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rand_distr",
@@ -21594,7 +21598,7 @@ name = "registry-canister-protobuf-generator"
 version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
- "prost-build 0.13.5",
+ "prost-build 0.14.3",
 ]
 
 [[package]]
@@ -21662,7 +21666,7 @@ dependencies = [
  "sev_guest",
  "sev_guest_testing",
  "tokio",
- "tonic 0.13.1",
+ "tonic",
 ]
 
 [[package]]
@@ -21670,9 +21674,10 @@ name = "remote_attestation_shared"
 version = "0.0.0"
 dependencies = [
  "attestation",
- "prost 0.13.5",
- "tonic 0.13.1",
- "tonic-build",
+ "prost 0.14.3",
+ "tonic",
+ "tonic-prost",
+ "tonic-prost-build",
 ]
 
 [[package]]
@@ -24776,35 +24781,6 @@ dependencies = [
 
 [[package]]
 name = "tonic"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e581ba15a835f4d9ea06c55ab1bd4dce26fc53752c69a04aac00703bfb49ba9"
-dependencies = [
- "async-trait",
- "axum",
- "base64 0.22.1",
- "bytes",
- "h2 0.4.13",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.8.1",
- "hyper-timeout",
- "hyper-util",
- "percent-encoding",
- "pin-project",
- "prost 0.13.5",
- "socket2 0.5.10",
- "tokio",
- "tokio-stream",
- "tower",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tonic"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fec7c61a0695dc1887c1b53952990f3ad2e3a31453e1f49f10e75424943a93ec"
@@ -24834,14 +24810,12 @@ dependencies = [
 
 [[package]]
 name = "tonic-build"
-version = "0.13.1"
+version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eac6f67be712d12f0b41328db3137e0d0757645d8904b4cb7d51cd9c2279e847"
+checksum = "c68f61875ac5293cf72e6c8cf0158086428c82c37229e98c840878f1706b0322"
 dependencies = [
  "prettyplease",
  "proc-macro2",
- "prost-build 0.13.5",
- "prost-types 0.13.5",
  "quote",
  "syn 2.0.117",
 ]
@@ -24854,7 +24828,23 @@ checksum = "a55376a0bbaa4975a3f10d009ad763d8f4108f067c7c2e74f3001fb49778d309"
 dependencies = [
  "bytes",
  "prost 0.14.3",
- "tonic 0.14.5",
+ "tonic",
+]
+
+[[package]]
+name = "tonic-prost-build"
+version = "0.14.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "654e5643eff75d7f8c99197ce1440ed19a3474eada74c12bbac488b2cafdae27"
+dependencies = [
+ "prettyplease",
+ "proc-macro2",
+ "prost-build 0.14.3",
+ "prost-types 0.14.3",
+ "quote",
+ "syn 2.0.117",
+ "tempfile",
+ "tonic-build",
 ]
 
 [[package]]
@@ -24865,7 +24855,7 @@ checksum = "2a875a902255423d34c1f20838ab374126db8eb41625b7947a1d54113b0b7399"
 dependencies = [
  "prost 0.14.3",
  "prost-types 0.14.3",
- "tonic 0.14.5",
+ "tonic",
 ]
 
 [[package]]
@@ -24983,7 +24973,7 @@ dependencies = [
  "http 1.4.0",
  "pin-project",
  "thiserror 2.0.18",
- "tonic 0.14.5",
+ "tonic",
  "tower",
  "tracing",
 ]
