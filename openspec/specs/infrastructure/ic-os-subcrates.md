@@ -364,6 +364,30 @@ The `network` crate generates systemd network configuration files and resolves m
 
 ---
 
+### Requirement: Shared IC-OS Utilities (utils)
+
+The `utils` crate provides small helpers shared across IC-OS binaries: IPv6 CIDR formatting, running a subprocess and capturing its output, and retrying a fallible operation with a wait strategy.
+
+#### Scenario: Format an IPv6 address as CIDR
+- **WHEN** `to_cidr(ipv6_address, prefix_length)` is called
+- **THEN** it returns the address and prefix length joined as `"{address}/{prefix_length}"`
+
+#### Scenario: Capture command stdout on success, stderr on failure
+- **WHEN** `get_command_stdout(command, args)` is called
+- **THEN** on success it returns the command's stdout as a UTF-8 string
+- **AND** on a non-zero exit it returns an error including the command, its arguments, and stderr
+
+#### Scenario: Retry until a stop predicate is satisfied
+- **WHEN** `retry_pred(attempts, f, stop_pred, wait_func)` is called
+- **THEN** `f` is called repeatedly, waiting via `wait_func` between attempts, until `stop_pred` returns true on `f`'s result or `attempts` calls have been made
+- **AND** the last result obtained is returned
+
+#### Scenario: Retry until success
+- **WHEN** `retry(attempts, f, wait)` is called
+- **THEN** it retries `f` (sleeping `wait` between attempts) until it returns `Ok`, using `retry_pred` with an is-ok stop predicate
+
+---
+
 ### Requirement: NSS Name Resolution for IC-OS (nss_icos)
 
 The `nss_icos` crate is a Name Service Switch (NSS) module that resolves the hostnames "hostos" and "guestos" to their respective IPv6 addresses.
