@@ -12,7 +12,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:88eab17245eb00929dddf0eadbab2e359952e06c440c890420ba257409e30149
+      image: ghcr.io/dfinity/ic-build@sha256:78e4ccf43ec2cac7a3812a28ea34bccb74bed8c35af361737af9ce42a73eb48d
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 60
