@@ -524,15 +524,18 @@ impl CanisterHttpPoolManagerImpl {
                 // single replica is allowed to consume. Free subnets charge
                 // nothing, so their spend (used only for cost accounting) may
                 // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
-                if share.content.spent()
-                    > max_http_outcall_spend(
-                        cost_schedule,
-                        context.refund_status.per_replica_allowance,
-                    )
-                {
+                let spend_limit = max_http_outcall_spend(
+                    cost_schedule,
+                    context.refund_status.per_replica_allowance,
+                );
+                if share.content.spent() > spend_limit {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
-                        "Spent cycles are greater than replica allowance".to_string(),
+                        format!(
+                            "Spent cycles {} exceed the per-replica spend limit {}",
+                            share.content.spent(),
+                            spend_limit,
+                        ),
                     ));
                 }
 
@@ -709,7 +712,11 @@ pub mod test {
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
+    use ic_replicated_state::metadata_state::SubnetTopology;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
+    use ic_replicated_state::metadata_state::testing::{
+        NetworkTopologyTesting, SystemMetadataTesting,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::CountBytes;
@@ -3216,7 +3223,125 @@ pub mod test {
                 assert_matches!(
                     &changes[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Spent cycles are greater than replica allowance"
+                        if reason == "Spent cycles 200 exceed the per-replica spend limit 100"
+                );
+            })
+        });
+    }
+
+    #[test]
+    fn test_spent_greater_than_replica_allowance_is_valid_on_free_subnet() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+
+                // A free subnet grants a zero per-replica allowance (nothing is
+                // charged), yet the reported spend is still accumulated for cost
+                // accounting and may exceed that allowance.
+                let request = CanisterHttpRequestContext {
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(0),
+                        per_replica_allowance: Cycles::new(0),
+                        refunded_cycles: Cycles::new(0),
+                        refunding_nodes: BTreeSet::new(),
+                    },
+                    ..test_request_context(
+                        Replication::FullyReplicated,
+                        PricingVersion::Legacy,
+                        None,
+                    )
+                };
+
+                // Put the validating replica's own subnet on a `Free` cost
+                // schedule so `get_own_cost_schedule()` returns `Free`, raising
+                // the spend limit to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                let mut state =
+                    state_with_pending_http_calls(BTreeMap::from([(CallbackId::from(0), request)]));
+                let own_subnet_id = state.metadata.own_subnet_id;
+                state.metadata.modify_network_topology(|network_topology| {
+                    network_topology.subnets_mut().insert(
+                        own_subnet_id,
+                        SubnetTopology {
+                            cost_schedule: CanisterCyclesCostSchedule::Free,
+                            ..Default::default()
+                        },
+                    );
+                });
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(Height::from(1), Arc::new(state)));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Build a per-replica receipt share whose spent claim exceeds the
+                // (zero) per-replica allowance but stays below the free-subnet
+                // maximum. On a `Normal` schedule this would be rejected as
+                // overspending (see the test above); on a `Free` schedule it must
+                // not be.
+                let receipt_share = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt {
+                        spent: Cycles::new(200),
+                    },
+                };
+                let signature = crypto
+                    .sign(
+                        &receipt_share,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: receipt_share,
+                    signature,
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share must not be invalidated for overspending.
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated(_),
+                    "free-subnet share was wrongly rejected: {:?}",
+                    changes[0]
                 );
             })
         });
