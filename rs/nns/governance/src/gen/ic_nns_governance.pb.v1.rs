@@ -549,14 +549,12 @@ pub mod proposal {
         #[prost(message, tag = "29")]
         DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
-        #[deprecated]
         #[prost(message, tag = "22")]
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
         /// Call the open method on an SNS swap canister.
         ///
         /// This is still supported but will soon be superseded by
         /// CreateServiceNervousSystem.
-        #[deprecated]
         #[prost(message, tag = "23")]
         OpenSnsTokenSwap(super::OpenSnsTokenSwap),
         /// Create a new SNS.

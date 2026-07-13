@@ -206,5 +206,20 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     config.compile_protos(&[src_file], &proto.to_vec()).unwrap();
 
+    // Workaround for prost_build generating #[deprecated] attributes unconditionally:
+    // https://github.com/tokio-rs/prost/issues/1444
+    for entry in std::fs::read_dir(out).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_file() {
+            let content = std::fs::read_to_string(&path).unwrap();
+            let cleaned: String = content
+                .lines()
+                .filter(|line| !line.contains("#[deprecated]"))
+                .map(|line| format!("{}\n", line))
+                .collect();
+            std::fs::write(&path, cleaned).unwrap();
+        }
+    }
+
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }
