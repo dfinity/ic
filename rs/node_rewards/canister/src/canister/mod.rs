@@ -39,7 +39,7 @@ use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -260,7 +260,7 @@ fn reward_reduction_window() -> (NaiveDate, NaiveDate) {
 thread_local! {
     /// The affected node providers, parsed from `REDUCED_NODE_PROVIDERS` once and reused across
     /// calculations (parsing panics here on the first access if a principal is malformed).
-    static REDUCED_NODE_PROVIDER_SET: HashSet<PrincipalId> = REDUCED_NODE_PROVIDERS
+    static REDUCED_NODE_PROVIDER_SET: BTreeSet<PrincipalId> = REDUCED_NODE_PROVIDERS
         .iter()
         .map(|p| PrincipalId::from_str(p).expect("invalid principal in REDUCED_NODE_PROVIDERS"))
         .collect();
@@ -292,7 +292,7 @@ fn reduce_provider_results(
     date: &NaiveDate,
     start: NaiveDate,
     end: NaiveDate,
-    reduced_providers: &HashSet<PrincipalId>,
+    reduced_providers: &BTreeSet<PrincipalId>,
     multiplier: Decimal,
 ) {
     if *date < start || *date >= end || reduced_providers.is_empty() {
@@ -645,5 +645,17 @@ mod reward_reduction_tests {
         reduce(&mut results, d(2026, 8, 1), &[]);
 
         assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
+    }
+
+    #[test]
+    fn all_reduced_node_providers_parse() {
+        // Fails fast in CI when REDUCED_NODE_PROVIDERS is populated with an invalid principal,
+        // rather than only panicking on the first access of the thread_local initializer.
+        for p in REDUCED_NODE_PROVIDERS {
+            assert!(
+                PrincipalId::from_str(p).is_ok(),
+                "REDUCED_NODE_PROVIDERS entry is not a valid principal: {p}"
+            );
+        }
     }
 }
