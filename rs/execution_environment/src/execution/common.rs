@@ -350,13 +350,6 @@ pub(crate) fn validate_controller(
     canister: &CanisterState,
     controller: &PrincipalId,
 ) -> Result<(), CanisterManagerError> {
-    if !canister.controllers().contains(controller) {
-        return Err(CanisterManagerError::CanisterInvalidController {
-            canister_id: canister.canister_id(),
-            controllers_expected: canister.system_state.controllers.clone(),
-            controller_provided: *controller,
-        });
-    }
     Ok(())
 }
 
