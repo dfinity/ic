@@ -64,9 +64,9 @@ pub(crate) fn fetch_canister_logs(
 ///   that fee. It is far above the measured cost of a fetch that returns nothing
 ///   (~15–30 µs even on a full 2 MiB buffer).
 /// - The per-record term (~0.45 µs/record, from the record-dominated worst case: a
-///   full 2 MiB buffer of 0-byte messages returns ~44_000 records in ~17 ms, i.e.
-///   ~0.38 µs/record measured) and the per-content-byte term (~2.5 ns/byte, well
-///   above the ~0.3 ns/byte measured for a full 2 MiB content payload) are
+///   full 2 MiB buffer of 0-byte messages returns ~50_000 records in ~17 ms, i.e.
+///   ~0.34 µs/record measured) and the per-content-byte term (~2.5 ns/byte, well
+///   above the ~0.26 ns/byte measured for a full 2 MiB content payload) are
 ///   dominated by the per-byte message transmission fee (1000 cycles/byte) the
 ///   caller prepays on the response, since each record adds ~17 response bytes and
 ///   each content byte adds one.
