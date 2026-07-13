@@ -23,7 +23,9 @@ use ic_replicated_state::canister_state::system_state::{
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
-use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
+use ic_types::{
+    CanisterLog, CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall,
+};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmHash;
 
@@ -247,19 +249,20 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<Self, (CanisterManagerError, NumInstructions, LogMemoryStore)> {
+    ) -> Result<
+        Self,
+        (
+            CanisterManagerError,
+            NumInstructions,
+            (CanisterLog, LogMemoryStore),
+        ),
+    > {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
             helper
                 .replay_step(state_change, original, round)
-                .map_err(|err| {
-                    (
-                        err,
-                        paused_instructions_left,
-                        helper.clone_log_memory_store(),
-                    )
-                })?;
+                .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
         debug_assert_eq!(paused_instructions_left, helper.instructions_left());
         Ok(helper)
@@ -346,7 +349,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     CanisterManagerError::Hypervisor(self.canister.canister_id(), err),
-                    self.clone_log_memory_store(),
+                    self.take_canister_log(),
                 );
             }
         }
@@ -390,7 +393,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
-                        self.clone_log_memory_store(),
+                        self.take_canister_log(),
                     );
                 }
             }
@@ -419,7 +422,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     err,
-                    self.clone_log_memory_store(),
+                    self.take_canister_log(),
                 );
             }
         }
@@ -463,7 +466,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
-                        self.clone_log_memory_store(),
+                        self.take_canister_log(),
                     );
                 }
             }
@@ -614,12 +617,13 @@ impl InstallCodeHelper {
         }
     }
 
-    /// Returns a clone of the canister's log memory store.
-    ///
-    /// Cloning is cheap as the log memory store is backed by a persistent
-    /// `PageMap` whose clone creates an independent snapshot cheaply.
-    pub(crate) fn clone_log_memory_store(&self) -> LogMemoryStore {
-        self.canister.system_state.log_memory_store.clone()
+    /// Takes the canister log.
+    pub(crate) fn take_canister_log(&mut self) -> (CanisterLog, LogMemoryStore) {
+        // TODO(DSM-105): Remove duplication when the migration is fully done.
+        (
+            self.canister.system_state.canister_log.take(),
+            self.canister.system_state.log_memory_store.clone(),
+        )
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -855,11 +859,11 @@ pub(crate) fn finish_err(
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
-    new_log_memory_store: LogMemoryStore,
+    new_canister_log: (CanisterLog, LogMemoryStore),
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
-    new_canister.set_log(new_log_memory_store);
+    new_canister.set_log(new_canister_log);
     new_canister
         .system_state
         .apply_ingress_induction_cycles_debit(

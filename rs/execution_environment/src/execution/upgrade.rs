@@ -111,7 +111,7 @@ pub(crate) fn execute_upgrade(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
 
@@ -128,7 +128,7 @@ pub(crate) fn execute_upgrade(
                 original,
                 round,
                 (canister_id, HypervisorError::WasmModuleNotFound).into(),
-                helper.clone_log_memory_store(),
+                helper.take_canister_log(),
             );
         }
     };
@@ -237,7 +237,7 @@ fn upgrade_stage_1_process_pre_upgrade_result(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
 
@@ -275,7 +275,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 original,
                 round,
                 err,
-                helper.clone_log_memory_store(),
+                helper.take_canister_log(),
             );
         }
     };
@@ -307,7 +307,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 original,
                 round,
                 err,
-                helper.clone_log_memory_store(),
+                helper.take_canister_log(),
             );
         }
     };
@@ -325,7 +325,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
 
@@ -438,7 +438,7 @@ fn upgrade_stage_3b_process_start_result(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
 
@@ -553,7 +553,7 @@ fn upgrade_stage_4b_process_post_upgrade_result(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
     helper.finish(clean_canister, original, round, round_limits)

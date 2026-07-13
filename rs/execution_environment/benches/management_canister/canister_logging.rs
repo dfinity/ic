@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
@@ -73,6 +73,7 @@ fn setup_fetch_bench(
         SubnetConfig::new(subnet_type),
         ExecutionConfig {
             replicated_inter_canister_log_fetch: FlagStatus::Enabled,
+            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
             ..Default::default()
         },
     );

@@ -90,7 +90,7 @@ pub(crate) fn execute_install(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
 
@@ -109,7 +109,7 @@ pub(crate) fn execute_install(
                 original,
                 round,
                 err,
-                helper.clone_log_memory_store(),
+                helper.take_canister_log(),
             );
         }
     };
@@ -135,7 +135,7 @@ pub(crate) fn execute_install(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
     helper.clear_certified_data();
@@ -249,7 +249,7 @@ fn install_stage_2a_process_start_result(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
 
@@ -361,7 +361,7 @@ fn install_stage_3_process_init_result(
             original,
             round,
             err,
-            helper.clone_log_memory_store(),
+            helper.take_canister_log(),
         );
     }
     helper.finish(clean_canister, original, round, round_limits)
