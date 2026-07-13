@@ -4122,6 +4122,7 @@ pub enum NnsFunction {
     /// version, the proposal also appends that version to the list of "blessed
     /// versions" that can be installed on a subnet. By itself, this proposal
     /// does not effect any upgrade.
+    /// Superseded by ReviseElectedGuestosVersions.
     BlessReplicaVersion = 5,
     /// Update a subnet's recovery CUP (used to recover subnets that have stalled).
     /// Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -4221,6 +4222,7 @@ pub enum NnsFunction {
     /// (obsolete) A proposal to retire previously elected and unused replica versions.
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
+    /// Superseded by ReviseElectedGuestosVersions.
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
