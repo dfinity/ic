@@ -1206,7 +1206,8 @@ crate.spec(
         "prost-codec",
     ],
     package = "pprof",
-    version = "^0.14.0",
+    git = "https://github.com/dfinity/pprof-rs",
+    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
 )
 crate.spec(
     package = "predicates",

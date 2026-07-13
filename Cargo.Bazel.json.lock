@@ -1,5 +1,5 @@
 {
-  "checksum": "e841dfcec9174ce8904a03843eaaa081012da2bfeb0764c10705a19bc35392cd",
+  "checksum": "b714c35b72e4cd7e7717dc63959eaf46ce73b29a9b5d7ec3715b9f0567a92920",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22656,7 +22656,7 @@
               "target": "pkg_config"
             },
             {
-              "id": "pprof 0.14.0",
+              "id": "pprof 0.15.0",
               "target": "pprof"
             },
             {
@@ -40897,96 +40897,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "inferno 0.11.19": {
-      "name": "inferno",
-      "version": "0.11.19",
-      "package_url": "https://github.com/jonhoo/inferno.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/inferno/0.11.19/download",
-          "sha256": "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "inferno",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "inferno",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "indexmap",
-            "nameattr"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.8.11",
-              "target": "ahash"
-            },
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "is-terminal 0.4.9",
-              "target": "is_terminal"
-            },
-            {
-              "id": "itoa 1.0.17",
-              "target": "itoa"
-            },
-            {
-              "id": "log 0.4.28",
-              "target": "log"
-            },
-            {
-              "id": "num-format 0.4.4",
-              "target": "num_format"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "quick-xml 0.26.0",
-              "target": "quick_xml"
-            },
-            {
-              "id": "rgb 0.8.37",
-              "target": "rgb"
-            },
-            {
-              "id": "str_stack 0.1.0",
-              "target": "str_stack"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.11.19"
-      },
-      "license": "CDDL-1.0",
-      "license_ids": [
-        "CDDL-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "inferno 0.12.0": {
       "name": "inferno",
       "version": "0.12.0",
@@ -51353,69 +51263,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "nix 0.26.4": {
-      "name": "nix",
-      "version": "0.26.4",
-      "package_url": "https://github.com/nix-rust/nix",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/nix/0.26.4/download",
-          "sha256": "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nix",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "nix",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "fs",
-            "process",
-            "signal"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "libc 0.2.186",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.26.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "nix 0.27.1": {
       "name": "nix",
       "version": "0.27.1",
@@ -51450,6 +51297,8 @@
             "default",
             "ioctl",
             "memoffset",
+            "process",
+            "signal",
             "socket"
           ],
           "selects": {}
@@ -59401,14 +59250,16 @@
       ],
       "license_file": "LICENSE"
     },
-    "pprof 0.14.0": {
+    "pprof 0.15.0": {
       "name": "pprof",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "package_url": "https://github.com/tikv/pprof-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pprof/0.14.0/download",
-          "sha256": "ebbe2f8898beba44815fdc9e5a4ae9c929e21c5dc29b0c774a15555f7f58d6d0"
+        "Git": {
+          "remote": "https://github.com/dfinity/pprof-rs",
+          "commitish": {
+            "Rev": "7f5228262196e3eb9c8d1ddbaca984787dea331a"
+          }
         }
       },
       "targets": [
@@ -59451,7 +59302,6 @@
             "prost",
             "prost-build",
             "prost-codec",
-            "prost-derive",
             "sha2"
           ],
           "selects": {}
@@ -59479,7 +59329,7 @@
               "target": "findshlibs"
             },
             {
-              "id": "inferno 0.11.19",
+              "id": "inferno 0.12.0",
               "target": "inferno"
             },
             {
@@ -59491,7 +59341,7 @@
               "target": "log"
             },
             {
-              "id": "nix 0.26.4",
+              "id": "nix 0.27.1",
               "target": "nix"
             },
             {
@@ -59499,11 +59349,7 @@
               "target": "once_cell"
             },
             {
-              "id": "parking_lot 0.12.5",
-              "target": "parking_lot"
-            },
-            {
-              "id": "pprof 0.14.0",
+              "id": "pprof 0.15.0",
               "target": "build_script_build"
             },
             {
@@ -59515,6 +59361,10 @@
               "target": "smallvec"
             },
             {
+              "id": "spin 0.10.0",
+              "target": "spin"
+            },
+            {
               "id": "symbolic-demangle 12.4.0",
               "target": "symbolic_demangle"
             },
@@ -59523,23 +59373,14 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.18",
               "target": "thiserror"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "prost-derive 0.12.2",
-              "target": "prost_derive"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.14.0"
+        "version": "0.15.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -63447,53 +63288,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "quick-xml 0.26.0": {
-      "name": "quick-xml",
-      "version": "0.26.0",
-      "package_url": "https://github.com/tafia/quick-xml",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/quick-xml/0.26.0/download",
-          "sha256": "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "quick_xml",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "quick_xml",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.26.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE-MIT.md"
     },
     "quick-xml 0.37.1": {
       "name": "quick-xml",
@@ -78113,6 +77907,67 @@
         },
         "edition": "2015",
         "version": "0.9.8"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "spin 0.10.0": {
+      "name": "spin",
+      "version": "0.10.0",
+      "package_url": "https://github.com/mvdnes/spin-rs.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/spin/0.10.0/download",
+          "sha256": "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "spin",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "spin",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "barrier",
+            "default",
+            "lazy",
+            "lock_api",
+            "mutex",
+            "once",
+            "rwlock",
+            "spin_mutex"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "lock_api 0.4.14",
+              "target": "lock_api",
+              "alias": "lock_api_crate"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.10.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -101511,7 +101366,7 @@
     "ping 0.5.0",
     "pkcs8 0.10.2",
     "pkg-config 0.3.32",
-    "pprof 0.14.0",
+    "pprof 0.15.0",
     "predicates 3.1.2",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
