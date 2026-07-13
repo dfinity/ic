@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE};
+use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_execution_environment::fetch_canister_logs_response_for_bench;
 use ic_management_canister_types_private::{
@@ -203,7 +203,6 @@ fn build_full_log_test(
     let caller = canister_test_id(1);
     let config = ExecutionConfig {
         replicated_inter_canister_log_fetch: FlagStatus::Enabled,
-        log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
         ..ExecutionConfig::default()
     };
     let mut test = ExecutionTestBuilder::new()
@@ -315,14 +314,7 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
                 request.filter = filter;
                 request
             },
-            |request| {
-                fetch_canister_logs_response_for_bench(
-                    sender,
-                    canister,
-                    request,
-                    LOG_MEMORY_STORE_FEATURE,
-                )
-            },
+            |request| fetch_canister_logs_response_for_bench(sender, canister, request),
             // The response (up to ~2 MiB) is dropped outside the timed region,
             // with bounded memory across the batch.
             BatchSize::LargeInput,
@@ -364,14 +356,7 @@ fn run_bench_fetch_single_log_in_middle<M: criterion::measurement::Measurement>(
                 request.filter = Some(filter);
                 request
             },
-            |request| {
-                fetch_canister_logs_response_for_bench(
-                    sender,
-                    canister,
-                    request,
-                    LOG_MEMORY_STORE_FEATURE,
-                )
-            },
+            |request| fetch_canister_logs_response_for_bench(sender, canister, request),
             BatchSize::LargeInput,
         );
     });

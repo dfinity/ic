@@ -314,6 +314,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
+            | Ok(Ic00Method::ListCanisters)
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister)
@@ -392,16 +393,10 @@ impl SystemStateModifications {
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
         if !self.canister_log.is_empty() {
-            // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
-        if system_state.log_memory_store.is_migrated() {
-            system_state
-                .log_memory_store
-                .append_delta_log(&mut self.canister_log.clone());
-        }
         system_state
-            .canister_log
+            .log_memory_store
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.
@@ -818,14 +813,10 @@ impl SandboxSafeSystemState {
             })
             .min()
             .unwrap_or(DEFAULT_QUEUE_CAPACITY);
-        let (next_canister_log_record_idx, canister_log_memory_limit) =
-            if system_state.log_memory_store.is_migrated() {
-                let lms = &system_state.log_memory_store;
-                (lms.next_idx(), lms.byte_capacity())
-            } else {
-                let cl = &system_state.canister_log;
-                (cl.next_idx(), cl.byte_capacity())
-            };
+        let (next_canister_log_record_idx, canister_log_memory_limit) = {
+            let lms = &system_state.log_memory_store;
+            (lms.next_idx(), lms.byte_capacity())
+        };
 
         Self::new_internal(
             system_state.canister_id(),
