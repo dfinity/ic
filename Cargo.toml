@@ -791,8 +791,8 @@ prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "=1.6.0"
 proptest-derive = "0.5.0"
-prost = "0.13.3"
-prost-build = "0.13.3"
+prost = "0.14.3"
+prost-build = "0.14.3"
 protobuf = "3.7.2"
 qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.11", default-features = false, features = [
@@ -886,8 +886,10 @@ tokio-rustls = { version = "0.26.0", default-features = false, features = [
 tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
-tonic = "0.13.1"
-tonic-build = "0.13.1"
+tonic = "0.14.5"
+tonic-build = "0.14.5"
+tonic-prost = "0.14.5"
+tonic-prost-build = "0.14.5"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
     "add-extension",
@@ -899,6 +901,7 @@ tower-http = { version = "0.6.4", features = [
     "compression-full",
     "tracing",
 ] }
+tower_governor = "0.8.0"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
@@ -929,7 +932,7 @@ which = "6.0.3"
 wirm = { version = "4.0.4", features = ["parallel"] }
 wsl = "0.1.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
-x509-parser = { version = "0.16.0" }
+x509-parser = { version = "0.18.1" }
 xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.2"

@@ -75,14 +75,11 @@ pub(crate) fn check_response_consistency(
     Ok(())
 }
 
-/// Enforces the per-replica allowance from the request context: on a subnet
-/// that charges (a Normal cost schedule), the amount the replica claims to have
-/// `spent` in the payment receipt must never exceed the `per_replica_allowance`
-/// derived from the request's context.
+/// Enforces the per-replica allowance from the request context: the amount the
+/// replica claims to have `spent` in the payment receipt must never exceed the
+/// `per_replica_allowance` derived from the request's context.
 ///
-/// On a free cost schedule nothing is charged, so a replica may legitimately
-/// report a spend exceeding the (zero) allowance for cost accounting; there are
-/// no cycles at stake, so the spend is not bounded here.
+/// Free subnets may spend more than their (zero) allowance for cost accounting.
 pub(crate) fn check_spent_allowance(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,

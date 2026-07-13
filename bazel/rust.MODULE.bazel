@@ -22,7 +22,7 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.93.1"],
+    versions = ["1.95.0"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -780,7 +780,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "ic_principal",
-    version = "^0.1.1",
+    version = "^0.1.5",
 )
 crate.spec(
     package = "ic-response-verification",
@@ -1264,11 +1264,11 @@ crate.spec(
 )
 crate.spec(
     package = "prost",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "prost-build",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "protobuf",
@@ -1496,10 +1496,11 @@ crate.spec(
 crate.spec(
     features = [
         "global-context",
-        "rand-std",
+        "rand",
+        "std",
     ],
     package = "secp256k1",
-    version = "^0.22",
+    version = "^0.29",
 )
 crate.spec(
     package = "security-framework",
@@ -1810,11 +1811,19 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.13.1",
+    version = "^0.14.5",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.13.1",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost-build",
+    version = "^0.14.5",
 )
 crate.spec(
     features = ["full"],
@@ -1837,7 +1846,7 @@ crate.spec(
 )
 crate.spec(
     package = "tower_governor",
-    version = "^0.7.0",
+    version = "^0.8.0",
 )
 crate.spec(
     package = "tower-request-id",
@@ -2015,7 +2024,7 @@ crate.spec(
 )
 crate.spec(
     package = "x509-parser",
-    version = "^0.16.0",
+    version = "^0.18.1",
 )
 crate.spec(
     features = [
@@ -2195,13 +2204,15 @@ crate.annotation_select(
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
-crate.annotation(
+
+# cfg flag to avoid linking issues. The cfg is scoped to wasm32 (the canister
+# target) because on native targets the vendored C library exports
+# version-renamed symbols, and the cfg makes the Rust bindings reference the
+# un-renamed names, breaking linking.
+crate.annotation_select(
     crate = "secp256k1-sys",
     rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
-    # This specific version is used by ic-btc-kyt canister, which
-    # requires an extra cfg flag to avoid linking issues.
-    # Applying the same cfg to other versions of secp256k1-sys
-    # may break other programs or tests.
+    triples = ["wasm32-unknown-unknown"],
     version = "0.10.0",
 )
 crate.annotation(

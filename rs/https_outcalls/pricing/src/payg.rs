@@ -146,14 +146,8 @@ impl BudgetTracker for PayAsYouGoTracker {
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
         // On a free cost schedule report the real spend uncapped, so canister
-        // cost metrics reflect the actual work: nothing is charged, so there is
-        // no allowance to respect and no cycles at stake (a Byzantine node can
-        // only inflate its own free-subnet metrics, revealing itself). Otherwise
-        // cap the reported spend at the allowance: an over-budget outcall (which
-        // accumulates `spent` past the allowance before failing) then reports
-        // consuming exactly its allowance, deriving a zero refund downstream, and
-        // the gossiped value can never exceed what the per-replica validation
-        // permits.
+        // cost metrics reflect the actual work: nothing is actually charged.
+        // Otherwise cap the reported spend at the allowance.
         let spent = if self.is_free {
             self.spent
         } else {
@@ -208,6 +202,8 @@ mod tests {
                 refunding_nodes: BTreeSet::new(),
             },
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 

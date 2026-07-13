@@ -55,7 +55,14 @@ pub struct UpgradePath {
 }
 /// An allowed upgrade step, from a current version to a next version.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct SnsUpgrade {
     #[prost(message, optional, tag = "1")]
@@ -78,7 +85,14 @@ pub struct SnsSpecificSnsUpgrade {
 }
 /// The representation of a WASM along with its target canister type.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
@@ -91,7 +105,14 @@ pub struct SnsWasm {
 }
 /// The error response returned in response objects on failed or partially failed operations.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct SnsWasmError {
     /// The message returned by the canister on errors.
@@ -100,7 +121,14 @@ pub struct SnsWasmError {
 }
 /// The payload for the add_wasm endpoint, which takes an SnsWasm along with the hash of the wasm bytes.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct AddWasmRequest {
     #[prost(message, optional, tag = "1")]
@@ -114,7 +142,14 @@ pub struct AddWasmRequest {
 }
 /// The response from add_wasm, which is either Ok or Error.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct AddWasmResponse {
     #[prost(oneof = "add_wasm_response::Result", tags = "1, 2")]
@@ -123,7 +158,14 @@ pub struct AddWasmResponse {
 /// Nested message and enum types in `AddWasmResponse`.
 pub mod add_wasm_response {
     #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Oneof,
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Oneof,
     )]
     pub enum Result {
         /// The hash of the wasm that was added.
@@ -151,7 +193,14 @@ pub struct InsertUpgradePathEntriesRequest {
 }
 /// The response from insert_upgrade_path_entries requests
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct InsertUpgradePathEntriesResponse {
     /// Optional error if request does not succeed
@@ -160,7 +209,14 @@ pub struct InsertUpgradePathEntriesResponse {
 }
 /// A request to list upgrade steps (for list_upgrade_steps_pretty at present)
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct ListUpgradeStepsRequest {
     /// If provided, limit response to only include entries for this version and later
@@ -183,7 +239,14 @@ pub struct ListUpgradeStepsResponse {
 }
 /// A step in the upgrade path for human or programmatic consumption
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct ListUpgradeStep {
     /// A machine-readable version
@@ -195,7 +258,14 @@ pub struct ListUpgradeStep {
 }
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetWasmRequest {
     #[prost(bytes = "vec", tag = "1")]
@@ -204,7 +274,14 @@ pub struct GetWasmRequest {
 }
 /// The response for get_wasm, which returns a WASM if it is found, or None.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetWasmResponse {
     #[prost(message, optional, tag = "1")]
@@ -212,7 +289,14 @@ pub struct GetWasmResponse {
 }
 /// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetProposalIdThatAddedWasmRequest {
     #[prost(bytes = "vec", tag = "1")]
@@ -226,6 +310,8 @@ pub struct GetProposalIdThatAddedWasmRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetProposalIdThatAddedWasmResponse {
@@ -267,6 +353,8 @@ pub struct DeployNewSnsResponse {
     Copy,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SnsCanisterIds {
@@ -318,6 +406,8 @@ pub struct DappCanistersTransferResult {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ListDeployedSnsesRequest {}
@@ -332,7 +422,14 @@ pub struct ListDeployedSnsesResponse {
 }
 /// An SNS deployed by this canister (i.e. the sns-wasm canister).
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct DeployedSns {
     /// ID of the various canisters that were originally created in an SNS.
@@ -352,10 +449,10 @@ pub struct DeployedSns {
     candid::CandidType,
     candid::Deserialize,
     serde::Serialize,
-    Eq,
-    Hash,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SnsVersion {
@@ -386,7 +483,14 @@ pub struct SnsVersion {
 }
 /// A human readable SnsVersion
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct PrettySnsVersion {
     #[prost(string, tag = "1")]
@@ -404,7 +508,14 @@ pub struct PrettySnsVersion {
 }
 /// The request type accepted by the get_next_sns_version canister method.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetNextSnsVersionRequest {
     /// The current version recorded on the SNS (in Governance, the "deployed_version" field). This
@@ -418,7 +529,14 @@ pub struct GetNextSnsVersionRequest {
 }
 /// The response type returned by the get_next_sns_version canister method.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetNextSnsVersionResponse {
     #[prost(message, optional, tag = "1")]
@@ -479,6 +597,8 @@ pub mod update_allowed_principals_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetAllowedPrincipalsRequest {}
@@ -503,7 +623,14 @@ pub struct UpdateSnsSubnetListRequest {
 }
 /// The response type of update_sns_subnet_list
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct UpdateSnsSubnetListResponse {
     #[prost(message, optional, tag = "1")]
@@ -518,6 +645,8 @@ pub struct UpdateSnsSubnetListResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetSnsSubnetIdsRequest {}
@@ -539,6 +668,8 @@ pub struct GetSnsSubnetIdsResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetDeployedSnsByProposalIdRequest {
@@ -548,7 +679,14 @@ pub struct GetDeployedSnsByProposalIdRequest {
 /// The response type of get_deployed_sns_by_proposal_id. Used to get a `DeployedSns` by the ProposalId in the
 /// NNS that created it.
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetDeployedSnsByProposalIdResponse {
     #[prost(
@@ -562,7 +700,14 @@ pub struct GetDeployedSnsByProposalIdResponse {
 /// Nested message and enum types in `GetDeployedSnsByProposalIdResponse`.
 pub mod get_deployed_sns_by_proposal_id_response {
     #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Oneof,
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Oneof,
     )]
     pub enum GetDeployedSnsByProposalIdResult {
         #[prost(message, tag = "1")]
@@ -573,7 +718,14 @@ pub mod get_deployed_sns_by_proposal_id_response {
 }
 /// The request type for get_wasm_metadata, which returns the metadata for a given wasm
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct GetWasmMetadataRequest {
     #[prost(bytes = "vec", optional, tag = "1")]
@@ -581,7 +733,14 @@ pub struct GetWasmMetadataRequest {
     pub hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct MetadataSection {
     /// First part of the section. Normally, this is either "icp:private" or "icp:public".

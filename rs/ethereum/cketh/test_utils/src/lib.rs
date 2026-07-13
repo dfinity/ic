@@ -701,7 +701,7 @@ impl CkEthSetup {
         let log = self.env.canister_log(self.minter_id);
 
         let mut records = log.records().iter().collect::<Vec<_>>();
-        records.sort_by(|a, b| a.idx.cmp(&b.idx));
+        records.sort_by_key(|a| a.idx);
         records
             .into_iter()
             .map(|log| CanisterLog {

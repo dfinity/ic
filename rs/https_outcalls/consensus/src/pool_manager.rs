@@ -488,6 +488,7 @@ impl CanisterHttpPoolManagerImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
+        // TODO: Use cost schedule from the context instead, once it exists.
         let cost_schedule = state.get_own_cost_schedule();
         let next_callback_id = self.next_callback_id();
 
@@ -521,8 +522,8 @@ impl CanisterHttpPoolManagerImpl {
 
                 // Invalidate shares whose claimed spent cycles exceed what a
                 // single replica is allowed to consume. Free subnets charge
-                // nothing, so their spend is not bounded (it may exceed the zero
-                // allowance) and is used only for cost accounting.
+                // nothing, so their spend  may exceed the zero allowance.
+                // It is used only for cost accounting.
                 if cost_schedule != CanisterCyclesCostSchedule::Free
                     && share.content.spent() > context.refund_status.per_replica_allowance
                 {
@@ -781,6 +782,8 @@ pub mod test {
             pricing_version,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 
@@ -2123,6 +2126,7 @@ pub mod test {
 
                 // `make_new_requests` will try to dispatch contexts to the adapter shim.
                 // Accept any number of `send` calls and treat them as no-ops.
+                #[allow(clippy::result_large_err)]
                 shim_mock.expect_send().returning(|_| Ok(()));
 
                 let mut sequence = Sequence::new();
