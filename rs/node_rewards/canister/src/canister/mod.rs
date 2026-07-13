@@ -230,12 +230,11 @@ impl NodeRewardsCanister {
 //   * The window is expressed as fixed UTC calendar dates. Reward calculation is deterministic
 //     given the stored daily metrics, so querying any past day always returns the same result, and
 //     the reduction reverts automatically at REWARD_REDUCTION_END without a further upgrade.
-//   * The start date is aligned to a reward-period boundary (the day after the last reward event's
-//     end date) so that whole monthly payouts are reduced rather than partial ones.
+//   * The start and end dates are fixed UTC calendar dates chosen per NNS motion proposal 142724.
 
 /// First day (inclusive, UTC) on which the reduction applies.
-const REWARD_REDUCTION_START: (i32, u32, u32) = (2026, 7, 14);
-/// First day (exclusive, UTC) on which the reduction no longer applies (START + 3 reward periods).
+const REWARD_REDUCTION_START: (i32, u32, u32) = (2026, 7, 15);
+/// First day (exclusive, UTC) on which the reduction no longer applies.
 const REWARD_REDUCTION_END: (i32, u32, u32) = (2026, 10, 14);
 
 // Node providers subject to the reduction: those that failed to respond within the 24h window in
@@ -578,7 +577,7 @@ mod reward_reduction_tests {
         reduce_provider_results(
             results,
             &on,
-            d(2026, 7, 14),
+            d(2026, 7, 15),
             d(2026, 10, 14),
             &reduced.iter().cloned().collect(),
             Decimal::new(5, 1), // 0.5
@@ -590,7 +589,7 @@ mod reward_reduction_tests {
         let affected = PrincipalId::new_node_test_id(1);
         let mut results = BTreeMap::from([(affected, provider_rewards(&[100, 51]))]);
 
-        reduce(&mut results, d(2026, 7, 14), &[affected]);
+        reduce(&mut results, d(2026, 7, 15), &[affected]);
 
         let pr = &results[&affected];
         // Nodes are individually halved and the total is recomputed from the scaled nodes.
@@ -614,7 +613,7 @@ mod reward_reduction_tests {
         let other = PrincipalId::new_node_test_id(2);
         let mut results = BTreeMap::from([(other, provider_rewards(&[100, 50]))]);
 
-        reduce(&mut results, d(2026, 7, 14), &[affected]);
+        reduce(&mut results, d(2026, 7, 15), &[affected]);
 
         assert_eq!(results[&other].total_adjusted_rewards_xdr_permyriad, 150);
     }
@@ -624,7 +623,8 @@ mod reward_reduction_tests {
         let affected = PrincipalId::new_node_test_id(1);
         let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
 
-        reduce(&mut results, d(2026, 7, 13), &[affected]);
+        // The day before the (exclusive) start is not reduced.
+        reduce(&mut results, d(2026, 7, 14), &[affected]);
 
         assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
     }
@@ -649,7 +649,7 @@ mod reward_reduction_tests {
     fn reduction_applies_on_start_and_last_in_window_day() {
         let affected = PrincipalId::new_node_test_id(1);
 
-        for day in [d(2026, 7, 14), d(2026, 10, 13)] {
+        for day in [d(2026, 7, 15), d(2026, 10, 13)] {
             let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
             reduce(&mut results, day, &[affected]);
             assert_eq!(
