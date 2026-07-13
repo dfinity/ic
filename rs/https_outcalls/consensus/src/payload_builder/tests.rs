@@ -48,7 +48,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
@@ -881,6 +881,8 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // Insert the context in the replicated state
@@ -953,6 +955,8 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // Insert the context in the replicated state
@@ -1026,6 +1030,8 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
@@ -1077,6 +1083,8 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1281,6 +1289,8 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // Inject this context into the state reader.
@@ -1350,6 +1360,8 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1426,6 +1438,8 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // Inject this context into the state reader.
@@ -1503,6 +1517,8 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         // 2. Inject this context into the state reader
@@ -4707,6 +4723,8 @@ pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestCo
         pricing_version: ic_types::canister_http::PricingVersion::Legacy,
         refund_status: ic_types::canister_http::RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: None,
     }
 }
 
@@ -4732,6 +4750,8 @@ fn flexible_request_context(
         pricing_version: ic_types::canister_http::PricingVersion::PayAsYouGo,
         refund_status: ic_types::canister_http::RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: None,
     }
 }
 

@@ -189,6 +189,8 @@ mod tests {
                 refunding_nodes: BTreeSet::new(),
             },
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 
