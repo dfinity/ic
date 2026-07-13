@@ -2284,11 +2284,12 @@ pub struct StartServerParams {
 
 /// Attempt to start a new PocketIC server.
 ///
-/// The returned [`ServerHandle`] owns the spawned server process. On unix it is
-/// registered in a process-global registry and, once the test process exits,
-/// automatically killed (its whole process group, so the canister-sandbox children are
-/// terminated too) and reaped; on other platforms the server is not killed automatically
-/// and shuts down on its TTL. Callers that want to terminate the server earlier can call
+/// The spawned server process is owned by a process-global registry; the returned
+/// [`ServerHandle`] only refers to it (dropping the handle does not stop the server). On
+/// unix, once the test process exits, the server is killed (its whole process group, so
+/// the canister-sandbox children are terminated too) and reaped on a bounded, best-effort
+/// basis; on other platforms the server is not killed automatically and shuts down on its
+/// TTL. Callers that want to terminate the server earlier can call
 /// [`ServerHandle::kill_and_wait`].
 pub async fn start_server(params: StartServerParams) -> (ServerHandle, Url) {
     let default_bin_dir =

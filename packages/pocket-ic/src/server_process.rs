@@ -68,8 +68,10 @@ fn lock_registry() -> MutexGuard<'static, Vec<Option<ServerProc>>> {
 /// process-global registry and returns a [`ServerHandle`] referring to it.
 ///
 /// The registry keeps the child alive for the remainder of the process (so the server
-/// stays up for the whole test run) and guarantees it is killed and reaped at process
-/// exit, replacing the previous "spawn and leak" behaviour.
+/// stays up for the whole test run). On unix it is then killed (its process group) and
+/// reaped at process exit on a bounded, best-effort basis, replacing the previous
+/// "spawn and leak" behaviour; on other platforms the child is not reaped automatically
+/// and shuts down on its TTL.
 pub(crate) fn register(child: Child) -> ServerHandle {
     #[cfg(unix)]
     let pgid = child.id() as libc::pid_t;
@@ -86,22 +88,24 @@ pub(crate) fn register(child: Child) -> ServerHandle {
 
 /// A handle to a `pocket-ic-server` spawned by [`crate::start_server`].
 ///
-/// The server is owned by a process-global registry and is automatically killed and
-/// reaped when the test process exits (on unix), so most callers can simply drop this
-/// handle. Callers that want to terminate the server earlier — e.g. to test crash
-/// recovery — can call [`ServerHandle::kill_and_wait`].
+/// The server is owned by a process-global registry. On unix it is killed and reaped
+/// when the test process exits (on a bounded, best-effort basis), so most callers can
+/// simply drop this handle. Callers that want to terminate the server earlier — e.g. to
+/// test crash recovery — can call [`ServerHandle::kill_and_wait`].
 pub struct ServerHandle {
     idx: usize,
 }
 
 impl ServerHandle {
-    /// Kills the server — its whole process group on unix, so the canister-sandbox
-    /// children are terminated too — and waits for it to be reaped, immediately.
+    /// Kills the server now — its whole process group on unix, so the canister-sandbox
+    /// children are terminated too — and makes a bounded, best-effort attempt to reap it.
     ///
-    /// This is a *hard* kill (`SIGKILL` on unix): it does not give the server a chance
-    /// to shut down gracefully or checkpoint state. Idempotent with respect to the
-    /// exit-time reaper: the server is removed from the registry here, so it is not
-    /// signalled or waited on again at process exit.
+    /// This is a *hard* kill (`SIGKILL` on unix): it does not give the server a chance to
+    /// shut down gracefully or checkpoint state. The reap is time-bounded, so on return
+    /// the process has been signalled (and, on unix, its whole group `SIGKILL`ed) but may
+    /// not yet be fully reaped. Idempotent with respect to the exit-time reaper: the
+    /// server is removed from the registry here, so it is not signalled or waited on again
+    /// at process exit.
     pub fn kill_and_wait(&self) {
         let taken = lock_registry().get_mut(self.idx).and_then(Option::take);
         if let Some(mut proc) = taken {
