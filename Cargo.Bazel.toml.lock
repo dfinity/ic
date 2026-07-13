@@ -3785,7 +3785,7 @@ dependencies = [
  "hyper-rustls 0.27.7",
  "hyper-socks2",
  "hyper-util",
- "ic-agent",
+ "ic-agent 0.48.1",
  "ic-bn-lib",
  "ic-bn-lib-common",
  "ic-btc-interface",
@@ -3795,6 +3795,7 @@ dependencies = [
  "ic-cbor",
  "ic-cdk 0.19.0",
  "ic-cdk-executor",
+ "ic-cdk-management-canister",
  "ic-cdk-timers",
  "ic-certificate-verification",
  "ic-certification",
@@ -3806,15 +3807,15 @@ dependencies = [
  "ic-gateway",
  "ic-http-certification",
  "ic-identity-hsm",
- "ic-management-canister-types 0.7.1",
+ "ic-management-canister-types 0.8.0",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",
  "ic-stable-structures 0.6.8",
  "ic-stable-structures 0.7.0",
  "ic-test-state-machine-client",
- "ic-transport-types",
- "ic-utils",
+ "ic-transport-types 0.48.1",
+ "ic-utils 0.48.1",
  "ic-verify-bls-signature",
  "ic-vetkeys",
  "ic-wasm",
@@ -4093,7 +4094,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5938,7 +5939,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.9",
+ "socket2 0.6.1",
  "system-configuration 0.7.0",
  "tokio",
  "tower-layer",
@@ -5995,7 +5996,57 @@ dependencies = [
  "http-body-util",
  "ic-certification",
  "ic-ed25519",
- "ic-transport-types",
+ "ic-transport-types 0.47.3",
+ "ic-verify-bls-signature",
+ "ic_principal",
+ "k256",
+ "leb128",
+ "p256",
+ "pem",
+ "pkcs8",
+ "rand 0.10.1",
+ "rangemap",
+ "reqwest 0.13.4",
+ "sec1",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "serde_repr",
+ "sha2 0.10.9",
+ "stop-token",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tower-service",
+ "url",
+]
+
+[[package]]
+name = "ic-agent"
+version = "0.48.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0844c80b49056ad4117e7abba251ee98758599e7bd8461775a1349251a8263b1"
+dependencies = [
+ "arc-swap",
+ "async-channel 2.5.0",
+ "async-lock",
+ "async-trait",
+ "async-watch",
+ "backoff",
+ "bytes",
+ "cached 0.56.0",
+ "candid",
+ "ecdsa",
+ "ed25519-consensus",
+ "elliptic-curve",
+ "futures-util",
+ "hex",
+ "http 1.3.1",
+ "http-body 1.0.1",
+ "http-body-util",
+ "ic-certification",
+ "ic-ed25519",
+ "ic-transport-types 0.48.1",
  "ic-verify-bls-signature",
  "ic_principal",
  "k256",
@@ -6055,7 +6106,7 @@ dependencies = [
  "hyper 1.8.1",
  "hyper-rustls 0.27.7",
  "hyper-util",
- "ic-agent",
+ "ic-agent 0.47.3",
  "ic-bn-lib-common",
  "indoc 2.0.7",
  "instant-acme",
@@ -6126,7 +6177,7 @@ dependencies = [
  "humantime",
  "hyper 1.8.1",
  "hyper-util",
- "ic-agent",
+ "ic-agent 0.47.3",
  "instant-acme",
  "parse-size",
  "prometheus 0.14.0",
@@ -6513,7 +6564,7 @@ dependencies = [
  "ic-custom-domains-backend",
  "ic-custom-domains-base",
  "ic-http-gateway-protocol",
- "ic-transport-types",
+ "ic-transport-types 0.47.3",
  "isbot",
  "itertools 0.15.0",
  "lazy_static",
@@ -6574,21 +6625,21 @@ dependencies = [
  "http 1.3.1",
  "http-body 1.0.1",
  "http-body-util",
- "ic-agent",
+ "ic-agent 0.47.3",
  "ic-http-certification",
  "ic-response-verification",
- "ic-utils",
+ "ic-utils 0.47.3",
  "thiserror 1.0.68",
 ]
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.47.3"
+version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "577e4411ea208f0bf7e6bf13535660df682fada94f45fbbc79b7e34c946a06ae"
+checksum = "32ebd639a70743d6ccb972d4a04b5773c4a8b138f5ed8fead34063906e871dc9"
 dependencies = [
  "hex",
- "ic-agent",
+ "ic-agent 0.48.1",
  "pkcs11",
  "sha2 0.10.9",
  "simple_asn1",
@@ -6611,6 +6662,17 @@ name = "ic-management-canister-types"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51705516ed4d23f24e8d714a70fe9d7ec17106cfd830d5434a1b29f583ef70ee"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
+name = "ic-management-canister-types"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3187ba94198a8df0e38a478f289812fcead6a86c658b9552b00f1f8081f06bb3"
 dependencies = [
  "candid",
  "serde",
@@ -6715,6 +6777,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-transport-types"
+version = "0.48.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7caf62ab0d7e00d0d4926ae9cb81c42ab5fb84e9d8d9b183bfa42ab12180d2f"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-certification",
+ "leb128",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "serde_repr",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "ic-utils"
 version = "0.47.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6723,7 +6803,29 @@ dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent",
+ "ic-agent 0.47.3",
+ "ic-management-canister-types 0.7.1",
+ "once_cell",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.9",
+ "strum 0.28.0",
+ "strum_macros 0.28.0",
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
+name = "ic-utils"
+version = "0.48.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baa00e2c777d214553cc86160d358e1820063745bbe89c4d6fa61184182b01ec"
+dependencies = [
+ "async-trait",
+ "candid",
+ "futures-util",
+ "ic-agent 0.48.1",
  "ic-management-canister-types 0.7.1",
  "once_cell",
  "semver",
@@ -10787,7 +10889,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.27",
- "socket2 0.5.9",
+ "socket2 0.6.1",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -11819,7 +11921,7 @@ dependencies = [
  "errno 0.3.10",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11962,7 +12064,7 @@ dependencies = [
  "security-framework 3.5.1",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -11983,7 +12085,7 @@ dependencies = [
  "security-framework 3.5.1",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -13657,7 +13759,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -12,7 +12,7 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use candid::Principal;
+use candid::{Encode, Principal};
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_fetch_logs, can_read_msg, cert_state_makes_progress_with_retries,
@@ -34,7 +34,6 @@ use ic_system_test_driver::{
     util::{JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -178,14 +177,22 @@ pub fn upgrade(
         let agent = create_agent(healthy_node.get_public_url().as_str())
             .await
             .expect("Failed to create agent");
-        let mgr = ManagementCanister::create(&agent);
         let snapshot_args = TakeCanisterSnapshotArgs {
             canister_id: CanisterId::from(can_id),
             replace_snapshot: None,
             uninstall_code: None,
             sender_canister_version: None,
         };
-        mgr.take_canister_snapshot(&snapshot_args).await.unwrap();
+        // Call the management canister directly instead of via `ic_utils`'s typed
+        // helper: `ic_utils` still depends on an older `ic-management-canister-types`,
+        // so its `take_canister_snapshot` expects an incompatible argument type.
+        agent
+            .update(&Principal::management_canister(), "take_canister_snapshot")
+            .with_arg(Encode!(&snapshot_args).unwrap())
+            .with_effective_canister_id(CanisterId::from(can_id))
+            .call_and_wait()
+            .await
+            .unwrap();
     });
 
     info!(logger, "Stopping faulty node {} ...", faulty_node.node_id);

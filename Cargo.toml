@@ -683,7 +683,7 @@ hyper-rustls = { version = "0.27.5", default-features = false, features = [
 hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.12", features = ["full"] }
 ic0 = "1.0.0"
-ic-agent = { version = "0.47.3", features = ["pem"] }
+ic-agent = { version = "0.48.1", features = ["pem"] }
 ic-bn-lib = { version = "0.2.3", features = ["acme-alpn"] }
 ic-bn-lib-common = { version = "0.2.2" }
 ic-btc-interface = "0.4.0"
@@ -691,19 +691,20 @@ ic-canister-runtime = "0.2.0"
 ic-canister-sig-creation = "1.3.1"
 ic-cbor = "3"
 ic-cdk = "0.19.0"
+ic-cdk-management-canister = "0.1.1"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "3e698972422be07776bf888666285b7b3f7c984e", default-features = false }
 ic-http-certification = "3.0.3"
-ic-identity-hsm = { version = "0.47.3" }
-ic-management-canister-types = "0.7.1"
+ic-identity-hsm = { version = "0.48.1" }
+ic-management-canister-types = "0.8.0"
 ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
-ic-transport-types = { version = "0.47.3" }
-ic-utils = { version = "0.47.3", features = ["raw"] }
+ic-transport-types = { version = "0.48.1" }
+ic-utils = { version = "0.48.1", features = ["raw"] }
 ic-vetkeys = "0.7.0"
 ic-xrc-types = "1.2.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
