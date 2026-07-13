@@ -362,6 +362,61 @@ fn run_bench_fetch_single_log_in_middle<M: criterion::measurement::Measurement>(
     });
 }
 
+/// Regression guard for the filtered read path against an adversarial filter whose
+/// range sits entirely *below* the buffer's live index range. Its `start` makes the
+/// index seek land at the head, so the very first scanned record is already past the
+/// range's end.
+///
+/// `records()` scans in ascending key order and stops as soon as it reaches a record
+/// past the range's end (`LogRecord::is_past_range_end`), so this returns nothing in
+/// O(1) — it must NOT degrade into a full head-to-tail scan as the buffer (log memory
+/// limit) grows. Before that early-exit was added, this case scanned the whole buffer
+/// (e.g. ~15 ms on a full 2 MiB buffer) while returning zero records, which the
+/// instruction deduction — derived from the returned record count and content size —
+/// undercharged as an empty response. This differs from `FETCH_FILTER_EMPTY` (range
+/// *above* the newest index), which the seek instead lands at the tail.
+fn run_bench_fetch_no_match_scan<M: criterion::measurement::Measurement>(
+    group: &mut BenchmarkGroup<M>,
+    bench_name: &str,
+    log_memory_limit: u64,
+    log_message_size: usize,
+) {
+    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
+    let sender = canister_test_id(1).get();
+    let canister = test.canister_state(target);
+    let log_memory_store = &canister.system_state.log_memory_store;
+    // Oldest live index: after filling to capacity the buffer has evicted its
+    // earliest records, so the oldest live index is > 0 and the range `[0, oldest)`
+    // is non-empty (valid) yet matches no live record.
+    let oldest_idx = log_memory_store
+        .all_records_for_testing()
+        .first()
+        .expect("buffer is non-empty")
+        .idx;
+    assert!(
+        oldest_idx > 0,
+        "buffer did not evict any records — cannot build a head-positioned no-match filter",
+    );
+    let filter = FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+        start: 0,
+        end: oldest_idx,
+    });
+    // Guard against the benchmark silently measuring a normal read: the filter must
+    // match nothing (while still forcing a full-buffer scan, see the doc comment).
+    assert!(log_memory_store.records(Some(filter)).is_empty());
+    group.bench_function(bench_name, |b| {
+        b.iter_batched(
+            || {
+                let mut request = FetchCanisterLogsRequest::new(target);
+                request.filter = Some(filter);
+                request
+            },
+            |request| fetch_canister_logs_response_for_bench(sender, canister, request),
+            BatchSize::LargeInput,
+        );
+    });
+}
+
 /// Executes a single `fetch_canister_logs` subnet message against a target whose
 /// log buffer is filled to capacity and returns the Candid-encoded reply payload.
 /// Panics if the call was rejected. Used for one-off sanity checks.
@@ -536,6 +591,22 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
                 run_bench_fetch_single_log_in_middle(
                     &mut group,
                     &format!("fetch:{name}/msg:{msg_name}/filter:single_mid"),
+                    limit,
+                    msg_size,
+                );
+            }
+        }
+        // No-match scan across the same growing log memory limits and content sizes:
+        // a valid filter positioned below the live idx range. The scan must early-exit
+        // (returning nothing in O(1)) rather than walk the whole buffer, so — unlike
+        // `filter:empty` (positioned past the newest index) — these times must stay
+        // flat as the buffer grows. A regression here would reintroduce a full-buffer
+        // scan that returns zero records yet is charged only the fixed base.
+        for (msg_name, msg_size) in [("0B", 0_usize), ("100B", 100_usize)] {
+            for (name, limit) in log_memory_limits {
+                run_bench_fetch_no_match_scan(
+                    &mut group,
+                    &format!("fetch:{name}/msg:{msg_name}/filter:no_match_scan"),
                     limit,
                     msg_size,
                 );
