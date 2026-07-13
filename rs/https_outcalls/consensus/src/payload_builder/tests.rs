@@ -1761,13 +1761,13 @@ fn assert_payload_rejected_for_excess_spent(
             validation_result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::SpentExceedsAllowance {
+                    InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
                         spent,
-                        per_replica_allowance,
+                        limit,
                     },
                 ),
             )) if spent == receipt_exceeding_allowance().spent
-                && per_replica_allowance == Cycles::new(0)
+                && limit == Cycles::new(0)
         );
     });
 }

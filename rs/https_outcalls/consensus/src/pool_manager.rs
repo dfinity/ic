@@ -522,10 +522,13 @@ impl CanisterHttpPoolManagerImpl {
 
                 // Invalidate shares whose claimed spent cycles exceed what a
                 // single replica is allowed to consume. Free subnets charge
-                // nothing, so their spend  may exceed the zero allowance.
-                // It is used only for cost accounting.
-                if cost_schedule != CanisterCyclesCostSchedule::Free
-                    && share.content.spent() > context.refund_status.per_replica_allowance
+                // nothing, so their spend (used only for cost accounting) may
+                // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                if share.content.spent()
+                    > max_http_outcall_spend(
+                        cost_schedule,
+                        context.refund_status.per_replica_allowance,
+                    )
                 {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),

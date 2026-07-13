@@ -1081,7 +1081,8 @@ pub struct CanisterHttpPaymentReceipt {
     /// The amount of cycles, out of the per-replica allowance, that the replica
     /// has spent. The cycles to refund to the caller are derived downstream as
     /// `per_replica_allowance - spent`. On free subnets it may exceed the (zero)
-    /// allowance, since it is only used for cost accounting.
+    /// allowance, since it is only used for cost accounting, but never
+    /// [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
     pub spent: Cycles,
 }
 
@@ -1089,6 +1090,34 @@ impl CountBytes for CanisterHttpPaymentReceipt {
     fn count_bytes(&self) -> usize {
         let Self { spent } = self;
         size_of_val(spent)
+    }
+}
+
+/// The maximum cycles a single replica may report having spent on an HTTP
+/// outcall when the subnet uses a [`CanisterCyclesCostSchedule::Free`] schedule.
+///
+/// Free subnets charge nothing, so the reported spend (used only for cost
+/// accounting) is not bounded by the per-replica allowance. To keep it from
+/// being arbitrarily large, it is instead bounded by this constant.
+// TODO: Lower this to a meaningful bound once free-subnet cost accounting is
+// finalized.
+pub const MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET: Cycles = Cycles::new(u64::MAX as u128);
+
+/// Returns the maximum cycles a single replica may report having `spent` on an
+/// HTTP outcall, given the subnet's `cost_schedule` and the request's
+/// `per_replica_allowance`.
+///
+/// On a [`CanisterCyclesCostSchedule::Normal`] schedule this is the
+/// `per_replica_allowance` (a replica may never spend more than it was granted).
+/// On a [`CanisterCyclesCostSchedule::Free`] schedule nothing is charged, so the
+/// spend is instead bounded by [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+pub fn max_http_outcall_spend(
+    cost_schedule: CanisterCyclesCostSchedule,
+    per_replica_allowance: Cycles,
+) -> Cycles {
+    match cost_schedule {
+        CanisterCyclesCostSchedule::Free => MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
+        CanisterCyclesCostSchedule::Normal => per_replica_allowance,
     }
 }
 
