@@ -707,6 +707,8 @@ mod tests {
                 pricing_version: PricingVersion::Legacy,
                 refund_status: RefundStatus::default(),
                 registry_version: RegistryVersion::from(1),
+                subnet_size: NumberOfNodes::from(13),
+                cost_schedule: None,
             },
             socks_proxy_addrs: vec![],
             cost_schedule: CanisterCyclesCostSchedule::Normal,

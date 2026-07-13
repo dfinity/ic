@@ -401,7 +401,7 @@ impl TopologySnapshot {
     }
 
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
         Box::new(
             self.local_registry
                 .get_subnet_ids(registry_version)
@@ -420,7 +420,7 @@ impl TopologySnapshot {
     }
 
     pub fn subnet_canister_ranges(&self, sub: SubnetId) -> Vec<CanisterIdRange> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
         self.local_registry
             .get_subnet_canister_ranges(registry_version, sub)
             .expect("Could not deserialize optional routing table from local registry.")
@@ -428,7 +428,7 @@ impl TopologySnapshot {
     }
 
     pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
         let assigned_nodes: HashSet<_> = self
             .local_registry
             .get_subnet_ids(registry_version)
@@ -470,7 +470,7 @@ impl TopologySnapshot {
     }
 
     pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
 
         Box::new(
             self.local_registry
@@ -490,7 +490,7 @@ impl TopologySnapshot {
     }
 
     pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
 
         Box::new(
             self.local_registry
@@ -510,7 +510,7 @@ impl TopologySnapshot {
     }
 
     pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
 
         Box::new(
             self.local_registry
@@ -530,7 +530,7 @@ impl TopologySnapshot {
     }
 
     pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
-        let registry_version = self.local_registry.get_latest_version();
+        let registry_version = self.registry_version;
 
         self.local_registry
             .get_all_replica_version_records(registry_version)?

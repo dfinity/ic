@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:d760427d72cf6420c84f7558af39e9eb3d8a0d26a15892fa1500c4f592a478ae
+      image: ghcr.io/dfinity/ic-build@sha256:78e4ccf43ec2cac7a3812a28ea34bccb74bed8c35af361737af9ce42a73eb48d
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -101,7 +101,7 @@ jobs:
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
         with:
-          channel-id: eng-nns
+          channel-id: eng-nns-alerts
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

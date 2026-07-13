@@ -518,12 +518,12 @@ impl CanisterHttpPoolManagerImpl {
                     return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
                 };
 
-                // Invalidate shares whose refund exceeds what a single
-                // replica is allowed to claim.
-                if share.content.refund() > context.refund_status.per_replica_allowance {
+                // Invalidate shares whose claimed spent cycles exceed what a
+                // single replica is allowed to consume.
+                if share.content.spent() > context.refund_status.per_replica_allowance {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
-                        "Refund is greater than replica allowance".to_string(),
+                        "Spent cycles are greater than replica allowance".to_string(),
                     ));
                 }
 
@@ -776,6 +776,8 @@ pub mod test {
             pricing_version,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 
@@ -3111,7 +3113,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_refund_greater_than_replica_allowance_is_invalid() {
+    fn test_spent_greater_than_replica_allowance_is_invalid() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let Dependencies {
@@ -3152,7 +3154,7 @@ pub mod test {
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
 
-                // Build a per-replica receipt share whose refund claim is
+                // Build a per-replica receipt share whose spent claim is
                 // larger than the per-replica allowance.
                 let receipt_share = CanisterHttpResponseReceipt {
                     metadata: CanisterHttpResponseMetadata {
@@ -3163,7 +3165,7 @@ pub mod test {
                         replica_version: ReplicaVersion::default(),
                     },
                     payment_receipt: CanisterHttpPaymentReceipt {
-                        refund: Cycles::new(200),
+                        spent: Cycles::new(200),
                     },
                 };
                 let signature = crypto
@@ -3205,7 +3207,7 @@ pub mod test {
                 assert_matches!(
                     &changes[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Refund is greater than replica allowance"
+                        if reason == "Spent cycles are greater than replica allowance"
                 );
             })
         });

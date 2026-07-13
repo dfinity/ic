@@ -22,7 +22,7 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.93.1"],
+    versions = ["1.95.0"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -1264,11 +1264,11 @@ crate.spec(
 )
 crate.spec(
     package = "prost",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "prost-build",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "protobuf",
@@ -1811,11 +1811,19 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.13.1",
+    version = "^0.14.5",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.13.1",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost-build",
+    version = "^0.14.5",
 )
 crate.spec(
     features = ["full"],
@@ -2016,7 +2024,7 @@ crate.spec(
 )
 crate.spec(
     package = "x509-parser",
-    version = "^0.16.0",
+    version = "^0.18.1",
 )
 crate.spec(
     features = [
