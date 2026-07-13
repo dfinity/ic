@@ -238,9 +238,31 @@ const REWARD_REDUCTION_START: (i32, u32, u32) = (2026, 7, 14);
 /// First day (exclusive, UTC) on which the reduction no longer applies (START + 3 reward periods).
 const REWARD_REDUCTION_END: (i32, u32, u32) = (2026, 10, 14);
 
-// TODO(proposal-142724): populate with the principals of the node providers that failed both
-// incident-response smoke tests. While this list is empty, no reduction is applied.
-const REDUCED_NODE_PROVIDERS: &[&str] = &[];
+// Node providers subject to the reduction: those that failed to respond within the 24h window in
+// BOTH incident-response smoke tests (May 20 and June 13, 2026), per NNS motion proposal 142724.
+// A late (>24h) response counts as a failure. Principals were taken from the node provider registry
+// and cross-checked against the on-chain `list_node_providers`.
+const REDUCED_NODE_PROVIDERS: &[&str] = &[
+    "sqhxa-h6ili-qkwup-ohzwn-yofnm-vvnp5-kxdhg-saabw-rvua3-xp325-zqe", // 43rd Big Idea Films
+    "eipr5-izbom-neyqh-s3ec2-52eww-cyfpg-qfomg-3dpwj-4pffh-34xcu-7qe", // 87m Neuron
+    "2dgp4-h57n4-a4kgx-n4uun-huo3a-wbdlc-m57wd-jtkuh-g5vcc-fcbby-6qe", // 100 Count Holdings
+    "ss6oe-fm7b2-b5r57-y3x74-omrz5-d5pgy-5iwtw-4aew5-aqj3l-6ydra-wqe", // Arceau NP LLC
+    "mjnyf-lzqq6-s7fzb-62rqm-xzvge-5oa26-humwp-dvwxp-jxxkf-hoel7-fqe", // Bitmoon
+    "sma3p-ivkif-hz7nu-ngmvq-ibnjg-nubke-zf6gh-wbnfc-2dlng-l3die-zqe", // BLP22
+    "ks7ow-zvs7i-ratdk-azq34-zio2b-gbekj-qjicg-pfhp3-ovhgu-k5qql-dae", // BlockTech Ventures
+    "i3cfo-s2tgu-qe5ym-wk7e6-y7ura-pptgu-kevuf-2feh7-z4enq-5hz4s-mqe", // Conic Ventures
+    "w4buy-lgwzr-pccs7-huzhh-qqnws-rns75-iaoox-jolrm-xs2ra-vdu3o-2qe", // Decentralized Entities Foundation
+    "7ryes-jnj73-bsyu4-lo6h7-lbxk5-x4ien-lylws-5qwzl-hxd5f-xjh3w-mqe", // Extragone SA
+    "i7dto-bgkj2-xo5dx-cyrb7-zkk5y-q46eh-gz6iq-qkgyc-w4qte-scgtb-6ae", // Iancu Aurel
+    "7ws2n-wqorv-vmo4m-5e222-n42c3-hk43s-ei3kp-4hpbn-xlkzo-jgv7i-tqe", // InfoObjects
+    "4dibr-2alzr-h6kva-bvwn2-yqgsl-o577t-od46o-v275p-a2zov-tcw4f-eae", // Neptune Partners
+    "r3yjn-kthmg-pfgmb-2fngg-5c7d7-t6kqg-wi37r-j7gy6-iee64-kjdja-jae", // Pindar Technology Limited
+    "4fedi-eu6ue-nd7ts-vnof5-hzg66-hgzl7-liy5n-3otyp-h7ipw-owycg-uae", // Power Meta Corporation
+    "g2ax6-jrkmb-3zuh3-jibtb-q5xoq-njrgo-5utbc-j2o7g-zfq2w-yyhky-dqe", // Wancloud limited
+    "glrjs-2dbzh-owbdd-fpp5e-eweoz-nsuto-e3jmk-tl42c-wem4f-qfpfa-qqe", // Zarety
+    "pa5mu-yxsey-b4yrk-bodka-dhjnm-a3nx4-w2grw-3b766-ddr6e-nupu4-pqe", // Zenith Code LLC
+    "hzqcb-iiagd-4erjo-qn7rq-syqro-zztl6-cpble-atnkd-2c6bg-bxjoa-qae", // Zondax AG
+];
 
 /// Multiplier applied to the adjusted rewards of affected node providers within the window.
 fn reward_reduction_multiplier() -> Decimal {
