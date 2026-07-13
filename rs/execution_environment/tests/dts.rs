@@ -1741,26 +1741,22 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    // reduce slice limit to provoke test conditions
-    let env = env.restart_node_with_config(dts_state_machine_config(dts_subnet_config(
-        NumInstructions::from(1_000_000_000),
-        NumInstructions::from(250_000),
-    )));
-
+    // The callee program `b` is sent as the argument of the call made by `a`,
+    // so it is kept small to ensure that making the call does not exceed the
+    // per-slice instruction limit.
     let b = wasm()
-        .stable64_grow(1) // cost: 1 wasm page = 16 os pages -> 5k * 16 = 80k instructions
-        .stable64_fill(0, 0, 24_000) // 24_000 cost: 6 stable pages dirtied (6*5k) + 6 heap pages (6*5k) (because vec is allocated there) + 24k for the bytes = 84k instructions
-        .stable64_fill(0, 0, 24_000) // 84k * 3 = 252k -> this message needs at least two slices.
-        .stable64_fill(0, 0, 24_000)
+        .stable64_grow(1)
+        .stable64_fill(0, 0, 1_000)
         .message_payload()
         .append_and_reply()
         .build();
 
-    let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 24_000)
-        .stable64_fill(0, 0, 24_000)
-        .stable64_fill(0, 0, 24_000)
+    // `a` does many small `stable64_fill`s so that no single bulk memory
+    // operation exceeds the per-slice instruction limit (each one must fit into
+    // a single DTS slice), while the total work is large enough for the
+    // execution to span multiple slices.
+    let a = (0..20)
+        .fold(wasm().stable64_grow(1), |w, _| w.stable64_fill(0, 0, 1_000))
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
