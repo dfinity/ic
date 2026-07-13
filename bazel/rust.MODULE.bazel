@@ -1205,8 +1205,8 @@ crate.spec(
         "flamegraph",
         "prost-codec",
     ],
-    package = "pprof",
     git = "https://github.com/dfinity/pprof-rs",
+    package = "pprof",
     rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
 )
 crate.spec(
