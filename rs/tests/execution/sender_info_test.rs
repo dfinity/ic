@@ -1,51 +1,62 @@
 /* tag::catalog[]
 end::catalog[] */
 
-//! System test for the sender_info feature.
+//! System test for the `sender_info` ingress feature.
 //!
-//! Tests that canisters can read `msg_caller_info_data` and `msg_caller_info_signer`
-//! when the caller provides valid `sender_info` in an ingress message authenticated
-//! via canister signatures.
+//! Verifies that a canister can read `msg_caller_info_data` and
+//! `msg_caller_info_signer` when the caller attaches canister-signed
+//! `sender_info` to a query and to an update. The request path is exercised
+//! through the standard `ic-agent`, which carries `sender_info` via
+//! `InfoAwareIdentity`.
 
 use anyhow::Result;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
+use ic_agent::identity::InfoAwareIdentity;
+use ic_crypto_sha2::Sha256;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{UniversalCanister, block_on, expiry_time};
+use ic_system_test_driver::util::{UniversalCanister, agent_with_identity, block_on};
 use ic_types::crypto::Signable;
-use ic_types::messages::{
-    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
-    HttpUserQuery, MessageId, RawSignedSenderInfo, SenderInfoContent, SignedDelegation,
-};
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::messages::SenderInfoContent;
 use ic_universal_canister::wasm;
-use reqwest::{StatusCode, Url};
-use slog::debug;
+use serde::Serialize;
+use serde_bytes::ByteBuf;
+use slog::info;
 
-// ---------------------------------------------------------------------------
-// Infrastructure (simplified from rs/tests/crypto/ingress_verification_test.rs)
-// ---------------------------------------------------------------------------
+const SIGNER_SEED: &[u8] = b"sender_info_test_seed";
+const INFO_BYTES: &[u8] = b"some user attributes";
 
-struct TestInformation {
-    url: Url,
-    canister_id: CanisterId,
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_parallel(
+            SystemTestSubGroup::new()
+                .add_test(systest!(query_reads_sender_info))
+                .add_test(systest!(update_reads_sender_info)),
+        )
+        .execute_from_args()?;
+    Ok(())
 }
 
-fn canister_id_from_principal(p: &Principal) -> CanisterId {
-    if *p == Principal::management_canister() {
-        CanisterId::ic_00()
-    } else {
-        CanisterId::try_from_principal_id(PrincipalId::from(*p)).expect("invalid canister ID")
-    }
+pub fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
-/// Creates valid canister signatures backed by a Universal Canister that sets
-/// certified data.
+// ---------------------------------------------------------------------------
+// UC-backed canister signer
+// ---------------------------------------------------------------------------
+
+/// A canister signer backed by a Universal Canister: it sets `certified_data`
+/// to the digest of a witness tree over `(seed, message)` and reads back the
+/// state certificate, forming an ICCSA signature.
 #[derive(Clone)]
 struct CanisterSigner<'a> {
     canister: &'a UniversalCanister<'a>,
@@ -53,29 +64,24 @@ struct CanisterSigner<'a> {
 }
 
 impl<'a> CanisterSigner<'a> {
-    pub fn new(canister: &'a UniversalCanister<'a>, seed: Vec<u8>) -> Self {
+    fn new(canister: &'a UniversalCanister<'a>, seed: Vec<u8>) -> Self {
         Self { canister, seed }
-    }
-
-    pub fn canister_id(&self) -> CanisterId {
-        canister_id_from_principal(&self.canister.canister_id())
     }
 
     /// Raw canister-signature public key bytes: length-prefixed canister id
     /// followed by seed.
-    pub fn public_key_raw(&self) -> Vec<u8> {
-        let canister_id = self.canister_id();
-        let canister_id_bytes = canister_id.get_ref().as_slice();
-        let mut buf =
-            vec![u8::try_from(canister_id_bytes.len()).expect("canister id too long for u8")];
-        buf.extend_from_slice(canister_id_bytes);
+    fn public_key_raw(&self) -> Vec<u8> {
+        let cid = self.canister.canister_id();
+        let cid_bytes = cid.as_slice();
+        let mut buf = vec![u8::try_from(cid_bytes.len()).expect("canister id too long for u8")];
+        buf.extend_from_slice(cid_bytes);
         buf.extend_from_slice(&self.seed);
         buf
     }
 
     /// DER-encoded SubjectPublicKeyInfo with the canister-signature algorithm
     /// OID 1.3.6.1.4.1.56387.1.2.
-    pub fn public_key_der(&self) -> Vec<u8> {
+    fn public_key_der(&self) -> Vec<u8> {
         use simple_asn1::{ASN1Block, oid};
         let oid_canister_signature = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2);
         let raw_key = self.public_key_raw();
@@ -88,22 +94,34 @@ impl<'a> CanisterSigner<'a> {
         simple_asn1::to_der(&subject_public_key_info).expect("failed to DER-encode public key")
     }
 
-    pub async fn sign(&self, message: &[u8]) -> Vec<u8> {
-        use ic_certification::{labeled, leaf};
-        use ic_crypto_sha2::Sha256;
-        use serde::Serialize;
-        use serde_bytes::ByteBuf;
+    /// Produce an ICCSA signature over `message`. Sets `certified_data` on the
+    /// underlying canister and captures the state certificate.
+    async fn sign(&self, message: &[u8]) -> Vec<u8> {
+        use ic_certification::{HashTree, labeled, leaf};
 
         let seed_hash = Sha256::hash(&self.seed);
         let msg_hash = Sha256::hash(message);
         let sig_tree = labeled(b"sig", labeled(seed_hash, labeled(msg_hash, leaf(b""))));
 
-        let certificate_cbor = self.certify_variable(&sig_tree.digest()).await;
+        self.canister
+            .update(
+                wasm()
+                    .certified_data_set(&sig_tree.digest())
+                    .reply()
+                    .build(),
+            )
+            .await
+            .expect("failed to set certified data on canister signer");
+        let certificate_cbor = self
+            .canister
+            .query(wasm().data_certificate().append_and_reply().build())
+            .await
+            .expect("failed to read canister signer's certificate");
 
-        #[derive(serde::Serialize)]
+        #[derive(Serialize)]
         struct CanisterSignature {
             certificate: ByteBuf,
-            tree: ic_certification::HashTree,
+            tree: HashTree,
         }
         let canister_sig = CanisterSignature {
             certificate: ByteBuf::from(certificate_cbor),
@@ -114,22 +132,11 @@ impl<'a> CanisterSigner<'a> {
         canister_sig.serialize(&mut serializer).unwrap();
         serializer.into_inner()
     }
-
-    async fn certify_variable(&self, variable_data: &[u8]) -> Vec<u8> {
-        let _ = self
-            .canister
-            .update(wasm().certified_data_set(variable_data).reply().build())
-            .await
-            .expect("failed to set certified data on universal canister");
-
-        self.canister
-            .query(wasm().data_certificate().append_and_reply().build())
-            .await
-            .expect("failed to get data certificate from universal canister")
-    }
 }
 
-/// Minimal identity wrapper for canister-signature authentication.
+/// An `ic_agent::Identity` that authenticates as `self_authenticating(pk_der)`
+/// where `pk_der` is a canister-signature SPKI. Signing produces an ICCSA
+/// signature over the request id.
 #[derive(Clone)]
 struct CanisterSignerIdentity<'a> {
     signer: CanisterSigner<'a>,
@@ -139,27 +146,22 @@ struct CanisterSignerIdentity<'a> {
 
 impl<'a> CanisterSignerIdentity<'a> {
     fn new(signer: CanisterSigner<'a>) -> Self {
-        let pk = signer.public_key_der();
-        let principal = Principal::self_authenticating(&pk);
+        let public_key_der = signer.public_key_der();
+        let principal = Principal::self_authenticating(&public_key_der);
         Self {
             signer,
-            public_key_der: pk,
+            public_key_der,
             principal,
         }
     }
 
-    fn principal(&self) -> &Principal {
-        &self.principal
-    }
-
-    fn public_key_der(&self) -> Vec<u8> {
-        self.public_key_der.clone()
-    }
-
     fn sign_bytes(&self, bytes: &[u8]) -> Vec<u8> {
-        let sign_future = self.signer.sign(bytes);
+        let fut = self.signer.sign(bytes);
+        // The `Identity` trait's `sign*` methods are sync; the underlying UC
+        // signer is async. Bridge with `block_in_place` since we run under a
+        // multi-thread Tokio runtime.
         #[allow(clippy::disallowed_methods)]
-        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(sign_future))
+        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
     }
 }
 
@@ -187,389 +189,104 @@ impl Identity for CanisterSignerIdentity<'_> {
     }
 
     fn sign_arbitrary(&self, content: &[u8]) -> Result<ic_agent::Signature, String> {
-        let signature = self.sign_bytes(content);
         Ok(ic_agent::Signature {
-            public_key: Some(self.public_key_der()),
-            signature: Some(signature),
+            public_key: Some(self.public_key_der.clone()),
+            signature: Some(self.sign_bytes(content)),
             delegations: None,
         })
     }
 }
 
-// -- Response helpers --
+// ---------------------------------------------------------------------------
+// Test bodies
+// ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug)]
-enum ResponseBody {
-    Empty,
-    Text(String),
-    Cbor(serde_cbor::Value),
-}
-
-#[derive(Clone, Debug)]
-struct ReplicaResponse {
-    status: StatusCode,
-    body: ResponseBody,
-}
-
-impl ReplicaResponse {
-    fn status(&self) -> StatusCode {
-        self.status
-    }
-
-    fn expect_query_ok(&self) {
-        assert_eq!(self.status(), 200);
-        match &self.body {
-            ResponseBody::Cbor(serde_cbor::Value::Map(m)) => {
-                assert!(
-                    m.contains_key(&serde_cbor::Value::Text("reply".to_owned())),
-                    "Missing 'reply' field in CBOR response: {:?}",
-                    m
-                );
-            }
-            other => panic!("Expected CBOR map with 'reply', got {:?}", other),
-        }
-    }
-
-    fn expect_update_ok(&self) {
-        // Use v3 API: expect 200 with a certificate
-        assert_eq!(
-            self.status(),
-            200,
-            "Expected 200 for v3 update, got {}",
-            self.status()
-        );
-        match &self.body {
-            ResponseBody::Cbor(serde_cbor::Value::Map(m)) => {
-                assert!(
-                    m.contains_key(&serde_cbor::Value::Text("certificate".to_owned())),
-                    "Missing 'certificate' field in CBOR response: {:?}",
-                    m
-                );
-            }
-            other => panic!("Expected CBOR map with 'certificate', got {:?}", other),
-        }
-    }
-
-    fn expect_query_reply_arg(&self, expected_arg: &[u8]) {
-        match &self.body {
-            ResponseBody::Cbor(serde_cbor::Value::Map(m)) => {
-                let reply = m
-                    .get(&serde_cbor::Value::Text("reply".to_owned()))
-                    .expect("Missing 'reply' field in CBOR response");
-                if let serde_cbor::Value::Map(reply_map) = reply {
-                    let arg = reply_map
-                        .get(&serde_cbor::Value::Text("arg".to_owned()))
-                        .expect("Missing 'arg' field in reply");
-                    if let serde_cbor::Value::Bytes(bytes) = arg {
-                        assert_eq!(bytes, expected_arg, "Query reply arg mismatch");
-                    } else {
-                        panic!("Expected bytes for 'arg', got {:?}", arg);
-                    }
-                } else {
-                    panic!("Expected map for 'reply', got {:?}", reply);
-                }
-            }
-            other => panic!("Expected CBOR map response, got {:?}", other),
-        }
-    }
-}
-
-async fn send_request<C: serde::ser::Serialize>(
-    api_ver: usize,
-    test: &TestInformation,
-    req_type: &'static str,
-    content: C,
-    sender_pubkey: Vec<u8>,
-    sender_delegation: Option<Vec<SignedDelegation>>,
-    sender_sig: Vec<u8>,
-) -> ReplicaResponse {
-    let envelope = HttpRequestEnvelope {
-        content,
-        sender_delegation,
-        sender_pubkey: Some(Blob(sender_pubkey)),
-        sender_sig: Some(Blob(sender_sig)),
-    };
-
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-
-    let url = format!(
-        "{}api/v{}/canister/{}/{}",
-        test.url, api_ver, test.canister_id, req_type
-    );
-
-    let response = client
-        .post(url)
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    let status = response.status();
-
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .map(|s| s.to_str().expect("Invalid Content-Type").to_owned());
-
-    let bytes = response
-        .bytes()
-        .await
-        .expect("Failed to get response body")
-        .to_vec();
-
-    let body = match content_type.as_deref() {
-        None => {
-            assert_eq!(bytes.len(), 0);
-            ResponseBody::Empty
-        }
-        Some("application/cbor") => ResponseBody::Cbor(
-            serde_cbor::from_slice(&bytes).expect("Failed to parse CBOR response"),
-        ),
-        Some("text/plain; charset=utf-8") => ResponseBody::Text(
-            String::from_utf8(bytes).expect("Replica sent invalid text response"),
-        ),
-        Some(other) => {
-            panic!("Unknown content type {}", other);
-        }
-    };
-
-    ReplicaResponse { status, body }
-}
-
-// -- Test helper: create a SenderInfo context for a canister --
-
-struct SenderInfoContext<'a> {
-    identity: CanisterSignerIdentity<'a>,
-    info_bytes: Vec<u8>,
-    sender_info: RawSignedSenderInfo,
-    signer_principal_bytes: Vec<u8>,
-}
-
-async fn create_sender_info_context<'a>(
+/// Installs a UC that acts as both the sender_info signer and the target
+/// canister, and returns an `ic-agent` that carries `sender_info` on every
+/// request via `InfoAwareIdentity`.
+async fn setup_signer_and_agent<'a>(
+    node_url: &str,
     canister: &'a UniversalCanister<'a>,
-) -> SenderInfoContext<'a> {
-    let seed = b"sender_info_test_seed".to_vec();
-    let signer = CanisterSigner::new(canister, seed);
-    let identity = CanisterSignerIdentity::new(signer.clone());
+) -> (ic_agent::Agent, Vec<u8>) {
+    let signer = CanisterSigner::new(canister, SIGNER_SEED.to_vec());
+    let inner = CanisterSignerIdentity::new(signer.clone());
 
-    let info_bytes = b"some user attributes".to_vec();
-    let sender_info_content = SenderInfoContent(info_bytes.clone());
-    let sender_info_sig = signer.sign(&sender_info_content.as_signed_bytes()).await;
+    let info = INFO_BYTES.to_vec();
+    let sender_info_signable = SenderInfoContent(&info).as_signed_bytes();
+    let sig = signer.sign(&sender_info_signable).await;
 
-    let signer_principal_bytes = signer.canister_id().get().as_slice().to_vec();
-    let sender_info = RawSignedSenderInfo {
-        info: Blob(info_bytes.clone()),
-        signer: Blob(signer_principal_bytes.clone()),
-        sig: Blob(sender_info_sig),
-    };
-
-    SenderInfoContext {
-        identity,
-        info_bytes,
-        sender_info,
-        signer_principal_bytes,
-    }
+    let identity = InfoAwareIdentity::new_unchecked(inner, info.clone(), sig)
+        .expect("failed to build InfoAwareIdentity");
+    let agent = agent_with_identity(node_url, identity)
+        .await
+        .expect("failed to build agent with InfoAwareIdentity");
+    (agent, info)
 }
 
-fn send_query_with_sender_info<'a>(
-    test: &'a TestInformation,
-    ctx: &'a SenderInfoContext<'_>,
-    wasm_payload: Vec<u8>,
-) -> impl std::future::Future<Output = ReplicaResponse> + 'a {
-    let content = HttpQueryContent::Query {
-        query: HttpUserQuery {
-            canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
-            method_name: "query".to_string(),
-            arg: Blob(wasm_payload),
-            sender: Blob(ctx.identity.principal().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-            sender_info: Some(ctx.sender_info.clone()),
-        },
-    };
-    let message_id = MessageId::from(content.representation_independent_hash());
-    let signature = ctx.identity.sign_bytes(&message_id.as_signed_bytes());
-    send_request(
-        3,
-        test,
-        "query",
-        content,
-        ctx.identity.public_key_der(),
-        None,
-        signature,
-    )
-}
-
-fn send_update_with_sender_info<'a>(
-    test: &'a TestInformation,
-    ctx: &'a SenderInfoContext<'_>,
-    wasm_payload: Vec<u8>,
-) -> impl std::future::Future<Output = ReplicaResponse> + 'a {
-    let content = HttpCallContent::Call {
-        update: HttpCanisterUpdate {
-            canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
-            method_name: "update".to_string(),
-            arg: Blob(wasm_payload),
-            sender: Blob(ctx.identity.principal().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-            sender_info: Some(ctx.sender_info.clone()),
-        },
-    };
-    let message_id = MessageId::from(content.representation_independent_hash());
-    let signature = ctx.identity.sign_bytes(&message_id.as_signed_bytes());
-    send_request(
-        3,
-        test,
-        "call",
-        content,
-        ctx.identity.public_key_der(),
-        None,
-        signature,
-    )
-}
-
-// ---------------------------------------------------------------------------
-// Setup and main
-// ---------------------------------------------------------------------------
-
-fn main() -> Result<()> {
-    SystemTestGroup::new()
-        .with_setup(setup)
-        .add_parallel(
-            SystemTestSubGroup::new()
-                .add_test(systest!(query_reads_sender_info_data_and_signer))
-                .add_test(systest!(update_reads_sender_info_data_and_signer)),
-        )
-        .execute_from_args()?;
-    Ok(())
-}
-
-pub fn setup(env: TestEnv) {
-    InternetComputer::new()
-        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-}
-
-// ---------------------------------------------------------------------------
-// Test functions
-// ---------------------------------------------------------------------------
-
-/// Verify that a canister can read both caller_info_data and caller_info_signer
-/// from a query call carrying valid sender_info.
-pub fn query_reads_sender_info_data_and_signer(env: TestEnv) {
+pub fn query_reads_sender_info(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_application_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-            let test_info = TestInformation {
-                url: node.get_public_url(),
-                canister_id: canister_id_from_principal(&canister.canister_id()),
-            };
-            let ctx = create_sender_info_context(&canister).await;
+    block_on(async move {
+        let bootstrap_agent = node.build_default_agent_async().await;
+        let canister = UniversalCanister::new_with_retries(
+            &bootstrap_agent,
+            node.effective_canister_id(),
+            &logger,
+        )
+        .await;
+        let (agent, info) = setup_signer_and_agent(node.get_public_url().as_str(), &canister).await;
+        let signer_bytes = canister.canister_id().as_slice().to_vec();
 
-            // Query: read msg_caller_info_data
-            debug!(logger, "Querying msg_caller_info_data");
-            let response = send_query_with_sender_info(
-                &test_info,
-                &ctx,
-                wasm().msg_caller_info_data().append_and_reply().build(),
-            )
-            .await;
-            response.expect_query_ok();
-            response.expect_query_reply_arg(&ctx.info_bytes);
+        info!(logger, "Querying msg_caller_info_data");
+        let reply = agent
+            .query(&canister.canister_id(), "query")
+            .with_arg(wasm().msg_caller_info_data().append_and_reply().build())
+            .call()
+            .await
+            .expect("query for msg_caller_info_data failed");
+        assert_eq!(reply, info);
 
-            // Query: read msg_caller_info_signer
-            debug!(logger, "Querying msg_caller_info_signer");
-            let response = send_query_with_sender_info(
-                &test_info,
-                &ctx,
-                wasm().msg_caller_info_signer().append_and_reply().build(),
-            )
-            .await;
-            response.expect_query_ok();
-            response.expect_query_reply_arg(&ctx.signer_principal_bytes);
-        }
+        info!(logger, "Querying msg_caller_info_signer");
+        let reply = agent
+            .query(&canister.canister_id(), "query")
+            .with_arg(wasm().msg_caller_info_signer().append_and_reply().build())
+            .call()
+            .await
+            .expect("query for msg_caller_info_signer failed");
+        assert_eq!(reply, signer_bytes);
     });
 }
 
-/// Verify that a canister can read both caller_info_data and caller_info_signer
-/// from an update call carrying valid sender_info.
-///
-/// Since raw HTTP v3 update responses don't expose the reply bytes without
-/// parsing the state certificate, each update writes the value to stable
-/// memory (offset 0) and a follow-up query reads it back.
-pub fn update_reads_sender_info_data_and_signer(env: TestEnv) {
+pub fn update_reads_sender_info(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_application_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-            let test_info = TestInformation {
-                url: node.get_public_url(),
-                canister_id: canister_id_from_principal(&canister.canister_id()),
-            };
-            let ctx = create_sender_info_context(&canister).await;
+    block_on(async move {
+        let bootstrap_agent = node.build_default_agent_async().await;
+        let canister = UniversalCanister::new_with_retries(
+            &bootstrap_agent,
+            node.effective_canister_id(),
+            &logger,
+        )
+        .await;
+        let (agent, info) = setup_signer_and_agent(node.get_public_url().as_str(), &canister).await;
+        let signer_bytes = canister.canister_id().as_slice().to_vec();
 
-            // Stable memory page for storing values read back via query.
-            canister
-                .update(wasm().stable_grow(1).reply().build())
-                .await
-                .expect("failed to grow stable memory");
+        info!(logger, "Updating: reading msg_caller_info_data");
+        let reply = agent
+            .update(&canister.canister_id(), "update")
+            .with_arg(wasm().msg_caller_info_data().append_and_reply().build())
+            .call_and_wait()
+            .await
+            .expect("update for msg_caller_info_data failed");
+        assert_eq!(reply, info);
 
-            // Update: write msg_caller_info_data to stable[0..] and reply.
-            debug!(logger, "Sending update reading msg_caller_info_data");
-            let write_data_payload = wasm()
-                .push_int(0)
-                .msg_caller_info_data()
-                .stable_write_offset_blob()
-                .reply()
-                .build();
-            send_update_with_sender_info(&test_info, &ctx, write_data_payload)
-                .await
-                .expect_update_ok();
-            let result = canister
-                .query(
-                    wasm()
-                        .stable_read(0, ctx.info_bytes.len() as u32)
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .expect("failed to read caller_info_data from stable memory");
-            assert_eq!(result, ctx.info_bytes);
-
-            // Update: write msg_caller_info_signer to stable[0..] and reply.
-            debug!(logger, "Sending update reading msg_caller_info_signer");
-            let write_signer_payload = wasm()
-                .push_int(0)
-                .msg_caller_info_signer()
-                .stable_write_offset_blob()
-                .reply()
-                .build();
-            send_update_with_sender_info(&test_info, &ctx, write_signer_payload)
-                .await
-                .expect_update_ok();
-            let result = canister
-                .query(
-                    wasm()
-                        .stable_read(0, ctx.signer_principal_bytes.len() as u32)
-                        .append_and_reply()
-                        .build(),
-                )
-                .await
-                .expect("failed to read caller_info_signer from stable memory");
-            assert_eq!(result, ctx.signer_principal_bytes);
-        }
+        info!(logger, "Updating: reading msg_caller_info_signer");
+        let reply = agent
+            .update(&canister.canister_id(), "update")
+            .with_arg(wasm().msg_caller_info_signer().append_and_reply().build())
+            .call_and_wait()
+            .await
+            .expect("update for msg_caller_info_signer failed");
+        assert_eq!(reply, signer_bytes);
     });
 }

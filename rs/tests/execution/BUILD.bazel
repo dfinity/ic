@@ -189,7 +189,6 @@ system_test(
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-certification",
-        "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
