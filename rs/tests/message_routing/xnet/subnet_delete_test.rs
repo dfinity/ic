@@ -3,16 +3,17 @@ Title:: Subnet deletion with in-flight XNet messages.
 
 Goal:: Verify that deleting a subnet correctly causes in-flight XNet messages to
 be rejected, and that messages from the deleted subnet that are still in its
-stream are not pulled after subnet deletion. The scenario is run as a matrix
-over the type of the deleted subnet: it must behave the same whether the deleted
-subnet is a CloudEngine subnet or a regular Application subnet (subnet deletion
-is handled by the routing/topology layer, which is subnet-type agnostic).
+stream are not pulled after subnet deletion. The scenario is run once per type of
+the deleted subnet (as two separate tests sharing the same IC): it must behave
+the same whether the deleted subnet is a CloudEngine subnet or a regular
+Application subnet (subnet deletion is handled by the routing/topology layer,
+which is subnet-type agnostic).
 
 Runbook::
 0. Set up an IC with an NNS subnet, three Application subnets S, T and C_app,
-   and one CloudEngine subnet C_cloud. Then, for each deleted-subnet type in
-   {CloudEngine, Application}, pick the corresponding subnet as the deleted
-   subnet C (C_cloud or C_app) and run the following scenario:
+   and one CloudEngine subnet C_cloud. Then, in each of the two tests, pick the
+   subnet matching that test's deleted-subnet type as the deleted subnet C
+   (C_cloud or C_app) and run the following scenario:
 1. Install universal canisters US on S, UT on T, UC on C.
 2. Halt T.  Wait until T makes no progress.
 3. From UC fire a bounded-wait call to UT that would set UT's global data to a
@@ -37,7 +38,7 @@ Runbook::
 Note:: Bounded-wait (best-effort) calls with no cycles are used throughout
 because they are the only cross-subnet calls allowed to/from a CloudEngine
 subnet; they are equally valid for an Application subnet, which keeps the
-scenario identical across both matrix entries.
+scenario identical across both tests.
 
 Success::
 All assertions pass for both deleted-subnet types.
@@ -51,7 +52,7 @@ use ic_consensus_system_test_utils::rw_message::cert_state_makes_no_progress_wit
 use ic_management_canister_types_private::{
     IC_00, Method, Payload, SubnetInfoArgs, SubnetInfoResponse,
 };
-use ic_nns_constants::REGISTRY_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -73,17 +74,19 @@ use std::time::Duration;
 const NUM_NODES: usize = 4;
 const CALL_TIMEOUT_SECS: u32 = 300;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
-// The test runs the scenario twice (once per deleted-subnet type). A full run
-// takes ~230s in practice; these safety timeouts leave ample headroom while
-// staying below the bazel default `test_timeout` ("long" = 900s), so an
-// in-test timeout fires with a clean error before bazel hard-kills the target.
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(600);
+// The two tests run the scenario once each (per deleted-subnet type). A single
+// run takes ~115s in practice; the per-test timeout leaves ample headroom while
+// staying below the bazel default `test_timeout` ("long" = 900s), so an in-test
+// timeout fires with a clean error before bazel hard-kills the target. The
+// overall timeout covers the shared setup plus both tests running sequentially.
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(300);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(600);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(systest!(test_delete_cloud_engine_subnet))
+        .add_test(systest!(test_delete_application_subnet))
         .with_timeout_per_test(PER_TEST_TIMEOUT)
         .with_overall_timeout(OVERALL_TIMEOUT)
         // Nodes on the deleted subnet panic when consensus can no longer find
@@ -113,17 +116,54 @@ pub fn setup(env: TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-}
-
-pub fn test(env: TestEnv) {
     install_registry_canister_with_testnet_topology(
         &env,
         None::<fn(&mut RegistryCanisterInitPayloadBuilder)>,
     );
-    block_on(test_async(env));
+    // Install the governance universal canister used to submit registry changes.
+    // The registry canister above is created at REGISTRY_CANISTER_ID (the first
+    // canister id); the governance canister, created right after it, gets the
+    // next canister id, which is GOVERNANCE_CANISTER_ID. Registry mutations from
+    // that id are authorized, and both tests address it via that constant.
+    block_on(install_governance_canister(&env));
 }
 
-async fn test_async(env: TestEnv) {
+async fn install_governance_canister(env: &TestEnv) {
+    let logger = env.logger();
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
+    let governance = UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
+    assert_eq!(
+        governance.canister_id(),
+        GOVERNANCE_CANISTER_ID.get().0,
+        "governance universal canister must land at GOVERNANCE_CANISTER_ID; it \
+         must be the first canister created after the registry canister",
+    );
+    slog::info!(logger, "governance={}", governance.canister_id());
+}
+
+/// Deletes the CloudEngine subnet.
+pub fn test_delete_cloud_engine_subnet(env: TestEnv) {
+    block_on(run_matrix_entry(env, SubnetType::CloudEngine));
+}
+
+/// Deletes an Application subnet. The scenario must behave the same as when
+/// deleting a CloudEngine subnet (subnet deletion is handled by the
+/// routing/topology layer, which is subnet-type agnostic).
+pub fn test_delete_application_subnet(env: TestEnv) {
+    block_on(run_matrix_entry(env, SubnetType::Application));
+}
+
+/// Reconstructs the governance canister handle (installed in `setup`), picks the
+/// deleted subnet C matching `deleted_subnet_type` along with the sender subnet S
+/// and the receiver subnet T (halted only temporarily during the scenario), and
+/// runs the full subnet-deletion scenario.
+async fn run_matrix_entry(env: TestEnv, deleted_subnet_type: SubnetType) {
     let logger = env.logger();
     let topology = env.topology_snapshot();
 
@@ -131,13 +171,14 @@ async fn test_async(env: TestEnv) {
     let nns_node = nns_subnet.nodes().next().unwrap();
     let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
 
-    // Governance universal canister on the NNS subnet, used to submit registry changes. It is
-    // shared across both matrix entries.
-    let governance = UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
-    slog::info!(logger, "governance={}", governance.canister_id());
+    // Governance universal canister on the NNS subnet, used to submit registry
+    // changes. It was installed at GOVERNANCE_CANISTER_ID during `setup`.
+    let governance =
+        UniversalCanister::from_canister_id(&nns_agent, GOVERNANCE_CANISTER_ID.get().0);
 
-    // Application subnets: S and T are reused across both matrix entries, while
-    // the third one is the Application deletion candidate.
+    // Application subnets: S is the sender and T is the receiver (halted only
+    // temporarily during the scenario), while the third one is the Application
+    // deletion candidate.
     let app_subnets: Vec<_> = topology
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::Application)
@@ -149,33 +190,31 @@ async fn test_async(env: TestEnv) {
     );
     let s_subnet = app_subnets[0].clone();
     let t_subnet = app_subnets[1].clone();
-    let c_app_subnet = app_subnets[2].clone();
-    let c_cloud_subnet = topology
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::CloudEngine)
-        .unwrap();
+    let c_subnet = if deleted_subnet_type == SubnetType::CloudEngine {
+        topology
+            .subnets()
+            .find(|s| s.subnet_type() == SubnetType::CloudEngine)
+            .unwrap()
+    } else {
+        app_subnets[2].clone()
+    };
 
-    // Matrix over the type of the deleted subnet C.
-    for (deleted_subnet_type, c_subnet) in [
-        (SubnetType::CloudEngine, &c_cloud_subnet),
-        (SubnetType::Application, &c_app_subnet),
-    ] {
-        run_scenario(
-            &env,
-            &governance,
-            &s_subnet,
-            &t_subnet,
-            c_subnet,
-            deleted_subnet_type,
-            &logger,
-        )
-        .await;
-    }
+    run_scenario(
+        &env,
+        &governance,
+        &s_subnet,
+        &t_subnet,
+        &c_subnet,
+        deleted_subnet_type,
+        &logger,
+    )
+    .await;
 }
 
 /// Runs the full subnet-deletion scenario, deleting subnet `c_subnet` (whose
 /// type is `deleted_subnet_type`). Subnets `s_subnet` and `t_subnet` play the
-/// roles of the sender subnet S and the halted receiver subnet T.
+/// roles of the sender subnet S and the receiver subnet T (which is halted only
+/// temporarily during the scenario).
 #[allow(clippy::too_many_arguments)]
 async fn run_scenario(
     env: &TestEnv,
