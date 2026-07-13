@@ -70,8 +70,7 @@ use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::time::Duration;
 
-const NUM_NODES: usize = 1;
-const NUM_ENGINE_NODES: usize = 4;
+const NUM_NODES: usize = 4;
 const DKG_INTERVAL_LENGTH: u64 = 29;
 const CALL_TIMEOUT_SECS: u32 = 300;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
@@ -118,7 +117,7 @@ pub fn setup(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .add_subnet(
-            Subnet::fast(SubnetType::CloudEngine, NUM_ENGINE_NODES)
+            Subnet::fast(SubnetType::CloudEngine, NUM_NODES)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
         )
         .setup_and_start(&env)
@@ -146,7 +145,7 @@ async fn test_async(env: TestEnv) {
     let nns_node = nns_subnet.nodes().next().unwrap();
     let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
 
-    // Governance UC on the NNS subnet, used to submit registry changes. It is
+    // Governance universal canister on the NNS subnet, used to submit registry changes. It is
     // shared across both matrix entries.
     let governance = UniversalCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
     slog::info!(logger, "governance={}", governance.canister_id());

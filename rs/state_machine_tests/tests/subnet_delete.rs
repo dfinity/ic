@@ -1,7 +1,7 @@
 //! `StateMachine` analogue of the system test
-//! `rs/tests/message_routing/xnet/cloud_engine_subnet_delete_test.rs`.
+//! `rs/tests/message_routing/xnet/subnet_delete_test.rs`.
 //!
-//! It verifies that deleting a subnet correctly causes in-flight XNet messages
+//! It verifies that deleting a subnet correctly causes in-flight XNet requests
 //! to be rejected, and that messages from the deleted subnet that are still in
 //! its stream are not pulled after subnet deletion. The scenario is run as a
 //! matrix over the type of the deleted subnet: it must behave the same whether
