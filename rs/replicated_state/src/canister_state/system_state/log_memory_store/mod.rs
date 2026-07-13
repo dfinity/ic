@@ -14,7 +14,6 @@ use crate::canister_state::system_state::log_memory_store::{
     },
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
-use ic_config::flag_status::FlagStatus;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::{CanisterLog, NumBytes};
 use ic_validate_eq::ValidateEq;
@@ -87,17 +86,23 @@ pub struct LogMemoryStore {
     first_timestamp_cache: Option<u64>,
 }
 
+impl Default for LogMemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LogMemoryStore {
     /// Creates a new uninitialized store with an empty ring buffer.
     ///
     /// The store technically exists but has 0 capacity and is considered "uninitialized".
     /// Any attempts to append logs will be silently ignored until the store is
     /// explicitly resized to a non-zero capacity.
-    pub fn new(feature_flag: FlagStatus) -> Self {
+    pub fn new() -> Self {
         const DEFAULT_NEXT_IDX: u64 = 0;
         // A freshly created canister has no legacy CanisterLog records to migrate,
         // so migration is considered done from the start.
-        let migrated = feature_flag == FlagStatus::Enabled;
+        let migrated = true;
         Self::new_inner(None, DEFAULT_NEXT_IDX, migrated)
     }
 
@@ -137,21 +142,12 @@ impl LogMemoryStore {
 
     /// Returns `true` if the one-time migration from `CanisterLog` has already
     /// been performed for this canister.
+    ///
+    /// Always `true` for stores created after the migration was completed on
+    /// all subnets; retained only so that the value keeps round-tripping
+    /// through checkpoints for replicas that predate the log memory store.
     pub fn is_migrated(&self) -> bool {
         self.migrated
-    }
-
-    /// Marks the one-time migration as complete.
-    pub fn set_migrated(&mut self) {
-        self.migrated = true;
-    }
-
-    /// Clears the migration flag and resets the persistent index to zero so
-    /// that the feature can be cleanly re-enabled later. The migration will
-    /// run again on the next round execution after the feature is re-enabled.
-    pub fn clear_migrated(&mut self) {
-        self.migrated = false;
-        self.persistent_next_idx = 0;
     }
 
     /// Provides access to the underlying `PageMap`.
