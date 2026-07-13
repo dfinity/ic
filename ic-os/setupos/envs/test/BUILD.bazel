@@ -1,0 +1,37 @@
+load("//bazel:defs.bzl", "file_size_check")
+load("//ic-os:defs.bzl", "icos_build")
+load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
+load("//ic-os/setupos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "artifact_bundle")
+
+# The macro contains several targets.
+# Check
+#       //ic-os/setupos/BUILD.bazel for examples
+#    or //ic-os/defs.bzl for the full list of targets.
+icos_images = icos_build(
+    name = "test",
+    image_deps_func = image_deps,
+    upgrades = False,
+    vuln_scan = False,
+)
+
+file_size_check(
+    name = "disk_img_size_check",
+    file = icos_images.disk_image,
+    max_file_size = 2200 * 1000 * 1000,  # 2.15 GB on 2025-08-07
+)
+
+launch_bare_metal(
+    name = "launch_bare_metal",
+    image_zst_file = ":disk-img.tar.zst",
+)
+
+# Export checksums & build artifacts
+# (image is used as the IC-OS installation image downloaded by Node Providers)
+artifact_bundle(
+    name = "bundle",
+    testonly = True,
+    inputs = [":test"],
+    prefix = "setup-os/disk-img-test",
+    visibility = ["//visibility:public"],
+)
