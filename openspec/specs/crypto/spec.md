@@ -1,6 +1,6 @@
 # Crypto Subsystem
 
-**Crates**: `ic-crypto-for-verification-only`, `ic-crypto-iccsa`, `ic-crypto-secrets-containers`, `ic-crypto-temp-crypto`, `ic-crypto-temp-crypto-vault`, `ic-signer`
+**Crates**: `ic-crypto`, `ic-crypto-for-verification-only`, `ic-crypto-iccsa`, `ic-crypto-secrets-containers`, `ic-crypto-temp-crypto`, `ic-crypto-temp-crypto-vault`, `ic-signer`
 
 The IC crypto subsystem (`rs/crypto/`) provides cryptographic operations for Internet Computer nodes including key generation, distributed key generation, signing, signature verification, TLS handshakes, hashing, pseudorandom number generation, and verifiable encrypted threshold key derivation (vetKD).
 

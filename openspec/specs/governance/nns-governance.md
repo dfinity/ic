@@ -1,6 +1,6 @@
 # NNS Governance
 
-**Crates**: `ic-make-proposal`, `nns_dapp`, `ic-nns-init`
+**Crates**: `ic-make-proposal`, `ic-nns-governance`, `nns_dapp`, `ic-nns-init`
 
 The Network Nervous System (NNS) is the open, decentralized governance system of the Internet Computer (IC). It has complete control over all aspects of the IC network, including protocol upgrades, subnet management, node operator onboarding, economic parameters, and canister management. The NNS operates by accepting proposals submitted by neurons, deciding whether to adopt or reject them based on neuron voting activity.
 

@@ -1,6 +1,6 @@
 # Interfaces
 
-**Crates**: `ic-interfaces-adapter-client`, `ic-interfaces-certified-stream-store`, `ic-interfaces-state-manager`
+**Crates**: `ic-interfaces`, `ic-interfaces-adapter-client`, `ic-interfaces-certified-stream-store`, `ic-interfaces-state-manager`
 
 ## Requirements
 

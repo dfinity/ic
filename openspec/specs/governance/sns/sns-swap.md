@@ -1,5 +1,7 @@
 # SNS Swap (Decentralization Swap)
 
+**Crates**: `ic-sns-swap`
+
 The SNS Swap canister manages the decentralization token sale process. It collects ICP from direct participants and the Neurons' Fund, distributes SNS tokens proportionally, creates SNS neurons for participants, and transitions the SNS into a fully decentralized state.
 
 ## Requirements

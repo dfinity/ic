@@ -1,5 +1,7 @@
 # SNS Governance
 
+**Crates**: `ic-sns-governance`
+
 The SNS Governance canister is the decision-making engine of a Service Nervous System. It manages neurons, proposals, voting, following, rewards, and the execution of adopted proposals. It operates in two modes: `PreInitializationSwap` (limited functionality during token sale) and `Normal` (full functionality after successful decentralization swap).
 
 ## Requirements

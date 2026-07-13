@@ -1,6 +1,6 @@
 # Consensus Subsystem Specification
 
-**Crates**: `ic-consensus-dkg`, `ic-consensus-utils`
+**Crates**: `ic-consensus`, `ic-consensus-dkg`, `ic-consensus-utils`
 
 This document provides comprehensive specifications for the Internet Computer consensus subsystem. The consensus protocol establishes distributed agreement on blocks forming a blockchain, using subcomponents for block making, notarization, finalization, random beacon/tape generation, catch-up packages, share aggregation, validation, payload building, artifact priority, pool purging, and batch delivery.
 

@@ -1,6 +1,6 @@
 # Configuration
 
-**Crates**: `icp-config`, `config_types_compatibility_lib`
+**Crates**: `ic-config`, `icp-config`, `config_types_compatibility_lib`
 
 The IC configuration system defines the runtime parameters for all replica components. It supports loading from files, stdin, or string literals, with per-component sections that can be independently defaulted. The configuration covers transport, state management, execution, HTTP handling, metrics, consensus pools, cryptography, logging, and more.
 

@@ -1,5 +1,7 @@
 # Prep (IC Preparation Tools)
 
+**Crates**: `ic-prep`
+
 The ic-prep tool generates the initial configuration files needed to bootstrap an Internet Computer instance. It produces the registry local store, initial DKG transcripts, routing tables, and other artifacts required for genesis.
 
 ## Requirements
