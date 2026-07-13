@@ -257,24 +257,28 @@ fn reward_reduction_window() -> (NaiveDate, NaiveDate) {
     )
 }
 
-fn reduced_node_provider_set() -> HashSet<PrincipalId> {
-    REDUCED_NODE_PROVIDERS
+thread_local! {
+    /// The affected node providers, parsed from `REDUCED_NODE_PROVIDERS` once and reused across
+    /// calculations (parsing panics here on the first access if a principal is malformed).
+    static REDUCED_NODE_PROVIDER_SET: HashSet<PrincipalId> = REDUCED_NODE_PROVIDERS
         .iter()
         .map(|p| PrincipalId::from_str(p).expect("invalid principal in REDUCED_NODE_PROVIDERS"))
-        .collect()
+        .collect();
 }
 
 /// Applies the temporary node provider reward reduction (proposal 142724) to `results` for `date`.
 fn apply_node_provider_reward_reduction(results: &mut DailyResults, date: &NaiveDate) {
     let (start, end) = reward_reduction_window();
-    reduce_provider_results(
-        &mut results.provider_results,
-        date,
-        start,
-        end,
-        &reduced_node_provider_set(),
-        reward_reduction_multiplier(),
-    );
+    REDUCED_NODE_PROVIDER_SET.with(|reduced| {
+        reduce_provider_results(
+            &mut results.provider_results,
+            date,
+            start,
+            end,
+            reduced,
+            reward_reduction_multiplier(),
+        );
+    });
 }
 
 /// Pure implementation of the reward reduction, split out for testing.
