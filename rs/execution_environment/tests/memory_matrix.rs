@@ -35,7 +35,6 @@ The scenarios cover the following:
 */
 
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::units::{GIB, KIB};
@@ -1628,9 +1627,6 @@ fn test_memory_suite_decrease_memory_allocation() {
 
 #[test]
 fn test_memory_suite_increase_log_memory_limit() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
         let update_settings_args =
             update_memory_allocation_args(canister_id, None, Some(1024 * KIB));
@@ -1648,9 +1644,6 @@ fn test_memory_suite_increase_log_memory_limit() {
 
 #[test]
 fn test_memory_suite_increase_log_memory_limit_and_memory_allocation() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
         let current_memory_allocation = test
             .canister_state(canister_id)
@@ -1675,9 +1668,6 @@ fn test_memory_suite_increase_log_memory_limit_and_memory_allocation() {
 
 #[test]
 fn test_memory_suite_decrease_log_memory_limit() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
         let update_settings_args =
             update_memory_allocation_args(canister_id, None, Some(256 * KIB));

@@ -698,9 +698,7 @@ impl CkEthSetup {
     }
 
     pub fn minter_canister_logs(&self) -> Vec<CanisterLog> {
-        let log = self.env.canister_log(self.minter_id);
-
-        let mut records = log.records().iter().collect::<Vec<_>>();
+        let mut records = self.env.canister_log_records(self.minter_id);
         records.sort_by_key(|a| a.idx);
         records
             .into_iter()
