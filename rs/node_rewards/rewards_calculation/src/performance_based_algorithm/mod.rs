@@ -17,11 +17,77 @@ use rust_decimal::prelude::{FromPrimitive, ToPrimitive, Zero};
 use rust_decimal_macros::dec;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 
 pub mod results;
 pub mod test_utils;
 pub mod v1;
 pub mod v2;
+
+// ================================================================================================
+// TARGETED REWARDS REDUCTION (hardcoded, temporary intervention)
+// ================================================================================================
+//
+// Applies a fixed multiplier to the *adjusted* rewards of a specific set of node providers, for
+// every calendar day within an inclusive UTC window. This changes the XDR amounts returned by
+// both `get_node_providers_rewards` (the summed payout) and
+// `get_node_providers_rewards_calculation` (the per-day breakdown), because both flow through
+// `calculate_rewards_for_date`.
+//
+// This is a hardcoded, per-provider intervention that bypasses the performance-based algorithm.
+// It should be removed once no longer needed, and any shipped version must be traceable to the
+// decision that authorized it.
+//
+// TODO(fill in): populate `REDUCTION_TARGET_PROVIDERS` and `reduction_window()` below.
+
+/// Textual principals of the node providers whose adjusted rewards are reduced.
+/// Empty means the intervention is a no-op.
+const REDUCTION_TARGET_PROVIDERS: &[&str] = &[
+    // "abcde-...-provider-1",
+    // "fghij-...-provider-2",
+];
+
+/// Fraction of adjusted rewards *retained* (0.5 == reduce by 50%).
+fn reduction_multiplier() -> Decimal {
+    dec!(0.5)
+}
+
+/// Inclusive UTC date window `[from, to]` in which the reduction applies.
+fn reduction_window() -> (NaiveDate, NaiveDate) {
+    (
+        NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid reduction-window `from` date"),
+        NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid reduction-window `to` date"),
+    )
+}
+
+/// Returns `true` when `provider_id`'s rewards on `date` must be reduced.
+fn is_reduction_target(provider_id: &PrincipalId, date: &NaiveDate) -> bool {
+    if REDUCTION_TARGET_PROVIDERS.is_empty() {
+        return false;
+    }
+    let (from, to) = reduction_window();
+    if *date < from || *date > to {
+        return false;
+    }
+    REDUCTION_TARGET_PROVIDERS
+        .iter()
+        .filter_map(|p| PrincipalId::from_str(p).ok())
+        .any(|p| p == *provider_id)
+}
+
+/// Scales a provider's daily adjusted rewards by `multiplier` in place, keeping the per-node
+/// figures and the truncated provider total consistent. Base rewards are left untouched.
+fn apply_rewards_reduction(results: &mut DailyNodeProviderRewards, multiplier: Decimal) {
+    let mut total_adjusted: Decimal = Decimal::zero();
+    for node in results.daily_nodes_rewards.iter_mut() {
+        node.adjusted_rewards_xdr_permyriad *= multiplier;
+        total_adjusted += node.adjusted_rewards_xdr_permyriad;
+    }
+    results.total_adjusted_rewards_xdr_permyriad = total_adjusted
+        .trunc()
+        .to_u64()
+        .expect("failed to truncate reduced total_adjusted_rewards_xdr_permyriad");
+}
 
 // ================================================================================================
 // VERSIONING SAFETY WARNING
@@ -124,11 +190,14 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
         // Process each provider's nodes
         for (provider_id, rewardable_nodes) in providers_rewardable_nodes {
-            let provider_results = Self::calculate_provider_rewards(
+            let mut provider_results = Self::calculate_provider_rewards(
                 &rewards_table,
                 &mut nodes_metrics_daily,
                 rewardable_nodes,
             );
+            if is_reduction_target(&provider_id, date) {
+                apply_rewards_reduction(&mut provider_results, reduction_multiplier());
+            }
             results_per_provider.insert(provider_id, provider_results);
         }
 
