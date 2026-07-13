@@ -43,10 +43,16 @@ fn registry() -> &'static Mutex<Vec<Option<ServerProc>>> {
         // signal-handler context, so locking a `Mutex`, sleeping and `waitpid` are all
         // legal here; it only needs to be panic-free (see `reap_all`).
         #[cfg(unix)]
-        // SAFETY: `reap_all` is an `extern "C"`, panic-free function and is registered
-        // exactly once (guarded by `OnceLock`).
-        unsafe {
-            libc::atexit(reap_all);
+        {
+            // SAFETY: `reap_all` is an `extern "C"`, panic-free function and is registered
+            // exactly once (guarded by `OnceLock`).
+            let rc = unsafe { libc::atexit(reap_all) };
+            // A non-zero return means the handler was not registered, which would silently
+            // reintroduce the leaked-server problem — fail loudly instead.
+            assert_eq!(
+                rc, 0,
+                "failed to register the pocket-ic-server atexit reaper"
+            );
         }
         Mutex::new(Vec::new())
     })
@@ -139,12 +145,22 @@ extern "C" fn reap_all() {
     }));
 }
 
-/// Signals a server's process group and reaps the direct server child.
+/// Grace period given to each signal before escalating / giving up.
+#[cfg(unix)]
+const REAP_GRACE: Duration = Duration::from_millis(2_000);
+
+/// Signals a server's process group and makes a bounded, best-effort attempt to reap the
+/// direct server child.
 ///
 /// The child's launcher/sandbox descendants are terminated by the process-group signal
-/// (their pipe write-ends close on *termination*, not on reaping) and are reaped by
-/// init, since the test process cannot `waitpid` them (they are not its direct
-/// children). The wait is bounded so the atexit handler can never hang process exit.
+/// (their pipe write-ends close on *termination*, not on reaping) and are reaped by init,
+/// since the test process cannot `waitpid` them (they are not its direct children).
+///
+/// The whole operation is time-bounded so it can never hang process exit: after the first
+/// signal fails to reap the child within [`REAP_GRACE`] the group is `SIGKILL`ed and given
+/// one more [`REAP_GRACE`] window. If the child is *still* not reaped it is left for init
+/// to reap once we exit — what matters here (closing the inherited pipes) is already done
+/// by the kill.
 #[cfg(unix)]
 fn reap_one(proc: &mut ServerProc, signal: Signal) {
     let pgid = proc.pgid;
@@ -156,38 +172,15 @@ fn reap_one(proc: &mut ServerProc, signal: Signal) {
     };
     // A negative target signals the whole process group (server + launcher + sandboxes).
     // `ESRCH` — e.g. a loser candidate whose group is already empty — is expected and
-    // harmless: the following `waitpid` still reaps the zombie.
+    // harmless: `reap_until` still reaps the zombie.
     unsafe { libc::kill(-pgid, first) };
 
-    let deadline = Instant::now() + Duration::from_millis(2_000);
-    loop {
-        let mut status: libc::c_int = 0;
-        // SAFETY: reaping our own direct child by pid.
-        match unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } {
-            // Reaped.
-            r if r == pid => return,
-            -1 => {
-                // `EINTR` (interrupted by a signal): retry — returning early here could
-                // let the server outlive process exit still holding the pipes, the exact
-                // failure this reaper prevents. Any other error is terminal; the expected
-                // one is `ECHILD` (the child was already reaped / is not ours).
-                if last_errno() == libc::EINTR {
-                    continue;
-                }
-                return;
-            }
-            // Still running (`0`): wait, escalating to `SIGKILL` at the deadline.
-            _ => {
-                if Instant::now() >= deadline {
-                    unsafe { libc::kill(-pgid, libc::SIGKILL) };
-                    // Final blocking wait so the zombie is reaped before we return.
-                    blocking_reap(pid);
-                    return;
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-        }
+    if reap_until(pid, Instant::now() + REAP_GRACE) {
+        return;
     }
+    // Still alive after the grace period: force-kill the group and try once more.
+    unsafe { libc::kill(-pgid, libc::SIGKILL) };
+    reap_until(pid, Instant::now() + REAP_GRACE);
 }
 
 /// The calling thread's `errno`. Only meaningful immediately after a failed libc call.
@@ -196,17 +189,30 @@ fn last_errno() -> libc::c_int {
     std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
-/// Blocking `waitpid` on a direct child, retrying on `EINTR` so a signal cannot leave the
-/// child unreaped.
+/// Polls `waitpid(WNOHANG)` for a direct child until it is reaped/gone or `deadline`
+/// passes, retrying on `EINTR`. Returns `true` if the child was reaped or is already gone,
+/// `false` if the deadline elapsed while it was still alive (so the caller can escalate).
+///
+/// Bounded by `deadline` so it can never hang process exit; `EINTR` (interrupted by a
+/// signal) is retried rather than treated as terminal, so an interruption cannot cause an
+/// early return that leaves the server holding the pipes. The expected terminal error is
+/// `ECHILD` (the child was already reaped / is not ours).
 #[cfg(unix)]
-fn blocking_reap(pid: libc::pid_t) {
-    let mut status: libc::c_int = 0;
+fn reap_until(pid: libc::pid_t, deadline: Instant) -> bool {
     loop {
+        let mut status: libc::c_int = 0;
         // SAFETY: reaping our own direct child by pid.
-        let r = unsafe { libc::waitpid(pid, &mut status, 0) };
-        if r == -1 && last_errno() == libc::EINTR {
-            continue;
+        match unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } {
+            r if r == pid => return true,
+            -1 if last_errno() == libc::EINTR => continue,
+            -1 => return true,
+            // Still running (`0`): wait unless the deadline has passed.
+            _ => {
+                if Instant::now() >= deadline {
+                    return false;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
         }
-        return;
     }
 }
