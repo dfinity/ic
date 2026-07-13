@@ -647,10 +647,21 @@ impl ReplicatedStateMetrics {
         self.canister_compute_allocation
             .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
 
+        let log_memory_usage = if canister.system_state.log_memory_store.is_migrated() {
+            canister.system_state.log_memory_store.memory_usage()
+        } else {
+            canister.system_state.canister_log.bytes_used()
+        };
         self.canister_log_memory_usage_v3
-            .observe(canister.system_state.log_memory_store.memory_usage() as f64);
+            .observe(log_memory_usage as f64);
 
-        if let Some(retention) = canister.system_state.log_memory_store.retention() {
+        // Observe retention from whichever log store is active.
+        let retention = if canister.system_state.log_memory_store.is_migrated() {
+            canister.system_state.log_memory_store.retention()
+        } else {
+            canister.system_state.canister_log.retention()
+        };
+        if let Some(retention) = retention {
             self.canister_log_retention.observe(retention.as_secs_f64());
         }
 
