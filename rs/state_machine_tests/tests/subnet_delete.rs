@@ -147,13 +147,18 @@ fn ingress_result(sm: &StateMachine, msg_id: &MessageId) -> Option<WasmResult> {
     }
 }
 
-/// Matrix-style test: run the subnet-deletion scenario once for each supported
-/// type of the deleted subnet `C`. The observable behavior must be identical.
+// The subnet-deletion scenario is run once per supported type of the deleted
+// subnet `C`; the observable behavior must be identical. Each type gets its own
+// test so they run in parallel and failures are easy to attribute.
+
 #[test]
-fn xnet_messages_rejected_after_subnet_deletion() {
-    for deleted_subnet_type in [SubnetType::CloudEngine, SubnetType::Application] {
-        xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type);
-    }
+fn xnet_messages_rejected_after_cloud_engine_subnet_deletion() {
+    xnet_messages_rejected_after_subnet_deletion_impl(SubnetType::CloudEngine);
+}
+
+#[test]
+fn xnet_messages_rejected_after_application_subnet_deletion() {
+    xnet_messages_rejected_after_subnet_deletion_impl(SubnetType::Application);
 }
 
 fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: SubnetType) {
