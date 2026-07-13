@@ -33,11 +33,12 @@ pub struct GuestLaunchMeasurements {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    Eq,
     candid::CandidType,
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GuestLaunchMeasurement {
@@ -51,11 +52,12 @@ pub struct GuestLaunchMeasurement {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    Eq,
     candid::CandidType,
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GuestLaunchMeasurementMetadata {
@@ -73,7 +75,7 @@ pub struct GuestLaunchMeasurementMetadata {
 ///
 /// New versions are added here after a vote has been accepted by token
 /// holders. Subnetworks can then be upgraded to any of those version.
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BlessedReplicaVersions {
     /// A list of version information ids.
     #[prost(string, repeated, tag = "1")]
