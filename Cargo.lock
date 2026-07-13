@@ -12612,6 +12612,7 @@ dependencies = [
  "pretty_assertions",
  "prost 0.14.3",
  "rewards-calculation",
+ "rust_decimal",
  "serde_json",
  "tokio",
 ]
