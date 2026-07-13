@@ -276,12 +276,22 @@ impl RingBuffer {
                     Some(e) => e,
                 };
 
-                // Scan forward from approx start — collect matching records until limit
-                // or until a non-matching record is seen after we started collecting.
+                // Scan forward from approx start — collect matching records until the
+                // result size limit is hit or the scan reaches a record past the range.
                 let mut records: Vec<CanisterLogRecord> = Vec::new();
                 let mut total_size = 0;
                 let mut pos = approx_start.position;
                 while let Some(record) = self.io.load_record(&header, pos) {
+                    // Records are scanned in ascending key order, so once we reach a
+                    // record past the range's end no later record can match. Stop even
+                    // if nothing matched yet — otherwise a filter whose range lies
+                    // entirely below the live records would scan the whole buffer.
+                    // (The approx start may sit before the range, so earlier
+                    // non-matching records with keys below the range are skipped, not
+                    // treated as past-end.)
+                    if record.is_past_range_end(&filter) {
+                        break;
+                    }
                     let distance = MemorySize::new(record.bytes_len() as u64);
                     if record.matches(&filter) {
                         let canister_log_record = CanisterLogRecord::from(record);
@@ -290,9 +300,6 @@ impl RingBuffer {
                             break;
                         }
                         records.push(canister_log_record);
-                    } else if !records.is_empty() {
-                        // Stop after the first non-matching record once we have matches.
-                        break;
                     }
                     let new_pos = header.advance_position(pos, distance);
                     // corrupted record — avoid infinite loop
