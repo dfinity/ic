@@ -614,6 +614,30 @@ impl SystemMetadata {
             .get_reference_subnet_size(&self.own_subnet_id)
     }
 
+    /// Returns the subnet's guaranteed response message memory capacity, capped
+    /// relative to the subnet's heap delta capacity.
+    pub fn guaranteed_response_message_memory_capacity(&self) -> NumBytes {
+        ic_config::execution_environment::guaranteed_response_message_memory_capacity(
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// Returns the subnet's best-effort message memory capacity, capped relative
+    /// to the subnet's heap delta capacity.
+    pub fn best_effort_message_memory_capacity(&self) -> NumBytes {
+        ic_config::execution_environment::best_effort_message_memory_capacity(
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// The effective heap delta capacity: the registry override if set, else the
+    /// protocol default.
+    fn heap_delta_capacity(&self) -> NumBytes {
+        self.own_subnet_info
+            .resource_limits
+            .maximum_state_delta_or(ic_config::execution_environment::SUBNET_HEAP_DELTA_CAPACITY)
+    }
+
     /// One-off initialization: populate `canister_allocation_ranges` with the only
     /// `[N * 2^20, (N+1) * 2^20 - 1]` range fully hosted by the subnet as per the
     /// routing table; and initialize `last_generated_canister_id` based on

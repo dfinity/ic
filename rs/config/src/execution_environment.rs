@@ -110,7 +110,53 @@ pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60)
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+pub const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+
+/// Message memory is capped at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of the
+/// subnet's heap delta capacity.
+const MESSAGE_MEMORY_HEAP_DELTA_DIVISOR: u64 = 3;
+
+/// The subnet's guaranteed response message memory capacity, capped at
+/// `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of `heap_delta_capacity`.
+pub fn guaranteed_response_message_memory_capacity(heap_delta_capacity: NumBytes) -> NumBytes {
+    message_memory_capacity(
+        SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+        heap_delta_capacity,
+    )
+}
+
+/// The subnet's best-effort message memory capacity, capped at
+/// `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of `heap_delta_capacity`.
+pub fn best_effort_message_memory_capacity(heap_delta_capacity: NumBytes) -> NumBytes {
+    message_memory_capacity(
+        SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
+        heap_delta_capacity,
+    )
+}
+
+/// Test helper for configuring a subnet's `maximum_state_delta`: returns the
+/// heap delta capacity required to allow `message_memory` of message memory,
+/// i.e. the inverse of the cap applied by `message_memory_capacity`. Lives here
+/// so the `MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` factor stays confined to this
+/// module rather than being duplicated across tests.
+pub fn heap_delta_capacity_for_message_memory(message_memory: NumBytes) -> NumBytes {
+    NumBytes::new(message_memory.get() * MESSAGE_MEMORY_HEAP_DELTA_DIVISOR)
+}
+
+/// Caps `configured_default_capacity` at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR`
+/// of `heap_delta_capacity`.
+///
+/// Message memory is held in RAM alongside the heap delta pages, so this bounds
+/// message memory relative to a subnet's heap delta capacity (which is itself
+/// sized relative to available RAM).
+fn message_memory_capacity(
+    configured_default_capacity: NumBytes,
+    heap_delta_capacity: NumBytes,
+) -> NumBytes {
+    configured_default_capacity.min(NumBytes::new(
+        heap_delta_capacity.get() / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR,
+    ))
+}
 
 /// The maximum number of instructions for inspect_message calls.
 const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =
@@ -243,14 +289,6 @@ pub struct Config {
     /// The maximum amount of logical storage available to all the canisters on
     /// the subnet.
     pub subnet_memory_capacity: NumBytes,
-
-    /// The maximum amount of logical storage available to guaranteed response
-    /// canister messages across the whole subnet.
-    pub guaranteed_response_message_memory_capacity: NumBytes,
-
-    /// The maximum amount of logical storage available to best-effort canister
-    /// messages across the whole subnet.
-    pub best_effort_message_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to the ingress history
     /// across the whole subnet.
@@ -413,9 +451,6 @@ impl Default for Config {
                 MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
-            guaranteed_response_message_memory_capacity:
-                SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
-            best_effort_message_memory_capacity: SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,

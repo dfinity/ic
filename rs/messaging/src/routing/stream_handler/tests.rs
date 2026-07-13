@@ -2,9 +2,9 @@ use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use MessageBuilder::*;
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
-use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::execution_environment::heap_delta_capacity_for_message_memory;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
@@ -377,78 +377,32 @@ fn induct_loopback_stream_success() {
 /// `StreamHandlerImpl::induct_loopback_stream()`.
 #[test]
 fn induct_loopback_stream_with_subnet_message_memory_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        ..Default::default()
-    });
-}
-
-/// Tests that wasm custom sections memory capacity does not affect
-/// `StreamHandlerImpl::induct_loopback_stream()`.
-#[test]
-fn induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations
-    // and no allowance for wasm custom sections.
-    induct_loopback_stream_with_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
-        ..Default::default()
-    });
-}
-
-/// Tests that subnet memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_subnet_memory_limit() {
-    // A stream handler with a subnet memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-        ..Default::default()
-    });
+    // A subnet message memory limit that only allows up to 3 reservations.
+    induct_loopback_stream_with_memory_limit_impl(Some(heap_delta_capacity_for_message_memory(
+        NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+    )));
 }
 
 /// Tests that subnet message memory limit is ignored by
 /// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
 #[test]
 fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        ..Default::default()
-    });
-}
-
-/// Tests that subnet wasm custom sections memory limit is ignored by
-/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
-#[test]
-fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memory_limit() {
-    // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
-    induct_loopback_stream_ignores_memory_limit_impl(HypervisorConfig {
-        guaranteed_response_message_memory_capacity: NumBytes::new(
-            MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2,
-        ),
-        subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
-        ..Default::default()
-    });
+    // A subnet message memory limit that only allows up to 3 reservations.
+    induct_loopback_stream_ignores_memory_limit_impl(Some(heap_delta_capacity_for_message_memory(
+        NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+    )));
 }
 
 /// Common initial state setup for `StreamHandlerImpl::induct_loopback_stream()`
 /// memory limit tests.
 fn with_induct_loopback_stream_setup(
-    config: HypervisorConfig,
+    maximum_state_delta: Option<NumBytes>,
     subnet_type: SubnetType,
     certification_version: CertificationVersion,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
     with_local_test_setup_and_config(
-        config,
+        maximum_state_delta,
         subnet_type,
         certification_version,
         btreemap![LOCAL_SUBNET => StreamConfig {
@@ -474,9 +428,9 @@ fn with_induct_loopback_stream_setup(
 /// loopback requests and a loopback stream containing said requests. Tries to
 /// induct the loopback stream and expects the first request to be inducted; and
 /// the second request to fail to be inducted due to lack of memory.
-fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
+fn induct_loopback_stream_with_memory_limit_impl(maximum_state_delta: Option<NumBytes>) {
     with_induct_loopback_stream_setup(
-        config,
+        maximum_state_delta,
         SubnetType::Application,
         CURRENT_CERTIFICATION_VERSION,
         |stream_handler, state, metrics| {
@@ -534,9 +488,9 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
 /// loopback requests and a loopback stream containing said requests. Tries to
 /// induct the loopback stream and expects both requests to be inducted
 /// successfully.
-fn induct_loopback_stream_ignores_memory_limit_impl(config: HypervisorConfig) {
+fn induct_loopback_stream_ignores_memory_limit_impl(maximum_state_delta: Option<NumBytes>) {
     with_induct_loopback_stream_setup(
-        config,
+        maximum_state_delta,
         SubnetType::System,
         CURRENT_CERTIFICATION_VERSION,
         |stream_handler, state, metrics| {
@@ -2630,13 +2584,10 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
 ///    guaranteed response memory for one request.
 fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
     with_test_setup_and_config(
-        // A config with only enough subnet message memory for one request + epsilon.
-        HypervisorConfig {
-            guaranteed_response_message_memory_capacity: NumBytes::new(
-                MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
-            ),
-            ..Default::default()
-        },
+        // A subnet message memory limit with only enough for one request + epsilon.
+        Some(heap_delta_capacity_for_message_memory(NumBytes::new(
+            MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10,
+        ))),
         subnet_type,
         CURRENT_CERTIFICATION_VERSION,
         // An empty outgoing stream.
@@ -3771,7 +3722,7 @@ fn with_test_setup(
     ),
 ) {
     with_test_setup_and_config(
-        HypervisorConfig::default(),
+        None,
         SubnetType::Application,
         CURRENT_CERTIFICATION_VERSION,
         stream_configs,
@@ -3787,7 +3738,7 @@ fn with_test_setup(
 /// API been used to arrive at it, i.e. responses and (reject) responses generated from these requests
 /// can be successfully inducted into the state. Same for the generated stream slices.
 fn with_test_setup_and_config(
-    hypervisor_config: HypervisorConfig,
+    maximum_state_delta: Option<NumBytes>,
     subnet_type: SubnetType,
     certification_version: CertificationVersion,
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
@@ -3803,10 +3754,12 @@ fn with_test_setup_and_config(
         // Generate an empty `ReplicatedState` for `LOCAL_SUBNET`.
         let mut state = ReplicatedState::new(LOCAL_SUBNET, subnet_type);
         state.metadata.certification_version = certification_version;
+        let mut own_subnet_info = (*state.metadata.own_subnet_info).clone();
+        own_subnet_info.resource_limits.maximum_state_delta = maximum_state_delta;
+        state.metadata.own_subnet_info = Arc::new(own_subnet_info);
         let metrics_registry = MetricsRegistry::new();
         let stream_handler = StreamHandlerImpl::new(
             LOCAL_SUBNET,
-            hypervisor_config,
             &metrics_registry,
             &MessageRoutingMetrics::new(&metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
@@ -3986,14 +3939,14 @@ fn with_local_test_setup(
 /// Generates a local test setup, i.e. without incoming stream slices.
 /// For details see `with_test_setup_and_config()`.
 fn with_local_test_setup_and_config(
-    hypervisor_config: HypervisorConfig,
+    maximum_state_delta: Option<NumBytes>,
     subnet_type: SubnetType,
     certification_version: CertificationVersion,
     stream_configs: BTreeMap<SubnetId, StreamConfig<Vec<MessageBuilder>>>,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
 ) {
     with_test_setup_and_config(
-        hypervisor_config,
+        maximum_state_delta,
         subnet_type,
         certification_version,
         stream_configs,

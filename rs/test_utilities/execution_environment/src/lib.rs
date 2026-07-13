@@ -1,5 +1,6 @@
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_config::embedders::{MeteringType, StableMemoryPageLimit};
+use ic_config::execution_environment::heap_delta_capacity_for_message_memory;
 use ic_config::{
     embedders::{Config as EmbeddersConfig, WASM_MAX_SIZE},
     execution_environment::Config,
@@ -2614,9 +2615,9 @@ impl ExecutionTestBuilder {
         mut self,
         subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
-        self.execution_config
-            .guaranteed_response_message_memory_capacity =
-            NumBytes::from(subnet_guaranteed_response_message_memory);
+        self.resource_limits.maximum_state_delta = Some(heap_delta_capacity_for_message_memory(
+            NumBytes::from(subnet_guaranteed_response_message_memory),
+        ));
         self
     }
 
@@ -2983,6 +2984,7 @@ impl ExecutionTestBuilder {
             own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
+        own_subnet_info.resource_limits = self.resource_limits;
 
         let metrics_registry = MetricsRegistry::new();
 

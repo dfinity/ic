@@ -7,6 +7,7 @@ use std::{
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
+    execution_environment::heap_delta_capacity_for_message_memory,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
@@ -813,7 +814,7 @@ pub(crate) struct SchedulerTestBuilder {
     hypervisor_config: HypervisorConfig,
     initial_canister_cycles: Cycles,
     subnet_memory_capacity: u64,
-    subnet_guaranteed_response_message_memory: u64,
+    maximum_state_delta: Option<NumBytes>,
     subnet_callback_soft_limit: usize,
     canister_guaranteed_callback_quota: usize,
     registry_settings: RegistryExecutionSettings,
@@ -845,9 +846,7 @@ impl Default for SchedulerTestBuilder {
             hypervisor_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_memory_capacity: config.subnet_memory_capacity.get(),
-            subnet_guaranteed_response_message_memory: config
-                .guaranteed_response_message_memory_capacity
-                .get(),
+            maximum_state_delta: None,
             subnet_callback_soft_limit: config.subnet_callback_soft_limit,
             canister_guaranteed_callback_quota: config.canister_guaranteed_callback_quota,
             registry_settings: test_registry_settings(),
@@ -891,7 +890,9 @@ impl SchedulerTestBuilder {
         subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
         Self {
-            subnet_guaranteed_response_message_memory,
+            maximum_state_delta: Some(heap_delta_capacity_for_message_memory(NumBytes::new(
+                subnet_guaranteed_response_message_memory,
+            ))),
             ..self
         }
     }
@@ -981,6 +982,10 @@ impl SchedulerTestBuilder {
         }).unwrap();
 
         let mut state = ReplicatedState::new(self.own_subnet_id, self.subnet_type);
+        {
+            let own_subnet_info = std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info);
+            own_subnet_info.resource_limits.maximum_state_delta = self.maximum_state_delta;
+        }
 
         let mut registry_settings = self.registry_settings;
 
@@ -1060,9 +1065,6 @@ impl SchedulerTestBuilder {
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::new(self.subnet_memory_capacity),
-            guaranteed_response_message_memory_capacity: NumBytes::new(
-                self.subnet_guaranteed_response_message_memory,
-            ),
             // Keep it simple, no memory reservation for responses.
             subnet_memory_reservation: NumBytes::new(0),
             subnet_callback_soft_limit: self.subnet_callback_soft_limit,
