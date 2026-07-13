@@ -283,7 +283,7 @@ impl<'a> PayloadAssembler<'a> {
     }
 
     /// Builds a node's contribution to an aggregated proof: a default (zero
-    /// refund) payment receipt together with that node's signature over the
+    /// spent) payment receipt together with that node's signature over the
     /// corresponding receipt share.
     fn signature(
         &self,
@@ -303,7 +303,7 @@ impl<'a> PayloadAssembler<'a> {
     }
 
     /// Builds a single signed [`CanisterHttpResponseShare`] (receipt share with
-    /// a default, zero-refund payment receipt) for the given node.
+    /// a default, zero-spent payment receipt) for the given node.
     fn share(
         &self,
         signer: &Signer,
