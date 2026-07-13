@@ -936,7 +936,8 @@ impl ValidNnsFunction {
             ValidNnsFunction::DeleteSubnet => {
                 "Delete a subnet. The subnet record, catch-up package, threshold signing key \
                 and routing table entries are removed from the registry, the subnet is \
-                removed from the subnet list, and the subnet's nodes become unassigned."
+                removed from the subnet list, and the subnet's nodes become unassigned. \
+                System subnets (e.g. the NNS or II subnet) cannot be deleted."
             }
             ValidNnsFunction::SetDefaultInitialDkgSubnet => {
                 "Set or unset the default subnet to which `SetupInitialDKG` management canister \
