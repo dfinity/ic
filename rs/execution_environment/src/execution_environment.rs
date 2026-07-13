@@ -1869,6 +1869,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 canister,
                                                 args,
+                                                self.config.log_memory_store_feature,
                                                 msg,
                                                 &self.cycles_account_manager,
                                                 subnet_cycles_config,
