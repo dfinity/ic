@@ -623,7 +623,7 @@ mod reward_reduction_tests {
         let affected = PrincipalId::new_node_test_id(1);
         let mut results = BTreeMap::from([(affected, provider_rewards(&[100]))]);
 
-        // The day before the (exclusive) start is not reduced.
+        // The day before the (inclusive) start is not reduced.
         reduce(&mut results, d(2026, 7, 14), &[affected]);
 
         assert_eq!(results[&affected].total_adjusted_rewards_xdr_permyriad, 100);
