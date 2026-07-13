@@ -63,7 +63,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_on};
-use ic_types::{Height, SubnetId};
+use ic_types::SubnetId;
 use ic_universal_canister::{call_args, wasm};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
@@ -71,7 +71,6 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::time::Duration;
 
 const NUM_NODES: usize = 4;
-const DKG_INTERVAL_LENGTH: u64 = 29;
 const CALL_TIMEOUT_SECS: u32 = 300;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
 // The test runs the scenario twice (once per deleted-subnet type). A full run
@@ -102,26 +101,11 @@ pub fn setup(env: TestEnv) {
     // one CloudEngine subnet (the CloudEngine deletion candidate), plus the NNS.
     InternetComputer::new()
         .with_api_boundary_nodes_playnet(1)
-        .add_subnet(
-            Subnet::fast(SubnetType::System, NUM_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
-        )
-        .add_subnet(
-            Subnet::fast(SubnetType::Application, NUM_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
-        )
-        .add_subnet(
-            Subnet::fast(SubnetType::Application, NUM_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
-        )
-        .add_subnet(
-            Subnet::fast(SubnetType::Application, NUM_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
-        )
-        .add_subnet(
-            Subnet::fast(SubnetType::CloudEngine, NUM_NODES)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL_LENGTH)),
-        )
+        .add_subnet(Subnet::fast(SubnetType::System, NUM_NODES))
+        .add_subnet(Subnet::fast(SubnetType::Application, NUM_NODES))
+        .add_subnet(Subnet::fast(SubnetType::Application, NUM_NODES))
+        .add_subnet(Subnet::fast(SubnetType::Application, NUM_NODES))
+        .add_subnet(Subnet::fast(SubnetType::CloudEngine, NUM_NODES))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {
