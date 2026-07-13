@@ -6072,7 +6072,7 @@ fn print_value<T: Debug + serde::Serialize>(key: &String, version: u64, value: T
 }
 
 /// Fetches the last value stored under `key` in the registry and prints it.
-async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
+async fn print_and_get_last_value<T: Message + Default + serde::Serialize + Debug>(
     key: Vec<u8>,
     registry: &RegistryCanister,
     as_json: bool,
