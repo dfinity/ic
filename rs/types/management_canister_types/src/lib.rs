@@ -2171,8 +2171,8 @@ pub struct InstallCodeArgs {
 impl std::fmt::Display for InstallCodeArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallCodeArgs {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  canister_id: {:?}", self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
@@ -2240,8 +2240,8 @@ pub struct InstallCodeArgsV2 {
 impl std::fmt::Display for InstallCodeArgsV2 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallCodeArgsV2 {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  canister_id: {:?}", self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
@@ -3969,9 +3969,9 @@ pub struct InstallChunkedCodeArgs {
 impl std::fmt::Display for InstallChunkedCodeArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallChunkedCodeArgs {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  target_canister: {:?}", &self.target_canister)?;
-        writeln!(f, "  store_canister: {:?}", &self.store_canister)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  target_canister: {:?}", self.target_canister)?;
+        writeln!(f, "  store_canister: {:?}", self.store_canister)?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
     }

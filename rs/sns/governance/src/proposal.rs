@@ -520,7 +520,7 @@ fn validate_and_render_motion(motion: &Motion) -> Result<String, String> {
 ## Motion Text:
 
 {}",
-        &motion.motion_text
+        motion.motion_text
     ))
 }
 
@@ -544,7 +544,7 @@ fn validate_and_render_manage_nervous_system_parameters(
 ## New nervous system parameters:
 
 {:#?}",
-        &current_parameters, new_parameters
+        current_parameters, new_parameters
     ))
 }
 

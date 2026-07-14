@@ -2519,7 +2519,7 @@ mod load_transcript_with_openings {
                 .expect("empty openings");
             complaint_with_openings.remove(&complaint);
             complaint.dealer_id = NodeId::from(PrincipalId::new_anonymous());
-            for (_opener_id, opening) in openings.iter_mut() {
+            for opening in openings.values_mut() {
                 opening.dealer_id = NodeId::from(PrincipalId::new_anonymous());
             }
             complaint_with_openings.insert(complaint, openings);
