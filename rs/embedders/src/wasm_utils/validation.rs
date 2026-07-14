@@ -1045,7 +1045,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                     } else {
                         return Err(WasmValidationError::InvalidImportSection(format!(
                             "Function import doesn't have a function type. Type found: {:?}",
-                            &module.types.types[&TypeID(*index)]
+                            module.types.types[&TypeID(*index)]
                         )));
                     };
                     set_imports_details(&mut imports_details, import_module, field);

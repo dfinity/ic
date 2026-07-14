@@ -370,9 +370,9 @@ fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
         .map(|e| e.path().to_owned())
     {
         let file =
-            std::fs::File::open(&entry).with_context(|| format!("Could not open: {:?}", &entry))?;
+            std::fs::File::open(&entry).with_context(|| format!("Could not open: {:?}", entry))?;
         let vm: AllocatedVm = serde_json::from_reader(file)
-            .with_context(|| format!("{:?}: Could not read json.", &entry))?;
+            .with_context(|| format!("{:?}: Could not read json.", entry))?;
         uvms.insert(vm.name.to_string(), vm.ipv6);
     }
     Ok(uvms)
