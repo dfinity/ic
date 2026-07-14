@@ -226,6 +226,10 @@ setup_config() {
     mkdir -p "$SETUPOS_CONFIG_MOUNT"
     mount "$SETUPOS_CONFIG_IMG_PATH" "$SETUPOS_CONFIG_MOUNT"
 
+    # Wait for udev to create the /dev/disk/by-label/OVERRIDE symlink for the
+    # loop-mounted config image, which preload-config.sh depends on.
+    udevadm wait --timeout=10 /dev/disk/by-label/OVERRIDE
+
     # Preload and create config
     /opt/ic/bin/preload-config.sh
     /opt/ic/bin/config_tool create-setupos-config
