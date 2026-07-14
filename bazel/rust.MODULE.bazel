@@ -1200,12 +1200,12 @@ crate.spec(
         "flamegraph",
         "prost-codec",
     ],
-    package = "pprof",
     # the upstream pprof uses outdated dependencies that bloat our dependency
     # graph, so we use our own fork that updates some dependencies and loosens
     # bounds:
     # https://github.com/tikv/pprof-rs
     git = "https://github.com/dfinity/pprof-rs",
+    package = "pprof",
     rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
 )
 crate.spec(
