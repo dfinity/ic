@@ -121,8 +121,7 @@ async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
 
     // Forward the supplied `subnet_admins` list to the registry as-is; the
     // engine controller does not manipulate it.
-    let subnet_admins: Vec<PrincipalId> =
-        args.subnet_admins.into_iter().map(PrincipalId).collect();
+    let subnet_admins: Vec<PrincipalId> = args.subnet_admins.into_iter().map(PrincipalId).collect();
 
     let node_ids: Vec<NodeId> = args
         .node_ids
