@@ -1,5 +1,5 @@
 {
-  "checksum": "3400af9d008b727142c1e50ae09873d3bf926c4b7b2ef5503bd51c4cb1616726",
+  "checksum": "cbd2a1f8879331c84f3fa1a4bd8f95d7607c95ce6d78711235f50ac976429fa7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5046,54 +5046,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "autocfg 0.1.8": {
-      "name": "autocfg",
-      "version": "0.1.8",
-      "package_url": "https://github.com/cuviper/autocfg",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/autocfg/0.1.8/download",
-          "sha256": "0dde43e75fd43e8a1bf86103336bc699aa8d17ad1be60c76c0bdfd4828e19b78"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "autocfg",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "autocfg",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.5.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.8"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "autocfg 1.5.0": {
       "name": "autocfg",
       "version": "1.5.0",
@@ -8354,11 +8306,8 @@
         "crate_features": {
           "common": [
             "default",
-            "rand",
             "secp-recovery",
-            "serde",
-            "std",
-            "use-serde"
+            "std"
           ],
           "selects": {}
         },
@@ -8375,10 +8324,6 @@
             {
               "id": "secp256k1 0.22.2",
               "target": "secp256k1"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -8769,17 +8714,7 @@
         ],
         "crate_features": {
           "common": [
-            "serde",
             "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
           ],
           "selects": {}
         },
@@ -14331,44 +14266,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "cloudabi 0.0.3": {
-      "name": "cloudabi",
-      "version": "0.0.3",
-      "package_url": "https://github.com/nuxinl/cloudabi",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cloudabi/0.0.3/download",
-          "sha256": "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cloudabi",
-            "crate_root": "cloudabi.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "cloudabi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.0.3"
-      },
-      "license": "BSD-2-Clause",
-      "license_ids": [
-        "BSD-2-Clause"
-      ],
-      "license_file": null
     },
     "cmake 0.1.58": {
       "name": "cmake",
@@ -28732,42 +28629,6 @@
       "license_ids": [
         "MIT"
       ],
-      "license_file": "LICENSE"
-    },
-    "fuchsia-cprng 0.1.1": {
-      "name": "fuchsia-cprng",
-      "version": "0.1.1",
-      "package_url": "https://fuchsia.googlesource.com/fuchsia/+/master/garnet/public/rust/fuchsia-cprng",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fuchsia-cprng/0.1.1/download",
-          "sha256": "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fuchsia_cprng",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fuchsia_cprng",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.1"
-      },
-      "license": null,
-      "license_ids": [],
       "license_file": "LICENSE"
     },
     "funty 2.0.0": {
@@ -64231,139 +64092,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "rand 0.6.5": {
-      "name": "rand",
-      "version": "0.6.5",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand/0.6.5/download",
-          "sha256": "6d71dacdc3c88c1fde3885a3be3fbab9f35724e6ce99467f7d9c5026132184ca"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "rand_os",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "rand 0.6.5",
-              "target": "build_script_build"
-            },
-            {
-              "id": "rand_chacha 0.1.1",
-              "target": "rand_chacha"
-            },
-            {
-              "id": "rand_core 0.4.2",
-              "target": "rand_core"
-            },
-            {
-              "id": "rand_hc 0.1.0",
-              "target": "rand_hc"
-            },
-            {
-              "id": "rand_isaac 0.1.1",
-              "target": "rand_isaac"
-            },
-            {
-              "id": "rand_jitter 0.1.4",
-              "target": "rand_jitter"
-            },
-            {
-              "id": "rand_os 0.1.3",
-              "target": "rand_os"
-            },
-            {
-              "id": "rand_pcg 0.1.2",
-              "target": "rand_pcg"
-            },
-            {
-              "id": "rand_xorshift 0.1.1",
-              "target": "rand_xorshift"
-            }
-          ],
-          "selects": {
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.186",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.6.5"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 0.1.8",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "rand 0.8.6": {
       "name": "rand",
       "version": "0.8.6",
@@ -64585,90 +64313,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rand_chacha 0.1.1": {
-      "name": "rand_chacha",
-      "version": "0.1.1",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_chacha/0.1.1/download",
-          "sha256": "556d3a1ca6600bfcbab7c7c91ccb085ac7fbbcd70e008a98742e7847f4f7bcef"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_chacha",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_chacha",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_chacha 0.1.1",
-              "target": "build_script_build"
-            },
-            {
-              "id": "rand_core 0.3.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 0.1.8",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "rand_chacha 0.3.1": {
       "name": "rand_chacha",
       "version": "0.3.1",
@@ -64780,100 +64424,6 @@
         "version": "0.9.0"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_core 0.3.1": {
-      "name": "rand_core",
-      "version": "0.3.1",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_core/0.3.1/download",
-          "sha256": "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.4.2",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.3.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_core 0.4.2": {
-      "name": "rand_core",
-      "version": "0.4.2",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_core/0.4.2/download",
-          "sha256": "9c33a3c44ca05fa6f1807d8e6743f3824e8509beca625669633be0acbdf509dc"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.4.2"
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -65090,332 +64640,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rand_hc 0.1.0": {
-      "name": "rand_hc",
-      "version": "0.1.0",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_hc/0.1.0/download",
-          "sha256": "7b40677c7be09ae76218dc623efbf7b18e34bced3f38883af07bb75630a21bc4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_hc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_hc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.3.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_isaac 0.1.1": {
-      "name": "rand_isaac",
-      "version": "0.1.1",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_isaac/0.1.1/download",
-          "sha256": "ded997c9d5f13925be2a6fd7e66bf1872597f759fd9dd93513dd7e92e5a5ee08"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_isaac",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_isaac",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.3.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_jitter 0.1.4": {
-      "name": "rand_jitter",
-      "version": "0.1.4",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_jitter/0.1.4/download",
-          "sha256": "1166d5c91dc97b88d1decc3285bb0a99ed84b05cfd0bc2341bdf2d43fc41e39b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_jitter",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_jitter",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.4.2",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {
-            "cfg(any(target_os = \"macos\", target_os = \"ios\"))": [
-              {
-                "id": "libc 0.2.186",
-                "target": "libc"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.1.4"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_os 0.1.3": {
-      "name": "rand_os",
-      "version": "0.1.3",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_os/0.1.3/download",
-          "sha256": "7b75f676a1e053fc562eafbb47838d67c84801e38fc1ba459e8f180deabd5071"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_os",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_os",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.4.2",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {
-            "cfg(target_env = \"sgx\")": [
-              {
-                "id": "rdrand 0.4.0",
-                "target": "rdrand"
-              }
-            ],
-            "cfg(target_os = \"cloudabi\")": [
-              {
-                "id": "cloudabi 0.0.3",
-                "target": "cloudabi"
-              }
-            ],
-            "cfg(target_os = \"fuchsia\")": [
-              {
-                "id": "fuchsia-cprng 0.1.1",
-                "target": "fuchsia_cprng"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "libc 0.2.186",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.1.3"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_pcg 0.1.2": {
-      "name": "rand_pcg",
-      "version": "0.1.2",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_pcg/0.1.2/download",
-          "sha256": "abf9b09b01790cfe0364f52bf32995ea3c39f4d2dd011eac241d2914146d0b44"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_pcg",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_pcg",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.4.2",
-              "target": "rand_core"
-            },
-            {
-              "id": "rand_pcg 0.1.2",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.2"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 0.1.8",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "rand_pcg 0.3.1": {
       "name": "rand_pcg",
       "version": "0.3.1",
@@ -65458,54 +64682,6 @@
         "version": "0.3.1"
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "rand_xorshift 0.1.1": {
-      "name": "rand_xorshift",
-      "version": "0.1.1",
-      "package_url": "https://github.com/rust-random/rand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rand_xorshift/0.1.1/download",
-          "sha256": "cbf7e9e623549b0e21f6e97cf8ecf247c1a8fd2e8a992ae265314300b2455d5c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rand_xorshift",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rand_xorshift",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.3.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -66096,53 +65272,6 @@
       "license_ids": [
         "Apache-2.0",
         "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "rdrand 0.4.0": {
-      "name": "rdrand",
-      "version": "0.4.0",
-      "package_url": "https://github.com/nagisa/rust_rdrand/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rdrand/0.4.0/download",
-          "sha256": "678054eb77286b51581ba43620cc911abf02758c91f93f479767aed0f90458b2"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rdrand",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rdrand",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rand_core 0.3.1",
-              "target": "rand_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.4.0"
-      },
-      "license": "ISC",
-      "license_ids": [
-        "ISC"
       ],
       "license_file": "LICENSE"
     },
@@ -72906,10 +72035,7 @@
         ],
         "crate_features": {
           "common": [
-            "rand",
-            "rand-std",
             "recovery",
-            "serde",
             "std"
           ],
           "selects": {}
@@ -72917,16 +72043,8 @@
         "deps": {
           "common": [
             {
-              "id": "rand 0.6.5",
-              "target": "rand"
-            },
-            {
               "id": "secp256k1-sys 0.5.2",
               "target": "secp256k1_sys"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -101188,14 +100306,11 @@
       "x86_64-unknown-linux-gnu"
     ],
     "cfg(target_env = \"msvc\")": [],
-    "cfg(target_env = \"sgx\")": [],
     "cfg(target_family = \"wasm\")": [
       "wasm32-unknown-unknown"
     ],
     "cfg(target_os = \"android\")": [],
-    "cfg(target_os = \"cloudabi\")": [],
     "cfg(target_os = \"dragonfly\")": [],
-    "cfg(target_os = \"fuchsia\")": [],
     "cfg(target_os = \"haiku\")": [],
     "cfg(target_os = \"hermit\")": [],
     "cfg(target_os = \"linux\")": [
