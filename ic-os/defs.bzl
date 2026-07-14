@@ -12,7 +12,6 @@ This macro defines the overall build process for ICOS images, including:
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:defs.bzl", "zstd_compress")
-load("//ic-os:alternative_guestos.bzl", "download_alternative_guestos_proposal", "prepare_alternative_guestos_base_bootfs_tree_tar")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
@@ -136,11 +135,40 @@ def icos_build(
         tags = ["manual"],
     )
 
-    prepare_alternative_guestos_base_bootfs_tree_tar(
+    # Extract the bootfs tree from the base GuestOS update image. The image is
+    # supplied by build-sev-recovery as a source file `base-update-img.tar.zst`,
+    # a symlink to a version-named `update-img-<version>.tar.zst`
+    # (see //ic-os/guestos/envs/sev-recovery:build-sev-recovery).
+    native.genrule(
         name = "alternative_guestos_base_bootfs_tree_tar",
-        out = "alternative_guestos_base_bootfs_tree.tar",
-        tags = ["manual", "no-cache", "requires-network"],
+        srcs = [":base-update-img.tar.zst"],
+        outs = ["alternative_guestos_base_bootfs_tree.tar"],
+        cmd = """
+set -euo pipefail
+
+tmpdir=$$(mktemp -d)
+mounted=0
+cleanup() {
+  set +e
+  if [[ $$mounted -eq 1 ]]; then
+    fusermount3 -u "$$tmpdir/bootfs" || fusermount -u "$$tmpdir/bootfs" || umount "$$tmpdir/bootfs"
+  fi
+  rm -rf "$$tmpdir"
+}
+trap cleanup EXIT
+
+# Extract boot.img from the base GuestOS update image.
+tar --extract --zstd --to-stdout --file "$<" boot.img > "$$tmpdir/boot.img"
+
+mkdir "$$tmpdir/bootfs"
+$(location //:fuse2fs) -o ro,norecovery,fakeroot "$$tmpdir/boot.img" "$$tmpdir/bootfs"
+mounted=1
+tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
+""",
+        message = "Extracting base GuestOS boot partition via fuse2fs",
+        tags = ["manual", "no-cache"],
         target_compatible_with = ["@platforms//os:linux"],
+        tools = ["//:fuse2fs"],
     )
 
     # -------------------- Extract root and boot partitions --------------------
@@ -398,11 +426,6 @@ def icos_build(
     native.alias(
         name = "boot_args_template",
         actual = image_deps["boot_args_template"],
-        tags = ["manual"],
-    )
-
-    download_alternative_guestos_proposal(
-        name = "alternative_guestos_proposal.cbor",
         tags = ["manual"],
     )
 
