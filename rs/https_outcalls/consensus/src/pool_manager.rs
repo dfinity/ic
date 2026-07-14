@@ -504,14 +504,16 @@ impl CanisterHttpPoolManagerImpl {
             .filter_map(|artifact| {
                 let share = &artifact.share;
 
+                // Reject shares from different replica versions
+                if !is_current_protocol_version(share.content.replica_version()) {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                }
+
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(share.content.replica_version()) {
-                        true => Some(CanisterHttpChangeAction::HandleInvalid(
-                            share.clone(),
-                            "Redundant share".into(),
-                        )),
-                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
-                    };
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Redundant share".into(),
+                    ));
                 }
 
                 let Some(context) = active_contexts.get(&share.content.id()) else {
@@ -979,6 +981,110 @@ pub mod test {
 
                 let changes = pool_manager.validate_shares(&canister_http_pool);
 
+                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+            })
+        });
+    }
+
+    #[test]
+    fn test_removal_of_wrong_version_share_without_existing_validated_share() {
+        // A share signed under a different replica version must be removed from
+        // the unvalidated pool even when no share for the same (signer,
+        // callback) is present in the validated pool yet.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+
+                // A context must be present so that `next_callback_id` is 1 and
+                // the share for callback 0 is considered (id < next_callback_id).
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                // A share from a committee member with a valid signature that
+                // would otherwise be validated, but which carries an outdated
+                // replica version.
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::from_str("outdated_version").unwrap(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                };
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Note: the validated pool is intentionally left empty, so the
+                // (signer, callback) slot is free.
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share is dropped silently (removed, not marked invalid).
+                assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
         });
