@@ -9937,7 +9937,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-validator",
- "inferno 0.12.6",
+ "inferno",
  "maplit",
  "mockall 0.13.1",
  "pretty_assertions",
@@ -16685,24 +16685,6 @@ dependencies = [
 
 [[package]]
 name = "inferno"
-version = "0.11.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
-dependencies = [
- "ahash 0.8.12",
- "indexmap 2.14.0",
- "is-terminal",
- "itoa",
- "log",
- "num-format",
- "once_cell",
- "quick-xml 0.26.0",
- "rgb",
- "str_stack",
-]
-
-[[package]]
-name = "inferno"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90807d610575744524d9bdc69f3885d96f0e6c3354565b0828354a7ff2a262b8"
@@ -16718,7 +16700,7 @@ dependencies = [
  "log",
  "num-format",
  "once_cell",
- "quick-xml 0.39.2",
+ "quick-xml",
  "rgb",
  "str_stack",
 ]
@@ -18608,17 +18590,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
-dependencies = [
- "bitflags 1.3.2",
- "cfg-if",
- "libc",
-]
-
-[[package]]
-name = "nix"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
@@ -20300,29 +20271,27 @@ dependencies = [
 
 [[package]]
 name = "pprof"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afad4d4df7b31280028245f152d5a575083e2abb822d05736f5e47653e77689f"
+version = "0.15.0"
+source = "git+https://github.com/dfinity/pprof-rs?rev=7f5228262196e3eb9c8d1ddbaca984787dea331a#7f5228262196e3eb9c8d1ddbaca984787dea331a"
 dependencies = [
  "aligned-vec",
  "backtrace",
  "cfg-if",
  "criterion",
  "findshlibs",
- "inferno 0.11.21",
+ "inferno",
  "libc",
  "log",
- "nix 0.26.4",
+ "nix 0.27.1",
  "once_cell",
  "prost 0.12.6",
  "prost-build 0.12.6",
- "prost-derive 0.12.6",
  "sha2 0.10.9",
  "smallvec",
  "spin 0.10.0",
  "symbolic-demangle",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -20859,15 +20828,6 @@ name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
-
-[[package]]
-name = "quick-xml"
-version = "0.26.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "quick-xml"
