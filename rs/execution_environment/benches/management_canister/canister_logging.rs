@@ -253,11 +253,10 @@ fn setup_fetch_bench<F: FnOnce(&ExecutionTest, CanisterId) -> Vec<u8>>(
     let (mut test, target) = build_full_log_test(log_memory_limit, log_message_size);
 
     // Enqueue the inter-canister call. It is the only pending subnet message, so
-    // the next `execute_subnet_message` executes exactly this call. Attach
-    // comfortably more than the `fetch_canister_logs` fee (any excess is refunded)
-    // so the call is not rejected for insufficient cycles.
+    // the next `execute_subnet_message` executes exactly this call. No cycles are
+    // attached: `fetch_canister_logs` charges no cycles fee.
     let payload = make_payload(&test, target);
-    test.inject_call_to_ic00(method, payload, Cycles::new(5_000_000_000));
+    test.inject_call_to_ic00(method, payload, Cycles::new(0));
     test
 }
 
