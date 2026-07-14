@@ -238,6 +238,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 // this request are derived from the registry version pinned in
                 // its context. The subnet size feeds the consensus-cost term of
                 // the collective initial spend.
+                // TODO: Take subnet size from context instead, once it exists.
                 let CanisterHttpCommittee {
                     threshold,
                     faults_tolerated,
@@ -447,6 +448,7 @@ impl CanisterHttpPayloadBuilderImpl {
             // The committee is the subnet node set at the registry version
             // pinned in the request context; its size feeds the consensus-cost
             // term of the collective initial spend.
+            // TODO: Take subnet size from context instead, once it exists.
             let CanisterHttpCommittee {
                 committee,
                 threshold,
@@ -632,7 +634,8 @@ impl CanisterHttpPayloadBuilderImpl {
             )?;
             // The subnet size (used for the consensus-cost term of the collective
             // initial spend) is the full node set at the context's registry
-            // version, not the flexible committee subset.
+            // version.
+            // TODO: Take subnet size from context instead, once it exists.
             let CanisterHttpCommittee { committee, .. } = self
                 .membership
                 .get_canister_http_committee(context.registry_version)
@@ -730,6 +733,7 @@ impl CanisterHttpPayloadBuilderImpl {
             // The subnet size (used for the consensus-cost term of the collective
             // initial spend) is the full node set at the context's registry
             // version, not the flexible committee subset.
+            // TODO: Take subnet size from context instead, once it exists.
             let CanisterHttpCommittee { committee, .. } = self
                 .membership
                 .get_canister_http_committee(context.registry_version)
@@ -1043,13 +1047,11 @@ impl
                     }
                 },
             ));
-            if !nodes.is_empty() {
-                spent.initial.push(CanisterHttpInitialSpent {
-                    callback,
-                    amount,
-                    nodes,
-                });
-            }
+            spent.initial.push(CanisterHttpInitialSpent {
+                callback,
+                amount,
+                nodes,
+            });
         }
 
         // Timeouts: map to a rejected response. A timed-out request has no
@@ -1065,6 +1067,7 @@ impl
             ));
         }
 
+        // Divergences carry no response content, and hence no spend report.
         for divergence_response in messages.divergence_responses {
             if let Some(consensus_response) = divergence_response_into_reject(divergence_response) {
                 stats.divergence_responses += 1;
@@ -1072,9 +1075,9 @@ impl
             }
         }
 
+        // The collective initial spend was computed during payload building
+        // and validated during payload validation.
         for response_group in messages.flexible_responses {
-            // The collective initial spend was computed during payload building
-            // and validated during payload validation.
             let callback = response_group.callback_id;
             let amount = response_group.initial_spent;
             let nodes: BTreeSet<NodeId> = response_group
@@ -1086,13 +1089,11 @@ impl
                 Some(consensus_response) => {
                     stats.flexible_ok_responses += 1;
                     consensus_responses.push(consensus_response);
-                    if !nodes.is_empty() {
-                        spent.initial.push(CanisterHttpInitialSpent {
-                            callback,
-                            amount,
-                            nodes,
-                        });
-                    }
+                    spent.initial.push(CanisterHttpInitialSpent {
+                        callback,
+                        amount,
+                        nodes,
+                    });
                 }
                 None => stats.flexible_ok_responses_candid_failures += 1,
             }
@@ -1123,9 +1124,7 @@ impl
                 Some(consensus_response) => {
                     stats.flexible_errors += 1;
                     consensus_responses.push(consensus_response);
-                    if let Some(report) = report
-                        && !report.nodes.is_empty()
-                    {
+                    if let Some(report) = report {
                         spent.initial.push(report);
                     }
                 }

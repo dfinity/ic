@@ -7,7 +7,7 @@ use ic_management_canister_types_private::{
 };
 use ic_types::{
     CanisterId, ExecutionRound, Height, NodeId, RegistryVersion, Time,
-    canister_http::CanisterHttpRequestContext,
+    canister_http::{CanisterHttpRequestContext, PricingVersion},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
         canister_threshold_sig::{
@@ -326,13 +326,14 @@ impl SubnetCallContextManager {
                             context.request.sender_reply_callback,
                             context.request.sender
                         );
-                        // Move the context into the collection of contexts that
-                        // have already been responded to, where it remains until
-                        // it times out. This lets the messaging layer keep
-                        // accounting late per-replica spend reports (and refund
-                        // the replicas that never responded on timeout).
-                        self.delivered_canister_http_request_contexts
-                            .insert(callback_id, context.clone());
+                        if context.pricing_version == PricingVersion::PayAsYouGo {
+                            // If the pricing version is pay-as-you-go, move the context
+                            // to the delivered contexts. This lets us keep accounting
+                            // late per-replica spend reports (and refund the replicas
+                            // that never responded on timeout).
+                            self.delivered_canister_http_request_contexts
+                                .insert(callback_id, context.clone());
+                        }
                         SubnetCallContext::CanisterHttpRequest(context)
                     })
             })

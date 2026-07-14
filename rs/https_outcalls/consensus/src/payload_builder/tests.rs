@@ -1058,7 +1058,8 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
 #[test]
 fn validate_payload_succeeds_for_valid_non_replicated_response() {
     // ARRANGE
-    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
         let delegated_node_id = node_test_id(1);
         let callback_id = CallbackId::from(77);
 
@@ -1089,7 +1090,8 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         // The proof must contain exactly ONE signature, from the DELEGATED node.
         add_signer_to_proof(&mut proof, delegated_node_id);
-        proof.initial_spent = super::utils::fully_replicated_initial_spent(&proof.proof, 4);
+        proof.initial_spent =
+            super::utils::fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1545,7 +1547,8 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
     // proofs for the same NonReplicated request.
 
     // ARRANGE
-    test_config_with_http_feature(true, 4, |mut payload_builder, _| {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
         let delegated_node_id = node_test_id(1);
         let duplicate_callback_id = CallbackId::from(102);
 
@@ -1577,7 +1580,8 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
         let (response, metadata) = test_response_and_metadata(duplicate_callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         add_signer_to_proof(&mut proof, delegated_node_id);
-        proof.initial_spent = super::utils::fully_replicated_initial_spent(&proof.proof, 4);
+        proof.initial_spent =
+            super::utils::fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
 
         // 4. Create a payload that includes this same proof twice.
         let payload = CanisterHttpPayload {
@@ -2240,80 +2244,104 @@ fn flexible_build_and_validate_round_trip() {
 
 #[test]
 fn flexible_valid_mixed_content_responses() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let subnet_size = 4;
+    let committee: BTreeSet<_> = (0..subnet_size).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
-        let payload = flexible_payload(vec![flexible_group(
-            callback_id,
-            4,
-            vec![
-                flexible_response(42, 0, b"response_a"),
-                flexible_response(42, 1, b"response_b"),
-                flexible_response(42, 2, b"response_c"),
-            ],
-        )]);
+    setup_test_with_flexible_context(
+        subnet_size as usize,
+        callback_id,
+        committee,
+        2,
+        subnet_size as u32,
+        |payload_builder, _pool| {
+            let payload = flexible_payload(vec![flexible_group(
+                callback_id,
+                subnet_size as u32,
+                vec![
+                    flexible_response(42, 0, b"response_a"),
+                    flexible_response(42, 1, b"response_b"),
+                    flexible_response(42, 2, b"response_c"),
+                ],
+            )]);
 
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(result, Ok(_));
-    });
+            let result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(result, Ok(_));
+        },
+    );
 }
 
 #[test]
 fn flexible_valid_at_min_responses_boundary() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let subnet_size = 4;
+    let committee: BTreeSet<_> = (0..subnet_size).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
-        let payload = flexible_payload(vec![flexible_group(
-            callback_id,
-            4,
-            vec![
-                flexible_response(42, 0, b"a"),
-                flexible_response(42, 1, b"b"),
-            ],
-        )]);
+    setup_test_with_flexible_context(
+        subnet_size as usize,
+        callback_id,
+        committee,
+        2,
+        subnet_size as u32,
+        |payload_builder, _pool| {
+            let payload = flexible_payload(vec![flexible_group(
+                callback_id,
+                subnet_size as u32,
+                vec![
+                    flexible_response(42, 0, b"a"),
+                    flexible_response(42, 1, b"b"),
+                ],
+            )]);
 
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(result, Ok(_));
-    });
+            let result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(result, Ok(_));
+        },
+    );
 }
 
 #[test]
 fn flexible_valid_at_max_responses_boundary() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let subnet_size = 4;
+    let committee: BTreeSet<_> = (0..subnet_size).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_flexible_context(4, callback_id, committee, 2, 4, |payload_builder, _pool| {
-        let payload = flexible_payload(vec![flexible_group(
-            callback_id,
-            4,
-            vec![
-                flexible_response(42, 0, b"a"),
-                flexible_response(42, 1, b"b"),
-                flexible_response(42, 2, b"c"),
-                flexible_response(42, 3, b"d"),
-            ],
-        )]);
+    setup_test_with_flexible_context(
+        subnet_size as usize,
+        callback_id,
+        committee,
+        2,
+        subnet_size as u32,
+        |payload_builder, _pool| {
+            let payload = flexible_payload(vec![flexible_group(
+                callback_id,
+                subnet_size as u32,
+                vec![
+                    flexible_response(42, 0, b"a"),
+                    flexible_response(42, 1, b"b"),
+                    flexible_response(42, 2, b"c"),
+                    flexible_response(42, 3, b"d"),
+                ],
+            )]);
 
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(result, Ok(_));
-    });
+            let result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(result, Ok(_));
+        },
+    );
 }
 
 #[test]
@@ -2340,30 +2368,46 @@ fn flexible_valid_with_zero_min_and_max_responses() {
 
 #[test]
 fn flexible_invalid_duplicate_callback_id_within_payload() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let subnet_size = 4;
+    let committee: BTreeSet<_> = (0..subnet_size).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_flexible_context(4, callback_id, committee, 1, 4, |payload_builder, _pool| {
-        let payload = flexible_payload(vec![
-            flexible_group(callback_id, 4, vec![flexible_response(42, 0, b"a")]),
-            flexible_group(callback_id, 4, vec![flexible_response(42, 1, b"b")]),
-        ]);
-
-        let result = payload_builder.validate_payload(
-            Height::from(1),
-            &test_proposal_context(&default_validation_context()),
-            &payload_to_bytes_max_4mb(payload),
-            &[],
-        );
-        assert_matches!(
-            result,
-            Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::DuplicateResponse(id),
+    setup_test_with_flexible_context(
+        subnet_size as usize,
+        callback_id,
+        committee,
+        1,
+        subnet_size as u32,
+        |payload_builder, _pool| {
+            let payload = flexible_payload(vec![
+                flexible_group(
+                    callback_id,
+                    subnet_size as u32,
+                    vec![flexible_response(42, 0, b"a")],
                 ),
-            )) if id == callback_id
-        );
-    });
+                flexible_group(
+                    callback_id,
+                    subnet_size as u32,
+                    vec![flexible_response(42, 1, b"b")],
+                ),
+            ]);
+
+            let result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(payload),
+                &[],
+            );
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::DuplicateResponse(id),
+                    ),
+                )) if id == callback_id
+            );
+        },
+    );
 }
 
 #[test]
@@ -2916,21 +2960,22 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
 
 #[test]
 fn flexible_invalid_signature_error() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let subnet_size = 4;
+    let committee: BTreeSet<_> = (0..subnet_size).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
     setup_test_with_flexible_context(
-        4,
+        subnet_size as usize,
         callback_id,
         committee,
         1,
-        4,
+        subnet_size as u32,
         |mut payload_builder, _pool| {
             payload_builder.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
             let payload = flexible_payload(vec![flexible_group(
                 callback_id,
-                4,
+                subnet_size as u32,
                 vec![flexible_response(42, 0, b"data")],
             )]);
 
@@ -4338,7 +4383,11 @@ fn flexible_error_too_many_rejects_valid() {
             .collect();
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![too_many_rejects(callback_id, 4, reject_entries)],
+            flexible_errors: vec![too_many_rejects(
+                callback_id,
+                num_nodes as u32,
+                reject_entries,
+            )],
             ..Default::default()
         };
         let result = pb.validate_payload(
@@ -4365,7 +4414,11 @@ fn flexible_error_too_many_rejects_insufficient_rejects() {
             .collect();
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![too_many_rejects(callback_id, 4, reject_entries)],
+            flexible_errors: vec![too_many_rejects(
+                callback_id,
+                num_nodes as u32,
+                reject_entries,
+            )],
             ..Default::default()
         };
         let result = pb.validate_payload(
@@ -4694,7 +4747,11 @@ fn flexible_error_too_many_rejects_invalid_signature() {
             .collect();
 
         let payload = CanisterHttpPayload {
-            flexible_errors: vec![too_many_rejects(callback_id, 4, reject_entries)],
+            flexible_errors: vec![too_many_rejects(
+                callback_id,
+                num_nodes as u32,
+                reject_entries,
+            )],
             ..Default::default()
         };
         let result = pb.validate_payload(

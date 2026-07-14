@@ -55,10 +55,7 @@ pub enum BatchContent {
         batch_messages: BatchMessages,
         /// Responses to subnet calls that require consensus' involvement.
         consensus_responses: Vec<ConsensusResponse>,
-        /// Per-replica spent-cycles reports for HTTP outcalls, delivered
-        /// separately from the consensus responses (they are accounting data,
-        /// not delivered to the calling canister). The messaging layer derives
-        /// the caller's refund and the consumed-cycles metric from them.
+        /// The amount of cycles spent on HTTP outcalls.
         canister_http_spent: CanisterHttpSpent,
         /// Data required by the chain key service
         chain_key_data: ChainKeyData,
@@ -352,17 +349,8 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
     }
 }
 
-/// Per-replica spent-cycles reports for HTTP outcalls, delivered alongside (but
+/// The amount of cycles spent on HTTP outcalls, delivered alongside (but
 /// separately from) the [`ConsensusResponse`]s of a batch.
-///
-/// Unlike the consensus responses, these are *not* delivered to the calling
-/// canister; they are consumed by the messaging layer, which uses the spent
-/// amounts to (a) credit the caller's refund (`per_replica_allowance − spent`)
-/// and (b) report the consumed-cycles metric (`spent`). Reporting the *spent*
-/// (rather than the refund) is what lets free subnets — whose refund is always
-/// zero — still account their consumed cycles. These values are only used
-/// in-memory on the hop from consensus to the messaging layer and are
-/// intentionally not serialized as part of the batch.
 ///
 /// There are two kinds of reports:
 ///  - an *initial* report, where the set of nodes that produced a response
@@ -381,10 +369,6 @@ pub struct CanisterHttpSpent {
 /// The initial spent report for an HTTP outcall: the set of `nodes` that
 /// produced the response collectively spent one specific `amount` of cycles
 /// (the sum of their per-replica spends plus the consensus cost).
-///
-/// The contributing `nodes` are recorded so that the messaging layer can avoid
-/// crediting/accounting any later asynchronous report from a node that already
-/// contributed here.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpInitialSpent {
@@ -396,9 +380,7 @@ pub struct CanisterHttpInitialSpent {
 /// An asynchronous spent report for an HTTP outcall.
 ///
 /// `shares` holds the per-replica spends that the participating nodes signed
-/// over as part of the aggregated response proof. A report may be delivered in
-/// a later block than the response; the messaging layer accounts each node at
-/// most once.
+/// over as part of the aggregated response proof.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpAsyncSpent {

@@ -252,7 +252,6 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number
             )
         }
-        execution_timer.observe_duration();
 
         // Apply HTTP outcall spend reports and time out delivered request
         // contexts. This runs after execution, so that contexts that were just
@@ -262,6 +261,8 @@ impl StateMachine for StateMachineImpl {
         deliver_canister_http_spent(&canister_http_spent, &mut state_after_execution, &self.log);
         let batch_time = state_after_execution.time();
         refund_timed_out_canister_http_contexts(&mut state_after_execution, batch_time, &self.log);
+
+        execution_timer.observe_duration();
 
         // Postprocess the state: route messages into streams.
         let message_routing_timer = self.metrics.start_phase_timer(PHASE_MESSAGE_ROUTING);

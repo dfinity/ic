@@ -1047,11 +1047,7 @@ impl From<HttpMethod> for CanisterHttpMethod {
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
-    /// The collective initial spent cycles to account for the calling canister,
-    /// computed during payload building from the subnet size in the request
-    /// context and validated during payload validation. The messaging layer
-    /// derives the caller's refund (`per_replica_allowance − spent`) and the
-    /// consumed-cycles metric from it.
+    /// The total amount of cycles spent by the subnet to produce this response.
     pub initial_spent: Cycles,
 }
 

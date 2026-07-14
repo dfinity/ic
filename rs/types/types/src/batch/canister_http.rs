@@ -55,8 +55,7 @@ pub enum FlexibleCanisterHttpError {
     TooManyRejects {
         callback_id: CallbackId,
         reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
-        /// Collective initial spent cycles, computed during payload building from
-        /// the subnet size in the request context and checked during validation.
+        /// The total amount of cycles spent by the subnet to produce this response.
         initial_spent: Cycles,
     },
 }
@@ -81,8 +80,7 @@ impl FlexibleCanisterHttpError {
 pub struct FlexibleCanisterHttpResponses {
     pub callback_id: CallbackId,
     pub responses: Vec<FlexibleCanisterHttpResponseWithProof>,
-    /// Collective initial spent cycles, computed during payload building from the
-    /// subnet size in the request context and checked during validation.
+    /// The total amount of cycles spent by the subnet to produce this response.
     pub initial_spent: Cycles,
 }
 
