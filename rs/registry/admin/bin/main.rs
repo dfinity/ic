@@ -4662,19 +4662,19 @@ async fn main() {
             ),
         }
 
-        if let Some(secret_key_path) = &opts.secret_key_pem {
+        if let Some(secret_key_path) = opts.secret_key_pem {
             let contents = read_to_string(secret_key_path).expect("Could not read key file");
             let sig_keys = SigKeys::from_pem(&contents).expect("Failed to parse pem file");
             Sender::SigKeys(sig_keys)
         } else if opts.use_hsm {
             make_hsm_sender(
-                opts.hsm_slot.as_ref().expect(
+                &opts.hsm_slot.expect(
                     "HSM slot must also be provided for --use-hsm; use --hsm-slot or see --help.",
                 ),
-                opts.hsm_key_id.as_ref().expect(
+                &opts.hsm_key_id.expect(
                     "HSM key ID must also be provided for --use-hsm; use --key-id or see --help.",
                 ),
-                opts.hsm_pin.as_ref().expect(
+                &opts.hsm_pin.expect(
                     "HSM pin must also be provided for --use-hsm; use --pin or see --help.",
                 ),
             )
@@ -4776,7 +4776,12 @@ async fn main() {
             }
             eprintln!("INFO: Fetching API Boundary nodes...");
             // list all API Boundary Nodes
-            let api_bn_node_ids = get_api_boundary_node_ids(opts, reachable_nns_urls.clone())
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+            let api_bn_node_ids = get_api_boundary_node_ids(registry_client)
                 .iter()
                 .map(|n| NodeId::from(PrincipalId::from_str(n).unwrap()))
                 .collect();
@@ -5930,7 +5935,12 @@ async fn main() {
             .await;
         }
         SubCommand::GetApiBoundaryNodes => {
-            let records = get_api_boundary_node_ids(opts, reachable_nns_urls.clone());
+            let registry_client = make_registry_client(
+                reachable_nns_urls.clone(),
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+            let records = get_api_boundary_node_ids(registry_client);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&records)
@@ -6741,12 +6751,7 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
     }
 }
 
-fn get_api_boundary_node_ids(opts: Opts, nns_url: Vec<Url>) -> Vec<String> {
-    let registry_client = make_registry_client(
-        nns_url,
-        opts.verify_nns_responses,
-        opts.nns_public_key_pem_file,
-    );
+fn get_api_boundary_node_ids(registry_client: RegistryClientImpl) -> Vec<String> {
     // maximum number of retries, let the user ctrl+c if necessary
     registry_client
         .try_polling_latest_version(usize::MAX)
