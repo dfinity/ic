@@ -3099,9 +3099,10 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
 
 #[test]
 fn into_messages_emits_initial_spend_reports() {
-    // A fully-replicated response and a flexible group, each carrying a distinct
-    // nonzero collective spend, must each yield one initial spend report tagged
-    // with the reporting callback, the claimed amount, and the signing nodes.
+    // A fully-replicated response, a flexible ok group, and a flexible
+    // too-many-rejects error, each carrying a distinct nonzero collective spend,
+    // must each yield one initial spend report tagged with the reporting
+    // callback, the claimed amount, and the signing nodes.
     let fr_callback = CallbackId::from(100);
     let (response, metadata) = test_response_and_metadata(fr_callback.get());
     let mut fr_proof = response_and_metadata_to_proof(&response, &metadata);
@@ -3125,35 +3126,50 @@ fn into_messages_emits_initial_spend_reports() {
         ],
     };
 
+    // A too-many-rejects error is the only flexible error that reports a spend.
+    let err_callback = CallbackId::from(200);
+    let flex_error = FlexibleCanisterHttpError::TooManyRejects {
+        callback_id: err_callback,
+        reject_responses: vec![
+            flexible_reject_response(err_callback.get(), 0),
+            flexible_reject_response(err_callback.get(), 1),
+        ],
+        initial_spent: Cycles::new(5_000),
+    };
+
     let payload = CanisterHttpPayload {
         responses: vec![fr_proof],
         flexible_responses: vec![flex_group],
+        flexible_errors: vec![flex_error],
         ..Default::default()
     };
     let bytes = payload_to_bytes_max_4mb(payload);
 
     let (_responses, spent, _stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
 
-    assert_eq!(spent.initial.len(), 2);
+    assert_eq!(spent.initial.len(), 3);
     assert!(spent.asynchronous.is_empty());
 
     let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
+    let report = |callback: CallbackId| {
+        spent
+            .initial
+            .iter()
+            .find(|r| r.callback == callback)
+            .unwrap_or_else(|| panic!("report for {callback} missing"))
+    };
 
-    let fr = spent
-        .initial
-        .iter()
-        .find(|r| r.callback == fr_callback)
-        .expect("fully-replicated report missing");
+    let fr = report(fr_callback);
     assert_eq!(fr.amount, Cycles::new(7_000));
     assert_eq!(fr.nodes, signers);
 
-    let flex = spent
-        .initial
-        .iter()
-        .find(|r| r.callback == flex_callback)
-        .expect("flexible report missing");
+    let flex = report(flex_callback);
     assert_eq!(flex.amount, Cycles::new(3_000));
     assert_eq!(flex.nodes, signers);
+
+    let err = report(err_callback);
+    assert_eq!(err.amount, Cycles::new(5_000));
+    assert_eq!(err.nodes, signers);
 }
 
 #[test]
