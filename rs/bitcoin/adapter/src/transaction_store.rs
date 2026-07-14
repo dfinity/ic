@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::{time::Duration, time::SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use bitcoin::consensus::deserialize;
 use bitcoin::{
@@ -50,7 +50,9 @@ struct TransactionInfo {
     /// lost, e.g. when the connection is dropped and re-established. Therefore the
     /// transaction is re-advertised every [TX_READVERTISE_PERIOD_SECS] for as long as
     /// it stays in the cache.
-    advertised: HashMap<SocketAddr, SystemTime>,
+    /// [Instant] is used instead of [SystemTime] because the re-advertisement schedule
+    /// must be immune to wall-clock jumps (NTP corrections, VM clock adjustments).
+    advertised: HashMap<SocketAddr, Instant>,
     /// How long the transaction should be held on to.
     /// This is needed in order to be able to reply to GetData requests.
     ttl: SystemTime,
@@ -136,7 +138,7 @@ impl TransactionStore {
     /// peer, or if the last advertisement was at least [TX_READVERTISE_PERIOD_SECS] ago.
     pub fn advertise_txids<Header, Block>(&mut self, channel: &mut impl Channel<Header, Block>) {
         self.remove_old_txns();
-        let now = SystemTime::now();
+        let now = Instant::now();
         let readvertise_period = Duration::from_secs(TX_READVERTISE_PERIOD_SECS);
         for address in channel.available_connections() {
             let mut inventory = vec![];
@@ -428,7 +430,7 @@ mod test {
             .expect("transaction should be in the map");
         info.advertised.insert(
             address,
-            SystemTime::now() - Duration::from_secs(TX_READVERTISE_PERIOD_SECS),
+            Instant::now() - Duration::from_secs(TX_READVERTISE_PERIOD_SECS),
         );
 
         // 5.
