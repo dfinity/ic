@@ -140,6 +140,8 @@ system_test(
 
 system_test(
     name = "subnet_delete_test",
+    backend = "farm",  # Too big for the "local" backend.
+    cpus = MIN_LOCAL_CPUS + (1 + 5 * 4) * DEFAULT_VCPUS_PER_VM,  # 1 API BN + 5 subnets * 4 nodes * 6 vCPUs each
     tags = [
         "long_test",
     ],
