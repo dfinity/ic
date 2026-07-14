@@ -167,9 +167,9 @@ def get_replica_version_info(replica_version: str) -> VersionInfo:
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
     )
 
-    setup_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
-    setupos_hash = download_and_read_sha256sums(f"{setup_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
-    setupos_dev_hash = download_and_read_sha256sums(f"{setup_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
+    setupos_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
+    setupos_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
+    setupos_dev_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
 
     return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements, setupos_hash, setupos_dev_hash)
 
@@ -201,9 +201,9 @@ def get_latest_replica_version_info() -> VersionInfo:
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
     )
 
-    setup_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
-    setupos_hash = download_and_read_sha256sums(f"{setup_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
-    setupos_dev_hash = download_and_read_sha256sums(f"{setup_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
+    setupos_base = f"https://download.dfinity.systems/ic/{version}/setup-os"
+    setupos_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img/SHA256SUMS", "disk-img.tar.zst")
+    setupos_dev_hash = download_and_read_sha256sums(f"{setupos_base}/disk-img-dev/SHA256SUMS", "disk-img.tar.zst")
 
     return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements, setupos_hash, setupos_dev_hash)
 
