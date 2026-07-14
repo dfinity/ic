@@ -240,7 +240,7 @@ impl HttpClient {
             let readable_response = if is_update_call {
                 format!("{:?}", serde_cbor::from_slice::<Value>(&parsed_body))
             } else {
-                format!("{:?}", &std::str::from_utf8(&parsed_body))
+                format!("{:?}", std::str::from_utf8(&parsed_body))
             };
 
             return Err(format!(

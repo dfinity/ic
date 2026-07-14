@@ -221,7 +221,7 @@ fn create_encrypted_key_share_internal(
             .ok_or_else(|| {
                 VetKdKeyShareCreationError::InternalError(format!(
                     "public coefficients for NI-DKG ID {} are empty",
-                    &args.ni_dkg_id
+                    args.ni_dkg_id
                 ))
             })?,
     };

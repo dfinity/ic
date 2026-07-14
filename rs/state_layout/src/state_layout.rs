@@ -1313,7 +1313,7 @@ impl StateLayout {
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
-            .join(format!("diverged_checkpoint_{}", &checkpoint_name));
+            .join(format!("diverged_checkpoint_{}", checkpoint_name));
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
@@ -1363,7 +1363,7 @@ impl StateLayout {
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
-        let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
+        let tmp_path = self.fs_tmp().join(format!("backup_{}", backup_name));
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),
