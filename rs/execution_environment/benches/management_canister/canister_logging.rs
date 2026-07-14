@@ -2,8 +2,7 @@ use std::time::Duration;
 
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::{Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE};
-use ic_config::flag_status::FlagStatus;
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_execution_environment::fetch_canister_logs_response_for_bench;
 use ic_management_canister_types_private::{
     CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgsBuilder, FetchCanisterLogsFilter,
@@ -13,11 +12,8 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::log_memory_store::LogMemoryStore;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_test_utilities_execution_environment::{
-    ExecutionTest, ExecutionTestBuilder, wat_canister, wat_fn,
-};
+use ic_test_utilities_execution_environment::{wat_canister, wat_fn};
 use ic_types_cycles::Cycles;
-use ic_types_test_utils::ids::{canister_test_id, subnet_test_id};
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
@@ -65,61 +61,6 @@ fn fill_logs_canister_wasm(records_to_fill: u32, log_message: &[u8]) -> Vec<u8> 
         .build_wasm()
 }
 
-/// A benchmark harness that can run a canister's `fill_logs` method and read its
-/// log ring-buffer usage, letting `fill_log_buffer_to_capacity` be shared across
-/// the `StateMachine` and `ExecutionTest` based setups.
-trait LogFillHarness {
-    fn run_fill_logs(&mut self, canister_id: CanisterId);
-    fn log_bytes_used(&self, canister_id: CanisterId) -> usize;
-    fn log_byte_capacity(&self, canister_id: CanisterId) -> usize;
-}
-
-impl LogFillHarness for StateMachine {
-    fn run_fill_logs(&mut self, canister_id: CanisterId) {
-        // `fill_logs` does not reply; ignore the resulting `CanisterDidNotReply`.
-        let _ = self.execute_ingress(canister_id, "fill_logs", vec![]);
-    }
-
-    fn log_bytes_used(&self, canister_id: CanisterId) -> usize {
-        self.get_latest_state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .log_memory_store
-            .bytes_used()
-    }
-
-    fn log_byte_capacity(&self, canister_id: CanisterId) -> usize {
-        self.get_latest_state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .log_memory_store
-            .byte_capacity()
-    }
-}
-
-impl LogFillHarness for ExecutionTest {
-    fn run_fill_logs(&mut self, canister_id: CanisterId) {
-        // `fill_logs` does not reply; ignore the resulting `CanisterDidNotReply`.
-        let _ = self.ingress(canister_id, "fill_logs", vec![]);
-    }
-
-    fn log_bytes_used(&self, canister_id: CanisterId) -> usize {
-        self.canister_state(canister_id)
-            .system_state
-            .log_memory_store
-            .bytes_used()
-    }
-
-    fn log_byte_capacity(&self, canister_id: CanisterId) -> usize {
-        self.canister_state(canister_id)
-            .system_state
-            .log_memory_store
-            .byte_capacity()
-    }
-}
-
 /// Repeatedly runs `fill_logs` until the log ring buffer is saturated. Each call
 /// appends at most a delta's worth of records (see `records_per_fill`), so the
 /// used bytes grow until the buffer is full, after which the ring buffer evicts
@@ -129,14 +70,23 @@ impl LogFillHarness for ExecutionTest {
 /// the size the canister actually logs. It is only used to size the
 /// post-condition margin below.
 fn fill_log_buffer_to_capacity(
-    harness: &mut impl LogFillHarness,
+    env: &mut StateMachine,
     canister_id: CanisterId,
     log_message_size: usize,
 ) {
+    let log_bytes_used = |env: &StateMachine| {
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .log_memory_store
+            .bytes_used()
+    };
     let mut prev_used = 0;
     loop {
-        harness.run_fill_logs(canister_id);
-        let used = harness.log_bytes_used(canister_id);
+        // `fill_logs` does not reply; ignore the resulting `CanisterDidNotReply`.
+        let _ = env.execute_ingress(canister_id, "fill_logs", vec![]);
+        let used = log_bytes_used(env);
         if used <= prev_used {
             break;
         }
@@ -148,7 +98,13 @@ fn fill_log_buffer_to_capacity(
     // append, see `records_per_fill`), leaving `bytes_used` at ~one delta. A full
     // ring buffer instead sits within one stored record of its capacity, since
     // eviction is per-record and stops as soon as the next record fits.
-    let capacity = harness.log_byte_capacity(canister_id);
+    let capacity = env
+        .get_latest_state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .log_memory_store
+        .byte_capacity();
     let record_size = LogMemoryStore::estimate_record_size(log_message_size);
     assert!(
         prev_used + record_size >= capacity,
@@ -157,7 +113,10 @@ fn fill_log_buffer_to_capacity(
     );
 }
 
-/// Creates a StateMachine with a canister whose log buffer is filled to capacity.
+/// Creates a `StateMachine` with a canister whose log buffer is filled to
+/// capacity and whose logs are public (readable by any caller). Shared by the
+/// resize benchmarks and the fetch benchmarks / `fetch_response` helper, so all
+/// exercise an identically-filled buffer.
 fn setup_canister_with_full_log(
     log_memory_limit: u64,
     log_message_size: usize,
@@ -185,53 +144,6 @@ fn setup_canister_with_full_log(
     .unwrap();
     fill_log_buffer_to_capacity(&mut env, canister_id, log_message_size);
     (env, canister_id)
-}
-
-/// Builds an `ExecutionTest` with a `target` canister whose log buffer is filled
-/// to capacity (with `log_message_size`-byte records) and whose logs are readable
-/// by the injected `caller`. Shared by the fetch benchmarks and the
-/// `fetch_response` sanity-check helper so both exercise an identically-filled
-/// buffer.
-fn build_full_log_test(
-    log_memory_limit: u64,
-    log_message_size: usize,
-) -> (ExecutionTest, CanisterId) {
-    let log_message = vec![b'a'; log_message_size];
-    let records_to_fill = records_per_fill(log_memory_limit, log_message_size);
-
-    // The caller lives on a remote subnet so that the injected call arrives via
-    // the subnet input queue as an inter-canister request.
-    let caller = canister_test_id(1);
-    let config = ExecutionConfig {
-        replicated_inter_canister_log_fetch: FlagStatus::Enabled,
-        log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
-        ..ExecutionConfig::default()
-    };
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .with_execution_config(config)
-        .with_caller(subnet_test_id(2), caller)
-        .build();
-
-    // Create the target canister, controlled by both the test user (so it can be
-    // installed and configured) and the caller (so the caller may read its logs).
-    let target = test
-        .create_canister_with_settings(
-            Cycles::new(u128::MAX / 2),
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![test.user_id().get(), caller.get()])
-                .with_log_memory_limit(log_memory_limit)
-                .with_log_visibility(LogVisibilityV2::Controllers)
-                .build(),
-        )
-        .unwrap();
-    test.install_canister(
-        target,
-        fill_logs_canister_wasm(records_to_fill, &log_message),
-    )
-    .unwrap();
-    fill_log_buffer_to_capacity(&mut test, target, log_message_size);
-    (test, target)
 }
 
 fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
@@ -277,10 +189,11 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
     log_message_size: usize,
     filter: Option<FetchCanisterLogsFilter>,
 ) {
-    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
-    // The caller canister (a controller of the target) is allowed to read the logs.
-    let sender = canister_test_id(1).get();
-    let canister = test.canister_state(target);
+    let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
+    // The target's logs are public, so any sender is allowed to read them.
+    let sender = PrincipalId::new_anonymous();
+    let state = env.get_latest_state();
+    let canister = state.canister_state(&target).unwrap();
     group.bench_function(bench_name, |b| {
         b.iter_batched(
             || {
@@ -315,9 +228,11 @@ fn run_bench_fetch_single_log_in_middle<M: criterion::measurement::Measurement>(
     log_memory_limit: u64,
     log_message_size: usize,
 ) {
-    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
-    let sender = canister_test_id(1).get();
-    let canister = test.canister_state(target);
+    let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
+    // The target's logs are public, so any sender is allowed to read them.
+    let sender = PrincipalId::new_anonymous();
+    let state = env.get_latest_state();
+    let canister = state.canister_state(&target).unwrap();
     // Pick a record in the middle of the live idx range and filter for exactly
     // that one index (`[mid, mid + 1)`).
     let log_memory_store = &canister.system_state.log_memory_store;
@@ -369,9 +284,11 @@ fn run_bench_fetch_no_match_scan<M: criterion::measurement::Measurement>(
     log_memory_limit: u64,
     log_message_size: usize,
 ) {
-    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
-    let sender = canister_test_id(1).get();
-    let canister = test.canister_state(target);
+    let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
+    // The target's logs are public, so any sender is allowed to read them.
+    let sender = PrincipalId::new_anonymous();
+    let state = env.get_latest_state();
+    let canister = state.canister_state(&target).unwrap();
     let log_memory_store = &canister.system_state.log_memory_store;
     // Oldest live index: after filling to capacity the buffer has evicted its
     // earliest records, so the oldest live index is > 0 and the range `[0, oldest)`
@@ -428,14 +345,15 @@ fn fetch_response(
     log_memory_limit: u64,
     log_message_size: usize,
 ) -> Vec<u8> {
-    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
-    // The caller canister (a controller of the target) is allowed to read the logs.
-    let sender = canister_test_id(1).get();
+    let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
+    // The target's logs are public, so any sender is allowed to read them.
+    let sender = PrincipalId::new_anonymous();
+    let state = env.get_latest_state();
     let mut request = FetchCanisterLogsRequest::new(target);
     request.filter = filter;
     let (reply, _record_count, _content_size) = fetch_canister_logs_response_for_bench(
         sender,
-        test.canister_state(target),
+        state.canister_state(&target).unwrap(),
         request,
         LOG_MEMORY_STORE_FEATURE,
     );
