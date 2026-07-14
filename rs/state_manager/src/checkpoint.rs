@@ -107,22 +107,6 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     metrics: &CheckpointMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
-    maybe_parallel_map(
-        &mut thread_pool,
-        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
-        |pm| validate(pm),
-    )
-    .into_iter()
-    .try_for_each(identity)?;
-
-    maybe_parallel_map(
-        &mut thread_pool,
-        checkpoint_layout.all_existing_wasm_files()?.into_iter(),
-        |wasm_file| try_mmap_wasm_file(wasm_file),
-    )
-    .into_iter()
-    .try_for_each(identity)?;
-
     if let Some(reference_state) = reference_state {
         validate_eq_checkpoint(
             checkpoint_layout,
@@ -132,6 +116,26 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
             fd_factory,
             metrics,
         );
+    } else {
+        // Overlays are validated at write time (see `write_overlay` / `write_base` in
+        // `page_map::storage`) and Wasm files are written by us, so we only need to
+        // re-validate them on the state-sync path (`reference_state == None`), where
+        // the files came from peers rather than being produced locally.
+        maybe_parallel_map(
+            &mut thread_pool,
+            checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+            |pm| validate(pm),
+        )
+        .into_iter()
+        .try_for_each(identity)?;
+
+        maybe_parallel_map(
+            &mut thread_pool,
+            checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+            |wasm_file| try_mmap_wasm_file(wasm_file),
+        )
+        .into_iter()
+        .try_for_each(identity)?;
     }
     checkpoint_layout
         .finalize_and_remove_unverified_marker(thread_pool)
