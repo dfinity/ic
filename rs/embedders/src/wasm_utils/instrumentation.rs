@@ -139,7 +139,6 @@ use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 
-use std::any::Any;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -1313,11 +1312,10 @@ fn inject_metering(
 ) {
     // Calculate instructions for allocating Wasm locals when creating call frame.
     let arguments_cost: u64 = match func_signature {
-        None => 0,
-        Some(typ) => match typ {
-            Types::FuncType { params, .. } => params.iter().map(|t| local_cost(t, mem_type)).sum(),
-            _ => 0,
-        },
+        Some(Types::FuncType { params, .. }) => {
+            params.iter().map(|t| local_cost(t, mem_type)).sum()
+        }
+        _ => 0,
     };
     let locals_cost: u64 = body
         .locals
