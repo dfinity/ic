@@ -5194,6 +5194,83 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
     );
 }
 
+/// Sets up an `ExecutionTest` whose own subnet has a normal cost schedule and a
+/// remote caller subnet whose cost schedule is `caller_cost_schedule`, then
+/// injects a `fetch_canister_logs` call from the remote caller targeting a
+/// public-logs canister on the own subnet. Returns the resulting xnet response.
+fn fetch_canister_logs_from_remote_subnet(
+    caller_cost_schedule: CanisterCyclesCostSchedule,
+) -> RequestOrResponse {
+    let own_subnet = subnet_test_id(1);
+    let caller_subnet = subnet_test_id(2);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(caller_subnet, caller_canister)
+        .with_replicated_inter_canister_log_fetch_enabled()
+        .build();
+
+    // Put the remote caller's subnet on the requested cost schedule.
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .subnets_mut()
+                .get_mut(&caller_subnet)
+                .unwrap()
+                .cost_schedule = caller_cost_schedule;
+        });
+
+    // A public-logs canister on the own subnet, so the only thing that can
+    // reject the fetch is the free-cost-schedule permission check.
+    let target_canister = test.universal_canister().unwrap();
+    test.set_log_visibility(target_canister, LogVisibilityV2::Public)
+        .unwrap();
+
+    test.inject_call_to_ic00(
+        Method::FetchCanisterLogs,
+        FetchCanisterLogsRequest::new(target_canister).encode(),
+        Cycles::new(0),
+    );
+    test.execute_all();
+
+    test.xnet_messages().last().unwrap().clone()
+}
+
+#[test]
+fn test_fetch_canister_logs_rejected_from_remote_free_cost_schedule_subnet() {
+    // A caller on a *remote* subnet with a free cost schedule pays neither the
+    // message transmission fee nor the per-message execution fee that otherwise
+    // cover the fetch, so `fetch_canister_logs` (which charges no cycles fee of
+    // its own) rejects the call rather than perform the read work for free.
+    let response = fetch_canister_logs_from_remote_subnet(CanisterCyclesCostSchedule::Free);
+    let reject_message = get_reject_message(response);
+    assert_eq!(
+        reject_message,
+        format!(
+            "{} can only be called by a canister on the same subnet or on a subnet with a normal cost schedule.",
+            Method::FetchCanisterLogs
+        ),
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_allowed_from_remote_normal_cost_schedule_subnet() {
+    // A caller on a remote subnet with a normal cost schedule is charged for the
+    // call, so the free-cost-schedule check does not reject it and the fetch
+    // succeeds with a data reply.
+    let response = fetch_canister_logs_from_remote_subnet(CanisterCyclesCostSchedule::Normal);
+    match response {
+        RequestOrResponse::Response(resp) => match &resp.response_payload {
+            Payload::Data(_) => {}
+            Payload::Reject(reject) => {
+                panic!("Expected a data reply, got a reject: {}", reject.message())
+            }
+        },
+        RequestOrResponse::Request(_) => panic!("Expected a Response"),
+    }
+}
+
 #[test]
 fn test_sign_with_schnorr_api_is_enabled() {
     // TODO(EXC-1629): upgrade to more of e2e test with mocking the response

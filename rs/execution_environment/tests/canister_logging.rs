@@ -2641,11 +2641,12 @@ fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
 }
 
 #[test]
-fn test_fetch_canister_logs_rejected_from_free_cost_schedule_subnet() {
-    // On a subnet with a free cost schedule the caller pays neither the message
-    // transmission fee nor the per-message execution fee that otherwise cover the
-    // fetch, so `fetch_canister_logs` (which charges no cycles fee of its own)
-    // rejects the call rather than perform the read work entirely for free.
+fn test_fetch_canister_logs_allowed_from_same_free_cost_schedule_subnet() {
+    // A "free" cost schedule applies to the whole subnet, so a caller doing free
+    // work on its own subnet is the subnet's intended behavior. Only a caller on
+    // a *remote* free-cost-schedule subnet (which would offload the read work
+    // onto this subnet for free) is rejected. Here the caller is on the same
+    // (free) subnet as the executing subnet, so the call succeeds.
     let env = setup_env_with_cost_schedule(FlagStatus::Enabled, CanisterCyclesCostSchedule::Free);
     let canister_a = create_and_install_canister(
         &env,
@@ -2666,12 +2667,8 @@ fn test_fetch_canister_logs_rejected_from_free_cost_schedule_subnet() {
     );
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
-    let result = fetch_canister_logs_intercanister(&env, canister_a, canister_b);
-    let reject_message = get_reject(result);
-    assert!(
-        reject_message.contains("normal cost schedule"),
-        "Expected a free-cost-schedule rejection, got: {reject_message}"
-    );
+    let records = fetch_log_records_intercanister(&env, canister_a, canister_b);
+    assert_eq!(records.len(), 1);
 }
 
 #[test]
