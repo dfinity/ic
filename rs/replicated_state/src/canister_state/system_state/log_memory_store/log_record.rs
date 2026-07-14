@@ -37,7 +37,7 @@ impl LogRecord {
     /// range's (exclusive) end, i.e. the record lies past the requested range.
     ///
     /// Records are scanned in ascending key order (both `idx` and `timestamp`
-    /// increase monotonically with insertion order), so once a scan reaches a
+    /// are expected to be non-decreasing with insertion order), so once a scan reaches a
     /// record for which this holds, no later record can match the filter and the
     /// scan can stop — even if it has not matched anything yet (e.g. a range that
     /// lies entirely below the live records).

@@ -653,7 +653,7 @@ ed25519-dalek = { version = "2.2.0", features = [
     "pem",
     "hazmat",
 ] }
-ethnum = { version = "1.3.2", features = ["serde"] }
+ethnum = { version = "1.5.3", features = ["serde"] }
 evm_rpc_client = "0.4.0"
 evm_rpc_types = "3.1.0"
 flate2 = "1.0.31"
@@ -834,6 +834,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
 ] }
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
+secp256k1 = { version = "0.29", features = ["global-context", "rand", "std"] }
 securefmt = "0.1.5"
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }

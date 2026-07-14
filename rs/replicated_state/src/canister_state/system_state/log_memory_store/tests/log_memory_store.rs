@@ -250,7 +250,7 @@ fn filtering_by_idx_and_timestamp() {
 }
 
 #[test]
-fn filter_range_below_live_records_returns_empty() {
+fn filter_range_outside_live_records_returns_empty() {
     // A valid filter whose range lies entirely below the live records must return
     // nothing. Its `start` is below every stored key, so the index seek lands at the
     // head and the first scanned record is already past the range's end; `records()`
@@ -300,6 +300,45 @@ fn filter_range_below_live_records_returns_empty() {
         )))
         .is_empty()
     );
+}
+
+#[test]
+fn filter_end_boundary_around_a_record() {
+    // Three records at idx 0/1/2 with timestamps 10/20/30. The gaps between the
+    // timestamps let the (exclusive) filter `end` fall before, exactly on, or after
+    // the middle record's key. The scan early-exits at the first record whose key is
+    // `>= end` (`LogRecord::is_past_range_end`), so the middle record is returned iff
+    // `end` is strictly greater than its key.
+    let mut delta = CanisterLog::default_delta();
+    delta.add_record(10, b"a".to_vec()); // idx 0, ts 10
+    delta.add_record(20, b"b".to_vec()); // idx 1, ts 20
+    delta.add_record(30, b"c".to_vec()); // idx 2, ts 30
+    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
+    s.append_delta_log(&mut delta);
+
+    let first = make_canister_record(0, 10, "a");
+    let middle = make_canister_record(1, 20, "b");
+
+    // By timestamp: end before / exactly on / just after the middle record (ts 20).
+    let by_ts = |start: u64, end: u64| {
+        s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange { start, end },
+        )))
+    };
+    assert_eq!(by_ts(0, 19), vec![first.clone()]);
+    assert_eq!(by_ts(0, 20), vec![first.clone()]); // exclusive end excludes ts 20
+    assert_eq!(by_ts(0, 21), vec![first.clone(), middle.clone()]);
+
+    // By index: end exactly on the middle record (idx 1) excludes it; end past it
+    // includes it (indices are contiguous, so there is no "before" gap).
+    let by_idx = |start: u64, end: u64| {
+        s.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start, end },
+        )))
+    };
+    assert_eq!(by_idx(0, 1), vec![first.clone()]);
+    assert_eq!(by_idx(0, 2), vec![first, middle]);
 }
 
 #[test]

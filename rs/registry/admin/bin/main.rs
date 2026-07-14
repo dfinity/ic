@@ -1469,7 +1469,7 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
             Some(title) => title.clone(),
             None => format!(
                 "Upgrade NNS Canister: {} to wasm with hash: {}",
-                self.canister_id, &self.wasm_module_sha256
+                self.canister_id, self.wasm_module_sha256
             ),
         }
     }
@@ -1554,7 +1554,7 @@ impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
             Some(title) => title.clone(),
             None => format!(
                 "Hard reset NNS root to wasm with hash: {}",
-                &self.wasm_module_sha256
+                self.wasm_module_sha256
             ),
         }
     }
@@ -3082,7 +3082,7 @@ impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRe
         let payload = self.get_payload();
 
         if !self.skip_confirmation {
-            println!("\n{}", &payload);
+            println!("\n{}", payload);
             println!("Is the above payload correct? [Y/n]");
 
             let mut buffer = String::new();
