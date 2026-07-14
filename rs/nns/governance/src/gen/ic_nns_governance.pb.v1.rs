@@ -5326,13 +5326,14 @@ pub enum NnsFunction {
     /// the Wasm module of the target canister, the proposal can also set the
     /// authorization information and the allocations.
     NnsCanisterUpgrade = 4,
-    /// A proposal to bless a new version to which the replicas can be
+    /// (obsolete) A proposal to bless a new version to which the replicas can be
     /// upgraded.
     /// The proposal registers a replica version (identified by the hash of the
     /// installation image) in the registry. Besides creating a record for that
     /// version, the proposal also appends that version to the list of "blessed
     /// versions" that can be installed on a subnet. By itself, this proposal
     /// does not effect any upgrade.
+    /// Superseded by ReviseElectedGuestosVersions.
     BlessReplicaVersion = 5,
     /// Update a subnet's recovery CUP (used to recover subnets that have stalled).
     /// Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -5429,16 +5430,16 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
-    /// A proposal to retire previously elected and unused replica versions.
+    /// (obsolete) A proposal to retire previously elected and unused replica versions.
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
+    /// Superseded by ReviseElectedGuestosVersions.
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
     /// A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-    /// the hash of the installation image) is added to the registry. Besides creating a record for
-    /// that version, the proposal also appends that version to the list of elected versions that can
-    /// be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+    /// the commit hash of the installation image) is added to the registry. This version can then be
+    /// used to upgrade nodes.
     ReviseElectedGuestosVersions = 38,
     BitcoinSetConfig = 39,
     /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
