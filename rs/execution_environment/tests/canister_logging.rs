@@ -24,7 +24,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{CanisterId, CanisterLog, NumInstructions, ingress::WasmResult};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
@@ -92,10 +92,7 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup_env_with_cost_schedule(
-    replicated_inter_canister_log_fetch: FlagStatus,
-    cost_schedule: CanisterCyclesCostSchedule,
-) -> StateMachine {
+fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
@@ -113,15 +110,7 @@ fn setup_env_with_cost_schedule(
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
-        .with_cost_schedule(cost_schedule)
         .build()
-}
-
-fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
-    setup_env_with_cost_schedule(
-        replicated_inter_canister_log_fetch,
-        CanisterCyclesCostSchedule::Normal,
-    )
 }
 
 fn setup_env() -> StateMachine {
@@ -2636,37 +2625,6 @@ fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
     let _ = env.execute_ingress(canister_b, "test", vec![]);
 
     // The helper attaches no cycles as payment — no fetch fee is required.
-    let records = fetch_log_records_intercanister(&env, canister_a, canister_b);
-    assert_eq!(records.len(), 1);
-}
-
-#[test]
-fn test_fetch_canister_logs_allowed_from_same_free_cost_schedule_subnet() {
-    // A "free" cost schedule applies to the whole subnet, so a caller doing free
-    // work on its own subnet is the subnet's intended behavior. Only a caller on
-    // a *remote* free-cost-schedule subnet (which would offload the read work
-    // onto this subnet for free) is rejected. Here the caller is on the same
-    // (free) subnet as the executing subnet, so the call succeeds.
-    let env = setup_env_with_cost_schedule(FlagStatus::Enabled, CanisterCyclesCostSchedule::Free);
-    let canister_a = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![PrincipalId::new_user_test_id(42)])
-            .build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
-    let canister_b = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .with_controllers(vec![canister_a.get()])
-            .build(),
-        wat_canister()
-            .update("test", wat_fn().debug_print(b"message"))
-            .build_wasm(),
-    );
-    let _ = env.execute_ingress(canister_b, "test", vec![]);
-
     let records = fetch_log_records_intercanister(&env, canister_a, canister_b);
     assert_eq!(records.len(), 1);
 }

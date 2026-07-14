@@ -2685,11 +2685,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_replicated_inter_canister_log_fetch_enabled(mut self) -> Self {
-        self.execution_config.replicated_inter_canister_log_fetch = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_flexible_http_requests_enabled(mut self) -> Self {
         self.execution_config.flexible_http_requests = FlagStatus::Enabled;
         self
