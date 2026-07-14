@@ -133,7 +133,7 @@ impl TransactionStore {
 
     /// This method is used to broadcast known transaction IDs to connected peers.
     /// A transaction ID is broadcasted to a peer if it has never been advertised to that
-    /// peer, or if the last advertisement was more than [TX_READVERTISE_PERIOD_SECS] ago.
+    /// peer, or if the last advertisement was at least [TX_READVERTISE_PERIOD_SECS] ago.
     pub fn advertise_txids<Header, Block>(&mut self, channel: &mut impl Channel<Header, Block>) {
         self.remove_old_txns();
         let now = SystemTime::now();
@@ -397,7 +397,8 @@ mod test {
     /// 1. Add transaction to manager.
     /// 2. Advertise that transaction.
     /// 3. Check that this transaction does not get advertised again during manager tick.
-    /// 4. Backdate the advertisement to more than [TX_READVERTISE_PERIOD_SECS] ago.
+    /// 4. Backdate the advertisement to exactly [TX_READVERTISE_PERIOD_SECS] ago,
+    ///    the (inclusive) re-advertisement boundary.
     /// 5. Check that the transaction is advertised to the peer again.
     #[test]
     fn test_adapter_readvertise_after_period() {
