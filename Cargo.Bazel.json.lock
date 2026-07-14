@@ -1,5 +1,5 @@
 {
-  "checksum": "a204a4c11a98f02a0d330ecb84f6839812cbf39ee29ece97fa01f629aced0d74",
+  "checksum": "fce051d915c26415c5d5d13717fac5648a38d5b1d1387402c130bb9aed8bd704",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22248,7 +22248,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ic-agent 0.48.1",
+              "id": "ic-agent 0.49.0",
               "target": "ic_agent"
             },
             {
@@ -22332,7 +22332,7 @@
               "target": "ic_http_certification"
             },
             {
-              "id": "ic-identity-hsm 0.48.1",
+              "id": "ic-identity-hsm 0.49.0",
               "target": "ic_identity_hsm"
             },
             {
@@ -22365,11 +22365,11 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-transport-types 0.48.1",
+              "id": "ic-transport-types 0.49.0",
               "target": "ic_transport_types"
             },
             {
-              "id": "ic-utils 0.48.1",
+              "id": "ic-utils 0.49.0",
               "target": "ic_utils"
             },
             {
@@ -35083,14 +35083,14 @@
       ],
       "license_file": null
     },
-    "ic-agent 0.48.1": {
+    "ic-agent 0.49.0": {
       "name": "ic-agent",
-      "version": "0.48.1",
+      "version": "0.49.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.48.1/download",
-          "sha256": "0844c80b49056ad4117e7abba251ee98758599e7bd8461775a1349251a8263b1"
+          "url": "https://static.crates.io/crates/ic-agent/0.49.0/download",
+          "sha256": "65a32acd8665871aff33d8c2d47ab8bf5da60635652d83a3770bfa34b9ef91ad"
         }
       },
       "targets": [
@@ -35190,7 +35190,7 @@
               "target": "ic_ed25519"
             },
             {
-              "id": "ic-transport-types 0.48.1",
+              "id": "ic-transport-types 0.49.0",
               "target": "ic_transport_types"
             },
             {
@@ -35303,7 +35303,7 @@
           ],
           "selects": {}
         },
-        "version": "0.48.1"
+        "version": "0.49.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38028,14 +38028,14 @@
       ],
       "license_file": null
     },
-    "ic-identity-hsm 0.48.1": {
+    "ic-identity-hsm 0.49.0": {
       "name": "ic-identity-hsm",
-      "version": "0.48.1",
+      "version": "0.49.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-identity-hsm/0.48.1/download",
-          "sha256": "32ebd639a70743d6ccb972d4a04b5773c4a8b138f5ed8fead34063906e871dc9"
+          "url": "https://static.crates.io/crates/ic-identity-hsm/0.49.0/download",
+          "sha256": "bd610c57b9353fbbc00af59894341e43eb98299f327a46eda5f5a6bf841b0fc1"
         }
       },
       "targets": [
@@ -38064,7 +38064,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-agent 0.48.1",
+              "id": "ic-agent 0.49.0",
               "target": "ic_agent"
             },
             {
@@ -38087,7 +38087,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.48.1"
+        "version": "0.49.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38794,14 +38794,14 @@
       ],
       "license_file": null
     },
-    "ic-transport-types 0.48.1": {
+    "ic-transport-types 0.49.0": {
       "name": "ic-transport-types",
-      "version": "0.48.1",
+      "version": "0.49.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.48.1/download",
-          "sha256": "f7caf62ab0d7e00d0d4926ae9cb81c42ab5fb84e9d8d9b183bfa42ab12180d2f"
+          "url": "https://static.crates.io/crates/ic-transport-types/0.49.0/download",
+          "sha256": "ede9080798410ed4777b6c4e02f011467b256fb9ddd393fc48aef86eb96442e6"
         }
       },
       "targets": [
@@ -38874,7 +38874,7 @@
           ],
           "selects": {}
         },
-        "version": "0.48.1"
+        "version": "0.49.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38986,14 +38986,14 @@
       ],
       "license_file": null
     },
-    "ic-utils 0.48.1": {
+    "ic-utils 0.49.0": {
       "name": "ic-utils",
-      "version": "0.48.1",
+      "version": "0.49.0",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-utils/0.48.1/download",
-          "sha256": "baa00e2c777d214553cc86160d358e1820063745bbe89c4d6fa61184182b01ec"
+          "url": "https://static.crates.io/crates/ic-utils/0.49.0/download",
+          "sha256": "9eee176e6e16bb85f904442af47503b1e214da3d62e4cad2fda4a64d9b72de28"
         }
       },
       "targets": [
@@ -39032,11 +39032,11 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.48.1",
+              "id": "ic-agent 0.49.0",
               "target": "ic_agent"
             },
             {
-              "id": "ic-management-canister-types 0.7.1",
+              "id": "ic-management-canister-types 0.8.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -39088,7 +39088,7 @@
           ],
           "selects": {}
         },
-        "version": "0.48.1"
+        "version": "0.49.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -101833,7 +101833,7 @@
     "hyper-rustls 0.27.7",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.20",
-    "ic-agent 0.48.1",
+    "ic-agent 0.49.0",
     "ic-bn-lib 0.2.3",
     "ic-bn-lib-common 0.2.2",
     "ic-btc-interface 0.4.0",
@@ -101854,7 +101854,7 @@
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
-    "ic-identity-hsm 0.48.1",
+    "ic-identity-hsm 0.49.0",
     "ic-management-canister-types 0.8.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.1.0",
@@ -101862,8 +101862,8 @@
     "ic-stable-structures 0.6.8",
     "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
-    "ic-transport-types 0.48.1",
-    "ic-utils 0.48.1",
+    "ic-transport-types 0.49.0",
+    "ic-utils 0.49.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-vetkeys 0.7.0",
     "ic-wasm 0.9.11",

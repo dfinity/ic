@@ -3785,7 +3785,7 @@ dependencies = [
  "hyper-rustls 0.27.7",
  "hyper-socks2",
  "hyper-util",
- "ic-agent 0.48.1",
+ "ic-agent 0.49.0",
  "ic-bn-lib",
  "ic-bn-lib-common",
  "ic-btc-interface",
@@ -3814,8 +3814,8 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "ic-stable-structures 0.7.0",
  "ic-test-state-machine-client",
- "ic-transport-types 0.48.1",
- "ic-utils 0.48.1",
+ "ic-transport-types 0.49.0",
+ "ic-utils 0.49.0",
  "ic-verify-bls-signature",
  "ic-vetkeys",
  "ic-wasm",
@@ -6025,9 +6025,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.48.1"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0844c80b49056ad4117e7abba251ee98758599e7bd8461775a1349251a8263b1"
+checksum = "65a32acd8665871aff33d8c2d47ab8bf5da60635652d83a3770bfa34b9ef91ad"
 dependencies = [
  "arc-swap",
  "async-channel 2.5.0",
@@ -6048,7 +6048,7 @@ dependencies = [
  "http-body-util",
  "ic-certification",
  "ic-ed25519",
- "ic-transport-types 0.48.1",
+ "ic-transport-types 0.49.0",
  "ic-verify-bls-signature",
  "ic_principal",
  "k256",
@@ -6636,12 +6636,12 @@ dependencies = [
 
 [[package]]
 name = "ic-identity-hsm"
-version = "0.48.1"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ebd639a70743d6ccb972d4a04b5773c4a8b138f5ed8fead34063906e871dc9"
+checksum = "bd610c57b9353fbbc00af59894341e43eb98299f327a46eda5f5a6bf841b0fc1"
 dependencies = [
  "hex",
- "ic-agent 0.48.1",
+ "ic-agent 0.49.0",
  "pkcs11",
  "sha2 0.10.9",
  "simple_asn1",
@@ -6780,9 +6780,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.48.1"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7caf62ab0d7e00d0d4926ae9cb81c42ab5fb84e9d8d9b183bfa42ab12180d2f"
+checksum = "ede9080798410ed4777b6c4e02f011467b256fb9ddd393fc48aef86eb96442e6"
 dependencies = [
  "candid",
  "hex",
@@ -6820,15 +6820,15 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.48.1"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baa00e2c777d214553cc86160d358e1820063745bbe89c4d6fa61184182b01ec"
+checksum = "9eee176e6e16bb85f904442af47503b1e214da3d62e4cad2fda4a64d9b72de28"
 dependencies = [
  "async-trait",
  "candid",
  "futures-util",
- "ic-agent 0.48.1",
- "ic-management-canister-types 0.7.1",
+ "ic-agent 0.49.0",
+ "ic-management-canister-types 0.8.0",
  "once_cell",
  "semver",
  "serde",
