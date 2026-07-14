@@ -1,5 +1,5 @@
 {
-  "checksum": "cbd2a1f8879331c84f3fa1a4bd8f95d7607c95ce6d78711235f50ac976429fa7",
+  "checksum": "ed893126867ddbab254ab9638431b1cdeb0bb723f57d8868fcac2a30b1018123",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5085,14 +5085,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "aws-lc-rs 1.17.0": {
+    "aws-lc-rs 1.17.1": {
       "name": "aws-lc-rs",
-      "version": "1.17.0",
+      "version": "1.17.1",
       "package_url": "https://github.com/aws/aws-lc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/aws-lc-rs/1.17.0/download",
-          "sha256": "5ec2f1fc3ec205783a5da9a7e6c1509cc69dedf09a1949e412c1e18469326d00"
+          "url": "https://static.crates.io/crates/aws-lc-rs/1.17.1/download",
+          "sha256": "4342d8937fc7e5dd9b1c60292261c0670c882a2cd1719cfc11b1af41731e32ad"
         }
       },
       "targets": [
@@ -5140,11 +5140,11 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "build_script_build"
             },
             {
-              "id": "aws-lc-sys 0.41.0",
+              "id": "aws-lc-sys 0.42.0",
               "target": "aws_lc_sys"
             },
             {
@@ -5159,7 +5159,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.17.0"
+        "version": "1.17.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -5174,13 +5174,13 @@
         "link_deps": {
           "common": [
             {
-              "id": "aws-lc-sys 0.41.0",
+              "id": "aws-lc-sys 0.42.0",
               "target": "aws_lc_sys"
             }
           ],
           "selects": {}
         },
-        "links": "aws_lc_rs_1_17_0_sys"
+        "links": "aws_lc_rs_1_17_1_sys"
       },
       "license": "ISC AND (Apache-2.0 OR ISC)",
       "license_ids": [
@@ -5189,20 +5189,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "aws-lc-sys 0.41.0": {
+    "aws-lc-sys 0.42.0": {
       "name": "aws-lc-sys",
-      "version": "0.41.0",
+      "version": "0.42.0",
       "package_url": "https://github.com/aws/aws-lc-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/aws-lc-sys/0.41.0/download",
-          "sha256": "1a2f9779ce85b93ab6170dd940ad0169b5766ff848247aff13bb788b832fe3f4",
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:aws-lc-sys.patch"
-          ]
+          "url": "https://static.crates.io/crates/aws-lc-sys/0.42.0/download",
+          "sha256": "6d9ceb1da931507a12f4fccea479dccd00da1943e1b4ae72d8e502d707361444"
         }
       },
       "targets": [
@@ -5245,14 +5239,14 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-sys 0.41.0",
+              "id": "aws-lc-sys 0.42.0",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.41.0"
+        "version": "0.42.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -5283,9 +5277,16 @@
               "target": "fs_extra"
             }
           ],
-          "selects": {}
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "pkg-config 0.3.32",
+                "target": "pkg_config"
+              }
+            ]
+          }
         },
-        "links": "aws_lc_0_41_0"
+        "links": "aws_lc_0_42_0"
       },
       "license": "ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0)",
       "license_ids": [
@@ -32413,7 +32414,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -32587,7 +32588,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -41389,7 +41390,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -63667,7 +63668,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -65161,7 +65162,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -65242,7 +65243,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -69798,7 +69799,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -69857,7 +69858,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             }
           ],
@@ -69920,7 +69921,7 @@
               "target": "async_web_client"
             },
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
@@ -70748,7 +70749,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.0",
+              "id": "aws-lc-rs 1.17.1",
               "target": "aws_lc_rs"
             },
             {
