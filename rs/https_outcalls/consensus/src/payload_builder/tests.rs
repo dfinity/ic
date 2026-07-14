@@ -1112,6 +1112,60 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
 }
 
 #[test]
+fn validate_payload_fails_for_initial_spent_mismatch() {
+    // ARRANGE
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(77);
+
+        let request_context = request_context(Replication::NonReplicated(delegated_node_id));
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+
+        // Build an otherwise-valid response, then claim a collective initial spend
+        // that differs from what the receipts and subnet size recompute to.
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        add_signer_to_proof(&mut proof, delegated_node_id);
+        let computed =
+            super::utils::fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
+        // A content-bearing response has a nonzero consensus cost, so the honest
+        // value is nonzero; claim one cycle too many.
+        proof.initial_spent = computed + Cycles::new(1);
+
+        let payload = CanisterHttpPayload {
+            responses: vec![proof],
+            ..Default::default()
+        };
+        let payload_bytes = payload_to_bytes(payload, TEST_MAX_PAYLOAD_BYTES);
+
+        // ACT
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_bytes,
+            &[],
+        );
+
+        // ASSERT
+        assert_matches!(
+            validation_result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                        callback_id: cb,
+                        payload_spent,
+                        computed_spent,
+                    }
+                )
+            )) if cb == callback_id
+                && payload_spent == computed + Cycles::new(1)
+                && computed_spent == computed
+        );
+    });
+}
+
+#[test]
 fn validate_payload_fails_for_spent_exceeding_allowance_non_replicated() {
     let delegated_node_id = node_test_id(1);
     let callback_id = CallbackId::from(99);
@@ -3044,6 +3098,65 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
 }
 
 #[test]
+fn into_messages_emits_initial_spend_reports() {
+    // A fully-replicated response and a flexible group, each carrying a distinct
+    // nonzero collective spend, must each yield one initial spend report tagged
+    // with the reporting callback, the claimed amount, and the signing nodes.
+    let fr_callback = CallbackId::from(100);
+    let (response, metadata) = test_response_and_metadata(fr_callback.get());
+    let mut fr_proof = response_and_metadata_to_proof(&response, &metadata);
+    add_signer_to_proof(&mut fr_proof, node_test_id(0));
+    add_signer_to_proof(&mut fr_proof, node_test_id(1));
+    fr_proof.initial_spent = Cycles::new(7_000);
+
+    let flex_callback = CallbackId::from(42);
+    let content = Encode!(&CanisterHttpResponsePayload {
+        status: 200,
+        headers: vec![],
+        body: vec![],
+    })
+    .unwrap();
+    let flex_group = FlexibleCanisterHttpResponses {
+        callback_id: flex_callback,
+        initial_spent: Cycles::new(3_000),
+        responses: vec![
+            flexible_response(flex_callback.get(), 0, &content),
+            flexible_response(flex_callback.get(), 1, &content),
+        ],
+    };
+
+    let payload = CanisterHttpPayload {
+        responses: vec![fr_proof],
+        flexible_responses: vec![flex_group],
+        ..Default::default()
+    };
+    let bytes = payload_to_bytes_max_4mb(payload);
+
+    let (_responses, spent, _stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+
+    assert_eq!(spent.initial.len(), 2);
+    assert!(spent.asynchronous.is_empty());
+
+    let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
+
+    let fr = spent
+        .initial
+        .iter()
+        .find(|r| r.callback == fr_callback)
+        .expect("fully-replicated report missing");
+    assert_eq!(fr.amount, Cycles::new(7_000));
+    assert_eq!(fr.nodes, signers);
+
+    let flex = spent
+        .initial
+        .iter()
+        .find(|r| r.callback == flex_callback)
+        .expect("flexible report missing");
+    assert_eq!(flex.amount, Cycles::new(3_000));
+    assert_eq!(flex.nodes, signers);
+}
+
+#[test]
 fn flexible_ok_responses_into_messages_skips_reject_entries() {
     let callback_id = CallbackId::from(99);
 
@@ -4736,10 +4849,11 @@ fn flexible_error_too_many_rejects_proof_id_mismatch() {
 
 #[test]
 fn flexible_error_too_many_rejects_invalid_signature() {
-    let committee: BTreeSet<_> = (0..4).map(node_test_id).collect();
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
     let callback_id = CallbackId::from(42);
 
-    setup_test_with_flexible_context(4, callback_id, committee, 3, 4, |mut pb, _pool| {
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |mut pb, _pool| {
         pb.crypto = Arc::new(mock_crypto_rejecting_signatures());
 
         let reject_entries: Vec<_> = (0..2_u64)

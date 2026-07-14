@@ -616,12 +616,118 @@ pub(crate) fn find_flexible_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::ReplicaVersion;
     use ic_types::canister_http::MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET;
+    use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf};
 
     fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
         CanisterHttpPaymentReceipt {
             spent: Cycles::new(spent),
         }
+    }
+
+    fn metadata(content_size: u32) -> CanisterHttpResponseMetadata {
+        CanisterHttpResponseMetadata {
+            id: CallbackId::new(0),
+            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+            content_size,
+            is_reject: false,
+            replica_version: ReplicaVersion::default(),
+        }
+    }
+
+    /// A proof whose `content_size` is `content_size` and whose signers claim the
+    /// given per-replica `spents`. The hash and signatures are irrelevant to the
+    /// spent formulas and are left empty.
+    fn proof(content_size: u32, spents: &[u128]) -> CanisterHttpResponseProof {
+        let signatures = spents
+            .iter()
+            .enumerate()
+            .map(|(i, spent)| {
+                (
+                    node_test_id(i as u64),
+                    CanisterHttpResponseSignature {
+                        payment_receipt: receipt(*spent),
+                        signature: BasicSigOf::new(BasicSig(vec![])),
+                    },
+                )
+            })
+            .collect();
+        CanisterHttpResponseProof {
+            metadata: metadata(content_size),
+            signatures,
+        }
+    }
+
+    fn share(content_size: u32, spent: u128, signer: u64) -> CanisterHttpResponseShare {
+        Signed {
+            content: CanisterHttpResponseReceipt {
+                metadata: metadata(content_size),
+                payment_receipt: receipt(spent),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![])),
+                signer: node_test_id(signer),
+            },
+        }
+    }
+
+    #[test]
+    fn consensus_cost_coefficient_matches_formula() {
+        // N * (10 * N + 600).
+        assert_eq!(consensus_cost_coefficient(0), 0);
+        assert_eq!(consensus_cost_coefficient(1), 610);
+        assert_eq!(consensus_cost_coefficient(7), 7 * 670); // 4_690 (SEV size).
+        assert_eq!(consensus_cost_coefficient(13), 13 * 730); // 9_490 (default size).
+        assert_eq!(consensus_cost_coefficient(34), 34 * 940); // 31_960.
+    }
+
+    #[test]
+    fn fully_replicated_initial_spent_sums_receipts_and_consensus_cost() {
+        // spent_sum = 600; consensus_cost = coeff(13) * content_size(5) = 9_490 * 5.
+        let proof = proof(5, &[100, 200, 300]);
+        let expected = Cycles::new(600 + 9_490 * 5);
+        assert_eq!(fully_replicated_initial_spent(&proof, 13), expected);
+    }
+
+    #[test]
+    fn fully_replicated_initial_spent_scales_with_subnet_size() {
+        // A SEV subnet of 7 and a default subnet of 13 must produce different
+        // consensus costs for the same response, exercising `subnet_size`.
+        let proof = proof(4, &[10, 20]);
+        assert_eq!(
+            fully_replicated_initial_spent(&proof, 7),
+            Cycles::new(30 + 4_690 * 4)
+        );
+        assert_eq!(
+            fully_replicated_initial_spent(&proof, 13),
+            Cycles::new(30 + 9_490 * 4)
+        );
+    }
+
+    #[test]
+    fn fully_replicated_initial_spent_with_empty_proof_is_consensus_cost_only() {
+        let proof = proof(7, &[]);
+        assert_eq!(
+            fully_replicated_initial_spent(&proof, 13),
+            Cycles::new(9_490 * 7)
+        );
+    }
+
+    #[test]
+    fn flexible_initial_spent_sums_receipts_and_per_share_consensus_cost() {
+        // spent_sum = 150; size_term = (181 + 10) + (181 + 20) = 392;
+        // consensus_cost = coeff(13) * 392 = 9_490 * 392.
+        let shares = [share(10, 100, 0), share(20, 50, 1)];
+        let expected = Cycles::new(150 + 9_490 * 392);
+        assert_eq!(flexible_initial_spent(shares.iter(), 13), expected);
+    }
+
+    #[test]
+    fn flexible_initial_spent_empty_is_zero() {
+        let shares: [CanisterHttpResponseShare; 0] = [];
+        assert_eq!(flexible_initial_spent(shares.iter(), 13), Cycles::zero());
     }
 
     #[test]
