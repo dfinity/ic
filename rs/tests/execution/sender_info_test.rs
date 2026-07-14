@@ -234,7 +234,45 @@ async fn build_info_aware_agent(
         .expect("failed to build agent with InfoAwareIdentity")
 }
 
-pub fn query_reads_sender_info(env: TestEnv) {
+/// Which ingress entry point to exercise.
+#[derive(Clone, Copy, Debug)]
+enum CallMode {
+    Query,
+    Update,
+}
+
+impl CallMode {
+    fn method(self) -> &'static str {
+        match self {
+            Self::Query => "query",
+            Self::Update => "update",
+        }
+    }
+}
+
+/// Invokes the target canister with `arg` on the entry point picked by
+/// `mode`, returning the reply bytes.
+async fn call(
+    agent: &ic_agent::Agent,
+    canister_id: &Principal,
+    mode: CallMode,
+    arg: Vec<u8>,
+) -> Vec<u8> {
+    let method = mode.method();
+    match mode {
+        CallMode::Query => agent.query(canister_id, method).with_arg(arg).call().await,
+        CallMode::Update => {
+            agent
+                .update(canister_id, method)
+                .with_arg(arg)
+                .call_and_wait()
+                .await
+        }
+    }
+    .unwrap_or_else(|e| panic!("{:?} call failed: {}", mode, e))
+}
+
+fn run_sender_info_test(env: TestEnv, mode: CallMode) {
     let logger = env.logger();
     let node = env.get_first_healthy_application_node_snapshot();
     block_on(async move {
@@ -253,61 +291,32 @@ pub fn query_reads_sender_info(env: TestEnv) {
         )
         .await;
 
-        info!(logger, "Querying msg_caller_info_data");
-        let reply = agent
-            .query(&canister_id, "query")
-            .with_arg(wasm().msg_caller_info_data().append_and_reply().build())
-            .call()
-            .await
-            .expect("query for msg_caller_info_data failed");
+        info!(logger, "{:?}: reading msg_caller_info_data", mode);
+        let reply = call(
+            &agent,
+            &canister_id,
+            mode,
+            wasm().msg_caller_info_data().append_and_reply().build(),
+        )
+        .await;
         assert_eq!(reply, INFO_BYTES);
 
-        info!(logger, "Querying msg_caller_info_signer");
-        let reply = agent
-            .query(&canister_id, "query")
-            .with_arg(wasm().msg_caller_info_signer().append_and_reply().build())
-            .call()
-            .await
-            .expect("query for msg_caller_info_signer failed");
+        info!(logger, "{:?}: reading msg_caller_info_signer", mode);
+        let reply = call(
+            &agent,
+            &canister_id,
+            mode,
+            wasm().msg_caller_info_signer().append_and_reply().build(),
+        )
+        .await;
         assert_eq!(reply, canister_id.as_slice());
     });
 }
 
+pub fn query_reads_sender_info(env: TestEnv) {
+    run_sender_info_test(env, CallMode::Query)
+}
+
 pub fn update_reads_sender_info(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_application_node_snapshot();
-    block_on(async move {
-        let bootstrap_agent = node.build_default_agent_async().await;
-        let canister = UniversalCanister::new_with_retries(
-            &bootstrap_agent,
-            node.effective_canister_id(),
-            &logger,
-        )
-        .await;
-        let canister_id = canister.canister_id();
-        let agent = build_info_aware_agent(
-            node.get_public_url().as_str(),
-            bootstrap_agent.clone(),
-            canister_id,
-        )
-        .await;
-
-        info!(logger, "Updating: reading msg_caller_info_data");
-        let reply = agent
-            .update(&canister_id, "update")
-            .with_arg(wasm().msg_caller_info_data().append_and_reply().build())
-            .call_and_wait()
-            .await
-            .expect("update for msg_caller_info_data failed");
-        assert_eq!(reply, INFO_BYTES);
-
-        info!(logger, "Updating: reading msg_caller_info_signer");
-        let reply = agent
-            .update(&canister_id, "update")
-            .with_arg(wasm().msg_caller_info_signer().append_and_reply().build())
-            .call_and_wait()
-            .await
-            .expect("update for msg_caller_info_signer failed");
-        assert_eq!(reply, canister_id.as_slice());
-    });
+    run_sender_info_test(env, CallMode::Update)
 }
