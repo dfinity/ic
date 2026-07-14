@@ -46,10 +46,7 @@ def _mainnet_icos_images_impl(repository_ctx):
 
     # Pass the sha256 of each image so the download can be served from the local
     # repository cache / Remote Asset API CAS instead of re-fetched from the CDN.
-    setupos_disk_img_hash_key = "setupos_disk_img_hash_dev" if repository_ctx.attr.dev else "setupos_disk_img_hash"
-    setupos_disk_img_hash = info.get(setupos_disk_img_hash_key, None)
-    if setupos_disk_img_hash == None:
-        fail("no {} in mainnet-icos-revisions.json for: {}".format(setupos_disk_img_hash_key, "/".join(parts)))
+    setupos_disk_img_hash = info["setupos_disk_img_hash_dev"] if repository_ctx.attr.dev else info["setupos_disk_img_hash"]
 
     # download the disk image
     repository_ctx.download(url_fn(git_commit_id, "setup-os", False), "disk-img.tar.zst", sha256 = setupos_disk_img_hash)
