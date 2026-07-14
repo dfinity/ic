@@ -215,25 +215,23 @@ impl Identity for CanisterSignerIdentity {
 
 /// Given an already-installed UC that will act as both signer and target,
 /// returns an `ic-agent` that carries a canister-signed `sender_info` on every
-/// request via `InfoAwareIdentity`, plus the raw `info` bytes for assertions.
+/// request via `InfoAwareIdentity`.
 async fn build_info_aware_agent(
     node_url: &str,
     bootstrap_agent: ic_agent::Agent,
     canister_id: Principal,
-) -> (ic_agent::Agent, Vec<u8>) {
+) -> ic_agent::Agent {
     let signer = CanisterSigner::new(bootstrap_agent, canister_id, SIGNER_SEED.to_vec());
     let inner = CanisterSignerIdentity::new(signer.clone());
 
-    let info = INFO_BYTES.to_vec();
-    let sender_info_signable = SenderInfoContent(&info).as_signed_bytes();
+    let sender_info_signable = SenderInfoContent(INFO_BYTES).as_signed_bytes();
     let sig = signer.sign(&sender_info_signable).await;
 
-    let identity = InfoAwareIdentity::new_unchecked(inner, info.clone(), sig)
+    let identity = InfoAwareIdentity::new_unchecked(inner, INFO_BYTES.to_vec(), sig)
         .expect("failed to build InfoAwareIdentity");
-    let agent = agent_with_identity(node_url, identity)
+    agent_with_identity(node_url, identity)
         .await
-        .expect("failed to build agent with InfoAwareIdentity");
-    (agent, info)
+        .expect("failed to build agent with InfoAwareIdentity")
 }
 
 pub fn query_reads_sender_info(env: TestEnv) {
@@ -248,8 +246,7 @@ pub fn query_reads_sender_info(env: TestEnv) {
         )
         .await;
         let canister_id = canister.canister_id();
-        let signer_bytes = canister_id.as_slice().to_vec();
-        let (agent, info) = build_info_aware_agent(
+        let agent = build_info_aware_agent(
             node.get_public_url().as_str(),
             bootstrap_agent.clone(),
             canister_id,
@@ -263,7 +260,7 @@ pub fn query_reads_sender_info(env: TestEnv) {
             .call()
             .await
             .expect("query for msg_caller_info_data failed");
-        assert_eq!(reply, info);
+        assert_eq!(reply, INFO_BYTES);
 
         info!(logger, "Querying msg_caller_info_signer");
         let reply = agent
@@ -272,7 +269,7 @@ pub fn query_reads_sender_info(env: TestEnv) {
             .call()
             .await
             .expect("query for msg_caller_info_signer failed");
-        assert_eq!(reply, signer_bytes);
+        assert_eq!(reply, canister_id.as_slice());
     });
 }
 
@@ -288,8 +285,7 @@ pub fn update_reads_sender_info(env: TestEnv) {
         )
         .await;
         let canister_id = canister.canister_id();
-        let signer_bytes = canister_id.as_slice().to_vec();
-        let (agent, info) = build_info_aware_agent(
+        let agent = build_info_aware_agent(
             node.get_public_url().as_str(),
             bootstrap_agent.clone(),
             canister_id,
@@ -303,7 +299,7 @@ pub fn update_reads_sender_info(env: TestEnv) {
             .call_and_wait()
             .await
             .expect("update for msg_caller_info_data failed");
-        assert_eq!(reply, info);
+        assert_eq!(reply, INFO_BYTES);
 
         info!(logger, "Updating: reading msg_caller_info_signer");
         let reply = agent
@@ -312,6 +308,6 @@ pub fn update_reads_sender_info(env: TestEnv) {
             .call_and_wait()
             .await
             .expect("update for msg_caller_info_signer failed");
-        assert_eq!(reply, signer_bytes);
+        assert_eq!(reply, canister_id.as_slice());
     });
 }
