@@ -54,25 +54,33 @@ pub fn setup(env: TestEnv) {
 // UC-backed canister signer
 // ---------------------------------------------------------------------------
 
-/// A canister signer backed by a Universal Canister: it sets `certified_data`
-/// to the digest of a witness tree over `(seed, message)` and reads back the
-/// state certificate, forming an ICCSA signature.
+/// A canister signer backed by a canister that responds to Universal Canister
+/// bytecode: it sets `certified_data` to the digest of a witness tree over
+/// `(seed, message)` and reads back the state certificate, forming an ICCSA
+/// signature.
+///
+/// Owns its `Agent` and `canister_id` so it can be embedded in a `'static`
+/// `Identity` handed to `agent_with_identity`.
 #[derive(Clone)]
-struct CanisterSigner<'a> {
-    canister: &'a UniversalCanister<'a>,
+struct CanisterSigner {
+    agent: ic_agent::Agent,
+    canister_id: Principal,
     seed: Vec<u8>,
 }
 
-impl<'a> CanisterSigner<'a> {
-    fn new(canister: &'a UniversalCanister<'a>, seed: Vec<u8>) -> Self {
-        Self { canister, seed }
+impl CanisterSigner {
+    fn new(agent: ic_agent::Agent, canister_id: Principal, seed: Vec<u8>) -> Self {
+        Self {
+            agent,
+            canister_id,
+            seed,
+        }
     }
 
     /// Raw canister-signature public key bytes: length-prefixed canister id
     /// followed by seed.
     fn public_key_raw(&self) -> Vec<u8> {
-        let cid = self.canister.canister_id();
-        let cid_bytes = cid.as_slice();
+        let cid_bytes = self.canister_id.as_slice();
         let mut buf = vec![u8::try_from(cid_bytes.len()).expect("canister id too long for u8")];
         buf.extend_from_slice(cid_bytes);
         buf.extend_from_slice(&self.seed);
@@ -103,18 +111,22 @@ impl<'a> CanisterSigner<'a> {
         let msg_hash = Sha256::hash(message);
         let sig_tree = labeled(b"sig", labeled(seed_hash, labeled(msg_hash, leaf(b""))));
 
-        self.canister
-            .update(
+        self.agent
+            .update(&self.canister_id, "update")
+            .with_arg(
                 wasm()
                     .certified_data_set(&sig_tree.digest())
                     .reply()
                     .build(),
             )
+            .call_and_wait()
             .await
             .expect("failed to set certified data on canister signer");
         let certificate_cbor = self
-            .canister
-            .query(wasm().data_certificate().append_and_reply().build())
+            .agent
+            .query(&self.canister_id, "query")
+            .with_arg(wasm().data_certificate().append_and_reply().build())
+            .call()
             .await
             .expect("failed to read canister signer's certificate");
 
@@ -138,14 +150,14 @@ impl<'a> CanisterSigner<'a> {
 /// where `pk_der` is a canister-signature SPKI. Signing produces an ICCSA
 /// signature over the request id.
 #[derive(Clone)]
-struct CanisterSignerIdentity<'a> {
-    signer: CanisterSigner<'a>,
+struct CanisterSignerIdentity {
+    signer: CanisterSigner,
     public_key_der: Vec<u8>,
     principal: Principal,
 }
 
-impl<'a> CanisterSignerIdentity<'a> {
-    fn new(signer: CanisterSigner<'a>) -> Self {
+impl CanisterSignerIdentity {
+    fn new(signer: CanisterSigner) -> Self {
         let public_key_der = signer.public_key_der();
         let principal = Principal::self_authenticating(&public_key_der);
         Self {
@@ -157,7 +169,7 @@ impl<'a> CanisterSignerIdentity<'a> {
 
     fn sign_bytes(&self, bytes: &[u8]) -> Vec<u8> {
         let fut = self.signer.sign(bytes);
-        // The `Identity` trait's `sign*` methods are sync; the underlying UC
+        // The `Identity` trait's `sign*` methods are sync; the underlying
         // signer is async. Bridge with `block_in_place` since we run under a
         // multi-thread Tokio runtime.
         #[allow(clippy::disallowed_methods)]
@@ -165,7 +177,7 @@ impl<'a> CanisterSignerIdentity<'a> {
     }
 }
 
-impl Identity for CanisterSignerIdentity<'_> {
+impl Identity for CanisterSignerIdentity {
     fn sender(&self) -> Result<Principal, String> {
         Ok(self.principal)
     }
@@ -201,14 +213,15 @@ impl Identity for CanisterSignerIdentity<'_> {
 // Test bodies
 // ---------------------------------------------------------------------------
 
-/// Installs a UC that acts as both the sender_info signer and the target
-/// canister, and returns an `ic-agent` that carries `sender_info` on every
-/// request via `InfoAwareIdentity`.
-async fn setup_signer_and_agent<'a>(
+/// Given an already-installed UC that will act as both signer and target,
+/// returns an `ic-agent` that carries a canister-signed `sender_info` on every
+/// request via `InfoAwareIdentity`, plus the raw `info` bytes for assertions.
+async fn build_info_aware_agent(
     node_url: &str,
-    canister: &'a UniversalCanister<'a>,
+    bootstrap_agent: ic_agent::Agent,
+    canister_id: Principal,
 ) -> (ic_agent::Agent, Vec<u8>) {
-    let signer = CanisterSigner::new(canister, SIGNER_SEED.to_vec());
+    let signer = CanisterSigner::new(bootstrap_agent, canister_id, SIGNER_SEED.to_vec());
     let inner = CanisterSignerIdentity::new(signer.clone());
 
     let info = INFO_BYTES.to_vec();
@@ -234,12 +247,18 @@ pub fn query_reads_sender_info(env: TestEnv) {
             &logger,
         )
         .await;
-        let (agent, info) = setup_signer_and_agent(node.get_public_url().as_str(), &canister).await;
-        let signer_bytes = canister.canister_id().as_slice().to_vec();
+        let canister_id = canister.canister_id();
+        let signer_bytes = canister_id.as_slice().to_vec();
+        let (agent, info) = build_info_aware_agent(
+            node.get_public_url().as_str(),
+            bootstrap_agent.clone(),
+            canister_id,
+        )
+        .await;
 
         info!(logger, "Querying msg_caller_info_data");
         let reply = agent
-            .query(&canister.canister_id(), "query")
+            .query(&canister_id, "query")
             .with_arg(wasm().msg_caller_info_data().append_and_reply().build())
             .call()
             .await
@@ -248,7 +267,7 @@ pub fn query_reads_sender_info(env: TestEnv) {
 
         info!(logger, "Querying msg_caller_info_signer");
         let reply = agent
-            .query(&canister.canister_id(), "query")
+            .query(&canister_id, "query")
             .with_arg(wasm().msg_caller_info_signer().append_and_reply().build())
             .call()
             .await
@@ -268,12 +287,18 @@ pub fn update_reads_sender_info(env: TestEnv) {
             &logger,
         )
         .await;
-        let (agent, info) = setup_signer_and_agent(node.get_public_url().as_str(), &canister).await;
-        let signer_bytes = canister.canister_id().as_slice().to_vec();
+        let canister_id = canister.canister_id();
+        let signer_bytes = canister_id.as_slice().to_vec();
+        let (agent, info) = build_info_aware_agent(
+            node.get_public_url().as_str(),
+            bootstrap_agent.clone(),
+            canister_id,
+        )
+        .await;
 
         info!(logger, "Updating: reading msg_caller_info_data");
         let reply = agent
-            .update(&canister.canister_id(), "update")
+            .update(&canister_id, "update")
             .with_arg(wasm().msg_caller_info_data().append_and_reply().build())
             .call_and_wait()
             .await
@@ -282,7 +307,7 @@ pub fn update_reads_sender_info(env: TestEnv) {
 
         info!(logger, "Updating: reading msg_caller_info_signer");
         let reply = agent
-            .update(&canister.canister_id(), "update")
+            .update(&canister_id, "update")
             .with_arg(wasm().msg_caller_info_signer().append_and_reply().build())
             .call_and_wait()
             .await
