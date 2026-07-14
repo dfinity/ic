@@ -391,3 +391,19 @@ genrule(
         "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
     ],
 )
+
+# OVMF_SEV.fd -- AMD SEV-SNP confidential VM firmware, extracted the same way
+# from the `ovmf-amdsev` `.deb` (see MODULE.bazel for the `ovmf_amdsev_deb`
+# http_file). That package is currently only available in Debian sid
+# (https://packages.debian.org/sid/ovmf-amdsev), hence pulling it from a
+# snapshot.debian.org snapshot rather than a stable release mirror.
+genrule(
+    name = "ovmfsev_code",
+    srcs = ["@ovmf_amdsev_deb//file"],
+    outs = ["OVMF_SEV.fd"],
+    cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_amdsev_deb//file) | tar -xO ./usr/share/ovmf/OVMF.amdsev.fd > $@",
+    tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
+    ],
+)

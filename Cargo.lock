@@ -4543,9 +4543,9 @@ dependencies = [
 
 [[package]]
 name = "ethnum"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca81e6b4777c89fd810c25a4be2b1bd93ea034fbe58e6a75216a34c6b82c539b"
+checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 dependencies = [
  "serde",
 ]
@@ -12673,6 +12673,7 @@ dependencies = [
  "pretty_assertions",
  "prost 0.14.3",
  "rewards-calculation",
+ "rust_decimal",
  "serde_json",
  "tokio",
 ]
@@ -18246,14 +18247,19 @@ name = "message-routing-system-tests-xnet"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
  "canister-test",
+ "futures",
  "ic-agent 0.49.0",
  "ic-error-types 0.2.0",
+ "ic-management-canister-types-private",
+ "ic-nns-constants",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
  "ic_consensus_system_test_utils",
+ "registry-canister",
  "slog",
  "systest-message-routing-common",
  "tokio",
@@ -18570,14 +18576,10 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-protobuf",
- "ic-registry-keys",
- "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
- "ic-registry-transport",
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "prost 0.14.3",
  "regex",
  "reqwest",
  "serde_cbor",

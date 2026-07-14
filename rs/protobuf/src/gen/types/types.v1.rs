@@ -520,7 +520,7 @@ pub struct ThresholdSignatureShare {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterHttpPaymentReceipt {
     #[prost(message, optional, tag = "1")]
-    pub refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    pub spent: ::core::option::Option<super::super::state::queues::v1::Cycles>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HttpHeader {

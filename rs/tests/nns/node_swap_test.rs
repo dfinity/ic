@@ -74,7 +74,7 @@ fn test(env: TestEnv) {
         .await
         .unwrap();
 
-        topology_snapshot
+        let topology_snapshot = topology_snapshot
             .block_for_newer_registry_version()
             .await
             .unwrap();

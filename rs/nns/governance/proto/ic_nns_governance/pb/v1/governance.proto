@@ -324,13 +324,14 @@ enum NnsFunction {
   // the Wasm module of the target canister, the proposal can also set the
   // authorization information and the allocations.
   NNS_FUNCTION_NNS_CANISTER_UPGRADE = 4;
-  // A proposal to bless a new version to which the replicas can be
+  // (obsolete) A proposal to bless a new version to which the replicas can be
   // upgraded.
   // The proposal registers a replica version (identified by the hash of the
   // installation image) in the registry. Besides creating a record for that
   // version, the proposal also appends that version to the list of "blessed
   // versions" that can be installed on a subnet. By itself, this proposal
   // does not effect any upgrade.
+  // Superseded by ReviseElectedGuestosVersions.
   NNS_FUNCTION_BLESS_REPLICA_VERSION = 5;
   // Update a subnet's recovery CUP (used to recover subnets that have stalled).
   // Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -427,16 +428,16 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS = 34;
   // Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
   NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS = 35;
-  // A proposal to retire previously elected and unused replica versions.
+  // (obsolete) A proposal to retire previously elected and unused replica versions.
   // The specified versions are removed from the registry and the "blessed versions" record.
   // This ensures that the replica cannot upgrade to these versions anymore.
+  // Superseded by ReviseElectedGuestosVersions.
   NNS_FUNCTION_RETIRE_REPLICA_VERSION = 36;
   // Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
   NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES = 37;
   // A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-  // the hash of the installation image) is added to the registry. Besides creating a record for
-  // that version, the proposal also appends that version to the list of elected versions that can
-  // be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+  // the commit hash of the installation image) is added to the registry. This version can then be
+  // used to upgrade nodes.
   NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS = 38;
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
@@ -501,9 +502,9 @@ enum NnsFunction {
   NNS_FUNCTION_SPLIT_SUBNET = 56;
 
   // Delete a subnet. The subnet record, catch-up package, threshold signing key
-  // and routing table entries are removed from the registry, and the subnet's
-  // nodes become unassigned.
-  // Currently limited to CloudEngine subnets.
+  // and routing table entries are removed from the registry, the subnet is
+  // removed from the subnet list, and the subnet's nodes become unassigned.
+  // System subnets (e.g. the NNS or II subnet) cannot be deleted.
   NNS_FUNCTION_DELETE_SUBNET = 57;
 
   // Set or unset the default subnet to which `SetupInitialDKG` management

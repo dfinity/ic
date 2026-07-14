@@ -2047,7 +2047,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let cost_schedule = state.get_own_cost_schedule();
         abort_all_paused_executions(&mut state, &self.exec_env, cost_schedule, &self.log);
-        for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
+        for paused_subnet_message in self.paused_subnet_messages.values_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
         self.state = Some(state);

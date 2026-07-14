@@ -260,11 +260,11 @@ where
             Ok(v) => return Ok(v),
             Err(e) => match backoff.next_backoff() {
                 Some(interval) => {
-                    eprintln!("Retrying due to: {}", &e);
+                    eprintln!("Retrying due to: {}", e);
                     tokio::time::sleep(interval).await;
                 }
                 None => {
-                    eprintln!("Failed due to: {}", &e);
+                    eprintln!("Failed due to: {}", e);
                     return Err(e);
                 }
             },
@@ -1110,7 +1110,7 @@ impl<'a> Install<'a> {
             self.wasm.0.clone(),
             payload,
         );
-        eprintln!("Install args: {}", &install_args);
+        eprintln!("Install args: {}", install_args);
         match self.runtime {
             Runtime::Local(local_runtime) => local_runtime
                 .install_canister_helper_async(install_args)

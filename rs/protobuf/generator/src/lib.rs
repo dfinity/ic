@@ -243,7 +243,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
 
     config.type_attribute(
         ".registry.hostos_version",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Serialize, serde::Deserialize, Ord, PartialOrd)]",
     );
     config.type_attribute(
         ".registry.node_rewards.v2",
