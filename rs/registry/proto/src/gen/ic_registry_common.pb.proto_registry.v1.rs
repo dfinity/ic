@@ -4,7 +4,7 @@ pub struct ProtoRegistry {
     #[prost(message, repeated, tag = "1")]
     pub records: ::prost::alloc::vec::Vec<ProtoRegistryRecord>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProtoRegistryRecord {
     #[prost(string, tag = "1")]
     pub key: ::prost::alloc::string::String,

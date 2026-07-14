@@ -5,7 +5,6 @@ pub mod do_add_api_boundary_nodes;
 pub mod do_add_node_operator;
 pub mod do_add_nodes_to_subnet;
 mod do_add_or_remove_data_centers;
-pub mod do_bless_replica_version;
 pub mod do_change_subnet_membership;
 pub mod do_clear_provisional_whitelist;
 pub mod do_create_subnet;
