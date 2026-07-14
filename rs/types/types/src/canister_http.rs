@@ -1081,8 +1081,8 @@ pub struct CanisterHttpPaymentReceipt {
     /// The amount of cycles, out of the per-replica allowance, that the replica
     /// has spent. The cycles to refund to the caller are derived downstream as
     /// `per_replica_allowance - spent`. On free subnets it may exceed the (zero)
-    /// allowance, since it is only used for cost accounting, but never
-    /// [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+    /// allowance, since it is only used for cost accounting, but it may never
+    /// exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
     pub spent: Cycles,
 }
 

@@ -81,8 +81,8 @@ pub(crate) fn check_response_consistency(
 ///
 /// On charging subnets this is the `per_replica_allowance`. Free subnets charge
 /// nothing, so their spend (used only for cost accounting) may exceed the (zero)
-/// allowance, but never [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
-pub(crate) fn check_spent_allowance(
+/// allowance, but may never exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+pub(crate) fn check_spent_within_limit(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
     cost_schedule: CanisterCyclesCostSchedule,
@@ -206,7 +206,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership,
-/// and the per-replica allowance.
+/// and the per-replica spend limit.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -219,7 +219,7 @@ pub(crate) fn validate_response_share(
     per_replica_allowance: Cycles,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_spent_allowance(
+    check_spent_within_limit(
         &share.content.payment_receipt,
         per_replica_allowance,
         cost_schedule,
@@ -555,7 +555,7 @@ mod tests {
     #[test]
     fn spent_within_allowance_is_accepted_when_charging() {
         assert!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(50),
                 Cycles::new(100),
                 CanisterCyclesCostSchedule::Normal,
@@ -567,7 +567,7 @@ mod tests {
     #[test]
     fn spent_exceeding_allowance_is_rejected_when_charging() {
         assert!(matches!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(101),
                 Cycles::new(100),
                 CanisterCyclesCostSchedule::Normal,
@@ -581,7 +581,7 @@ mod tests {
         // A zero allowance on a charging subnet (e.g. the caller paid exactly the
         // base fee) must still reject any nonzero spend.
         assert!(matches!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(1),
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Normal,
@@ -596,7 +596,7 @@ mod tests {
         // accounting; nothing is charged. It is bounded only by the free-subnet
         // maximum, which the spend here stays well below.
         assert!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(1_000_000),
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Free,
@@ -609,7 +609,7 @@ mod tests {
     fn spent_at_free_subnet_maximum_is_accepted() {
         // A spend exactly at the free-subnet maximum is still accepted.
         assert!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()),
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Free,
@@ -623,7 +623,7 @@ mod tests {
         // Free subnets may exceed their (zero) allowance, but not the free-subnet
         // maximum: the spend is bounded rather than unbounded.
         assert!(matches!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get() + 1),
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Free,
