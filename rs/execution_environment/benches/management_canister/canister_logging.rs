@@ -189,8 +189,9 @@ fn setup_canister_with_full_log(
 
 /// Builds an `ExecutionTest` with a `target` canister whose log buffer is filled
 /// to capacity (with `log_message_size`-byte records) and whose logs are readable
-/// by the injected `caller`. Shared by `setup_fetch_bench` and the diagnostics
-/// dump so both exercise an identically-filled buffer.
+/// by the injected `caller`. Shared by the fetch benchmarks and the
+/// `fetch_response` sanity-check helper so both exercise an identically-filled
+/// buffer.
 fn build_full_log_test(
     log_memory_limit: u64,
     log_message_size: usize,
@@ -231,33 +232,6 @@ fn build_full_log_test(
     .unwrap();
     fill_log_buffer_to_capacity(&mut test, target, log_message_size);
     (test, target)
-}
-
-/// Creates an `ExecutionTest` whose subnet input queue already holds a single
-/// inter-canister call (from the caller canister to the management canister) so
-/// that the next `execute_subnet_message` executes exactly that call.
-///
-/// The `target` canister has its log buffer filled to capacity and its logs
-/// readable by the caller canister, so the fetch exercises the real read path.
-/// `make_payload` builds the management-canister method payload from the (already
-/// filled) test and the target canister id (e.g. a `FetchCanisterLogsRequest`); it
-/// receives the test so a filter can be derived from the buffer's actual live
-/// records (e.g. an index in the middle of the idx range). Used by the one-off
-/// sanity checks that validate the end-to-end fetch path.
-fn setup_fetch_bench<F: FnOnce(&ExecutionTest, CanisterId) -> Vec<u8>>(
-    method: &str,
-    make_payload: F,
-    log_memory_limit: u64,
-    log_message_size: usize,
-) -> ExecutionTest {
-    let (mut test, target) = build_full_log_test(log_memory_limit, log_message_size);
-
-    // Enqueue the inter-canister call. It is the only pending subnet message, so
-    // the next `execute_subnet_message` executes exactly this call. No cycles are
-    // attached: `fetch_canister_logs` charges no cycles fee.
-    let payload = make_payload(&test, target);
-    test.inject_call_to_ic00(method, payload, Cycles::new(0));
-    test
 }
 
 fn run_bench_resize_canister_log<M: criterion::measurement::Measurement>(
@@ -446,30 +420,26 @@ fn run_bench_fetch_no_match_scan<M: criterion::measurement::Measurement>(
     });
 }
 
-/// Executes a single `fetch_canister_logs` subnet message against a target whose
-/// log buffer is filled to capacity and returns the Candid-encoded reply payload.
-/// Panics if the call was rejected. Used for one-off sanity checks.
+/// Runs the `fetch_canister_logs` read/encode path (the exact work the benchmarks
+/// time) against a target whose log buffer is filled to capacity and returns the
+/// Candid-encoded reply payload. Used for one-off sanity checks.
 fn fetch_response(
     filter: Option<FetchCanisterLogsFilter>,
     log_memory_limit: u64,
     log_message_size: usize,
 ) -> Vec<u8> {
-    let mut test = setup_fetch_bench(
-        "fetch_canister_logs",
-        |_test, target| {
-            let mut request = FetchCanisterLogsRequest::new(target);
-            request.filter = filter;
-            request.encode()
-        },
-        log_memory_limit,
-        log_message_size,
+    let (test, target) = build_full_log_test(log_memory_limit, log_message_size);
+    // The caller canister (a controller of the target) is allowed to read the logs.
+    let sender = canister_test_id(1).get();
+    let mut request = FetchCanisterLogsRequest::new(target);
+    request.filter = filter;
+    let (reply, _record_count, _content_size) = fetch_canister_logs_response_for_bench(
+        sender,
+        test.canister_state(target),
+        request,
+        LOG_MEMORY_STORE_FEATURE,
     );
-    assert!(test.execute_subnet_message());
-    test.induct_messages();
-    match &test.get_xnet_response(0).response_payload {
-        ic_types::messages::Payload::Data(data) => data.clone(),
-        other => panic!("fetch_canister_logs was rejected: {other:?}"),
-    }
+    reply
 }
 
 /// Size of the Candid-encoded `fetch_canister_logs` reply payload.
