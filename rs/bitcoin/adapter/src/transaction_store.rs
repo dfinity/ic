@@ -400,7 +400,9 @@ mod test {
     /// 2. Advertise that transaction.
     /// 3. Check that this transaction does not get advertised again during manager tick.
     /// 4. Backdate the advertisement to exactly [TX_READVERTISE_PERIOD_SECS] ago,
-    ///    the (inclusive) re-advertisement boundary.
+    ///    the (inclusive) re-advertisement boundary. The test is skipped if the
+    ///    monotonic clock cannot represent that instant (i.e. the system booted
+    ///    less than [TX_READVERTISE_PERIOD_SECS] ago).
     /// 5. Check that the transaction is advertised to the peer again.
     #[test]
     fn test_adapter_readvertise_after_period() {
@@ -424,14 +426,16 @@ mod test {
         assert_eq!(channel.command_count(), 0);
 
         // 4.
+        let Some(backdated) =
+            Instant::now().checked_sub(Duration::from_secs(TX_READVERTISE_PERIOD_SECS))
+        else {
+            return;
+        };
         let info = manager
             .transactions
             .get_mut(&txid)
             .expect("transaction should be in the map");
-        info.advertised.insert(
-            address,
-            Instant::now() - Duration::from_secs(TX_READVERTISE_PERIOD_SECS),
-        );
+        info.advertised.insert(address, backdated);
 
         // 5.
         manager.advertise_txids(&mut channel);
