@@ -5,6 +5,8 @@
         "version": "8a655ede1f59ea0cb3079a9aa0601b7905b7ca37",
         "update_img_hash": "f75bd4d869e2510b3271f4bd858b4056f93a528cb7bcf454cdd21956ae282bc5",
         "update_img_hash_dev": "16caec68b07460a4d53a6ef57e625b2ce12b4d0e74f3a31bfda3d005844bd835",
+        "setupos_disk_img_hash": "9f8bbe68b592592344cfbe70485892f4061229072b7b9dd9a8f6f4e2c5e06864",
+        "setupos_disk_img_hash_dev": "eb2cace25fd3bc8321f5ac88f29030db3377f0efd7bf4325c35b7139d9867a2d",
         "launch_measurements": {
           "guest_launch_measurements": [
             {
@@ -138,6 +140,8 @@
         "version": "992628c4f26cc7320396b6b8be37133a666a4386",
         "update_img_hash": "82d7e19ee6b708984db97bc1dbf03fd6188be01607ce1d13ef84fe6fc62d274a",
         "update_img_hash_dev": "6f50d00ae6c74d4cf042259528ab7568d9f81215f005d38ca2fbd5bd659c1aa8",
+        "setupos_disk_img_hash": "50bcb55955d60b45d4d09c734fb4e8c49567413b11e1565e66b8fe63a0769c4d",
+        "setupos_disk_img_hash_dev": "56b31731089f233f0672a5bbe9b9093c9d3c9c9a5d61b9e7b4c1a665b361f394",
         "launch_measurements": {
           "guest_launch_measurements": [
             {
@@ -272,6 +276,8 @@
       "version": "992628c4f26cc7320396b6b8be37133a666a4386",
       "update_img_hash": "82d7e19ee6b708984db97bc1dbf03fd6188be01607ce1d13ef84fe6fc62d274a",
       "update_img_hash_dev": "6f50d00ae6c74d4cf042259528ab7568d9f81215f005d38ca2fbd5bd659c1aa8",
+      "setupos_disk_img_hash": "50bcb55955d60b45d4d09c734fb4e8c49567413b11e1565e66b8fe63a0769c4d",
+      "setupos_disk_img_hash_dev": "56b31731089f233f0672a5bbe9b9093c9d3c9c9a5d61b9e7b4c1a665b361f394",
       "launch_measurements": {
         "guest_launch_measurements": [
           {
@@ -407,6 +413,8 @@
       "version": "992628c4f26cc7320396b6b8be37133a666a4386",
       "update_img_hash": "ed987c8b7e0138ba0e12e99e2a5cf94c91e4b6a8ffa9e34073739873f288edbd",
       "update_img_hash_dev": "a922ed470040edd5faa22102e02be5f606f243f549dc16aebb0ecae2a6c13ef4",
+      "setupos_disk_img_hash": "50bcb55955d60b45d4d09c734fb4e8c49567413b11e1565e66b8fe63a0769c4d",
+      "setupos_disk_img_hash_dev": "56b31731089f233f0672a5bbe9b9093c9d3c9c9a5d61b9e7b4c1a665b361f394",
       "launch_measurements": {
         "guest_launch_measurements": [
           {

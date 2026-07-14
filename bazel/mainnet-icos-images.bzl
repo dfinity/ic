@@ -44,13 +44,22 @@ def _mainnet_icos_images_impl(repository_ctx):
 
     url_fn = icos_dev_image_download_url if repository_ctx.attr.dev else icos_image_download_url
 
-    repository_ctx.download(url_fn(git_commit_id, "setup-os", False), "disk-img.tar.zst")  # download the disk image
+    # Pass the sha256 of each image so the download can be served from the local
+    # repository cache / Remote Asset API CAS instead of re-fetched from the CDN.
+    setupos_disk_img_hash_key = "setupos_disk_img_hash_dev" if repository_ctx.attr.dev else "setupos_disk_img_hash"
+    setupos_disk_img_hash = info.get(setupos_disk_img_hash_key, None)
+    if setupos_disk_img_hash == None:
+        fail("no {} in mainnet-icos-revisions.json for: {}".format(setupos_disk_img_hash_key, "/".join(parts)))
+
+    # download the disk image
+    repository_ctx.download(url_fn(git_commit_id, "setup-os", False), "disk-img.tar.zst", sha256 = setupos_disk_img_hash)
 
     # For GuestOS repositories also download the GuestOS update image so the
     # local system-test file server can serve it to the IC nodes.
     is_guestos = parts[0] == "guestos"
     if is_guestos:
-        repository_ctx.download(url_fn(git_commit_id, "guest-os", True), "guest-update-img.tar.zst")
+        update_img_hash = info["update_img_hash_dev"] if repository_ctx.attr.dev else info["update_img_hash"]
+        repository_ctx.download(url_fn(git_commit_id, "guest-os", True), "guest-update-img.tar.zst", sha256 = update_img_hash)
 
     if repository_ctx.attr.dev:
         json_measurements = json.encode(info["launch_measurements_dev"])
