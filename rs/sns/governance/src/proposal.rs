@@ -1092,7 +1092,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         }
         Ok(wasm) => match wasm.validate(env, canister_upgrade_arg).await {
             Err(new_defects) => {
-                defects.extend(new_defects.into_iter());
+                defects.extend(new_defects);
                 None
             }
             Ok(_) => Some(wasm.description()),

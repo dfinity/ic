@@ -10,7 +10,7 @@ use ic_types::{
         CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseReceipt,
         CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpResponseWithConsensus, max_http_outcall_spend,
     },
     crypto::{Signed, crypto_hash},
     messages::CallbackId,
@@ -125,23 +125,23 @@ pub(crate) fn flexible_initial_spent<'a>(
     spent_sum + consensus_cost
 }
 
-/// Enforces the per-replica allowance from the request context: on a subnet
-/// that charges (a Normal cost schedule), the amount the replica claims to have
-/// `spent` in the payment receipt must never exceed the `per_replica_allowance`
-/// derived from the request's context.
+/// Enforces the per-replica spend limit from the request context: the amount
+/// the replica claims to have `spent` in the payment receipt must never exceed
+/// the maximum returned by [`max_http_outcall_spend`].
 ///
-/// On a free cost schedule nothing is charged, so a replica may legitimately
-/// report a spend exceeding the (zero) allowance for cost accounting; there are
-/// no cycles at stake, so the spend is not bounded here.
-pub(crate) fn check_spent_allowance(
+/// On charging subnets this is the `per_replica_allowance`. Free subnets charge
+/// nothing, so their spend (used only for cost accounting) may exceed the (zero)
+/// allowance, but may never exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+pub(crate) fn check_spent_within_limit(
     receipt: &CanisterHttpPaymentReceipt,
     per_replica_allowance: Cycles,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    if cost_schedule != CanisterCyclesCostSchedule::Free && receipt.spent > per_replica_allowance {
-        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance {
+    let limit = max_http_outcall_spend(cost_schedule, per_replica_allowance);
+    if receipt.spent > limit {
+        return Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
             spent: receipt.spent,
-            per_replica_allowance,
+            limit,
         });
     }
     Ok(())
@@ -256,7 +256,7 @@ pub(crate) fn validate_flexible_response_with_proof(
 /// Validates a single [`CanisterHttpResponseShare`]'s metadata.
 ///
 /// Checks callback-id consistency, duplicate signers, committee membership,
-/// and the per-replica allowance.
+/// and the per-replica spend limit.
 ///
 /// **NOTE**: The signature is not verified. Callers are expected to
 /// batch-verify the signatures of all shares in the surrounding group via
@@ -269,7 +269,7 @@ pub(crate) fn validate_response_share(
     per_replica_allowance: Cycles,
     cost_schedule: CanisterCyclesCostSchedule,
 ) -> Result<(), InvalidCanisterHttpPayloadReason> {
-    check_spent_allowance(
+    check_spent_within_limit(
         &share.content.payment_receipt,
         per_replica_allowance,
         cost_schedule,
@@ -616,6 +616,7 @@ pub(crate) fn find_flexible_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_types::canister_http::MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET;
 
     fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
         CanisterHttpPaymentReceipt {
@@ -626,7 +627,7 @@ mod tests {
     #[test]
     fn spent_within_allowance_is_accepted_when_charging() {
         assert!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(50),
                 Cycles::new(100),
                 CanisterCyclesCostSchedule::Normal,
@@ -638,12 +639,12 @@ mod tests {
     #[test]
     fn spent_exceeding_allowance_is_rejected_when_charging() {
         assert!(matches!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(101),
                 Cycles::new(100),
                 CanisterCyclesCostSchedule::Normal,
             ),
-            Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance { .. })
+            Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. })
         ));
     }
 
@@ -652,26 +653,54 @@ mod tests {
         // A zero allowance on a charging subnet (e.g. the caller paid exactly the
         // base fee) must still reject any nonzero spend.
         assert!(matches!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(1),
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Normal,
             ),
-            Err(InvalidCanisterHttpPayloadReason::SpentExceedsAllowance { .. })
+            Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. })
         ));
     }
 
     #[test]
     fn spent_exceeding_allowance_is_accepted_on_free_schedule() {
         // Free subnets may report a spend exceeding the (zero) allowance for cost
-        // accounting; nothing is charged, so it is not bounded.
+        // accounting; nothing is charged. It is bounded only by the free-subnet
+        // maximum, which the spend here stays well below.
         assert!(
-            check_spent_allowance(
+            check_spent_within_limit(
                 &receipt(1_000_000),
                 Cycles::zero(),
                 CanisterCyclesCostSchedule::Free,
             )
             .is_ok()
         );
+    }
+
+    #[test]
+    fn spent_at_free_subnet_maximum_is_accepted() {
+        // A spend exactly at the free-subnet maximum is still accepted.
+        assert!(
+            check_spent_within_limit(
+                &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()),
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Free,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn spent_exceeding_free_subnet_maximum_is_rejected() {
+        // Free subnets may exceed their (zero) allowance, but not the free-subnet
+        // maximum: the spend is bounded rather than unbounded.
+        assert!(matches!(
+            check_spent_within_limit(
+                &receipt(MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get() + 1),
+                Cycles::zero(),
+                CanisterCyclesCostSchedule::Free,
+            ),
+            Err(InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. })
+        ));
     }
 }

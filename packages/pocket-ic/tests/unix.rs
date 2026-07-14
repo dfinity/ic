@@ -175,7 +175,7 @@ async fn resume_killed_instance_impl(
 #[tokio::test]
 async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed c75e6e3e57387b40c79cb9503f7c18518284981467d26ccfa7097343fa8bb808 is incomplete."));
+    assert!(err.contains("The state of subnet with seed c947edd7b79ac24b01b686a2c1f1d9fb917d71842eb6f01bae5d9ea50a44cbca is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
@@ -184,7 +184,7 @@ async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(IncompleteStateFlag::Disabled))
         .await
         .unwrap_err();
-    assert!(err.contains("The state of subnet with seed c75e6e3e57387b40c79cb9503f7c18518284981467d26ccfa7097343fa8bb808 is incomplete."));
+    assert!(err.contains("The state of subnet with seed c947edd7b79ac24b01b686a2c1f1d9fb917d71842eb6f01bae5d9ea50a44cbca is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.

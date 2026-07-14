@@ -1,7 +1,8 @@
 /* tag::catalog[]
 Title:: Delete Subnet
 
-Goal:: Ensure that CloudEngines can be deleted, and that regular App and System subnets cannot be deleted.
+Goal:: Ensure that governance can delete non-System subnets (CloudEngine, Application, and
+VerifiedApplication subnets), and that System subnets cannot be deleted.
 
 end::catalog[] */
 
@@ -85,19 +86,26 @@ pub fn test(env: TestEnv) {
         .filter(|s| s.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
     let app_subnet = app_subnet.first().unwrap();
-    let app_node = app_subnet.nodes().next().unwrap();
+    let app_nodes: Vec<IcNodeSnapshot> = app_subnet.nodes().collect();
+    let app_node = app_nodes
+        .first()
+        .expect("expected the Application subnet to have at least one node");
+    let app_node_ids = BTreeSet::from_iter(app_nodes.iter().map(|x| x.node_id));
     let vapp_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::VerifiedApplication)
         .collect::<Vec<_>>();
     let vapp_subnet = vapp_subnet.first().unwrap();
+    let vapp_node_ids = BTreeSet::from_iter(vapp_subnet.nodes().map(|x| x.node_id));
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
         .collect::<Vec<_>>();
     let engine_subnet = engine_subnet.first().unwrap();
     let engine_nodes: Vec<IcNodeSnapshot> = engine_subnet.nodes().collect();
-    let engine_node = &engine_nodes[0];
+    let engine_node = engine_nodes
+        .first()
+        .expect("expected the CloudEngine subnet to have at least one node");
     let engine_node_ids = BTreeSet::from_iter(engine_nodes.iter().map(|x| x.node_id));
     assert!(
         topology_snapshot
@@ -128,53 +136,65 @@ pub fn test(env: TestEnv) {
         let _canister_app =
             UniversalCanister::new(&app_agent, app_node.effective_canister_id()).await;
 
-        // Deleting the engine should work.
+        // Governance may delete any non-System subnet.
+
+        // Deleting the CloudEngine subnet should work.
         try_delete_subnet(&engine_subnet.subnet_id, &governance_canister, None).await;
 
-        // Deleting the app subnet should not work.
-        try_delete_subnet(
-            &app_subnet.subnet_id,
-            &governance_canister,
-            Some("Only CloudEngines may be deleted".to_string()),
-        )
-        .await;
+        // Deleting the Application subnet should work.
+        try_delete_subnet(&app_subnet.subnet_id, &governance_canister, None).await;
 
-        // Deleting the verified app subnet should not work.
-        try_delete_subnet(
-            &vapp_subnet.subnet_id,
-            &governance_canister,
-            Some("Only CloudEngines may be deleted".to_string()),
-        )
-        .await;
+        // Deleting the VerifiedApplication subnet should work.
+        try_delete_subnet(&vapp_subnet.subnet_id, &governance_canister, None).await;
 
-        // Deleting the system subnet should not work.
+        // Deleting the System subnet should not work.
         try_delete_subnet(
             &nns_subnet.subnet_id,
             &governance_canister,
-            Some("Only CloudEngines may be deleted".to_string()),
+            Some("System subnets may not be deleted".to_string()),
         )
         .await;
 
+        // Wait until the local registry reflects all three subnet deletions.
+        let latest_version = registry_client
+            .get_latest_version()
+            .await
+            .expect("failed to get the latest registry version");
         let new_topology_snapshot = topology_snapshot
-            .block_for_min_registry_version(RegistryVersion::new(2))
+            .block_for_min_registry_version(RegistryVersion::new(latest_version))
             .await
             .expect("Could not obtain updated registry.");
 
-        // The deleted engine should not be in the subnet list any more.
+        // The deleted subnets should no longer be in the subnet list; only the
+        // System (NNS) subnet should remain.
         let final_subnets = get_subnet_list_from_registry(&registry_client).await;
-        assert!(!final_subnets.contains(&engine_subnet.subnet_id));
-        assert_eq!(final_subnets.len(), 3);
+        assert_eq!(final_subnets, vec![nns_subnet.subnet_id]);
 
-        // The subnet record and routing table entries of the engine should be gone.
-        let routing_table = new_topology_snapshot.subnet_canister_ranges(engine_subnet.subnet_id);
-        assert!(routing_table.is_empty());
+        // The subnet records and routing table entries of the deleted subnets should be gone.
+        for deleted_subnet_id in [
+            engine_subnet.subnet_id,
+            app_subnet.subnet_id,
+            vapp_subnet.subnet_id,
+        ] {
+            assert!(
+                new_topology_snapshot
+                    .subnet_canister_ranges(deleted_subnet_id)
+                    .is_empty()
+            );
+        }
 
-        // The nodes from the engine should be unassigned.
+        // The nodes from the deleted subnets should be unassigned.
+        let expected_unassigned_node_ids: BTreeSet<_> = engine_node_ids
+            .iter()
+            .chain(app_node_ids.iter())
+            .chain(vapp_node_ids.iter())
+            .copied()
+            .collect();
         let unassigned_node_ids = new_topology_snapshot
             .unassigned_nodes()
             .map(|x| x.node_id)
             .collect::<BTreeSet<_>>();
-        assert_eq!(unassigned_node_ids, engine_node_ids);
+        assert_eq!(unassigned_node_ids, expected_unassigned_node_ids);
 
         // The nodes' states should be wiped.
         for node in new_topology_snapshot.unassigned_nodes() {
