@@ -184,8 +184,10 @@ pub fn upgrade(
             sender_canister_version: None,
         };
         // Call the management canister directly instead of via `ic_utils`'s typed
-        // helper: `ic_utils` still depends on an older `ic-management-canister-types`,
-        // so its `take_canister_snapshot` expects an incompatible argument type.
+        // helper: `ic_utils` pulls `ic-management-canister-types` from crates.io, which
+        // Cargo treats as a distinct crate from this workspace's local copy (same 0.8.0
+        // version), so its `take_canister_snapshot` expects an incompatible
+        // `TakeCanisterSnapshotArgs` type.
         agent
             .update(&Principal::management_canister(), "take_canister_snapshot")
             .with_arg(Encode!(&snapshot_args).unwrap())
