@@ -38,7 +38,7 @@ wasm-encoder = { workspace = true }
 wasm-smith = { version = "0.243.0", features = ["wasmparser"] }
 wasmparser = { workspace = true }
 wasmprinter = { workspace = true }
-wasmtime = { version = "45.0.0", default-features = false, features = [
+wasmtime = { version = "46.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
