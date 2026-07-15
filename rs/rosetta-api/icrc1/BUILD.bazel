@@ -398,7 +398,6 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),
-    tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":ic-icrc-rosetta",

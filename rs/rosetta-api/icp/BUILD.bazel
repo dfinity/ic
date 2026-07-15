@@ -393,7 +393,6 @@ rust_test(
         "@crate_index//:test-strategy",
     ],
     tags = [
-        "cpu:4",
         "long_test",
     ],
     deps = [

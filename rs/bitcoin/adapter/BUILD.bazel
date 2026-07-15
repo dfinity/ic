@@ -138,9 +138,6 @@ rust_test(
         "RUST_TEST_NOCAPTURE": "1",
     },
     exec_properties = {"cpu": "4"},
-    tags = [
-        "cpu:4",
-    ],
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
         "@platforms//cpu:x86_64",

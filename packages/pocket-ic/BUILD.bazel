@@ -72,7 +72,6 @@ rust_test(
     },
     exec_properties = {"cpu": "16"},
     tags = [
-        "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
@@ -131,7 +130,6 @@ rust_test(
     },
     exec_properties = {"cpu": "16"},
     tags = [
-        "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
@@ -187,7 +185,6 @@ rust_test(
         },
         exec_properties = {"cpu": "16"},
         tags = [
-            "cpu:16",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
             # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",
@@ -259,7 +256,6 @@ rust_test(
     },
     exec_properties = {"cpu": "16"},
     tags = [
-        "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
@@ -289,7 +285,6 @@ rust_test(
     },
     exec_properties = {"cpu": "16"},
     tags = [
-        "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",

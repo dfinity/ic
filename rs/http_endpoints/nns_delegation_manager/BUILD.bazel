@@ -58,7 +58,6 @@ rust_test(
     },
     exec_properties = {"cpu": "4"},
     tags = [
-        "cpu:4",
         "requires-network",
     ],
     deps = [
