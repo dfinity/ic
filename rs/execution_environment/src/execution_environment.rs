@@ -1868,7 +1868,6 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 canister,
                                                 args,
-                                                self.config.log_memory_store_feature,
                                                 round_limits,
                                             )
                                         },
