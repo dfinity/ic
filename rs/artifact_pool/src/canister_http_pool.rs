@@ -49,7 +49,7 @@ enum ServedResponse {
 
 impl HasLabel for ServedResponse {
     fn label(&self) -> &str {
-        ""
+        "served_response"
     }
 }
 
