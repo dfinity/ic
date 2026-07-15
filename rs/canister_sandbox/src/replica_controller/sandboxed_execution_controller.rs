@@ -1519,7 +1519,7 @@ impl SandboxedExecutionController {
             .get_ref()
             .resource_limits()
             .maximum_state_delta
-            .and_then(|d| if d.get() != 0 { Some(d) } else { None })
+            .filter(|&d| d.get() != 0)
             .unwrap_or(self.default_subnet_heap_delta_capacity);
         heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO
     }

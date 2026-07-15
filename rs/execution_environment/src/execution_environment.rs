@@ -664,7 +664,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -1869,7 +1869,6 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 canister,
                                                 args,
-                                                self.config.log_memory_store_feature,
                                                 msg,
                                                 &self.cycles_account_manager,
                                                 subnet_cycles_config,
@@ -2701,7 +2700,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -2993,7 +2992,7 @@ impl ExecutionEnvironment {
             return ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 )),
                 refund: msg.take_cycles(),
             };
@@ -4875,7 +4874,7 @@ fn get_canister(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }
@@ -4892,7 +4891,7 @@ fn canister_make_mut(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }

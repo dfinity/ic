@@ -126,7 +126,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nr_no_bless_fix_like_np",
+    name = "nr_no_elect_fix_like_np",
     backend = "farm",  # Too big for the "local" backend.
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 4 * 40,  # 1 UVM + 1 GuestOS system node + 1 API BN + 1 ic-gateway (6 vCPUs each) + 4 nested HostOS nodes (40 vCPUs each, NNS_RECOVERY_VM_RESOURCE_OVERRIDES).
     env = ENV,

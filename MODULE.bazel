@@ -337,6 +337,18 @@ http_file(
     url = "https://snapshot.ubuntu.com/ubuntu/20260422T000000Z/pool/main/e/edk2-hwe/ovmf-generic-hwe_2025.11-3ubuntu8_all.deb",
 )
 
+# OVMF (UEFI) firmware for AMD SEV-SNP confidential VMs, extracted from the
+# `ovmf-amdsev` `.deb` (see https://packages.debian.org/sid/ovmf-amdsev). Same
+# rationale as `ovmf_deb` above: no official prebuilt firmware, so we pull it
+# from a `.deb` snapshot instead of `rules_distroless` to avoid bloating the
+# lockfile.
+http_file(
+    name = "ovmf_amdsev_deb",
+    downloaded_file_path = "ovmf-amdsev.deb",
+    sha256 = "4655196c4e3131c77f172a17d422beba350f09e8385f2e55e3abda83276781fe",
+    url = "https://snapshot.debian.org/archive/debian/20260403T143651Z/pool/main/e/edk2/ovmf-amdsev_2025.11-5_all.deb",
+)
+
 # TLA+ tools
 bazel_dep(name = "rules_java", version = "9.3.0")
 

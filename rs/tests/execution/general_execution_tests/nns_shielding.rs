@@ -17,7 +17,6 @@ use ic_types_test_utils::ids::node_test_id;
 use ic_universal_canister::wasm;
 use lazy_static::lazy_static;
 
-const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);

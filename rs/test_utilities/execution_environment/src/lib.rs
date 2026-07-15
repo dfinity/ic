@@ -2047,7 +2047,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let cost_schedule = state.get_own_cost_schedule();
         abort_all_paused_executions(&mut state, &self.exec_env, cost_schedule, &self.log);
-        for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
+        for paused_subnet_message in self.paused_subnet_messages.values_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
         self.state = Some(state);
@@ -2666,16 +2666,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
         self
     }
 
