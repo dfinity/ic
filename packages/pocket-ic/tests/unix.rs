@@ -945,7 +945,7 @@ const SPAWN_SERVER_HELPER_ENV: &str = "POCKET_IC_TEST_SPAWN_SERVER_HELPER";
 /// `SPAWN_SERVER_HELPER_ENV` set: spawns a PocketIC server, prints its pid and exits.
 #[tokio::test]
 async fn spawn_server_and_exit_helper() {
-    let Some(mode) = std::env::var_os(SPAWN_SERVER_HELPER_ENV) else {
+    let Ok(mode) = std::env::var(SPAWN_SERVER_HELPER_ENV) else {
         return;
     };
     let (server, server_url) = start_server(StartServerParams::default()).await;

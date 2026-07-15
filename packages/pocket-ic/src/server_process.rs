@@ -19,7 +19,7 @@
 use std::path::PathBuf;
 use std::process::Child;
 #[cfg(unix)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 #[cfg(unix)]
 use std::time::{Duration, Instant};
@@ -48,12 +48,14 @@ struct ServerProc {
 
 /// The process-global registry of spawned servers.
 struct Registry {
-    /// The pid of the process that created the registry and installed the atexit
-    /// reaper. `fork()`ed children inherit both the atexit registration and the
-    /// registry's memory; [`reap_all`] compares this against `getpid()` so that a forked
-    /// child exiting normally does not kill the servers its parent is still using.
+    /// The pid of the process the registry's entries belong to. `fork()`ed children
+    /// inherit both the atexit registration and the registry's memory; [`reap_all`]
+    /// compares this against `getpid()` so that a forked child exiting normally does not
+    /// kill the servers its parent is still using. A forked child that spawns servers of
+    /// its own first disowns the inherited entries and adopts the registry — updating
+    /// this pid — so its own servers are still reaped at its exit (see [`register`]).
     #[cfg(unix)]
-    owner_pid: libc::pid_t,
+    owner_pid: AtomicI32,
     /// The spawned servers, indexed by the [`ServerHandle`] returned to callers. A slot
     /// becomes `None` once its server has been reaped (by [`ServerHandle::kill_and_wait`],
     /// the opportunistic sweep in [`register`] or the exit-time reaper) or has been
@@ -90,7 +92,7 @@ fn registry() -> &'static Registry {
         }
         Registry {
             #[cfg(unix)]
-            owner_pid: std::process::id() as libc::pid_t,
+            owner_pid: AtomicI32::new(std::process::id() as libc::pid_t),
             servers: Mutex::new(Vec::new()),
         }
     })
@@ -118,6 +120,25 @@ pub(crate) fn register(child: Child, port_file_path: PathBuf) -> ServerHandle {
     let pgid = pid as libc::pid_t;
     let idx = {
         let mut servers = lock_registry();
+        // A `fork()`ed child inherits the registry, but the inherited entries belong to
+        // the parent: their processes are not this process's children to signal or reap.
+        // On the first registration after a fork, disown the inherited entries (clearing
+        // the slots, so any inherited `ServerHandle`s go inert instead of aliasing new
+        // entries) and adopt the registry for this process — the (equally inherited)
+        // exit-time reaper then cleans up exactly the servers spawned by this process.
+        #[cfg(unix)]
+        {
+            // SAFETY: getpid cannot fail and has no preconditions.
+            let current_pid = unsafe { libc::getpid() };
+            if registry().owner_pid.load(Ordering::SeqCst) != current_pid {
+                for slot in servers.iter_mut() {
+                    // Dropping a `Child` neither signals nor waits, so the parent's
+                    // servers are untouched.
+                    *slot = None;
+                }
+                registry().owner_pid.store(current_pid, Ordering::SeqCst);
+            }
+        }
         // Opportunistically clean up candidates that have already exited (e.g.
         // `reuse: true` candidates that lost the port-file race and exited on their own),
         // so they do not accumulate as zombies for the lifetime of long-lived processes.
@@ -279,9 +300,11 @@ extern "C" fn reap_all() {
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         // atexit registrations and the registry's memory are inherited across `fork()`:
         // a forked child exiting normally must not kill the servers its parent is still
-        // using.
+        // using. (A forked child that spawned servers of its own has adopted the
+        // registry — and disowned the parent's entries — in `register`, so it passes
+        // this check and reaps exactly its own servers.)
         // SAFETY: getpid cannot fail and has no preconditions.
-        if unsafe { libc::getpid() } != registry().owner_pid {
+        if unsafe { libc::getpid() } != registry().owner_pid.load(Ordering::SeqCst) {
             return;
         }
         // From here on, late registrations kill their server themselves (see `register`).
