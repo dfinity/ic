@@ -1200,8 +1200,13 @@ crate.spec(
         "flamegraph",
         "prost-codec",
     ],
+    # the upstream pprof uses outdated dependencies that bloat our dependency
+    # graph, so we use our own fork that updates some dependencies and loosens
+    # bounds:
+    # https://github.com/tikv/pprof-rs
+    git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    version = "^0.14.0",
+    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
 )
 crate.spec(
     package = "predicates",
@@ -2222,13 +2227,6 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
-)
-
-# reported upstream: https://github.com/aws/aws-lc-rs/issues/1137
-crate.annotation(
-    crate = "aws-lc-sys",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:aws-lc-sys.patch"],
 )
 crate.annotation(
     crate = "rustix",
