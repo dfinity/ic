@@ -215,6 +215,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
+    exec_properties = {"cpu": "4"},
     tags = [
         "cpu:4",
         "test_all_platforms_slow",
@@ -253,6 +254,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
+    exec_properties = {"cpu": "4"},
     tags = [
         "cpu:4",
         "test_all_platforms_slow",
@@ -288,6 +290,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
+    exec_properties = {"cpu": "4"},
     tags = [
         "cpu:4",
         "test_all_platforms_slow",

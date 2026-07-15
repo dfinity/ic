@@ -202,6 +202,7 @@ rust_ic_test_suite_with_extra_srcs(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
+    exec_properties = {"cpu": "8"},
     extra_srcs = [],
     proc_macro_deps = [
         # Keep sorted.
