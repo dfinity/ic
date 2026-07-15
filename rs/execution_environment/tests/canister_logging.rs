@@ -2601,7 +2601,7 @@ fn test_canister_log_resize_no_extra_charge_feature_disabled() {
 
 #[test]
 fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
-    // `fetch_canister_logs` charges no cycles fee (only round instructions), so a
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated), so a
     // call succeeds even when it attaches no cycles as payment.
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();

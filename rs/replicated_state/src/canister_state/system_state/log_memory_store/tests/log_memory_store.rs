@@ -486,12 +486,14 @@ fn fetch_canister_logs_response_within_limit() {
     // `records()` must trim.
     let max_response = RESULT_MAX_SIZE.get() as usize + 4 * KIB;
     let aggregate_capacity = 3 * RESULT_MAX_SIZE.get() as usize;
-    for content_len in [
+    let content_lens = [
         0,
         16 * KIB,
         128 * KIB,
         RESULT_MAX_SIZE.get() as usize - CanisterLogRecord::default().data_size(),
-    ] {
+    ];
+    let last = content_lens.len() - 1;
+    for (i, content_len) in content_lens.into_iter().enumerate() {
         let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
         s.resize_for_testing(aggregate_capacity);
         // Append records until at least `2 * RESULT_MAX_SIZE` bytes have been added
@@ -509,7 +511,17 @@ fn fetch_canister_logs_response_within_limit() {
 
         let records = s.records(None);
         // The returned records are trimmed to `RESULT_MAX_SIZE` by stored data size.
-        assert_le!(total_size(&records), RESULT_MAX_SIZE.get() as usize);
+        let returned_size = total_size(&records);
+        assert_le!(returned_size, RESULT_MAX_SIZE.get() as usize);
+        // The last (largest) content case is a single record whose `data_size()`
+        // equals `RESULT_MAX_SIZE` exactly (content = `RESULT_MAX_SIZE` minus the
+        // fixed per-record overhead), so the trim keeps precisely that one record and
+        // the returned size hits the cap exactly — not merely below it. This pins the
+        // trim boundary: an off-by-one that dropped the boundary record (`>` vs `>=`)
+        // would leave `returned_size` short of the cap and fail here.
+        if i == last {
+            assert_eq!(returned_size, RESULT_MAX_SIZE.get() as usize);
+        }
 
         let response = FetchCanisterLogsResponse {
             canister_log_records: records,

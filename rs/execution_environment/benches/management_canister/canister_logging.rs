@@ -361,7 +361,7 @@ fn fetch_response(
 }
 
 /// Size of the Candid-encoded `fetch_canister_logs` reply payload.
-fn fetch_reply_len(
+fn fetch_response_len(
     filter: Option<FetchCanisterLogsFilter>,
     log_memory_limit: u64,
     log_message_size: usize,
@@ -429,7 +429,7 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         // measure the real read/encode path rather than an error or empty result.
         // Unfiltered worst case must return a full ~2 MiB response of log data
         // (the response is trimmed to `RESULT_MAX_SIZE`, i.e. 2 MB).
-        assert!(fetch_reply_len(None, 2 * MIB, (32 * KIB) as usize) > 1_800_000);
+        assert!(fetch_response_len(None, 2 * MIB, (32 * KIB) as usize) > 1_800_000);
         // A match-all by-index filter returns the same records as no filter (the
         // 128 KiB buffer is small enough not to be trimmed to `RESULT_MAX_SIZE`).
         assert_eq!(
@@ -514,11 +514,13 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
             }
         }
         // No-match scan across the same growing log memory limits and content sizes:
-        // a valid filter positioned below the live idx range. The scan must early-exit
-        // (returning nothing in O(1)) rather than walk the whole buffer, so — unlike
-        // `filter:empty` (positioned past the newest index) — these times must stay
-        // flat as the buffer grows. A regression here would reintroduce a full-buffer
-        // scan that returns zero records yet is charged only the fixed base.
+        // a valid filter positioned below the live idx range. Its seek lands at the head
+        // (unlike `filter:empty`, positioned past the newest index, whose seek lands at
+        // the tail), so the scan must early-exit on the first record — already past the
+        // range end — to return nothing in O(1) rather than walk the whole buffer. These
+        // times must therefore stay flat as the buffer grows: a regression would
+        // reintroduce a full head-to-tail scan that returns zero records yet is charged
+        // only the fixed base.
         for (msg_name, msg_size) in [("0B", 0_usize), ("100B", 100_usize)] {
             for (name, limit) in log_memory_limits {
                 run_bench_fetch_no_match_scan(
