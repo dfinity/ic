@@ -568,14 +568,6 @@ pub struct SystemState {
     /// Canister global timer.
     pub global_timer: CanisterTimer,
 
-    /// The round time at which the canister's code was most recently deployed
-    /// (install, reinstall, or upgrade) or restored from a snapshot, in
-    /// nanoseconds since the Unix epoch. It is `None` when the canister has no
-    /// installed code (never installed, or uninstalled). It is also `None` for
-    /// canisters installed before this field was introduced, until their next
-    /// (re)install, upgrade, or snapshot restore.
-    pub last_install_timestamp: Option<Time>,
-
     /// Canister version.
     canister_version: u64,
 
@@ -775,7 +767,6 @@ impl SystemState {
             total_query_stats: TotalQueryStats::default(),
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
-            last_install_timestamp: None,
             canister_version: 0,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
@@ -812,7 +803,6 @@ impl SystemState {
         minimum_incoming_canister_call_cycles: Cycles,
         task_queue: TaskQueue,
         global_timer: CanisterTimer,
-        last_install_timestamp: Option<Time>,
         canister_version: u64,
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
@@ -847,7 +837,6 @@ impl SystemState {
             minimum_incoming_canister_call_cycles,
             task_queue,
             global_timer,
-            last_install_timestamp,
             canister_version,
             canister_history,
             wasm_chunk_store: WasmChunkStore::from_checkpoint(
@@ -2686,7 +2675,6 @@ pub mod testing {
             minimum_incoming_canister_call_cycles: Cycles::zero(),
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
-            last_install_timestamp: Default::default(),
             canister_version: Default::default(),
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),

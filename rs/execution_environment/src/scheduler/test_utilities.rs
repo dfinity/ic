@@ -1440,6 +1440,7 @@ impl TestWasmExecutorCore {
         }
         let execution_state = ExecutionState::new(
             execution_state::WasmBinary::new(canister_module),
+            None,
             ExportedFunctions::new(exported_functions.into_iter().collect()),
             Memory::new_for_testing(),
             Memory::new_for_testing(),

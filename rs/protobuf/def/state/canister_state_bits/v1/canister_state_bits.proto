@@ -163,6 +163,10 @@ message ExecutionStateBits {
   bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
   bool is_wasm64 = 8;
+  // The round time at which this code was installed/upgraded or restored from a
+  // snapshot, in nanoseconds since the Unix epoch. Absent for execution states
+  // persisted before this field was introduced.
+  optional uint64 last_install_timestamp_nanos = 9;
 }
 
 message StopCanisterContext {
@@ -430,7 +434,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 70
+// Next ID: 69
 message CanisterStateBits {
   reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
 
@@ -472,11 +476,6 @@ message CanisterStateBits {
   state.queues.v1.Cycles cycles_debit = 32;
   // Canister global timer, in nanoseconds since Unix epoch.
   optional uint64 global_timer_nanos = 33;
-  // The round time at which the canister's code was most recently deployed
-  // (install, reinstall, or upgrade) or restored from a snapshot, in
-  // nanoseconds since the Unix epoch. Absent when the canister has no installed
-  // code, and for canisters installed before this field was introduced.
-  optional uint64 last_install_timestamp_nanos = 69;
   // Canister version.
   uint64 canister_version = 34;
   // Consumed cycles by use case presented as gauges. When prepayments happen

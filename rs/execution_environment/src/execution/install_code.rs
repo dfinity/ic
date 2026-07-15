@@ -179,7 +179,6 @@ impl InstallCodeHelper {
             mode,
             module_hash: module_hash.clone(),
         });
-        self.canister.system_state.last_install_timestamp = Some(timestamp_nanos);
         let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
         let available_execution_memory_change =
             self.canister

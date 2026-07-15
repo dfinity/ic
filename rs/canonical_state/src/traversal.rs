@@ -349,6 +349,7 @@ mod tests {
 
         let execution_state = ExecutionState::new(
             wasm_binary,
+            Some(ic_types::Time::from_nanos_since_unix_epoch(1234)),
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory,
             Memory::new_for_testing(),
@@ -357,8 +358,6 @@ mod tests {
         );
 
         canister_state.execution_state = Some(execution_state);
-        canister_state.system_state.last_install_timestamp =
-            Some(ic_types::Time::from_nanos_since_unix_epoch(1234));
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);

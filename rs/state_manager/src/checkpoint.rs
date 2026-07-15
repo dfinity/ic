@@ -769,6 +769,9 @@ pub fn load_canister_state(
 
             Some(ExecutionState {
                 wasm_binary,
+                last_install_timestamp: execution_state_bits
+                    .last_install_timestamp_nanos
+                    .map(Time::from_nanos_since_unix_epoch),
                 exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
@@ -855,9 +858,6 @@ pub fn load_canister_state(
         canister_state_bits.minimum_incoming_canister_call_cycles,
         canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
-        canister_state_bits
-            .last_install_timestamp_nanos
-            .map(Time::from_nanos_since_unix_epoch),
         canister_state_bits.canister_version,
         canister_state_bits.canister_history,
         wasm_chunk_store_data,

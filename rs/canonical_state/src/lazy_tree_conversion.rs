@@ -919,8 +919,7 @@ impl<'a> CanisterFork<'a> {
                     Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
                 }
                 LAST_INSTALL_TIMESTAMP_LABEL => {
-                    let timestamp = canister
-                        .system_state
+                    let timestamp = execution_state
                         .last_install_timestamp
                         .expect("last_install_timestamp leaf present without a value");
                     num(timestamp.as_nanos_since_unix_epoch())
@@ -939,15 +938,15 @@ impl<'a> CanisterFork<'a> {
     /// Returns the labels applicable to this canister.
     #[inline]
     fn valid_labels(&self) -> &'static [&'static [u8]] {
-        match self.canister.execution_state {
+        match &self.canister.execution_state {
             // The `last_install_timestamp` leaf is only exposed from
-            // certification version `V27` onwards, and only when the canister
-            // has a recorded install timestamp (canisters installed before the
-            // field existed do not have one). Canisters with no installed code
+            // certification version `V27` onwards, and only when the execution
+            // state has a recorded install timestamp (code installed before the
+            // field existed does not have one). Canisters with no installed code
             // never expose it.
-            Some(_)
+            Some(execution_state)
                 if self.version >= CertificationVersion::V27
-                    && self.canister.system_state.last_install_timestamp.is_some() =>
+                    && execution_state.last_install_timestamp.is_some() =>
             {
                 &CANISTER_LABELS_WITH_INSTALL_TIMESTAMP
             }

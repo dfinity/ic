@@ -1656,12 +1656,16 @@ fn load_canister_snapshot_sets_last_install_timestamp() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
+    let last_install_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .execution_state
+            .as_ref()
+            .and_then(|es| es.last_install_timestamp)
+    };
+
     // Take a snapshot of the installed canister.
     let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
-    let install_time = test
-        .canister_state(canister_id)
-        .system_state
-        .last_install_timestamp;
+    let install_time = last_install_timestamp(&test);
     assert!(install_time.is_some());
 
     // Advance the round time so the restore time differs from the install time.
@@ -1670,12 +1674,7 @@ fn load_canister_snapshot_sets_last_install_timestamp() {
 
     // Loading the snapshot records the restore time as the install time.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .last_install_timestamp,
-        Some(restore_time)
-    );
+    assert_eq!(last_install_timestamp(&test), Some(restore_time));
     assert_ne!(Some(restore_time), install_time);
 }
 
@@ -3070,6 +3069,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     //
     let ExecutionState {
         wasm_binary,
+        last_install_timestamp: _,
         wasm_memory: _,
         stable_memory: _,
         exported_globals: _,

@@ -187,8 +187,12 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
+            // Exercise the `last_install_timestamp` leaf added in `V27`.
+            let last_install_timestamp = (certification_version >= CertificationVersion::V27)
+                .then(|| Time::from_nanos_since_unix_epoch(1234));
             let execution_state = ExecutionState::new(
                 wasm_binary,
+                last_install_timestamp,
                 ExportedFunctions::new(BTreeSet::new()),
                 wasm_memory,
                 Memory::new_for_testing(),
@@ -196,11 +200,6 @@ mod tests {
                 metadata,
             );
             canister_state.execution_state = Some(execution_state);
-            // Exercise the `last_install_timestamp` leaf added in `V27`.
-            if certification_version >= CertificationVersion::V27 {
-                canister_state.system_state.last_install_timestamp =
-                    Some(Time::from_nanos_since_unix_epoch(1234));
-            }
 
             state.put_canister_state(canister_state);
 
