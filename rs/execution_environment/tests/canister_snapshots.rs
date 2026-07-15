@@ -512,8 +512,8 @@ fn upload_and_load_snapshot_with_wasm_memory() {
     let wasm = wat::parse_str(wat).unwrap();
 
     // Encode counter value 42 at address 0 in the heap.
-    let mut heap = vec![0u8; MIB_2 as usize];
-    heap[..4].copy_from_slice(&42u32.to_le_bytes());
+    let mut heap = vec![0_u8; MIB_2 as usize];
+    heap[..4].copy_from_slice(&42_u32.to_le_bytes());
 
     let upload_args = UploadCanisterSnapshotMetadataArgs::new(
         canister_id,
@@ -541,7 +541,11 @@ fn upload_and_load_snapshot_with_wasm_memory() {
 
     // Execution fails gracefully: the (memory 1 1) module's declared max of 1 page
     // cannot be grown to the snapshot's 32 pages (2 MiB).
-    assert!(env.execute_ingress(canister_id, "inc", vec![]).is_err());
+    let err = env.execute_ingress(canister_id, "inc", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
+    assert!(err.description().contains(
+        "Failed to grow wasm memory by 31 page(s) to 32 page(s): exceeds module's declared maximum"
+    ));
 }
 
 #[test]
@@ -572,7 +576,7 @@ fn upgrade_with_keep_heap_exceeds_module_max_fails_gracefully() {
     let env = StateMachineBuilder::new().build();
     let canister_id = env
         .install_canister(
-            wat::parse_str(&COUNTER_WAT.replace("{MAX}", "20")).unwrap(),
+            wat::parse_str(COUNTER_WAT.replace("{MAX}", "20")).unwrap(),
             vec![],
             None,
         )
@@ -580,7 +584,7 @@ fn upgrade_with_keep_heap_exceeds_module_max_fails_gracefully() {
 
     // Call inc before upgrade: counter goes from 0 to 1.
     let result = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
-    assert_eq!(result, WasmResult::Reply(1u32.to_le_bytes().to_vec()));
+    assert_eq!(result, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
 
     // Upgrade to (memory 1 1) while keeping the heap (orthogonal persistence).
     // The heap retains 20 pages but the new module declares max=1 page.
@@ -594,7 +598,7 @@ fn upgrade_with_keep_heap_exceeds_module_max_fails_gracefully() {
                 wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
             })),
             canister_id: canister_id.get(),
-            wasm_module: wat::parse_str(&COUNTER_WAT.replace("{MAX}", "1")).unwrap(),
+            wasm_module: wat::parse_str(COUNTER_WAT.replace("{MAX}", "1")).unwrap(),
             arg: vec![],
             sender_canister_version: None,
         }
@@ -604,8 +608,11 @@ fn upgrade_with_keep_heap_exceeds_module_max_fails_gracefully() {
 
     // After the upgrade, calling inc must fail gracefully (not panic): the
     // retained 20-page heap exceeds the new module's declared maximum of 1 page.
-    let result = env.execute_ingress(canister_id, "inc", vec![]);
-    assert!(result.is_err());
+    let err = env.execute_ingress(canister_id, "inc", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
+    assert!(err.description().contains(
+        "Failed to grow wasm memory by 19 page(s) to 20 page(s): exceeds module's declared maximum"
+    ));
 }
 
 #[test]

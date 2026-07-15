@@ -99,8 +99,8 @@ pub fn upload_and_load_snapshot_with_wasm_memory(env: TestEnv) {
             .expect("Failed to upload snapshot wasm module");
 
         // Build a 2MiB heap with counter=42 encoded at address 0.
-        let mut heap = vec![0u8; MIB_2 as usize];
-        heap[..4].copy_from_slice(&42u32.to_le_bytes());
+        let mut heap = vec![0_u8; MIB_2 as usize];
+        heap[..4].copy_from_slice(&42_u32.to_le_bytes());
 
         // Upload the heap in 1MiB chunks to stay within the 2MiB message limit.
         const CHUNK_SIZE: usize = 1024 * 1024;
