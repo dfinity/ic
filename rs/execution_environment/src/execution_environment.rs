@@ -17,10 +17,7 @@ use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics};
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_config::execution_environment::{
-    Config as ExecutionConfig, SUBNET_HEAP_DELTA_CAPACITY,
-    guaranteed_response_message_memory_capacity,
-};
+use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
@@ -3474,8 +3471,7 @@ impl ExecutionEnvironment {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            full_subnet_memory_capacity(&self.config, state.resource_limits());
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config, &state);
         let execution_parameters = self.execution_parameters(
             canister_state,
             instruction_limits,
@@ -4860,16 +4856,17 @@ impl CompilationCostHandling {
 /// Returns the subnet's configured memory capacity (ignoring current usage).
 pub(crate) fn full_subnet_memory_capacity(
     config: &ExecutionConfig,
-    resource_limits: ResourceLimits,
+    state: &ReplicatedState,
 ) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new_scaled(
-        resource_limits
+        state
+            .resource_limits()
             .maximum_state_size_or(config.subnet_memory_capacity)
             .get() as i64,
-        guaranteed_response_message_memory_capacity(
-            resource_limits.maximum_state_delta_or(SUBNET_HEAP_DELTA_CAPACITY),
-        )
-        .get() as i64,
+        state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
+            .get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
         NonZeroU64::new(1).expect("scaling_factor must be non zero"),
     )

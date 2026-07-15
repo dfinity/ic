@@ -46,21 +46,6 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
 /// IC protocol requires storing copies of the canister state.
 const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * TIB);
 
-/// This is the upper limit on how much memory can be used by all guaranteed
-/// response canister messages on a given subnet.
-///
-/// Guaranteed response message memory usage is calculated as the total size of
-/// enqueued guaranteed responses; plus the maximum allowed response size per
-/// reserved guaranteed response slot.
-const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
-
-/// The limit on how much memory may be used by all guaranteed response messages
-/// on a given subnet at the end of a round.
-///
-/// During the round, the best-effort message memory usage may exceed the limit,
-/// but the constraint is restored at the end of the round by shedding messages.
-const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
-
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet message memory
 /// capacity because here we count actual memory consumption as opposed to
@@ -111,52 +96,6 @@ pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60)
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
 pub const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
-
-/// Message memory is capped at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of the
-/// subnet's heap delta capacity.
-const MESSAGE_MEMORY_HEAP_DELTA_DIVISOR: u64 = 3;
-
-/// The subnet's guaranteed response message memory capacity, capped at
-/// `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of `heap_delta_capacity`.
-pub fn guaranteed_response_message_memory_capacity(heap_delta_capacity: NumBytes) -> NumBytes {
-    message_memory_capacity(
-        SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
-        heap_delta_capacity,
-    )
-}
-
-/// The subnet's best-effort message memory capacity, capped at
-/// `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of `heap_delta_capacity`.
-pub fn best_effort_message_memory_capacity(heap_delta_capacity: NumBytes) -> NumBytes {
-    message_memory_capacity(
-        SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
-        heap_delta_capacity,
-    )
-}
-
-/// Test helper for configuring a subnet's `maximum_state_delta`: returns the
-/// heap delta capacity required to allow `message_memory` of message memory,
-/// i.e. the inverse of the cap applied by `message_memory_capacity`. Lives here
-/// so the `MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` factor stays confined to this
-/// module rather than being duplicated across tests.
-pub fn heap_delta_capacity_for_message_memory(message_memory: NumBytes) -> NumBytes {
-    NumBytes::new(message_memory.get() * MESSAGE_MEMORY_HEAP_DELTA_DIVISOR)
-}
-
-/// Caps `configured_default_capacity` at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR`
-/// of `heap_delta_capacity`.
-///
-/// Message memory is held in RAM alongside the heap delta pages, so this bounds
-/// message memory relative to a subnet's heap delta capacity (which is itself
-/// sized relative to available RAM).
-fn message_memory_capacity(
-    configured_default_capacity: NumBytes,
-    heap_delta_capacity: NumBytes,
-) -> NumBytes {
-    configured_default_capacity.min(NumBytes::new(
-        heap_delta_capacity.get() / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR,
-    ))
-}
 
 /// The maximum number of instructions for inspect_message calls.
 const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =

@@ -1,11 +1,10 @@
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_config::execution_environment::{
-    Config as HypervisorConfig, heap_delta_capacity_for_message_memory,
-};
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_resource_limits::ResourceLimits;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{

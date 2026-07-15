@@ -7,7 +7,6 @@ use std::{
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SubnetId};
 use ic_config::{
     embedders::Config as HypervisorConfig,
-    execution_environment::heap_delta_capacity_for_message_memory,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
@@ -41,7 +40,9 @@ use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, NumWasmPages,
     OutputRequest, ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
-    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    metadata_state::testing::{
+        NetworkTopologyTesting, SystemMetadataTesting, heap_delta_capacity_for_message_memory,
+    },
     metrics::ReplicatedStateMetrics,
     num_bytes_try_from,
     page_map::TestPageAllocatorFileDescriptorImpl,

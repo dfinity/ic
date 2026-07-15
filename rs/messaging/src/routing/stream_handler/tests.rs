@@ -4,11 +4,11 @@ use MessageBuilder::*;
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
-use ic_config::execution_environment::heap_delta_capacity_for_message_memory;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, Stream, SubnetTopology,
     metadata_state::{
