@@ -2669,16 +2669,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_flexible_http_requests_enabled(mut self) -> Self {
         self.execution_config.flexible_http_requests = FlagStatus::Enabled;
         self
