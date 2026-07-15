@@ -28,9 +28,9 @@ pub(crate) fn fetch_canister_logs(
     // is bounded by the flat per-message execution fee the caller pays to run its
     // response callback; the per-record and per-content-byte terms are dominated by
     // the per-byte message transmission fee the caller prepays on the response
-    // (which is ~1000x the per-byte instruction cost). A caller on a "free" cost
-    // schedule pays neither, but the read work it can trigger is still bounded by
-    // the round's instruction budget that this deduction draws down.
+    // (which is ~1000x the per-byte instruction cost). On a subnet with a "free"
+    // cost schedule the fee for the call is zero, which by design covers the work
+    // on such a subnet.
     let instructions = fetch_canister_logs_instructions(record_count, content_size);
     round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
