@@ -51,10 +51,10 @@ pub enum InvalidCanisterHttpPayloadReason {
     NotTimedOut(CallbackId),
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
-    /// A payment receipt claims a refund larger than the per-replica allowance
-    /// derived from the request's payment.
-    RefundExceedsAllowance {
-        refund: Cycles,
+    /// A payment receipt claims the replica spent more than the per-replica
+    /// allowance derived from the request's payment.
+    SpentExceedsAllowance {
+        spent: Cycles,
         per_replica_allowance: Cycles,
     },
     /// Some of the signatures in the canister http proof were not members of

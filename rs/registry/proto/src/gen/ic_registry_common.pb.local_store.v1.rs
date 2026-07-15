@@ -3,12 +3,12 @@
 /// produce the registry at version v+1
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChangelogEntry {
-    /// The default, an empty list, is _invalid_ here.
+    /// The default, an empty list, is *invalid* here.
     #[prost(message, repeated, tag = "1")]
     pub key_mutations: ::prost::alloc::vec::Vec<KeyMutation>,
 }
 /// A mutation of a single key.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeyMutation {
     /// Key.
     #[prost(string, tag = "1")]
@@ -21,7 +21,7 @@ pub struct KeyMutation {
     pub mutation_type: i32,
 }
 /// The time when the last certified update was successfully received.
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CertifiedTime {
     /// Number of nano seconds since UNIX EPOCH
     #[prost(uint64, tag = "1")]

@@ -40,6 +40,7 @@ prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
 itertools = { workspace = true }
 chrono = { workspace = true }
+rust_decimal = "1.37.1"
 
 [dev-dependencies]
 candid_parser = { workspace = true }

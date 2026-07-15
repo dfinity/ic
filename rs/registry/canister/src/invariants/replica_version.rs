@@ -42,16 +42,9 @@ pub(crate) fn check_replica_version_invariants(
     }
     versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
-    let elected_version_ids = get_all_replica_version_records(snapshot)
-        .into_iter()
-        .map(|(k, _)| k);
-
-    let num_elected = elected_version_ids.len();
-    let elected_set = BTreeSet::from_iter(elected_version_ids);
-    assert!(
-        elected_set.len() == num_elected,
-        "A version was elected multiple times."
-    );
+    let elected_set: BTreeSet<_> = get_all_replica_version_records(snapshot)
+        .into_keys()
+        .collect();
     assert!(
         elected_set.is_superset(&versions_in_use),
         "Using a version that isn't elected. Elected versions: {elected_set:?}, in use: {versions_in_use:?}."

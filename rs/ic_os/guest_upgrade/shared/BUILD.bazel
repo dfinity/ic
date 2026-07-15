@@ -20,7 +20,7 @@ cargo_build_script(
         "//bazel:protoc",
     ],
     deps = [
-        "@crate_index//:tonic-build",
+        "@crate_index//:tonic-prost-build",
     ],
 )
 
@@ -37,6 +37,7 @@ rust_library(
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
+        "@crate_index//:tonic-prost",
     ],
 )
 

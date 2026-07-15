@@ -803,7 +803,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterNotFound(canister_id) => Self::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found.{additional_help}", &canister_id),
+                format!("Canister {} not found.{additional_help}", canister_id),
             ),
             CanisterIdAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterIdAlreadyExists,

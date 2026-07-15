@@ -193,11 +193,6 @@ crate.spec(
     version = "^0.32.7-doge.0",
 )
 crate.spec(
-    features = [
-        "default",
-        "rand",
-        "use-serde",
-    ],
     package = "bitcoin",
     package_alias = "bitcoin-0-28",
     version = "^0.28.2",
@@ -455,7 +450,7 @@ crate.spec(
 crate.spec(
     features = ["serde"],
     package = "ethnum",
-    version = "^1.3.2",
+    version = "^1.5.3",
 )
 crate.spec(
     package = "evm_rpc_client",
@@ -1205,8 +1200,13 @@ crate.spec(
         "flamegraph",
         "prost-codec",
     ],
+    # the upstream pprof uses outdated dependencies that bloat our dependency
+    # graph, so we use our own fork that updates some dependencies and loosens
+    # bounds:
+    # https://github.com/tikv/pprof-rs
+    git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    version = "^0.14.0",
+    rev = "7f5228262196e3eb9c8d1ddbaca984787dea331a",
 )
 crate.spec(
     package = "predicates",
@@ -1264,11 +1264,11 @@ crate.spec(
 )
 crate.spec(
     package = "prost",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "prost-build",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "protobuf",
@@ -1811,11 +1811,19 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.13.1",
+    version = "^0.14.5",
 )
 crate.spec(
     package = "tonic-build",
-    version = "^0.13.1",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost-build",
+    version = "^0.14.5",
 )
 crate.spec(
     features = ["full"],
@@ -2219,13 +2227,6 @@ crate.annotation(
         "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
     },
     crate = "ring",
-)
-
-# reported upstream: https://github.com/aws/aws-lc-rs/issues/1137
-crate.annotation(
-    crate = "aws-lc-sys",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:aws-lc-sys.patch"],
 )
 crate.annotation(
     crate = "rustix",
