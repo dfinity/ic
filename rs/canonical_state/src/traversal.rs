@@ -502,12 +502,11 @@ mod tests {
             let path: [&[u8]; 3] = [b"canister", principal.as_slice(), b"system_metadata"];
             let leaf =
                 follow_path(&tree, &path).expect("every canister exposes `system_metadata` at V27");
-            let bytes = match leaf {
-                LazyTree::LazyBlob(f) => f(),
-                LazyTree::Blob(b, _) => b.to_vec(),
-                LazyTree::LazyFork(_) => panic!("`system_metadata` must be a leaf, not a subtree"),
+            // The `system_metadata` leaf is always encoded via `blob(..)`.
+            let LazyTree::LazyBlob(thunk) = leaf else {
+                unreachable!("the `system_metadata` leaf is a lazy blob");
             };
-            let map: BTreeMap<String, u64> = serde_cbor::from_slice(&bytes).unwrap();
+            let map: BTreeMap<String, u64> = serde_cbor::from_slice(&thunk()).unwrap();
             assert!(
                 map.is_empty(),
                 "expected an empty system_metadata map for {canister_id}, got {map:?}"
