@@ -3,7 +3,6 @@ use crate::routing::demux::Demux;
 use crate::routing::stream_builder::{
     StreamBuilder, generate_reject_responses_for_deleted_subnets,
 };
-use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
@@ -12,7 +11,7 @@ use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_replicated_state::{NetworkTopology, OwnSubnetInfo, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{ExecutionRound, NumBytes, SubnetId};
+use ic_types::{ExecutionRound, SubnetId};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -39,7 +38,6 @@ pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
-    best_effort_message_memory_capacity: NumBytes,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
 }
@@ -49,7 +47,6 @@ impl StateMachineImpl {
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
-        hypervisor_config: HypervisorConfig,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
     ) -> Self {
@@ -57,8 +54,6 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
-            best_effort_message_memory_capacity: hypervisor_config
-                .best_effort_message_memory_capacity,
             log,
             metrics,
         }
@@ -272,10 +267,11 @@ impl StateMachine for StateMachineImpl {
 
         // Shed enough messages to stay below the best-effort message memory limit.
         let shed_messages_timer = self.metrics.start_phase_timer(PHASE_SHED_MESSAGES);
-        state_after_stream_builder.enforce_best_effort_message_limit(
-            self.best_effort_message_memory_capacity,
-            &self.metrics,
-        );
+        let best_effort_message_memory_capacity = state_after_stream_builder
+            .metadata
+            .best_effort_message_memory_capacity();
+        state_after_stream_builder
+            .enforce_best_effort_message_limit(best_effort_message_memory_capacity, &self.metrics);
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         shed_messages_timer.observe_duration();
