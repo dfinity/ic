@@ -60,16 +60,6 @@ pub struct LogMemoryStore {
     /// modified: appended, cleared or deallocated.
     persistent_next_idx: u64,
 
-    /// Tracks whether the one-time migration from `CanisterLog` to
-    /// `LogMemoryStore` has already been performed for this canister.
-    ///
-    /// On the first round execution after the upgrade that enables the feature
-    /// the store is initialised with `DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT` and
-    /// existing `CanisterLog` records are copied in.  Once that has happened
-    /// this flag is set to `true` and persisted so that the migration is never
-    /// repeated, even if the user later resets `log_memory_limit` to 0.
-    migrated: bool,
-
     /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
@@ -100,28 +90,15 @@ impl LogMemoryStore {
     /// explicitly resized to a non-zero capacity.
     pub fn new() -> Self {
         const DEFAULT_NEXT_IDX: u64 = 0;
-        // A freshly created canister has no legacy CanisterLog records to migrate,
-        // so migration is considered done from the start.
-        let migrated = true;
-        Self::new_inner(None, DEFAULT_NEXT_IDX, migrated)
+        Self::new_inner(None, DEFAULT_NEXT_IDX)
     }
 
     /// Creates a new store from a checkpoint.
-    pub fn from_checkpoint(
-        maybe_page_map: Option<PageMap>,
-        persistent_next_idx: u64,
-        migrated: bool,
-    ) -> Self {
-        Self::new_inner(maybe_page_map, persistent_next_idx, migrated)
+    pub fn from_checkpoint(maybe_page_map: Option<PageMap>, persistent_next_idx: u64) -> Self {
+        Self::new_inner(maybe_page_map, persistent_next_idx)
     }
 
-    fn new_inner(
-        maybe_page_map: Option<PageMap>,
-        persistent_next_idx: u64,
-        migrated: bool,
-    ) -> Self {
-        let maybe_page_map = if migrated { maybe_page_map } else { None };
-        let persistent_next_idx = if migrated { persistent_next_idx } else { 0 };
+    fn new_inner(maybe_page_map: Option<PageMap>, persistent_next_idx: u64) -> Self {
         // Rebuild the first-timestamp cache from the ring buffer so the
         // invariant holds immediately after `from_checkpoint`, without
         // waiting for the next mutation to populate it.
@@ -132,22 +109,11 @@ impl LogMemoryStore {
         let store = Self {
             maybe_page_map,
             persistent_next_idx,
-            migrated,
             header_cache: OnceLock::new(),
             first_timestamp_cache,
         };
         debug_assert!(store.stats_ok());
         store
-    }
-
-    /// Returns `true` if the one-time migration from `CanisterLog` has already
-    /// been performed for this canister.
-    ///
-    /// Always `true` for stores created after the migration was completed on
-    /// all subnets; retained only so that the value keeps round-tripping
-    /// through checkpoints for replicas that predate the log memory store.
-    pub fn is_migrated(&self) -> bool {
-        self.migrated
     }
 
     /// Provides access to the underlying `PageMap`.
@@ -459,7 +425,6 @@ impl Clone for LogMemoryStore {
             // an independent snapshot.
             maybe_page_map: self.maybe_page_map.clone(),
             persistent_next_idx: self.persistent_next_idx,
-            migrated: self.migrated,
             // OnceLock is not Clone, so we must manually clone the state.
             header_cache: match self.header_cache.get() {
                 Some(val) => OnceLock::from(*val),
@@ -476,7 +441,6 @@ impl PartialEq for LogMemoryStore {
         // should not be compared.
         self.maybe_page_map == other.maybe_page_map
             && self.persistent_next_idx == other.persistent_next_idx
-            && self.migrated == other.migrated
     }
 }
 

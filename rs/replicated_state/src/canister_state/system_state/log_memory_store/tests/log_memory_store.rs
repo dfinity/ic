@@ -753,22 +753,12 @@ fn test_resize_down_preserves_records_and_next_idx() {
 }
 
 #[test]
-fn test_from_checkpoint_migrated() {
+fn test_from_checkpoint() {
     let some_page_map = Some(PageMap::new_for_testing());
 
-    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX, true);
+    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX);
     assert!(s.maybe_page_map().is_some());
     assert_eq!(s.next_idx(), TEST_NEXT_IDX);
-}
-
-#[test]
-fn test_from_checkpoint_not_migrated() {
-    let some_page_map = Some(PageMap::new_for_testing());
-
-    let s = LogMemoryStore::from_checkpoint(some_page_map, TEST_NEXT_IDX, false);
-    assert!(s.maybe_page_map().is_none());
-    // When not yet migrated, next_idx should be initialized to 0 regardless of the provided value.
-    assert_eq!(s.next_idx(), 0);
 }
 
 #[test]

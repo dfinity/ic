@@ -812,7 +812,6 @@ impl SystemState {
         canister_log: CanisterLog,
         log_memory_store_data: Option<PageMap>,
         log_memory_store_persistent_next_idx: u64,
-        log_memory_store_migrated: bool,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         environment_variables: BTreeMap<String, String>,
@@ -850,7 +849,6 @@ impl SystemState {
             log_memory_store: LogMemoryStore::from_checkpoint(
                 log_memory_store_data,
                 log_memory_store_persistent_next_idx,
-                log_memory_store_migrated,
             ),
             wasm_memory_limit,
             next_snapshot_id,
