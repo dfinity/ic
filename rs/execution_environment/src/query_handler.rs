@@ -204,13 +204,8 @@ impl InternalHttpQueryHandler {
                                 )
                             })?;
                     let result = Ok(WasmResult::Reply(
-                        fetch_canister_logs_response(
-                            query.source(),
-                            canister,
-                            args,
-                            self.config.log_memory_store_feature,
-                        )
-                        .map_err(UserError::from)?,
+                        fetch_canister_logs_response(query.source(), canister, args)
+                            .map_err(UserError::from)?,
                     ));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
