@@ -187,7 +187,7 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
-            // Exercise the `last_install_timestamp` leaf added in `V27`.
+            // Exercise the `system_metadata` leaf added in `V27`.
             let last_install_timestamp = (certification_version >= CertificationVersion::V27)
                 .then(|| Time::from_nanos_since_unix_epoch(1234));
             let execution_state = ExecutionState::new(
