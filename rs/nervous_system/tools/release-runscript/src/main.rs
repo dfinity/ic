@@ -334,14 +334,17 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
                     // The canister re-applies this on every post_upgrade, so
                     // the caller must be supplied each release to retain it
                     // (otherwise it reverts to the default).
-                    let new_caller = input(
-                        "Authorized caller principal for engine-controller? (leave empty for canister default)",
-                    )?;
-                    let authorized_caller = if new_caller.is_empty() {
-                        "null".to_string()
-                    } else {
-                        format!("opt principal \"{new_caller}\"")
-                    };
+let new_caller = input(
+    "Authorized caller principal for engine-controller? (leave empty for canister default)",
+)?;
+let authorized_caller = if new_caller.is_empty() {
+    "null".to_string()
+} else {
+    let principal = candid::Principal::from_text(&new_caller).map_err(|e| {
+        anyhow::anyhow!("Invalid principal '{new_caller}': {e}")
+    })?;
+    format!("opt principal \"{}\"", principal.to_text())
+};
                     let upgrade_arg = format!(
                         "(opt record {{ authorized_caller = {authorized_caller}; initial_dkg_subnet_id = null }})"
                     );
