@@ -7,6 +7,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
+use ic_test_utilities_metrics::{fetch_histogram_vec_stats, labels};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -48,6 +49,20 @@ fn canister_status(
         CallPath::Update => env.canister_status_as(sender, canister_id),
         CallPath::Query => env.canister_status_query_as(sender, canister_id),
     }
+}
+
+/// Returns the number of successful `canister_status` query calls recorded in
+/// the subnet query message duration metrics.
+fn canister_status_query_success_count(env: &StateMachine) -> u64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_query_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "query_ic00_canister_status"),
+        ("status", "success"),
+    ]))
+    .map_or(0, |stats| stats.count)
 }
 
 #[test]
@@ -136,6 +151,7 @@ fn test_status_visibility_of_canister_status() {
         assert_ne!(sender, canister_id.get());
 
         for call_path in [CallPath::Update, CallPath::Query] {
+            let query_success_before = canister_status_query_success_count(&env);
             let result = canister_status(&env, call_path, sender, canister_id);
             if expected_allowed {
                 let status = result
@@ -167,6 +183,21 @@ fn test_status_visibility_of_canister_status() {
                     err.description()
                 );
             }
+
+            // The successful `canister_status` query metric must increment
+            // exactly once for an allowed query call, and must not increment for
+            // a denied query call or for an update call (which is not recorded
+            // as a query message).
+            let expected_query_success_delta = match (call_path, expected_allowed) {
+                (CallPath::Query, true) => 1,
+                _ => 0,
+            };
+            assert_eq!(
+                canister_status_query_success_count(&env) - query_success_before,
+                expected_query_success_delta,
+                "unexpected successful query metric delta for status_visibility: \
+                 {status_visibility:?}, sender: {sender_label}, call path: {call_path:?}"
+            );
         }
     }
 }
