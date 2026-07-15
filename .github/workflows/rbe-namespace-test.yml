@@ -82,6 +82,8 @@ jobs:
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
 
+            --remote_default_exec_properties=namespace_action_isolation=sandboxed
+
             # Namespace currently limits the number of workers to 15
             --jobs=15
 
@@ -137,6 +139,8 @@ jobs:
 
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
+
+            --remote_default_exec_properties=namespace_action_isolation=sandboxed
 
             # Namespace currently limits the number of workers to 15
             --jobs=15
@@ -194,6 +198,8 @@ jobs:
 
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
+
+            --remote_default_exec_properties=namespace_action_isolation=sandboxed
 
             # Namespace currently limits the number of workers to 15
             --jobs=15
