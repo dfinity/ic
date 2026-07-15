@@ -10,8 +10,9 @@ use ic_system_test_driver::util::block_on;
 use ic_utils::interfaces::ManagementCanister;
 use slog::warn;
 
-/// Uploads a snapshot with 2MiB wasm_memory_size and a counter canister wasm,
-/// loads it, and verifies that execution sees the heap state from the snapshot.
+/// Uploads a snapshot with 2MiB wasm_memory_size for a `(memory 1 1)` module,
+/// loads it, and verifies that execution fails gracefully (rather than panicking):
+/// the module's declared max of 1 page cannot be grown to the snapshot's 32 pages.
 pub fn upload_and_load_snapshot_with_wasm_memory(env: TestEnv) {
     let logger = env.logger();
     let app_node = env.get_first_healthy_application_node_snapshot();
@@ -130,19 +131,15 @@ pub fn upload_and_load_snapshot_with_wasm_memory(env: TestEnv) {
             .await
             .expect("Failed to load snapshot");
 
-        // The heap was loaded with counter=42; each inc call increments and replies with the new value.
+        // Execution fails gracefully: the `(memory 1 1)` module's declared max of 1 page
+        // cannot be grown to the snapshot's 32 pages (2 MiB).
         let result = agent
             .update(&canister_principal, "inc")
             .call_and_wait()
-            .await
-            .expect("Failed to call inc");
-        assert_eq!(result, 43u32.to_le_bytes().to_vec());
-
-        let result = agent
-            .update(&canister_principal, "inc")
-            .call_and_wait()
-            .await
-            .expect("Failed to call inc");
-        assert_eq!(result, 44u32.to_le_bytes().to_vec());
+            .await;
+        assert!(
+            result.is_err(),
+            "expected inc to fail gracefully, got {result:?}"
+        );
     });
 }
