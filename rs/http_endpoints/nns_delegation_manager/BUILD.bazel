@@ -56,6 +56,7 @@ rust_test(
     env = {
         "RUST_TEST_THREADS": "4",
     },
+    exec_properties = {"cpu": "4"},
     tags = [
         "cpu:4",
         "requires-network",
