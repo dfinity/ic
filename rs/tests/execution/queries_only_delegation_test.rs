@@ -32,7 +32,15 @@ use reqwest::StatusCode;
 use slog::info;
 use strum::IntoEnumIterator;
 
-const UPDATE_REJECTED_MSG: &str = "Update calls are not permitted";
+// Substring of the validator error emitted by
+// `RequestValidationError::UpdateCallNotPermittedByDelegation` (defined in
+// `rs/validator/ingress_message/src/lib.rs`). Matching this string, rather
+// than a generic prefix like "Update calls are not permitted", verifies
+// that the rejection is specifically due to the queries-only delegation
+// restriction and not some other reason (e.g. a bad signature or expired
+// ingress).
+const UPDATE_REJECTED_MSG: &str =
+    "a delegation restricts the sender to query calls (permissions = \"queries\")";
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
