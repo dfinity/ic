@@ -2885,7 +2885,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
     // Verify the system state is preserved except for certified data, global timer,
-    // canister version, and canister history.
+    // canister version, canister history, and last install timestamp.
     let new_state = state
         .canister_state(&canister_id)
         .unwrap()
@@ -2899,6 +2899,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         canister_change_origin_from_canister(&controller),
         CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, module_hash),
     );
+    original_canister.system_state.last_install_timestamp = Some(state.time());
     assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
@@ -2930,7 +2931,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
     // Verify the system state is preserved except for certified data, global timer,
-    // canister version, and canister history.
+    // canister version, canister history, and last install timestamp.
     let new_state = state
         .canister_state(&canister_id)
         .unwrap()
@@ -2944,6 +2945,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         canister_change_origin_from_canister(&controller),
         CanisterChangeDetails::code_deployment(CanisterInstallMode::Reinstall, module_hash),
     );
+    original_canister.system_state.last_install_timestamp = Some(state.time());
     assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
@@ -2984,7 +2986,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
     // Verify the system state is preserved except for global timer,
-    // canister version, and canister history.
+    // canister version, canister history, and last install timestamp.
     let new_state = state
         .canister_state(&canister_id)
         .unwrap()
@@ -2997,6 +2999,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         canister_change_origin_from_canister(&controller),
         CanisterChangeDetails::code_deployment(CanisterInstallMode::Upgrade, module_hash),
     );
+    original_canister.system_state.last_install_timestamp = Some(state.time());
     assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
@@ -5112,6 +5115,48 @@ fn uninstall_code_clears_canister_state() {
     };
 
     operation_clears_canister_state(uninstall_code, true);
+}
+
+#[test]
+fn last_install_timestamp_tracks_code_deployment_and_uninstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let last_install_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .last_install_timestamp
+    };
+
+    // A freshly created canister has no installed code, hence no install time.
+    assert_eq!(last_install_timestamp(&test), None);
+
+    // Install records the current round time as the install time.
+    let install_time = test.state().time();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(install_time));
+
+    // Reinstall updates the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let reinstall_time = test.state().time();
+    assert!(reinstall_time > install_time);
+    test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(reinstall_time));
+
+    // Upgrade updates the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let upgrade_time = test.state().time();
+    assert!(upgrade_time > reinstall_time);
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(upgrade_time));
+
+    // Uninstall clears the install time. This exercises the same
+    // `uninstall_canister` primitive used by the out-of-cycles force uninstall.
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(last_install_timestamp(&test), None);
 }
 
 #[test]

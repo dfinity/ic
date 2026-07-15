@@ -39,6 +39,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             install_code_debit: item.install_code_debit.get(),
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
             global_timer_nanos: item.global_timer_nanos,
+            last_install_timestamp_nanos: item.last_install_timestamp_nanos,
             canister_version: item.canister_version,
             consumed_cycles_by_use_cases: item
                 .consumed_cycles_by_use_cases
@@ -196,6 +197,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::time_of_last_allocation_charge_nanos",
             )?,
             global_timer_nanos: value.global_timer_nanos,
+            last_install_timestamp_nanos: value.last_install_timestamp_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
             consumed_cycles_by_use_cases_as_counters,

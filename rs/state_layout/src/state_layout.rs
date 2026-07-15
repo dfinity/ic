@@ -189,6 +189,7 @@ pub struct CanisterStateBits {
     pub install_code_debit: NumInstructions,
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
+    pub last_install_timestamp_nanos: Option<u64>,
     pub canister_version: u64,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,

@@ -597,6 +597,7 @@ macro_rules! message_expander {
                 CertificationVersion::V24 => $expand::<{ CertificationVersion::V24 as u32 }>,
                 CertificationVersion::V25 => $expand::<{ CertificationVersion::V25 as u32 }>,
                 CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
+                CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
             }
         }
     };
@@ -876,6 +877,7 @@ const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
 const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
+const LAST_INSTALL_TIMESTAMP_LABEL: &[u8] = b"last_install_timestamp";
 
 const CANISTER_LABELS: [&[u8]; 4] = [
     CERTIFIED_DATA_LABEL,
@@ -885,6 +887,16 @@ const CANISTER_LABELS: [&[u8]; 4] = [
 ];
 
 const CANISTER_NO_MODULE_LABELS: [&[u8]; 1] = [CONTROLLERS_LABEL];
+
+// Same as the above, but including the `last_install_timestamp` leaf added in
+// certification version `V27`. Labels must stay in sorted order.
+const CANISTER_LABELS_WITH_INSTALL_TIMESTAMP: [&[u8]; 5] = [
+    CERTIFIED_DATA_LABEL,
+    CONTROLLERS_LABEL,
+    LAST_INSTALL_TIMESTAMP_LABEL,
+    METADATA_LABEL,
+    MODULE_HASH_LABEL,
+];
 
 #[derive(Clone)]
 struct CanisterFork<'a> {
@@ -906,6 +918,13 @@ impl<'a> CanisterFork<'a> {
                 MODULE_HASH_LABEL => {
                     Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
                 }
+                LAST_INSTALL_TIMESTAMP_LABEL => {
+                    let timestamp = canister
+                        .system_state
+                        .last_install_timestamp
+                        .expect("last_install_timestamp leaf present without a value");
+                    num(timestamp.as_nanos_since_unix_epoch())
+                }
                 _ => unreachable!(),
             },
             None => match label {
@@ -921,6 +940,17 @@ impl<'a> CanisterFork<'a> {
     #[inline]
     fn valid_labels(&self) -> &'static [&'static [u8]] {
         match self.canister.execution_state {
+            // The `last_install_timestamp` leaf is only exposed from
+            // certification version `V27` onwards, and only when the canister
+            // has a recorded install timestamp (canisters installed before the
+            // field existed do not have one). Canisters with no installed code
+            // never expose it.
+            Some(_)
+                if self.version >= CertificationVersion::V27
+                    && self.canister.system_state.last_install_timestamp.is_some() =>
+            {
+                &CANISTER_LABELS_WITH_INSTALL_TIMESTAMP
+            }
             Some(_) => &CANISTER_LABELS,
             None => &CANISTER_NO_MODULE_LABELS,
         }
@@ -980,6 +1010,7 @@ fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
         CertificationVersion::V24 => expand_canister::<{ CertificationVersion::V24 as u32 }>,
         CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
         CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
+        CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
     }
 }
 

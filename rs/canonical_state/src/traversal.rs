@@ -357,6 +357,8 @@ mod tests {
         );
 
         canister_state.execution_state = Some(execution_state);
+        canister_state.system_state.last_install_timestamp =
+            Some(ic_types::Time::from_nanos_since_unix_epoch(1234));
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
@@ -386,6 +388,10 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
+                // The `last_install_timestamp` leaf is only present from `V27`
+                // onwards, and sorts between `controllers` and `metadata`.
+                (certification_version >= CertificationVersion::V27)
+                    .then(|| vec![edge("last_install_timestamp"), leb_num(1234)]),
                 Some(vec![
                     edge("metadata"),
                     E::StartSubtree,

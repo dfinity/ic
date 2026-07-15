@@ -1262,6 +1262,10 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .global_timer
                 .to_nanos_since_unix_epoch(),
+            last_install_timestamp_nanos: canister_state
+                .system_state
+                .last_install_timestamp
+                .map(|t| t.as_nanos_since_unix_epoch()),
             canister_version: canister_state.system_state.canister_version(),
             consumed_cycles_by_use_cases: canister_state
                 .system_state

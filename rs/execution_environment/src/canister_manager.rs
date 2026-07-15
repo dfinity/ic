@@ -2415,6 +2415,7 @@ impl CanisterManager {
 
         // Increment canister version.
         new_canister.system_state.bump_canister_version();
+        new_canister.system_state.last_install_timestamp = Some(time);
         let available_execution_memory_change = new_canister.add_canister_change(
             time,
             origin,
@@ -3068,6 +3069,7 @@ pub fn uninstall_canister(
 
     // Drop the canister's execution state.
     canister.execution_state = None;
+    canister.system_state.last_install_timestamp = None;
 
     // Clear canister log.
     canister.clear_log();

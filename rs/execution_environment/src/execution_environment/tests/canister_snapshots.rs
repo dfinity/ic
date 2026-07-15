@@ -1649,6 +1649,37 @@ fn helper_load_snapshot(
 }
 
 #[test]
+fn load_canister_snapshot_sets_last_install_timestamp() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    // Take a snapshot of the installed canister.
+    let (snapshot_id, _) = helper_take_snapshot(&mut test, canister_id);
+    let install_time = test
+        .canister_state(canister_id)
+        .system_state
+        .last_install_timestamp;
+    assert!(install_time.is_some());
+
+    // Advance the round time so the restore time differs from the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let restore_time = test.state().time();
+
+    // Loading the snapshot records the restore time as the install time.
+    helper_load_snapshot(&mut test, canister_id, snapshot_id);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .last_install_timestamp,
+        Some(restore_time)
+    );
+    assert_ne!(Some(restore_time), install_time);
+}
+
+#[test]
 fn load_canister_snapshot_updates_hook_condition() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);

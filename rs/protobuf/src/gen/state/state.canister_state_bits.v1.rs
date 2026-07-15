@@ -645,7 +645,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 69
+/// Next ID: 70
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "4")]
@@ -705,6 +705,12 @@ pub struct CanisterStateBits {
     /// Canister global timer, in nanoseconds since Unix epoch.
     #[prost(uint64, optional, tag = "33")]
     pub global_timer_nanos: ::core::option::Option<u64>,
+    /// The round time at which the canister's code was most recently deployed
+    /// (install, reinstall, or upgrade) or restored from a snapshot, in
+    /// nanoseconds since the Unix epoch. Absent when the canister has no installed
+    /// code, and for canisters installed before this field was introduced.
+    #[prost(uint64, optional, tag = "69")]
+    pub last_install_timestamp_nanos: ::core::option::Option<u64>,
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,

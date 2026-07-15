@@ -52,6 +52,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         time_of_last_allocation_charge_nanos: 0,
         task_queue: TaskQueue::default(),
         global_timer_nanos: None,
+        last_install_timestamp_nanos: None,
         canister_version: 0,
         consumed_cycles_by_use_cases: BTreeMap::new(),
         consumed_cycles_by_use_cases_as_counters: BTreeMap::new(),
@@ -113,6 +114,28 @@ fn test_encode_decode_empty_controllers() {
 
     // Controllers are still empty, as expected.
     assert_eq!(canister_state_bits.controllers, BTreeSet::new());
+}
+
+#[test]
+fn test_encode_decode_last_install_timestamp() {
+    // A set install timestamp survives the protobuf round-trip.
+    let canister_state_bits = CanisterStateBits {
+        last_install_timestamp_nanos: Some(1_234_567_890),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        canister_state_bits.last_install_timestamp_nanos,
+        Some(1_234_567_890)
+    );
+
+    // A missing field (e.g. checkpoints predating this field) decodes to `None`.
+    let mut pb_bits =
+        pb_canister_state_bits::CanisterStateBits::from(default_canister_state_bits());
+    pb_bits.last_install_timestamp_nanos = None;
+    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(canister_state_bits.last_install_timestamp_nanos, None);
 }
 
 #[test]
