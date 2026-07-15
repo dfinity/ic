@@ -259,7 +259,7 @@ fn filter_range_outside_live_records_returns_empty() {
     delta.add_record(10, b"a".to_vec()); // idx 0, ts 10
     delta.add_record(20, b"b".to_vec()); // idx 1, ts 20
     delta.add_record(30, b"c".to_vec()); // idx 2, ts 30
-    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    let mut s = LogMemoryStore::new();
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     s.append_delta_log(&mut delta);
     assert!(
@@ -271,7 +271,7 @@ fn filter_range_outside_live_records_returns_empty() {
 
     // By index — range entirely below the oldest live index. Force eviction so the
     // oldest index is > 0, giving a non-empty `[0, oldest)` range that matches nothing.
-    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    let mut s = LogMemoryStore::new();
     s.resize_for_testing(50_000);
     append_deltas(&mut s, 0, 100_000, 10_000, 1_000);
     let live = s.records(None);
@@ -310,7 +310,7 @@ fn filter_end_boundary_around_a_record() {
     delta.add_record(10, b"a".to_vec()); // idx 0, ts 10
     delta.add_record(20, b"b".to_vec()); // idx 1, ts 20
     delta.add_record(30, b"c".to_vec()); // idx 2, ts 30
-    let mut s = LogMemoryStore::new(TEST_LOG_MEMORY_STORE_FEATURE);
+    let mut s = LogMemoryStore::new();
     s.resize_for_testing(TEST_LOG_MEMORY_LIMIT);
     s.append_delta_log(&mut delta);
 
