@@ -12,9 +12,6 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 
-/// Initial cycles balance for the created canister, big enough for a regular test.
-const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100 * 1_000_000_000_000);
-
 /// The call path used to invoke the `canister_status` management endpoint.
 #[derive(Clone, Copy, Debug)]
 enum CallPath {
@@ -138,9 +135,10 @@ fn test_status_visibility_of_canister_status() {
 
     for (status_visibility, sender, sender_label, expected_allowed) in test_cases {
         let env = setup(subnet_admin);
+        // The subnet uses a free cost schedule, so no cycles are needed.
         let canister_id = env.create_canister_with_cycles(
             None,
-            INITIAL_CYCLES_BALANCE,
+            Cycles::zero(),
             Some(
                 CanisterSettingsArgsBuilder::new()
                     .with_controllers(vec![controller])
@@ -155,8 +153,11 @@ fn test_status_visibility_of_canister_status() {
             let result = canister_status(&env, call_path, sender, canister_id);
             if expected_allowed {
                 let status = result
-                    .expect("expected a successful response")
-                    .expect("expected access to be granted");
+                    .expect("expected access to be granted")
+                    // `canister_status` invoked via an ingress or query call never
+                    // produces a reject response (a reject is only possible for an
+                    // inter-canister call), so this layer is expected to be unreachable.
+                    .expect("unexpected reject response");
                 assert_eq!(
                     status.settings().status_visibility(),
                     &status_visibility,
