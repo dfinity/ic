@@ -154,6 +154,7 @@ rust_test(
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:libc",
         "@crate_index//:maplit",
         "@crate_index//:prost",
         "@crate_index//:reqwest",
