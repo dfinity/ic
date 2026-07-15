@@ -169,8 +169,6 @@ rust_ic_test_suite(
         "INTER_CANISTER_ERROR_HANDLING_WASM_PATH": "$(rootpath :inter_canister_error_handling)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    # Needed for //rs/rust_canisters/tests:tests_test_test/{hooks_test, test_test}:
-    tags = ["no-remote-exec"],  # TODO: remove after RBE @ Namespace supports network sandboxing.
     deps = [
         # Keep sorted.
         "//packages/ic-error-types",

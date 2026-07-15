@@ -112,7 +112,6 @@ rust_test(
         "@crate_index//:derive-new",
         "@crate_index//:indoc",
     ],
-    tags = ["no-remote-exec"],  # TODO: remove after RBE @ Namespace supports network sandboxing.
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
