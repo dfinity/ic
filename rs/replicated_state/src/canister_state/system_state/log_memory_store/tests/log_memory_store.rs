@@ -481,8 +481,8 @@ fn fetch_canister_logs_response_within_limit() {
     // sweep record sizes from empty content up to a single near-maximal record and
     // assert the encoded `FetchCanisterLogsResponse` fits within the result cap plus a
     // 4 KiB page for Candid framing (the bound that `ic-types` asserts fits in an
-    // inter-canister message). `append_deltas` below adds `2 * RESULT_MAX_SIZE` of
-    // records regardless of record size, so the buffer always exceeds the cap and
+    // inter-canister message). `append_deltas` below appends at least `2 * RESULT_MAX_SIZE` bytes
+    // of stored records (across one or more deltas), so the buffer always exceeds the cap and
     // `records()` must trim.
     let max_response = RESULT_MAX_SIZE.get() as usize + 4 * KIB;
     let aggregate_capacity = 3 * RESULT_MAX_SIZE.get() as usize;
