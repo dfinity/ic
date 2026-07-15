@@ -6,7 +6,7 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::validate_controller;
+use crate::execution::common::{list_canisters, validate_controller};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -216,7 +216,7 @@ pub struct RoundCounters<'a> {
 /// Contains round-specific context necessary for resuming a paused execution.
 #[derive(Clone)]
 pub struct RoundContext<'a> {
-    pub network_topology: &'a NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
     pub hypervisor: &'a Hypervisor,
     pub cycles_account_manager: &'a CyclesAccountManager,
     pub counters: RoundCounters<'a>,
@@ -664,7 +664,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -1083,6 +1083,27 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::ListCanisters) => match &msg {
+                CanisterCall::Request(_) => {
+                    // Only deduct round instructions for building the response
+                    // (i.e. the canister ID range computation) when access
+                    // control succeeds; a rejected call must not consume round
+                    // instructions.
+                    let res =
+                        list_canisters(&state, msg.sender(), payload).map(|(res, instructions)| {
+                            round_limits.instructions -= as_round_instructions(instructions);
+                            (res, None)
+                        });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::ListCanisters)
+                }
+            },
+
             Ok(Ic00Method::CanisterInfo) => match &msg {
                 CanisterCall::Request(_) => {
                     let res = CanisterInfoRequest::decode(payload).and_then(|record| {
@@ -1268,7 +1289,7 @@ impl ExecutionEnvironment {
                 },
             },
 
-            Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
+            Ok(Ic00Method::HttpRequest) => match state.subnet_features().http_requests {
                 true => match &msg {
                     CanisterCall::Request(request) => {
                         match CanisterHttpRequestArgs::decode(payload) {
@@ -1848,7 +1869,6 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 canister,
                                                 args,
-                                                self.config.log_memory_store_feature,
                                                 msg,
                                                 &self.cycles_account_manager,
                                                 subnet_cycles_config,
@@ -2330,7 +2350,7 @@ impl ExecutionEnvironment {
         };
 
         let round = RoundContext {
-            network_topology: &network_topology,
+            network_topology: network_topology.clone(),
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             counters: round_counters,
@@ -2680,7 +2700,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -2972,7 +2992,7 @@ impl ExecutionEnvironment {
             return ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 )),
                 refund: msg.take_cycles(),
             };
@@ -3322,7 +3342,7 @@ impl ExecutionEnvironment {
         };
 
         let round = RoundContext {
-            network_topology: &network_topology,
+            network_topology,
             hypervisor: &self.hypervisor,
             cycles_account_manager: &self.cycles_account_manager,
             counters: round_counters,
@@ -3465,7 +3485,7 @@ impl ExecutionEnvironment {
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,
-            &state.metadata.network_topology,
+            Arc::clone(&state.metadata.network_topology),
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
@@ -4130,7 +4150,7 @@ impl ExecutionEnvironment {
             prepaid_execution_cycles,
             old_canister,
             state.time(),
-            &state.metadata.network_topology,
+            Arc::clone(&state.metadata.network_topology),
             execution_parameters,
             round_limits,
             compilation_cost_handling,
@@ -4177,7 +4197,7 @@ impl ExecutionEnvironment {
                         }
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
+                            "Finished executing install_code message on canister {} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
                             canister_id,
                             execution_duration,
                             result.old_wasm_hash,
@@ -4190,7 +4210,7 @@ impl ExecutionEnvironment {
                     Err(err) => {
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?} with error: {:?}, instructions consumed {}",
+                            "Finished executing install_code message on canister {} after {:?} with error: {:?}, instructions consumed {}",
                             canister_id,
                             execution_duration,
                             err,
@@ -4308,7 +4328,7 @@ impl ExecutionEnvironment {
                     ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
                 };
                 let round = RoundContext {
-                    network_topology: &state.metadata.network_topology,
+                    network_topology: Arc::clone(&state.metadata.network_topology),
                     hypervisor: &self.hypervisor,
                     cycles_account_manager: &self.cycles_account_manager,
                     counters: round_counters,
@@ -4854,7 +4874,7 @@ fn get_canister(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }
@@ -4871,7 +4891,7 @@ fn canister_make_mut(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }
@@ -4997,7 +5017,7 @@ pub fn execute_canister(
                     ingress_with_cycles_error: &exec_env.metrics.ingress_with_cycles_error,
                 };
                 let round_context = RoundContext {
-                    network_topology: &network_topology,
+                    network_topology,
                     hypervisor: &exec_env.hypervisor,
                     cycles_account_manager: &exec_env.cycles_account_manager,
                     counters: round_counters,

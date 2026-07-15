@@ -325,6 +325,13 @@ pub struct HashTree {
     /// they are rebuilt on demand from the `SubtreeSource` (see
     /// [`HashTree::witness`]).
     stubs: Vec<Vec<StubNode>>,
+
+    /// Number of digests (stubs) reused from a baseline during the construction of
+    /// this [`HashTree`].
+    reused_stubs: usize,
+    /// Number of children built in parallel during the construction of this
+    /// [`HashTree`].
+    parallel_built_children: usize,
 }
 
 /// A reusable subtree collapsed to a single digest ("stub"), stored in a
@@ -368,6 +375,8 @@ impl HashTree {
             node_children: vec![Default::default()],
             node_children_labels_ranges: vec![Default::default()],
             stubs: vec![Default::default()],
+            reused_stubs: 0,
+            parallel_built_children: 0,
         }
     }
 
@@ -412,6 +421,18 @@ impl HashTree {
             .unwrap_or(0);
 
         leaf_size.max(fork_size).max(node_size).max(stub_size)
+    }
+
+    /// Number of subtree digests reused from a baseline `HashTree` during this
+    /// tree's construction (rather than recomputed).
+    pub fn reused_stubs(&self) -> usize {
+        self.reused_stubs
+    }
+
+    /// Number of labeled nodes (fork children) built in parallel during this
+    /// tree's construction.
+    pub fn parallel_built_children(&self) -> usize {
+        self.parallel_built_children
     }
 
     /// Number of [`NodeKind::Stub`] nodes in this tree.
@@ -779,9 +800,16 @@ impl HashTree {
             if pos.kind() == NodeKind::Stub {
                 // A stub, only storing its root digest.
                 return match t {
-                    // Requested partial tree descends into the subtree: rebuild it from source and
-                    // continue witness generation there.
-                    LabeledTree::SubTree(children) if !children.is_empty() => {
+                    // Witness only needs the precomputed digest.
+                    LabeledTree::SubTree(children) if children.is_empty() => {
+                        Ok(B::make_pruned(ht.digest(pos).clone()))
+                    }
+
+                    // Requested partial tree descends into the subtree or requests its leaf value:
+                    // rebuild the subtree from source and continue witness generation there. (A
+                    // stubbed subtree may itself be a single leaf, e.g. a stream message, in which
+                    // case `t` is a `Leaf` whose value the witness must carry.)
+                    _ => {
                         // Sanity check: a complete `HashTree` has no bucket offset.
                         debug_assert_eq!(ht.bucket_offset, 0);
 
@@ -791,9 +819,6 @@ impl HashTree {
                             .expect("expanding a stub should not fail");
                         go::<B>(&expanded, NodeId::empty(), expanded.root, t)
                     }
-
-                    // Witness only needs the precomputed digest.
-                    _ => Ok(B::make_pruned(ht.digest(pos).clone())),
                 };
             }
 
@@ -848,6 +873,12 @@ impl HashTree {
 
         // Reusable stubs
         self.stubs.extend(subtree.stubs);
+
+        // Roll up the worker's build statistics. (`parallel_built_children` is
+        // always 0 in a worker, which builds sequentially, but is folded in for
+        // symmetry.)
+        self.reused_stubs += subtree.reused_stubs;
+        self.parallel_built_children += subtree.parallel_built_children;
     }
 }
 
@@ -996,31 +1027,16 @@ impl<'a> BaselineCursor<'a> {
 /// The resulting tree has the exact same root hash as a fully materialized
 /// build; witnesses that descend into a stubbed subtree rebuild it on demand
 /// from the [`SubtreeSource`] held in the stub (see [`HashTree::witness`]).
-pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
-    hash_lazy_tree_impl(t, None)
-}
-
-/// Like [`hash_lazy_tree`], but reuses the [`NodeKind::Stub`] nodes of
-/// unchanged subtrees from `baseline`.
 ///
-/// The new lazy tree and the baseline tree are traversed in lockstep (children
-/// merge-joined by label). Wherever a child carries a [`SubtreeSource`] equal
-/// to the one the baseline stores under the same label the baseline's stored
-/// digest is reused instead of building and hashing the subtree.
-///
-/// The result is identical (same root hash, same witnesses) to a full
-/// [`hash_lazy_tree`] build, regardless of `baseline`. In particular, a
-/// `baseline` built under a different certification version is safe to pass:
-/// its subtrees carry a different expander, so none of them are reused (they
-/// are simply rebuilt).
-pub fn hash_lazy_tree_with_baseline<'a>(
-    t: &LazyTree<'a>,
-    baseline: &'a HashTree,
-) -> Result<HashTree, HashTreeError> {
-    hash_lazy_tree_impl(t, Some(baseline))
-}
-
-fn hash_lazy_tree_impl<'a>(
+/// If a `baseline` tree is provided, the [`NodeKind::Stub`] nodes of unchanged
+/// subtrees are reused from it: the lazy tree and the baseline are traversed in
+/// lockstep (children merge-joined by label), and wherever a child carries an
+/// equal [`SubtreeSource`], it is reused instead of rebuilt. The result is
+/// identical (same root hash, same witnesses) regardless of `baseline`; in
+/// particular, a `baseline` built under a different certification version is
+/// safe to pass: its subtrees carry a different expander, so none of them are
+/// reused (they are simply rebuilt).
+pub fn hash_lazy_tree<'a>(
     t: &LazyTree<'a>,
     baseline: Option<&'a HashTree>,
 ) -> Result<HashTree, HashTreeError> {
@@ -1096,7 +1112,10 @@ fn hash_lazy_tree_impl<'a>(
                     // Unchanged: the baseline carries an equal `SubtreeSource` — same source
                     // allocation *and* same expander (hence same certification version) — so its
                     // digest is reused without materializing the child.
-                    Some(stub) if stub.source == source => (stub.digest.clone(), false),
+                    Some(stub) if stub.source == source => {
+                        ht.reused_stubs += 1;
+                        (stub.digest.clone(), false)
+                    }
 
                     // New, changed, or built under a different version: rebuild the subtree from
                     // its (current) `source` only to capture its root digest; if later needed for
@@ -1307,6 +1326,8 @@ fn hash_lazy_tree_impl<'a>(
         mut tail: impl Iterator<Item = (usize, (Label, Child<'a>, Option<BaselineCursor<'a>>))>,
         tail_len: usize,
     ) -> Result<(), HashTreeError> {
+        ht.parallel_built_children += tail_len;
+
         let bucket_offset = ht.node_children.len();
         let threads = thread_pool.thread_count() as usize;
         debug_assert!(threads > 0);

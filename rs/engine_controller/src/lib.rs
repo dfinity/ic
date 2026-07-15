@@ -13,6 +13,7 @@ pub use registry_canister::mutations::do_create_subnet::NewSubnet;
 // Re-export the payload types accepted by the proxy endpoints
 // (`update_subnet` and `deploy_guestos_to_all_subnet_nodes`) so clients
 // don't have to depend on `registry-canister` directly to construct them.
+pub use registry_canister::mutations::do_change_subnet_membership::ChangeSubnetMembershipPayload;
 pub use registry_canister::mutations::do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload;
 pub use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 
@@ -31,7 +32,7 @@ pub struct EngineControllerInitArgs {
 pub struct CreateEngineArgs {
     pub node_ids: Vec<Principal>,
     pub subnet_admins: Vec<Principal>,
-    /// Blessed replica version that the new engine subnet should run.
+    /// Elected replica version that the new engine subnet should run.
     pub replica_version_id: String,
 }
 

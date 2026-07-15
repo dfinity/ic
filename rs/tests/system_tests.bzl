@@ -138,6 +138,15 @@ def system_test(
 
     _runtime_deps["TEST_BIN"] = test_driver_target
 
+    # Bazel-built FAT tools the driver uses to assemble config images for
+    # universal VMs / SetupOS / GuestOS, instead of system dosfstools/mtools.
+    # These are set on the test process and read (by name) from the driver and
+    # the config-image scripts it spawns; see run_systest.sh (symlink handling)
+    # and colocate_test.rs.
+    _runtime_deps["MKFS_FAT"] = "@dosfstools//:mkfs.fat"
+    _runtime_deps["MCOPY"] = "@mtools//:mcopy"
+    _runtime_deps["MLABEL"] = "@mtools//:mlabel"
+
     env_var_files = {}
     icos_images = dict()
 
@@ -266,7 +275,7 @@ def system_test(
     env["RUN_SCRIPT_VOLATILE_STATUS_PATH"] = "$(rootpath //bazel:volatile-status.txt)"
     data.append("//bazel:volatile-status.txt")
 
-    # Runtime deps that are only needed when running on the local (libvirt-based) backend.
+    # Runtime deps that are only needed when running on the local (QEMU-based) backend.
     _local_only_deps = {
         image_name + "_PATH": image_path
         for image_name, image_path in icos_images.items()
@@ -283,8 +292,16 @@ def system_test(
 
     _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
     _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
-    _local_only_deps["ENV_DEPS__LIBVIRTD_PATH"] = "//rs/tests:libvirtd"
-    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "//rs/tests:dnsmasq"
+    _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
+    _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
+
+    # Split OVMF (UEFI) firmware for the QEMU VMs (see local_backend.rs). The
+    # code image is mounted read-only and shared; the vars image is a per-VM
+    # writable varstore template.
+    _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
+    _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
@@ -456,16 +473,10 @@ def uvm_config_image(name, tags = None, visibility = None, srcmap = None, teston
         name = name + "_vfat",
         srcs = [":" + name + "_size"],
         outs = [name + "_vfat.img"],
-        tools = ["//:mkfs.fat"],
-        # //:mkfs.fat resolves to the dosfstools bundle (mkfs.fat + fatlabel),
-        # so pick out the mkfs.fat binary by name.
+        tools = ["@dosfstools//:mkfs.fat"],
         cmd = """
-        mkfs_fat=
-        for f in $(locations //:mkfs.fat); do
-            case "$$f" in */mkfs.fat) mkfs_fat="$$f" ;; esac
-        done
         truncate -s $$(cat $<) $@
-        "$$mkfs_fat" -i "0" -n CONFIG $@
+        $(location @dosfstools//:mkfs.fat) -i 0 -n CONFIG $@
         """,
         tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],

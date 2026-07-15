@@ -381,9 +381,6 @@ pub struct Config {
     /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
 
-    /// Enables the log memory store feature.
-    pub log_memory_store_feature: FlagStatus,
-
     /// Enables the flexible HTTP outcalls API (`flexible_http_request`).
     pub flexible_http_requests: FlagStatus,
 }
@@ -471,7 +468,6 @@ impl Default for Config {
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE,
-            log_memory_store_feature: LOG_MEMORY_STORE_FEATURE,
             flexible_http_requests: FLEXIBLE_HTTP_REQUESTS_FEATURE,
         }
     }

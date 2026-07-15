@@ -9,11 +9,12 @@
 //!   * has the exact same root hash as a fully materialized build,
 //!   * serves witnesses by expanding the stub on demand from the source `Arc`
 //!     it holds (via its [`SubtreeExpander`]), with no external source, and
-//!   * when built with a baseline ([`hash_lazy_tree_with_baseline`]), reuses the
-//!     stored digest of every unchanged subtree (matched by `SubtreeSource`).
+//!   * when built with a baseline ([`hash_lazy_tree`] with `Some(baseline)`),
+//!     reuses the stored digest of every unchanged subtree (matched by
+//!     [`SubtreeSource`]).
 
 use ic_canonical_state_tree_hash::hash_tree::{
-    HashTree, HashTreeError, PARALLEL_MIN_CHILDREN, hash_lazy_tree, hash_lazy_tree_with_baseline,
+    HashTree, HashTreeError, PARALLEL_MIN_CHILDREN, hash_lazy_tree,
 };
 use ic_canonical_state_tree_hash::lazy_tree::{LazyFork, LazyTree, SubtreeSource, fork};
 use ic_canonical_state_tree_hash_test_utils::as_lazy;
@@ -109,7 +110,7 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
 /// `expand_canister` in production, minus the certification version).
 fn expand_test_canister(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
     let canister = source.downcast::<LabeledTree<Vec<u8>>>();
-    hash_lazy_tree(&canister_fork(canister))
+    hash_lazy_tree(&canister_fork(canister), None)
 }
 
 /// A `LazyFork` over the `/canister` subtree.
@@ -245,20 +246,25 @@ fn canister_partial(i: usize) -> LabeledTree<Vec<u8>> {
 #[test]
 fn every_canister_is_a_subtree() {
     let canisters = canisters();
-    let tree = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
+    let tree = hash_lazy_tree(&state_tree(&canisters, TIME), None).unwrap();
 
     assert_eq!(
         tree.stub_count(),
         NUM_CANISTERS,
         "every canister should be stored as a stub"
     );
+
+    // No baseline, so nothing is reused; and a from-scratch fork this large is
+    // built entirely in parallel.
+    assert_eq!(tree.reused_stubs(), 0);
+    assert_eq!(tree.parallel_built_children(), NUM_CANISTERS);
 }
 
 #[test]
 fn witnesses_into_canisters_expand_from_source() {
     let canisters = canisters();
     let source = state_tree(&canisters, TIME);
-    let tree = hash_lazy_tree(&source).unwrap();
+    let tree = hash_lazy_tree(&source, None).unwrap();
 
     // Whole-canister witnesses across both the sequential and parallel ranges.
     for i in [
@@ -301,7 +307,7 @@ fn witnesses_into_canisters_expand_from_source() {
 fn absence_witnesses_expand_from_source() {
     let canisters = canisters();
     let source = state_tree(&canisters, TIME);
-    let tree = hash_lazy_tree(&source).unwrap();
+    let tree = hash_lazy_tree(&source, None).unwrap();
 
     // Absent canister id (proven at the `/canister` node, no stub descent).
     let partial = LabeledTree::SubTree(flatmap! {
@@ -343,16 +349,15 @@ fn absence_witnesses_expand_from_source() {
 #[test]
 fn baseline_build_matches_from_scratch() {
     let canisters = canisters();
-    let baseline = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
+    let baseline = hash_lazy_tree(&state_tree(&canisters, TIME), None).unwrap();
 
     // Mutate a single canister (fresh `Arc`) and change `time`; keep the rest.
     let mut next = canisters.clone();
     next.insert(canister_id_label(50), Arc::new(canister_subtree(9999)));
     let new_time: &[u8] = &[9, 9, 9, 9];
 
-    let from_scratch = hash_lazy_tree(&state_tree(&next, new_time)).unwrap();
-    let with_baseline =
-        hash_lazy_tree_with_baseline(&state_tree(&next, new_time), &baseline).unwrap();
+    let from_scratch = hash_lazy_tree(&state_tree(&next, new_time), None).unwrap();
+    let with_baseline = hash_lazy_tree(&state_tree(&next, new_time), Some(&baseline)).unwrap();
 
     assert_eq!(
         from_scratch.root_hash(),
@@ -381,18 +386,26 @@ fn baseline_build_matches_from_scratch() {
 #[test]
 fn baseline_build_with_partial_change_matches_from_scratch() {
     let canisters = canisters();
-    let baseline = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
+    let baseline = hash_lazy_tree(&state_tree(&canisters, TIME), None).unwrap();
 
     // A `BTreeMap` clone shares the canister `Arc`s; only canister 50 gets a
     // fresh `Arc` (a real mutation), so only it is rebuilt.
     let mut next = canisters.clone();
     next.insert(canister_id_label(50), Arc::new(canister_subtree(50)));
 
-    let with_baseline = hash_lazy_tree_with_baseline(&state_tree(&next, TIME), &baseline).unwrap();
-    let from_scratch = hash_lazy_tree(&state_tree(&next, TIME)).unwrap();
+    let with_baseline = hash_lazy_tree(&state_tree(&next, TIME), Some(&baseline)).unwrap();
+    let from_scratch = hash_lazy_tree(&state_tree(&next, TIME), None).unwrap();
 
     assert_eq!(with_baseline.stub_count(), NUM_CANISTERS);
     assert_eq!(with_baseline.root_hash(), from_scratch.root_hash());
+
+    // With the baseline, every canister but the mutated one is reused; the build
+    // stays sequential (the rebuild rate never projects enough work to parallelize).
+    assert_eq!(with_baseline.reused_stubs(), NUM_CANISTERS - 1);
+    assert_eq!(with_baseline.parallel_built_children(), 0);
+    // The from-scratch build reuses nothing and parallelizes the whole fork.
+    assert_eq!(from_scratch.reused_stubs(), 0);
+    assert_eq!(from_scratch.parallel_built_children(), NUM_CANISTERS);
 }
 
 /// Whether `a` and `b` hold the same stub [`SubtreeSource`]s by identity: each
@@ -408,17 +421,188 @@ fn disjoint_stub_sources(a: &HashTree, b: &HashTree) -> bool {
     a.stub_count() == b.stub_count() && a.stub_sources().zip(b.stub_sources()).all(|(x, y)| x != y)
 }
 
+// --- Leaf stubs (mirroring stream messages) -------------------------------
+//
+// Unlike canisters (whose subtree is a fork), a stream message's subtree is a
+// single *leaf*. A stubbed leaf must still serve its value in a witness (XNet
+// certification carries the actual message bytes), so requesting it as a
+// `LabeledTree::Leaf` expands the stub rather than pruning it.
+
+const MESSAGE_LABEL: &[u8] = b"message";
+
+/// A collection of messages, each behind its own `Arc` (as in production, where
+/// a `StreamMessage`'s payload is `Arc`-shared and immutable once enqueued).
+type Messages = BTreeMap<Label, Arc<Vec<u8>>>;
+
+fn message_id_label(i: usize) -> Label {
+    Label::from(format!("{i:08}"))
+}
+fn message_bytes(i: usize) -> Vec<u8> {
+    format!("message-payload-{i}").into_bytes()
+}
+
+fn messages(n: usize) -> Messages {
+    (0..n)
+        .map(|i| (message_id_label(i), Arc::new(message_bytes(i))))
+        .collect()
+}
+
+/// Rebuilds a stubbed message leaf from its source `Arc` (mirrors the per-variant
+/// `expand_*` message expanders in production).
+fn expand_test_message(source: &SubtreeSource) -> Result<HashTree, HashTreeError> {
+    let bytes = source.downcast_arc::<Vec<u8>>();
+    hash_lazy_tree(&LazyTree::Blob(bytes.as_slice(), None), None)
+}
+
+/// A `LazyFork` whose children are all *leaves* (each a message blob), collapsed
+/// to reusable stubs via `stub_sources` (mirrors `StreamQueueFork` for messages).
+struct MessagesFork<'a> {
+    messages: &'a Messages,
+}
+
+impl<'a> LazyFork<'a> for MessagesFork<'a> {
+    fn edge(&self, l: &Label) -> Option<LazyTree<'a>> {
+        self.messages
+            .get(l)
+            .map(|arc| LazyTree::Blob(arc.as_slice(), None))
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        Box::new(self.messages.keys().cloned())
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
+        Box::new(
+            self.messages
+                .iter()
+                .map(|(l, arc)| (l.clone(), LazyTree::Blob(arc.as_slice(), None))),
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.messages.len()
+    }
+
+    fn stub_sources(&self) -> Option<Box<dyn Iterator<Item = (Label, SubtreeSource)> + '_>> {
+        Some(Box::new(self.messages.iter().map(|(l, arc)| {
+            (l.clone(), SubtreeSource::new(arc, expand_test_message))
+        })))
+    }
+}
+
+/// The top-level fork `{message: {<id>: <blob>}}`.
+struct MessagesStateFork<'a> {
+    messages: &'a Messages,
+}
+
+fn messages_fork(messages: &Messages) -> LazyTree<'_> {
+    fork(MessagesFork { messages })
+}
+
+impl<'a> LazyFork<'a> for MessagesStateFork<'a> {
+    fn edge(&self, l: &Label) -> Option<LazyTree<'a>> {
+        (l.as_bytes() == MESSAGE_LABEL).then(|| messages_fork(self.messages))
+    }
+
+    fn labels(&self) -> Box<dyn Iterator<Item = Label> + '_> {
+        Box::new(std::iter::once(Label::from(MESSAGE_LABEL)))
+    }
+
+    fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
+        Box::new(std::iter::once((
+            Label::from(MESSAGE_LABEL),
+            messages_fork(self.messages),
+        )))
+    }
+
+    fn len(&self) -> usize {
+        1
+    }
+}
+
+fn messages_state_tree(messages: &Messages) -> LazyTree<'_> {
+    fork(MessagesStateFork { messages })
+}
+
+/// A partial tree `{message: {<id>: Leaf(bytes)}}` requesting one message value.
+fn message_query(i: usize) -> LabeledTree<Vec<u8>> {
+    LabeledTree::SubTree(flatmap! {
+        Label::from(MESSAGE_LABEL) => LabeledTree::SubTree(flatmap!{
+            message_id_label(i) => LabeledTree::Leaf(message_bytes(i)),
+        }),
+    })
+}
+
+#[test]
+fn every_message_is_a_leaf_stub() {
+    let messages = messages(NUM_CANISTERS);
+    let tree = hash_lazy_tree(&messages_state_tree(&messages), None).unwrap();
+    assert_eq!(tree.stub_count(), NUM_CANISTERS);
+}
+
+/// A witness descending into a stubbed message leaf must carry the message
+/// *value* (expanded from source), not a pruned digest.
+#[test]
+fn witness_into_message_leaf_carries_value() {
+    let messages = messages(NUM_CANISTERS);
+    let tree = hash_lazy_tree(&messages_state_tree(&messages), None).unwrap();
+
+    // Across both the sequential and parallel build ranges.
+    for i in [0, 1, PARALLEL_MIN_CHILDREN + 1, NUM_CANISTERS - 1] {
+        let partial = message_query(i);
+        let mixed = tree.witness::<MixedHashTree>(&partial).unwrap();
+        assert_eq!(&mixed.digest(), tree.root_hash());
+        // The value is present (a stubbed leaf would be pruned if not expanded).
+        assert!(
+            mixed
+                .lookup(&[MESSAGE_LABEL, message_id_label(i).as_bytes()])
+                .is_found(),
+            "expected message {i} value in the witness, got {mixed:?}"
+        );
+    }
+}
+
+/// Messages are immutable per index: reusing a baseline (shared `Arc`s for the
+/// retained suffix, only newly enqueued messages fresh) yields the same tree as
+/// a from-scratch build, reusing every retained message's digest by identity.
+#[test]
+fn message_baseline_reuse_matches_from_scratch() {
+    let messages = messages(NUM_CANISTERS);
+    let baseline = hash_lazy_tree(&messages_state_tree(&messages), None).unwrap();
+
+    // Drop a prefix and enqueue new messages at higher indices, keeping the
+    // shared `Arc`s of the retained suffix (as a real stream queue does).
+    let mut next: Messages = messages
+        .iter()
+        .filter(|(l, _)| l.as_bytes() >= message_id_label(2).as_bytes())
+        .map(|(l, arc)| (l.clone(), Arc::clone(arc)))
+        .collect();
+    for i in NUM_CANISTERS..NUM_CANISTERS + 3 {
+        next.insert(message_id_label(i), Arc::new(message_bytes(i)));
+    }
+
+    let from_scratch = hash_lazy_tree(&messages_state_tree(&next), None).unwrap();
+    let with_baseline = hash_lazy_tree(&messages_state_tree(&next), Some(&baseline)).unwrap();
+
+    assert_eq!(from_scratch.root_hash(), with_baseline.root_hash());
+
+    // Witnesses must agree for a retained message and a newly enqueued one.
+    for i in [5, NUM_CANISTERS + 1] {
+        assert_same_witness(&from_scratch, &with_baseline, &message_query(i));
+    }
+}
+
 /// Reuse is by identity, not by value: replacing every canister with a fresh
 /// `Arc` of identical contents skips all digest reuse, yet still yields the same
 /// root hash (the canonical encoding depends only on the contents).
 #[test]
 fn reuse_is_by_identity_not_by_value() {
     let canisters = canisters();
-    let baseline = hash_lazy_tree(&state_tree(&canisters, TIME)).unwrap();
+    let baseline = hash_lazy_tree(&state_tree(&canisters, TIME), None).unwrap();
 
     // Rebuilding against the baseline with the *same* `Arc`s: every stub holds the
     // very same source allocation as the baseline (identity is preserved).
-    let unchanged = hash_lazy_tree_with_baseline(&state_tree(&canisters, TIME), &baseline).unwrap();
+    let unchanged = hash_lazy_tree(&state_tree(&canisters, TIME), Some(&baseline)).unwrap();
     assert!(same_stub_sources(&baseline, &unchanged));
 
     // Replace *every* canister with a fresh `Arc` of the same contents.
@@ -426,7 +610,7 @@ fn reuse_is_by_identity_not_by_value() {
         .map(|i| (canister_id_label(i), Arc::new(canister_subtree(i))))
         .collect();
 
-    let with_baseline = hash_lazy_tree_with_baseline(&state_tree(&next, TIME), &baseline).unwrap();
+    let with_baseline = hash_lazy_tree(&state_tree(&next, TIME), Some(&baseline)).unwrap();
 
     // No stub shares a source `Arc` with the baseline, so no digest could have been
     // reused (every `Arc` is fresh, so no identity matches).

@@ -138,37 +138,3 @@ fn ensure_only_allowed_fields_set_rejects_non_default_gossip_flag() {
         "error must mention the non-default bool: {err}"
     );
 }
-
-#[test]
-fn normalize_subnet_admins_adds_super_admin_when_missing() {
-    let other = PrincipalId::new_user_test_id(7);
-    let normalized = normalize_subnet_admins(vec![other]);
-
-    let super_admin = PrincipalId(default_authorized_caller());
-    assert!(
-        normalized.contains(&super_admin),
-        "super admin must be present after normalization"
-    );
-    assert!(
-        normalized.contains(&other),
-        "other admins must be preserved"
-    );
-}
-
-#[test]
-fn normalize_subnet_admins_keeps_list_intact_when_super_admin_present() {
-    let super_admin = PrincipalId(default_authorized_caller());
-    let other = PrincipalId::new_user_test_id(8);
-    let input = vec![other, super_admin];
-    let normalized = normalize_subnet_admins(input.clone());
-    assert_eq!(
-        normalized, input,
-        "list must not be reordered or duplicated when super admin is already present"
-    );
-}
-
-#[test]
-fn normalize_subnet_admins_handles_empty_input() {
-    let normalized = normalize_subnet_admins(vec![]);
-    assert_eq!(normalized, vec![PrincipalId(default_authorized_caller())]);
-}

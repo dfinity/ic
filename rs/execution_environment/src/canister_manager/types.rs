@@ -80,7 +80,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
-    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -105,7 +104,6 @@ impl CanisterMgrConfig {
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
-        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -127,7 +125,6 @@ impl CanisterMgrConfig {
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
-            log_memory_store_feature,
         }
     }
 }
@@ -806,7 +803,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterNotFound(canister_id) => Self::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found.{additional_help}", &canister_id),
+                format!("Canister {} not found.{additional_help}", canister_id),
             ),
             CanisterIdAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterIdAlreadyExists,

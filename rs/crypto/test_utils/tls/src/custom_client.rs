@@ -137,10 +137,10 @@ impl CustomClient {
             end_entity: self.server_cert.clone(),
         };
 
-        let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
-        ring_crypto_provider.cipher_suites = cipher_suites;
+        let mut crypto_provider = rustls::crypto::aws_lc_rs::default_provider();
+        crypto_provider.cipher_suites = cipher_suites;
 
-        let config_builder = ClientConfig::builder_with_provider(Arc::new(ring_crypto_provider))
+        let config_builder = ClientConfig::builder_with_provider(Arc::new(crypto_provider))
             .with_protocol_versions(&protocol_versions)
             .expect("Valid rustls client config.")
             .dangerous()
@@ -257,7 +257,7 @@ impl rustls::client::danger::ServerCertVerifier for MatchingEndEntityCertVerifie
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &rustls::crypto::aws_lc_rs::default_provider().signature_verification_algorithms,
         )
     }
 

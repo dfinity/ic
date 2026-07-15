@@ -31,13 +31,13 @@ use ic_types::{
     time::CoarseTime,
 };
 use ic_types_cycles::{
-    BurnedCycles, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
-    CyclesAccountManagerSubnetConfig, CyclesUseCaseKind, Instructions,
-    RequestAndResponseTransmission,
+    BurnedCycles, CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, CyclesUseCaseKind,
+    Instructions, RequestAndResponseTransmission,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// The ICP mainnet root key.
 const IC_ROOT_KEY: &[u8; 133] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00\x81\x4c\x0e\x6e\xc7\x1f\xab\x58\x3b\x08\xbd\x81\x37\x3c\x25\x5c\x3c\x37\x1b\x2e\x84\x86\x3c\x98\xa4\xf1\xe0\x8b\x74\x23\x5d\x14\xfb\x5d\x9c\x0c\xd5\x46\xd9\x68\x5f\x91\x3a\x0c\x0b\x2c\xc5\x34\x15\x83\xbf\x4b\x43\x92\xe4\x67\xdb\x96\xd6\x5b\x9b\xb4\xcb\x71\x71\x12\xf8\x47\x2e\x0d\x5a\x4d\x14\x50\x5f\xfd\x74\x84\xb0\x12\x91\x09\x1c\x5f\x87\xb9\x88\x83\x46\x3f\x98\x09\x1a\x0b\xaa\xae";
@@ -314,6 +314,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
+            | Ok(Ic00Method::ListCanisters)
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister)
@@ -395,11 +396,11 @@ impl SystemStateModifications {
             // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
-        if system_state.log_memory_store.is_migrated() {
-            system_state
-                .log_memory_store
-                .append_delta_log(&mut self.canister_log.clone());
-        }
+        system_state
+            .log_memory_store
+            .append_delta_log(&mut self.canister_log.clone());
+        // Keep the legacy `canister_log` store up to date so that checkpoints
+        // remain readable by replicas that predate the log memory store.
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
@@ -657,7 +658,9 @@ pub struct SandboxSafeSystemState {
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
     pub is_wasm64_execution: bool,
-    network_topology: NetworkTopology,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    network_topology: Arc<NetworkTopology>,
 }
 
 impl SandboxSafeSystemState {
@@ -693,7 +696,7 @@ impl SandboxSafeSystemState {
         next_canister_log_record_idx: u64,
         canister_log_memory_limit: usize,
         is_wasm64_execution: bool,
-        network_topology: NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
     ) -> Self {
         Self {
             canister_id,
@@ -739,7 +742,7 @@ impl SandboxSafeSystemState {
     pub fn new_for_testing(
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
@@ -767,7 +770,7 @@ impl SandboxSafeSystemState {
     pub fn new(
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         available_callbacks: u64,
@@ -816,14 +819,10 @@ impl SandboxSafeSystemState {
             })
             .min()
             .unwrap_or(DEFAULT_QUEUE_CAPACITY);
-        let (next_canister_log_record_idx, canister_log_memory_limit) =
-            if system_state.log_memory_store.is_migrated() {
-                let lms = &system_state.log_memory_store;
-                (lms.next_idx(), lms.byte_capacity())
-            } else {
-                let cl = &system_state.canister_log;
-                (cl.next_idx(), cl.byte_capacity())
-            };
+        let (next_canister_log_record_idx, canister_log_memory_limit) = {
+            let lms = &system_state.log_memory_store;
+            (lms.next_idx(), lms.byte_capacity())
+        };
 
         Self::new_internal(
             system_state.canister_id(),
@@ -854,7 +853,7 @@ impl SandboxSafeSystemState {
             next_canister_log_record_idx,
             canister_log_memory_limit,
             is_wasm64_execution,
-            network_topology.clone(),
+            network_topology,
         )
     }
 
@@ -874,8 +873,8 @@ impl SandboxSafeSystemState {
         &self.environment_variables
     }
 
-    pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
-        self.subnet_cycles_config.cost_schedule
+    pub fn subnet_cycles_config(&self) -> CyclesAccountManagerSubnetConfig {
+        self.subnet_cycles_config
     }
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
@@ -1601,7 +1600,7 @@ mod tests {
             MAX_DELTA_LOG_MEMORY_LIMIT,
             // Wasm32 execution environment. Sufficient in testing.
             false,
-            NetworkTopology::default(),
+            std::sync::Arc::new(NetworkTopology::default()),
         );
         sandbox_state.msg_deadline()
     }

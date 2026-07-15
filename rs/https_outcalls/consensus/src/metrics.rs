@@ -53,8 +53,9 @@ pub struct CanisterHttpPayloadBuilderMetrics {
     pub op_duration: HistogramVec,
     /// The total number of validated shares in the pool
     pub total_shares: IntGauge,
-    /// The number of shares which are not timed out or have ineligible registry
-    /// versions.
+    /// The number of validated shares whose request has not already been
+    /// answered in the chain (i.e. shares that are still candidates for
+    /// inclusion in a payload).
     pub active_shares: IntGauge,
 }
 
@@ -74,7 +75,7 @@ impl CanisterHttpPayloadBuilderMetrics {
             ),
             active_shares: metrics_registry.int_gauge(
                 "canister_http_total_active_validated_shares",
-                "The total number of validated shares that are not timed out or made with invalid registry version."
+                "The total number of validated shares whose request has not already been answered in the chain."
             ),
         }
     }

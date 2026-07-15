@@ -18,7 +18,7 @@ use crate::{
 use ic_base_types::NumSeconds;
 use ic_config::{
     embedders::Config as EmbeddersConfig,
-    execution_environment::{Config as HypervisorConfig, LOG_MEMORY_STORE_FEATURE},
+    execution_environment::Config as HypervisorConfig,
     subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
@@ -66,13 +66,12 @@ fn test_wasmtime_system_api() {
         UNIX_EPOCH,
         NumSeconds::from(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl),
-        LOG_MEMORY_STORE_FEATURE,
     );
     let api_type = ApiType::start(UNIX_EPOCH);
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
-        &NetworkTopology::default(),
+        std::sync::Arc::new(NetworkTopology::default()),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,

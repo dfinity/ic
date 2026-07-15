@@ -17,16 +17,12 @@ rust_library(
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
         "//rs/protobuf",
-        "//rs/registry/keys",
-        "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
-        "//rs/registry/transport",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:prost",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
@@ -54,7 +50,7 @@ system_test_nns(
     # into Farm directly to upload the config image, attach the SetupOS disk image
     # and start the nested VM. Supporting this requires adding a
     # `SystemTestBackend::Local` branch that boots the nested VM via the local
-    # libvirt-based backend.
+    # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     env = MAINNET_ENV,
@@ -96,7 +92,7 @@ system_test_nns(
     # calls into Farm directly to upload the config image, attach the SetupOS
     # disk image and start the nested VM. Supporting this requires adding a
     # `SystemTestBackend::Local` branch that boots the nested VM via the local
-    # libvirt-based backend.
+    # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     env = MAINNET_ENV,
@@ -140,7 +136,7 @@ system_test_nns(
     # calls into Farm directly to upload the config image, attach the SetupOS
     # disk image and start the nested VM. Supporting this requires adding a
     # `SystemTestBackend::Local` branch that boots the nested VM via the local
-    # libvirt-based backend.
+    # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
@@ -200,7 +196,7 @@ system_test_nns(
     # into Farm directly to upload the config image, attach the SetupOS disk image
     # and start the nested VM. Supporting this requires adding a
     # `SystemTestBackend::Local` branch that boots the nested VM via the local
-    # libvirt-based backend.
+    # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     env = MAINNET_ENV,
@@ -222,7 +218,7 @@ system_test_nns(
     # into Farm directly to upload the config image, attach the SetupOS disk image
     # and start the nested VM. Supporting this requires adding a
     # `SystemTestBackend::Local` branch that boots the nested VM via the local
-    # libvirt-based backend.
+    # QEMU-based backend.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key

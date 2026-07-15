@@ -4,6 +4,7 @@ use super::subnet_call_context_manager::{
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
+use crate::metadata_state::testing::SystemMetadataTesting;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use crate::{CanisterPriority, InputQueueType};
 use assert_matches::assert_matches;
@@ -39,7 +40,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers,
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{ExecutionRound, Height, RegistryVersion};
+use ic_types::{ExecutionRound, Height, NumberOfNodes, RegistryVersion};
 use ic_types_cycles::{Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -180,7 +181,7 @@ fn init_allocation_ranges_if_empty() {
     };
 
     let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = Arc::new(network_topology);
 
     assert_eq!(
         CanisterIdRanges::try_from(vec![]).unwrap(),
@@ -261,7 +262,7 @@ fn peek_and_commit_new_canister_id() {
         nns_subnet_id: other_subnet_id,
         ..Default::default()
     };
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = Arc::new(network_topology);
 
     assert_eq!(None, system_metadata.last_generated_canister_id);
     assert_eq!(2, system_metadata.canister_allocation_ranges.len());
@@ -346,25 +347,25 @@ fn system_metadata_roundtrip_encoding() {
         routing_table,
         canister_migrations,
         nns_subnet_id: other_subnet_id,
+        api_boundary_nodes: btreemap! {
+            node_test_id(1) => ApiBoundaryNodeEntry {
+                domain: "api-example.com".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            },
+        },
         ..Default::default()
     };
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = Arc::new(network_topology);
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
     let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
         .unwrap()
         .serialize_rfc8410_der();
 
-    system_metadata.node_public_keys = btreemap! {
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
-    };
-    system_metadata.api_boundary_nodes = btreemap! {
-        node_test_id(1) => ApiBoundaryNodeEntry {
-            domain: "api-example.com".to_string(),
-            ipv4_address: Some("127.0.0.1".to_string()),
-            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-            pubkey: None,
-        },
     };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
@@ -495,6 +496,7 @@ fn network_topology_roundtrip_encoding() {
         bitcoin_mainnet_canister_id,
         None,
         Some(app_subnet_id),
+        Default::default(),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology);
@@ -518,6 +520,7 @@ fn network_topology_roundtrip_encoding() {
             routing_table: full_routing_table,
         }),
         Some(app_subnet_id),
+        Default::default(),
     );
 
     let proto = pb::NetworkTopology::from(&network_topology_with_full);
@@ -748,7 +751,9 @@ fn system_metadata_online_split() {
     system_metadata.last_generated_canister_id = Some(CANISTER_2);
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
-    system_metadata.network_topology.routing_table = Arc::new(routing_table);
+    system_metadata.modify_network_topology(|network_topology| {
+        network_topology.routing_table = Arc::new(routing_table);
+    });
     system_metadata.subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
@@ -869,6 +874,8 @@ fn subnet_call_contexts_deserialization() {
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: None,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,

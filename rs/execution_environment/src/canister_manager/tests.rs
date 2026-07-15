@@ -20,10 +20,10 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE, LOG_MEMORY_STORE_FEATURE_ENABLED,
-        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -56,7 +56,8 @@ use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
-        subnet_call_context_manager::InstallCodeCallId, testing::NetworkTopologyTesting,
+        subnet_call_context_manager::InstallCodeCallId,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
@@ -324,7 +325,6 @@ fn canister_manager_config(
         MAX_ENVIRONMENT_VARIABLES,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
         MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        LOG_MEMORY_STORE_FEATURE,
     )
 }
 
@@ -339,12 +339,10 @@ fn initial_state(subnet_id: SubnetId, use_specified_ids_routing_table: bool) -> 
         })
         .unwrap()
     };
-    state
-        .metadata
-        .network_topology
-        .set_routing_table(routing_table);
-
-    state.metadata.network_topology.nns_subnet_id = subnet_id;
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table(routing_table);
+        network_topology.nns_subnet_id = subnet_id;
+    });
     state.metadata.init_allocation_ranges_if_empty().unwrap();
     state
 }
@@ -405,7 +403,7 @@ fn install_code(
         None,
         old_canister,
         time,
-        &network_topology,
+        network_topology,
         execution_parameters,
         round_limits,
         CompilationCostHandling::CountFullAmount,
@@ -5401,9 +5399,7 @@ fn setup_canister_log_heap_delta_test(
     // of the two records.
     const MSG: &[u8] = &[b'x'; 2100];
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .create_canister_with_settings(
             CYCLES,
@@ -5590,7 +5586,6 @@ fn update_settings_fails_when_heap_delta_rate_limited() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_heap_delta_rate_limit(LIMIT)
-        .with_log_memory_store_feature_enabled()
         .build();
     let canister_id = test
         .create_canister_with_settings(
@@ -5638,9 +5633,7 @@ fn update_settings_fails_when_heap_delta_rate_limited() {
 fn create_canister_heap_delta_log_memory_limit_default() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     test.create_canister(CYCLES);
 
     assert_eq!(test.state().metadata.heap_delta_estimate, NumBytes::from(0));
@@ -5653,9 +5646,7 @@ fn create_canister_heap_delta_log_memory_limit_explicit() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
     const MIB: u64 = 1024 * 1024;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_log_memory_store_feature_enabled()
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     test.create_canister_with_settings(
         CYCLES,
         CanisterSettingsArgsBuilder::new()

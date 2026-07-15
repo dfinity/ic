@@ -5,6 +5,10 @@
 # lockfile for MODULE.bazel
 common --lockfile_mode=off
 
+# If the download via the Remote Asset API on the bazel-remote cache failed, try it again locally.
+common --experimental_remote_downloader_local_fallback
+common --experimental_remote_downloader_propagate_credentials
+
 # Use prebuilt protoc binary via toolchain resolution instead of compiling from C++ source.
 # See https://github.com/protocolbuffers/protobuf/issues/19558
 # (Removing this still builds, but reverts to compiling protoc/libprotoc from source.)
@@ -113,14 +117,6 @@ run:sandbox_fuzzing --run_under="ASAN_OPTIONS=detect_leaks=0:allow_user_segv_han
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
-
-# This is disabled by default on bazel 7+ some of our targets choke
-# on this (not yet clear why)
-common --remote_download_all
-
-# This option (in conjunction with remote cache issues) creates build failures
-#   https://github.com/bazelbuild/bazel/issues/22387
-common --noexperimental_inmemory_dotd_files
 
 # This is particularly helpful for canbench, but other tests that follow this
 # convention would also benefit. If the test does not support this, this "almost

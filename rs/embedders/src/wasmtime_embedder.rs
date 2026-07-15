@@ -510,12 +510,15 @@ impl WasmtimeEmbedder {
             let instance_globals = get_exported_globals(&instance, &mut store);
 
             if exported_globals.len() != instance_globals.len() {
-                fatal!(
-                    self.log,
-                    "Given number of exported globals {} is not equal to the number of instance exported globals {}",
-                    exported_globals.len(),
-                    instance_globals.len()
+                let err = HypervisorError::WasmEngineError(
+                    WasmEngineError::FailedToInstantiateModule(format!(
+                        "Given number of exported globals {} is not equal to the number of \
+                         instance exported globals {}",
+                        exported_globals.len(),
+                        instance_globals.len(),
+                    )),
                 );
+                return Err((err, store.into_data().system_api));
             }
 
             // set the globals to persisted values
@@ -525,33 +528,31 @@ impl WasmtimeEmbedder {
                 .zip(instance_globals.iter())
             {
                 if instance_global.ty(&mut store).mutability() == Mutability::Var {
-                    instance_global
-                        .set(
-                            &mut store,
-                            match v {
-                                Global::I32(val) => Val::I32(*val),
-                                Global::I64(val) => Val::I64(*val),
-                                Global::F32(val) => Val::F32((val).to_bits()),
-                                Global::F64(val) => Val::F64((val).to_bits()),
-                                Global::V128(val) => Val::V128((*val).into()),
-                            },
-                        )
-                        .unwrap_or_else(|e| {
-                            let v = match v {
-                                Global::I32(val) => (val).to_string(),
-                                Global::I64(val) => (val).to_string(),
-                                Global::F32(val) => (val).to_string(),
-                                Global::F64(val) => (val).to_string(),
-                                Global::V128(val) => (val).to_string(),
-                            };
-                            fatal!(
-                                self.log,
+                    if let Err(e) = instance_global.set(
+                        &mut store,
+                        match v {
+                            Global::I32(val) => Val::I32(*val),
+                            Global::I64(val) => Val::I64(*val),
+                            Global::F32(val) => Val::F32((val).to_bits()),
+                            Global::F64(val) => Val::F64((val).to_bits()),
+                            Global::V128(val) => Val::V128((*val).into()),
+                        },
+                    ) {
+                        let val = match v {
+                            Global::I32(val) => (val).to_string(),
+                            Global::I64(val) => (val).to_string(),
+                            Global::F32(val) => (val).to_string(),
+                            Global::F64(val) => (val).to_string(),
+                            Global::V128(val) => (val).to_string(),
+                        };
+                        let err = HypervisorError::WasmEngineError(
+                            WasmEngineError::FailedToInstantiateModule(format!(
                                 "error while setting exported global {} to {}: {}",
-                                ix,
-                                v,
-                                e
-                            )
-                        })
+                                ix, val, e,
+                            )),
+                        );
+                        return Err((err, store.into_data().system_api));
+                    }
                 } else {
                     debug!(
                         self.log,

@@ -1,6 +1,5 @@
 //! Canister Http related public interfaces.
 use crate::validation::ValidationError;
-use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     NodeId,
@@ -50,17 +49,12 @@ pub enum InvalidCanisterHttpPayloadReason {
     UnknownCallbackId(CallbackId),
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
     NotTimedOut(CallbackId),
-    /// The registry version of a response does not match the validation context
-    RegistryVersionMismatch {
-        expected: RegistryVersion,
-        received: RegistryVersion,
-    },
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
-    /// A payment receipt claims a refund larger than the per-replica allowance
-    /// derived from the request's payment.
-    RefundExceedsAllowance {
-        refund: Cycles,
+    /// A payment receipt claims the replica spent more than the per-replica
+    /// allowance derived from the request's payment.
+    SpentExceedsAllowance {
+        spent: Cycles,
         per_replica_allowance: Cycles,
     },
     /// Some of the signatures in the canister http proof were not members of
@@ -142,8 +136,6 @@ pub enum InvalidCanisterHttpPayloadReason {
 pub enum CanisterHttpPayloadValidationFailure {
     /// The state was not available at the time of validation
     StateUnavailable,
-    /// The consensus registry version could not be retrieved from the summary
-    ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,
     /// Membership Issue

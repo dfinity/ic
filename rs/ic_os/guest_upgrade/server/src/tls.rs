@@ -1,5 +1,5 @@
 use rustls::client::danger::HandshakeSignatureValid;
-use rustls::crypto::ring::default_provider;
+use rustls::crypto::aws_lc_rs::default_provider;
 use rustls::pki_types::{CertificateDer, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{DigitallySignedStruct, DistinguishedName, Error, PeerIncompatible, SignatureScheme};

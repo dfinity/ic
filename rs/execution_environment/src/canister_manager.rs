@@ -138,6 +138,8 @@ impl CanisterManager {
             Err(_)
             | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::CanisterMetadata)
+            // `list_canisters` can only be called via inter-canister calls by subnet admins.
+            | Ok(Ic00Method::ListCanisters)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
@@ -546,9 +548,7 @@ impl CanisterManager {
         }
 
         // Log memory limit: validate, charge cycles for resize, and apply.
-        if canister.system_state.log_memory_store.is_migrated()
-            && let Some(requested_limit) = settings.log_memory_limit()
-        {
+        if let Some(requested_limit) = settings.log_memory_limit() {
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
@@ -848,7 +848,7 @@ impl CanisterManager {
         prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
         mut canister: CanisterState,
         time: Time,
-        network_topology: &NetworkTopology,
+        network_topology: Arc<NetworkTopology>,
         execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
         compilation_cost_handling: CompilationCostHandling,
@@ -927,10 +927,10 @@ impl CanisterManager {
 
         match context.mode {
             CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
-                execute_install(context, canister, original, round.clone(), round_limits)
+                execute_install(context, canister, original, round, round_limits)
             }
             CanisterInstallModeV2::Upgrade(..) => {
-                execute_upgrade(context, canister, original, round.clone(), round_limits)
+                execute_upgrade(context, canister, original, round, round_limits)
             }
         }
     }
@@ -1482,7 +1482,6 @@ impl CanisterManager {
             state.metadata.batch_time,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
-            self.config.log_memory_store_feature,
         );
 
         system_state.consume_cycles(creation_fee);

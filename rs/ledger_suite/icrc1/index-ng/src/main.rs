@@ -946,6 +946,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
+    #[allow(clippy::explicit_counter_loop)]
     for block in new_blocks {
         append_block(block_index, block)?;
         block_index += 1;

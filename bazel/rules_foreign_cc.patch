@@ -2,14 +2,14 @@
 # On a successful build we empty the build log (which is declared as an action
 # output) since it contains non-deterministic content (absolute paths,
 # timestamps). On failure the log is still printed for debugging.
-diff --git a/foreign_cc/private/framework.bzl b/foreign_cc/private/framework.bzl
+index b822e2b..2b1eae1 100644
 --- a/foreign_cc/private/framework.bzl
 +++ b/foreign_cc/private/framework.bzl
-@@ -647,6 +647,7 @@ def wrap_outputs(ctx, lib_name, configure_name, script_text, env_prelude, build_
+@@ -715,6 +715,7 @@ def wrap_outputs(ctx, lib_name, configure_name, script_text, env_prelude, build_
          "\n".join([
              "##rm_rf## $$BUILD_TMPDIR$$",
              "##rm_rf## $$EXT_BUILD_DEPS$$",
 +            "echo > $$BUILD_LOG$$",
-         ]),
-     )
-     cleanup_on_failure_function = create_function(
+             # On Windows with short paths, BUILD_TMPDIR and EXT_BUILD_DEPS are
+             # inside RFCC_SHORT_PATH_ROOT (already removed above). Clean up the
+             # parent temp dir too. On non-Windows this var is unset.

@@ -62,7 +62,7 @@ pub struct SystemMetadata {
     /// system.
     pub ingress_history: IngressHistoryState,
 
-    /// XNet stream state indexed by the _destination_ subnet id.
+    /// XNet stream state indexed by the _destination_ subnet ID.
     pub(super) streams: Arc<StreamMap>,
 
     /// Scheduling priorities of the canisters on this subnet.
@@ -87,20 +87,15 @@ pub struct SystemMetadata {
     /// increasing).
     pub batch_time: Time,
 
-    pub network_topology: NetworkTopology,
+    pub network_topology: Arc<NetworkTopology>,
 
     pub own_subnet_id: SubnetId,
 
     pub own_subnet_type: SubnetType,
 
-    pub own_subnet_features: SubnetFeatures,
-
-    pub own_resource_limits: ResourceLimits,
-
-    /// DER-encoded public keys of the subnet's nodes.
-    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
-
-    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+    /// Registry-derived information about this subnet (its features, resource
+    /// limits and node public keys).
+    pub own_subnet_info: Arc<OwnSubnetInfo>,
 
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
@@ -174,7 +169,7 @@ pub struct SystemMetadata {
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
-    /// by aggregating them and storing a running total over multiple days by node id and
+    /// by aggregating them and storing a running total over multiple days by node ID and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
 
@@ -182,17 +177,13 @@ pub struct SystemMetadata {
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 
-    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
-    /// or from `LogMemoryStore` to `CanisterLog`, as per the
-    /// `log_memory_store_feature` flag.
+    /// The subnet list from network topology that was last used by
+    /// `generate_reject_responses_for_deleted_subnets()`. The function
+    /// exits early if the subnet list has not changed since the last call.
     ///
-    /// This is a (temporary) transient field tracking whether all canisters are
-    /// definitely using the log store required by the `log_memory_store_feature`
-    /// flag. It is intended to be used as a one-time trigger (when `false`) to
-    /// launch the (idempotent, if already performed) logs migration exactly once
-    /// per replica process (since the flag is hardcoded into the binary).
+    /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
-    pub logs_migrated: bool,
+    pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
 }
 
 /// Unfiltered topology, including all subnets and the full routing table.
@@ -244,9 +235,12 @@ pub struct NetworkTopology {
     full_topology: Option<FullTopology>,
 
     /// Subnet to which `SetupInitialDKG` management canister calls are routed
-    /// by default, i.e., when no subnet id is specified explicitly in the
+    /// by default, i.e., when no subnet ID is specified explicitly in the
     /// request. If `None`, such requests are routed to the calling subnet.
     pub default_initial_dkg_subnet_id: Option<SubnetId>,
+
+    /// API boundary nodes, indexed by `NodeId`.
+    pub api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
 }
 
 /// Full description of the API Boundary Node, which is saved in the metadata.
@@ -276,6 +270,7 @@ impl Default for NetworkTopology {
             bitcoin_mainnet_canister_id: None,
             full_topology: None,
             default_initial_dkg_subnet_id: None,
+            api_boundary_nodes: Default::default(),
         }
     }
 }
@@ -292,6 +287,7 @@ impl NetworkTopology {
         bitcoin_mainnet_canister_id: Option<CanisterId>,
         full_topology: Option<FullTopology>,
         default_initial_dkg_subnet_id: Option<SubnetId>,
+        api_boundary_nodes: BTreeMap<NodeId, ApiBoundaryNodeEntry>,
     ) -> Self {
         Self {
             subnets,
@@ -303,6 +299,7 @@ impl NetworkTopology {
             bitcoin_mainnet_canister_id,
             full_topology,
             default_initial_dkg_subnet_id,
+            api_boundary_nodes,
         }
     }
 
@@ -375,7 +372,7 @@ impl NetworkTopology {
             .unwrap_or(&self.routing_table)
     }
 
-    /// Find the subnet for `principal_id`. The input can either be a canister id, or a subnet id.
+    /// Find the subnet for `principal_id`. The input can either be a canister ID, or a subnet ID.
     pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
         let as_subnet_id = SubnetId::from(principal_id);
         if self.subnets.contains_key(&as_subnet_id) {
@@ -423,6 +420,18 @@ pub fn can_have_subnet_admins(
     (subnet_type == SubnetType::Application && cost_schedule == CanisterCyclesCostSchedule::Free)
         || (subnet_type == SubnetType::CloudEngine
             && cost_schedule == CanisterCyclesCostSchedule::Free)
+}
+
+/// Registry-derived information about the subnet that this replicated state
+/// belongs to. Repopulated from the registry at the start of every round.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct OwnSubnetInfo {
+    pub subnet_features: SubnetFeatures,
+
+    pub resource_limits: ResourceLimits,
+
+    /// DER-encoded public keys of the subnet's nodes.
+    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
@@ -544,10 +553,7 @@ impl SystemMetadata {
             batch_time: UNIX_EPOCH,
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
 
@@ -563,7 +569,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         }
     }
 
@@ -854,12 +860,7 @@ impl SystemMetadata {
             // subnet registry record, do not touch it.
             own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            own_subnet_features: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            own_resource_limits: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            node_public_keys: _,
-            api_boundary_nodes: _,
+            own_subnet_info: _,
             ref mut split_from,
             subnet_split_from,
             subnet_call_context_manager: _,
@@ -873,7 +874,7 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            logs_migrated: _,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -963,10 +964,7 @@ impl SystemMetadata {
             network_topology,
             own_subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_info,
             split_from,
             mut subnet_split_from,
             mut subnet_call_context_manager,
@@ -978,7 +976,7 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            logs_migrated,
+            subnet_ids_at_last_reject_generation: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1068,11 +1066,8 @@ impl SystemMetadata {
             // New subnet ID.
             own_subnet_id: subnet_id,
             own_subnet_type,
-            own_subnet_features,
-            own_resource_limits,
             // Already populated from the registry.
-            node_public_keys,
-            api_boundary_nodes,
+            own_subnet_info,
             split_from,
             subnet_split_from,
             subnet_call_context_manager,
@@ -1088,7 +1083,9 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
-            logs_migrated,
+            // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
+            // runs unconditionally on the first post-split round.
+            subnet_ids_at_last_reject_generation: None,
         })
     }
 
@@ -1599,7 +1596,7 @@ impl IngressHistoryState {
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
-        // Store the associated expiry time for the given message id only for a
+        // Store the associated expiry time for the given message ID only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
         if let IngressStatus::Known { state, .. } = &status
@@ -1640,11 +1637,17 @@ impl IngressHistoryState {
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
-    /// message id.
+    /// message ID.
     pub fn statuses(&self) -> impl Iterator<Item = (&MessageId, &IngressStatus)> {
         self.statuses
             .iter()
             .map(|(id, status)| (id, status.as_ref()))
+    }
+
+    /// Returns an iterator over the backing `Arc<IngressStatus>` of each entry,
+    /// sorted lexicographically by message ID.
+    pub fn statuses_arc(&self) -> impl Iterator<Item = (&MessageId, &Arc<IngressStatus>)> {
+        self.statuses.iter()
     }
 
     /// Returns an iterator over pruning times statuses, sorted
@@ -2062,6 +2065,17 @@ impl UnflushedCheckpointOps {
 pub mod testing {
     use super::*;
 
+    /// Exposes `SystemMetadata` internals for use in tests.
+    pub trait SystemMetadataTesting {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
+    }
+
+    impl SystemMetadataTesting for SystemMetadata {
+        fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology)) {
+            f(Arc::make_mut(&mut self.network_topology));
+        }
+    }
+
     /// Exposes `NetworkTopology` internals for use in tests.
     pub trait NetworkTopologyTesting {
         /// Returns a mutable reference to the subnets map.
@@ -2175,10 +2189,7 @@ pub mod testing {
             network_topology: Default::default(),
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
-            own_subnet_features: SubnetFeatures::default(),
-            own_resource_limits: Default::default(),
-            node_public_keys: Default::default(),
-            api_boundary_nodes: Default::default(),
+            own_subnet_info: Default::default(),
             split_from: None,
             subnet_split_from: None,
             prev_state_hash: Default::default(),
@@ -2190,7 +2201,7 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
+            subnet_ids_at_last_reject_generation: None,
         };
     }
 }
