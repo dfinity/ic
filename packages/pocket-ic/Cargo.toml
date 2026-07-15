@@ -88,5 +88,6 @@ ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provide
 ic-registry-transport = { path = "../../rs/registry/transport" }
 ic-types = { path = "../../rs/types/types" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
+libc = { workspace = true }
 maplit = "1.0.2"
 prost = { workspace = true }

@@ -3062,7 +3062,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         ttl: None,
         hard_ttl: None,
     };
-    let (_child, server_url) = start_server(server_params).await;
+    let (_server, server_url) = start_server(server_params).await;
 
     // Assert that
     // - an instance exists on the server iff `instance_exists` is set to `true`;
@@ -3150,7 +3150,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         ttl: None,
         hard_ttl: None,
     };
-    let (_child, server_url) = start_server(server_params).await;
+    let (_server, server_url) = start_server(server_params).await;
 
     // We provide an invalid log level.
     let subnet_config_set = SubnetConfigSet {
@@ -3199,7 +3199,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         ttl: None,
         hard_ttl: None,
     };
-    let (_child, server_url) = start_server(server_params).await;
+    let (_server, server_url) = start_server(server_params).await;
 
     // We first successfully create an instance with an HTTP gateway
     // to later craft an invalid HTTP gateway configuration
@@ -3270,7 +3270,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         ttl: None,
         hard_ttl: None,
     };
-    let (_child, server_url) = start_server(server_params).await;
+    let (_server, server_url) = start_server(server_params).await;
 
     // We provide invalid paths in `HttpsConfig` which makes HTTP gateway creation fail.
     let http_gateway_config = InstanceHttpGatewayConfig {

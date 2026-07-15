@@ -2286,11 +2286,13 @@ pub struct StartServerParams {
 ///
 /// The spawned server process is owned by a process-global registry; the returned
 /// [`ServerHandle`] only refers to it (dropping the handle does not stop the server). On
-/// unix, once the test process exits, the server is killed (its whole process group, so
-/// the canister-sandbox children are terminated too) and reaped on a bounded, best-effort
-/// basis; on other platforms the server is not killed automatically and shuts down on its
-/// TTL. Callers that want to terminate the server earlier can call
-/// [`ServerHandle::kill_and_wait`].
+/// unix, once the spawning process exits normally, the server is killed (its whole
+/// process group, so the canister-sandbox children are terminated too) and reaped on a
+/// bounded, best-effort basis; if the process terminates abnormally (e.g. it is killed by
+/// a signal or aborts), the server is not cleaned up and shuts down on its TTL instead.
+/// On other platforms the server is never killed automatically and always shuts down on
+/// its TTL. Callers can terminate the server earlier with [`ServerHandle::kill_and_wait`]
+/// or let it outlive this process with [`ServerHandle::detach`].
 pub async fn start_server(params: StartServerParams) -> (ServerHandle, Url) {
     let default_bin_dir =
         std::env::temp_dir().join(format!("{POCKET_IC_SERVER_NAME}-{LATEST_SERVER_VERSION}"));
@@ -2404,9 +2406,9 @@ pub async fn start_server(params: StartServerParams) -> (ServerHandle, Url) {
         .spawn()
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
     // Transfer ownership of the server process to the process-global registry, which
-    // kills and reaps it (and its sandbox children) once all subtests have finished.
+    // kills and reaps it (and its sandbox children) once the process exits normally.
     // See `server_process`.
-    let server_handle = server_process::register(child);
+    let server_handle = server_process::register(child, port_file_path.clone());
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
