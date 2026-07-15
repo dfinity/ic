@@ -289,6 +289,14 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
+                // A canister with no installed code still exposes `system_metadata`
+                // from `V27` onwards; its map is currently empty.
+                (certification_version >= CertificationVersion::V27).then(|| {
+                    vec![
+                        edge("system_metadata"),
+                        E::VisitBlob(crate::encoding::encode_canister_system_metadata(None)),
+                    ]
+                }),
                 Some(vec![
                     E::EndSubtree, // canister
                     E::EndSubtree, // canisters
@@ -387,10 +395,6 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
-                // The `last_install_timestamp` leaf is only present from `V27`
-                // onwards, and sorts between `controllers` and `metadata`.
-                (certification_version >= CertificationVersion::V27)
-                    .then(|| vec![edge("last_install_timestamp"), leb_num(1234)]),
                 Some(vec![
                     edge("metadata"),
                     E::StartSubtree,
@@ -406,6 +410,14 @@ mod tests {
                     edge("module_hash"),
                     E::VisitBlob(wasm_binary_hash.to_vec()),
                 ]),
+                // The `system_metadata` leaf is only present from `V27` onwards,
+                // and sorts after `module_hash`.
+                (certification_version >= CertificationVersion::V27).then(|| {
+                    vec![
+                        edge("system_metadata"),
+                        E::VisitBlob(crate::encoding::encode_canister_system_metadata(Some(1234))),
+                    ]
+                }),
                 Some(vec![
                     E::EndSubtree, // canister
                     E::EndSubtree, // canisters
@@ -435,6 +447,70 @@ mod tests {
                 expected_traversal,
                 traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
+            );
+        }
+    }
+
+    /// At `V27` every canister exposes a `system_metadata` leaf, but its map is
+    /// empty whenever there is no metadata to report. This covers the two such
+    /// conditions: a canister with no installed code, and a canister whose code
+    /// was installed before the install timestamp existed (`last_install_timestamp`
+    /// is `None`).
+    #[test]
+    fn system_metadata_leaf_is_empty_when_there_is_no_metadata() {
+        use ic_canonical_state_tree_hash::lazy_tree::{LazyTree, follow_path};
+        use std::collections::BTreeMap;
+
+        let controller = user_test_id(24);
+
+        // (a) A canister with no installed code.
+        let codeless_id = canister_test_id(1);
+        let codeless = new_canister_state(
+            codeless_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+
+        // (b) A canister with installed code but no recorded install timestamp.
+        let no_timestamp_id = canister_test_id(2);
+        let mut with_code = new_canister_state(
+            no_timestamp_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        with_code.execution_state = Some(ExecutionState::new(
+            WasmBinary::new(CanisterModule::new(vec![])),
+            None,
+            ExportedFunctions::new(BTreeSet::new()),
+            Memory::new_for_testing(),
+            Memory::new_for_testing(),
+            vec![],
+            WasmMetadata::new(BTreeMap::new()),
+        ));
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.put_canister_state(codeless);
+        state.put_canister_state(with_code);
+        state.metadata.certification_version = CertificationVersion::V27;
+
+        let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
+
+        for canister_id in [codeless_id, no_timestamp_id] {
+            let principal = canister_id.get();
+            let path: [&[u8]; 3] = [b"canister", principal.as_slice(), b"system_metadata"];
+            let leaf =
+                follow_path(&tree, &path).expect("every canister exposes `system_metadata` at V27");
+            let bytes = match leaf {
+                LazyTree::LazyBlob(f) => f(),
+                LazyTree::Blob(b, _) => b.to_vec(),
+                LazyTree::LazyFork(_) => panic!("`system_metadata` must be a leaf, not a subtree"),
+            };
+            let map: BTreeMap<String, u64> = serde_cbor::from_slice(&bytes).unwrap();
+            assert!(
+                map.is_empty(),
+                "expected an empty system_metadata map for {canister_id}, got {map:?}"
             );
         }
     }

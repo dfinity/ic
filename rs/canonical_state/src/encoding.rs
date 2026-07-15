@@ -128,6 +128,35 @@ pub fn encode_controllers(controllers: &BTreeSet<PrincipalId>) -> Vec<u8> {
     serializer.into_inner()
 }
 
+/// A canister's system metadata, encoded into the `system_metadata` tree leaf as
+/// a self-describing CBOR map.
+///
+/// Every field is optional and omitted from the map when absent, so the map
+/// contains only the information currently available for the canister (and is
+/// the empty map `{}` when none is). New fields can be added over time; each is
+/// independent, so the map is well-defined even once `last_install_timestamp` is
+/// no longer the only entry.
+#[derive(Serialize)]
+struct CanisterSystemMetadata {
+    /// The round time, in nanoseconds since the Unix epoch, at which the
+    /// canister's code was most recently installed/upgraded or restored from a
+    /// snapshot. Absent for canisters installed before this field existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_install_timestamp: Option<u64>,
+}
+
+/// Encodes a canister's [`CanisterSystemMetadata`] as a self-describing CBOR map.
+pub fn encode_canister_system_metadata(last_install_timestamp_nanos: Option<u64>) -> Vec<u8> {
+    let mut serializer = serde_cbor::ser::Serializer::new(vec![]);
+    serializer.self_describe().unwrap();
+    CanisterSystemMetadata {
+        last_install_timestamp: last_install_timestamp_nanos,
+    }
+    .serialize(&mut serializer)
+    .unwrap();
+    serializer.into_inner()
+}
+
 #[cfg(test)]
 mod tests {
     mod compatibility;

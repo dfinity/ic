@@ -3,8 +3,8 @@
 use crate::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
-        encode_controllers, encode_message, encode_metadata, encode_stream_header,
-        encode_subnet_canister_ranges, encode_subnet_metrics,
+        encode_canister_system_metadata, encode_controllers, encode_message, encode_metadata,
+        encode_stream_header, encode_subnet_canister_ranges, encode_subnet_metrics,
     },
 };
 use LazyTree::Blob;
@@ -877,7 +877,7 @@ const CERTIFIED_DATA_LABEL: &[u8] = b"certified_data";
 const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
-const LAST_INSTALL_TIMESTAMP_LABEL: &[u8] = b"last_install_timestamp";
+const SYSTEM_METADATA_LABEL: &[u8] = b"system_metadata";
 
 const CANISTER_LABELS: [&[u8]; 4] = [
     CERTIFIED_DATA_LABEL,
@@ -888,15 +888,19 @@ const CANISTER_LABELS: [&[u8]; 4] = [
 
 const CANISTER_NO_MODULE_LABELS: [&[u8]; 1] = [CONTROLLERS_LABEL];
 
-// Same as the above, but including the `last_install_timestamp` leaf added in
-// certification version `V27`. Labels must stay in sorted order.
-const CANISTER_LABELS_WITH_INSTALL_TIMESTAMP: [&[u8]; 5] = [
+// Same as the above, but including the `system_metadata` leaf added in
+// certification version `V27`, which is exposed for every canister (with or
+// without installed code). Labels must stay in sorted order.
+const CANISTER_LABELS_WITH_SYSTEM_METADATA: [&[u8]; 5] = [
     CERTIFIED_DATA_LABEL,
     CONTROLLERS_LABEL,
-    LAST_INSTALL_TIMESTAMP_LABEL,
     METADATA_LABEL,
     MODULE_HASH_LABEL,
+    SYSTEM_METADATA_LABEL,
 ];
+
+const CANISTER_NO_MODULE_LABELS_WITH_SYSTEM_METADATA: [&[u8]; 2] =
+    [CONTROLLERS_LABEL, SYSTEM_METADATA_LABEL];
 
 #[derive(Clone)]
 struct CanisterFork<'a> {
@@ -908,6 +912,17 @@ impl<'a> CanisterFork<'a> {
     /// Like `edge`, but assumes valid labels only.
     fn edge_no_checks(&self, label: &[u8]) -> LazyTree<'a> {
         let canister = self.canister;
+        // The `system_metadata` leaf is exposed for every canister (with or
+        // without installed code); the install timestamp, when present, lives on
+        // the execution state.
+        if label == SYSTEM_METADATA_LABEL {
+            let last_install_timestamp_nanos = canister
+                .execution_state
+                .as_ref()
+                .and_then(|execution_state| execution_state.last_install_timestamp)
+                .map(|t| t.as_nanos_since_unix_epoch());
+            return blob(move || encode_canister_system_metadata(last_install_timestamp_nanos));
+        }
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
                 CERTIFIED_DATA_LABEL => Blob(canister.system_state.certified_data.as_slice(), None),
@@ -917,12 +932,6 @@ impl<'a> CanisterFork<'a> {
                 METADATA_LABEL => canister_metadata_as_tree(execution_state, self.version),
                 MODULE_HASH_LABEL => {
                     Blob(execution_state.wasm_binary.binary.module_hash_ref(), None)
-                }
-                LAST_INSTALL_TIMESTAMP_LABEL => {
-                    let timestamp = execution_state
-                        .last_install_timestamp
-                        .expect("last_install_timestamp leaf present without a value");
-                    num(timestamp.as_nanos_since_unix_epoch())
                 }
                 _ => unreachable!(),
             },
@@ -938,20 +947,19 @@ impl<'a> CanisterFork<'a> {
     /// Returns the labels applicable to this canister.
     #[inline]
     fn valid_labels(&self) -> &'static [&'static [u8]] {
-        match &self.canister.execution_state {
-            // The `last_install_timestamp` leaf is only exposed from
-            // certification version `V27` onwards, and only when the execution
-            // state has a recorded install timestamp (code installed before the
-            // field existed does not have one). Canisters with no installed code
-            // never expose it.
-            Some(execution_state)
-                if self.version >= CertificationVersion::V27
-                    && execution_state.last_install_timestamp.is_some() =>
-            {
-                &CANISTER_LABELS_WITH_INSTALL_TIMESTAMP
-            }
-            Some(_) => &CANISTER_LABELS,
-            None => &CANISTER_NO_MODULE_LABELS,
+        // The `system_metadata` leaf is exposed from certification version `V27`
+        // onwards for every canister, regardless of whether it has installed
+        // code. Its map carries only the information currently available and may
+        // be the empty map (e.g. for a canister with no installed code, or one
+        // installed before the install timestamp existed).
+        match (
+            self.canister.execution_state.is_some(),
+            self.version >= CertificationVersion::V27,
+        ) {
+            (true, true) => &CANISTER_LABELS_WITH_SYSTEM_METADATA,
+            (true, false) => &CANISTER_LABELS,
+            (false, true) => &CANISTER_NO_MODULE_LABELS_WITH_SYSTEM_METADATA,
+            (false, false) => &CANISTER_NO_MODULE_LABELS,
         }
     }
 }
