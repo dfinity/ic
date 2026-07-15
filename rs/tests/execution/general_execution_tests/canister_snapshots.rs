@@ -1,4 +1,5 @@
 use candid::Principal;
+use ic_agent::agent::RejectCode;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{
     CanisterSnapshotDataOffset, LoadCanisterSnapshotArgs, Payload, UploadCanisterSnapshotDataArgs,
@@ -6,7 +7,7 @@ use ic_management_canister_types_private::{
 };
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::util::{assert_reject_msg, block_on};
 use ic_utils::interfaces::ManagementCanister;
 use slog::warn;
 
@@ -137,9 +138,10 @@ pub fn upload_and_load_snapshot_with_wasm_memory(env: TestEnv) {
             .update(&canister_principal, "inc")
             .call_and_wait()
             .await;
-        assert!(
-            result.is_err(),
-            "expected inc to fail gracefully, got {result:?}"
+        assert_reject_msg(
+            result,
+            RejectCode::CanisterError,
+            "Failed to grow wasm memory by 31 page(s) to 32 page(s): exceeds module's declared maximum",
         );
     });
 }
