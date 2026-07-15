@@ -133,7 +133,6 @@ rust_ic_test(
         "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
     },
     exec_properties = {"cpu": "4"},
-    tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":ledger",

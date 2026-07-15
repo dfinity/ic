@@ -207,9 +207,6 @@ rust_test_suite_with_extra_srcs(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:6",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -232,9 +229,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:8",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -248,12 +242,10 @@ rust_test(
     crate_root = "tests/upgrade_everything_test.rs",
     data = DEV_DATA,
     env = DEV_ENV | {"RUST_TEST_NOCAPTURE": "1"},
+    exec_properties = {"cpu": "6"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
-    ],
-    tags = [
-        "cpu:6",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
@@ -271,9 +263,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:4",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -290,9 +279,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:4",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -308,9 +294,6 @@ rust_test(
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
-    ],
-    tags = [
-        "cpu:4",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
@@ -329,9 +312,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:4",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -347,9 +327,6 @@ rust_test(
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
-    ],
-    tags = [
-        "cpu:4",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
@@ -367,9 +344,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:4",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -386,9 +360,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
     ],
-    tags = [
-        "cpu:4",
-    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
@@ -404,9 +375,6 @@ rust_test(
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
-    ],
-    tags = [
-        "cpu:4",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES,
 )
@@ -430,9 +398,6 @@ rust_test(
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:rust_decimal_macros",
-    ],
-    tags = [
-        "cpu:4",
     ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + [
         "//rs/sns/treasury_manager",

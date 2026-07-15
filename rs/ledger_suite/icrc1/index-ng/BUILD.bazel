@@ -124,7 +124,6 @@ rust_test(
         },
         exec_properties = {"cpu": "4"},
         extra_srcs = ["tests/common/mod.rs"],
-        tags = ["cpu:4"],
         deps = [
             # Keep sorted.
             ":index-ng",

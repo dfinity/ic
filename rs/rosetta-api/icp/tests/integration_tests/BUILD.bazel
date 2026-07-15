@@ -51,7 +51,6 @@ rust_test_suite(
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
     proc_macro_deps = [
     ],
-    tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":rosetta-integration-tests-lib",

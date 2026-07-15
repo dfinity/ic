@@ -104,7 +104,6 @@ rust_test(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    tags = ["cpu:16"],
     deps = [
         # Keep sorted
         "//packages/ic-http-types",
