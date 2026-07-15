@@ -331,6 +331,8 @@ def system_test(
         },
         env_inherit = env_inherit,
         tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
+        # The cpu:n` tag is not forwarded to the Remote Execution API so we set the exection properties explicitly:
+        exec_properties = {"cpu": cpus} if cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
