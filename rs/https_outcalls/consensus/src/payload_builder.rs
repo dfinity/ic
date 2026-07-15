@@ -484,9 +484,9 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            // Enforce the per-replica refund allowance on every receipt in the proof.
+            // Enforce the per-replica allowance on every receipt in the proof.
             for sig in response.proof.signatures.values() {
-                utils::check_refund_allowance(
+                utils::check_spent_allowance(
                     &sig.payment_receipt,
                     request_context.refund_status.per_replica_allowance,
                 )
@@ -571,9 +571,9 @@ impl CanisterHttpPayloadBuilderImpl {
                     context.registry_version,
                 ));
 
-                // Enforce per-replica refund allowance for divergence shares.
+                // Enforce per-replica allowance for divergence shares.
                 for share in grouped_shares.values().flatten() {
-                    utils::check_refund_allowance(
+                    utils::check_spent_allowance(
                         &share.content.payment_receipt,
                         context.refund_status.per_replica_allowance,
                     )

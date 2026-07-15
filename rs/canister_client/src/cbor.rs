@@ -30,7 +30,7 @@ pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
         )),
         None => Err(format!(
             "Key '{:?}' not found in '{:?}'",
-            status_key, &content
+            status_key, content
         )),
     }?;
 

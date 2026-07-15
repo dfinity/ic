@@ -1,6 +1,7 @@
 use candid::{CandidType, Decode, Encode, Principal, Reserved};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
@@ -181,7 +182,11 @@ async fn setup(
         let cycles = if enough_cycles {
             None
         } else {
-            Some(40_000_000_000)
+            Some(if LOG_MEMORY_STORE_FEATURE_ENABLED {
+                40_000_000_000
+            } else {
+                30_000_000_000
+            })
         };
         let migrated_canister = pic
             .create_canister_with_params(

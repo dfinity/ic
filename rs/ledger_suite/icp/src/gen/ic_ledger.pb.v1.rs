@@ -12,10 +12,10 @@ pub struct LedgerInit {
     pub max_message_size_bytes: u32,
 }
 /// The format of values serialized to/from the stable memory during and upgrade
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LedgerUpgrade {}
 /// Make a payment
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendRequest {
     #[prost(message, optional, tag = "1")]
     pub memo: ::core::option::Option<Memo>,
@@ -32,13 +32,13 @@ pub struct SendRequest {
     #[prost(message, optional, tag = "7")]
     pub created_at_time: ::core::option::Option<TimeStamp>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SendResponse {
     #[prost(message, optional, tag = "1")]
     pub resulting_height: ::core::option::Option<BlockIndex>,
 }
 /// Notify a canister that it has received a payment
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NotifyRequest {
     #[prost(message, optional, tag = "1")]
     pub block_height: ::core::option::Option<BlockIndex>,
@@ -51,9 +51,9 @@ pub struct NotifyRequest {
     #[prost(message, optional, tag = "5")]
     pub to_subaccount: ::core::option::Option<Subaccount>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct NotifyResponse {}
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransactionNotificationRequest {
     #[prost(message, optional, tag = "1")]
     pub from: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -70,19 +70,19 @@ pub struct TransactionNotificationRequest {
     #[prost(message, optional, tag = "7")]
     pub memo: ::core::option::Option<Memo>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransactionNotificationResponse {
     #[prost(bytes = "vec", tag = "1")]
     pub response: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CyclesNotificationResponse {
     #[prost(oneof = "cycles_notification_response::Response", tags = "1, 2, 3")]
     pub response: ::core::option::Option<cycles_notification_response::Response>,
 }
 /// Nested message and enum types in `CyclesNotificationResponse`.
 pub mod cycles_notification_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Response {
         #[prost(message, tag = "1")]
         CreatedCanisterId(::ic_base_types::PrincipalId),
@@ -93,20 +93,20 @@ pub mod cycles_notification_response {
     }
 }
 /// Get the balance of an account
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AccountBalanceRequest {
     #[prost(message, optional, tag = "1")]
     pub account: ::core::option::Option<AccountIdentifier>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AccountBalanceResponse {
     #[prost(message, optional, tag = "1")]
     pub balance: ::core::option::Option<Tokens>,
 }
 /// Get the length of the chain with a certification
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TipOfChainRequest {}
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TipOfChainResponse {
     #[prost(message, optional, tag = "1")]
     pub certification: ::core::option::Option<Certification>,
@@ -114,38 +114,38 @@ pub struct TipOfChainResponse {
     pub chain_length: ::core::option::Option<BlockIndex>,
 }
 /// How many Tokens are there not in the minting account
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TotalSupplyRequest {}
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TotalSupplyResponse {
     #[prost(message, optional, tag = "1")]
     pub total_supply: ::core::option::Option<Tokens>,
 }
 /// Archive any blocks older than this
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LedgerArchiveRequest {
     #[prost(message, optional, tag = "1")]
     pub timestamp: ::core::option::Option<TimeStamp>,
 }
 /// Get a single block
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BlockRequest {
     #[prost(uint64, tag = "1")]
     pub block_height: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EncodedBlock {
     #[prost(bytes = "vec", tag = "1")]
     pub block: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BlockResponse {
     #[prost(oneof = "block_response::BlockContent", tags = "1, 2")]
     pub block_content: ::core::option::Option<block_response::BlockContent>,
 }
 /// Nested message and enum types in `BlockResponse`.
 pub mod block_response {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum BlockContent {
         #[prost(message, tag = "1")]
         Block(super::EncodedBlock),
@@ -154,21 +154,21 @@ pub mod block_response {
     }
 }
 /// Get a set of blocks
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetBlocksRequest {
     #[prost(uint64, tag = "1")]
     pub start: u64,
     #[prost(uint64, tag = "2")]
     pub length: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Refund {
     #[prost(message, optional, tag = "2")]
     pub refund: ::core::option::Option<BlockIndex>,
     #[prost(string, tag = "3")]
     pub error: ::prost::alloc::string::String,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ToppedUp {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EncodedBlocks {
@@ -191,7 +191,7 @@ pub mod get_blocks_response {
     }
 }
 /// Iterate through blocks
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IterBlocksRequest {
     #[prost(uint64, tag = "1")]
     pub start: u64,
@@ -203,7 +203,7 @@ pub struct IterBlocksResponse {
     #[prost(message, repeated, tag = "1")]
     pub blocks: ::prost::alloc::vec::Vec<EncodedBlock>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ArchiveIndexEntry {
     #[prost(uint64, tag = "1")]
     pub height_from: u64,
@@ -218,8 +218,8 @@ pub struct ArchiveIndexResponse {
     pub entries: ::prost::alloc::vec::Vec<ArchiveIndexEntry>,
 }
 /// * Archive canister *
-/// Init the archive canister
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+///   Init the archive canister
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ArchiveInit {
     #[prost(uint32, tag = "1")]
     pub node_max_memory_size_bytes: u32,
@@ -232,34 +232,34 @@ pub struct ArchiveAddRequest {
     #[prost(message, repeated, tag = "1")]
     pub blocks: ::prost::alloc::vec::Vec<Block>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ArchiveAddResponse {}
 /// Fetch a list of all of the archive nodes
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetNodesRequest {}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetNodesResponse {
     #[prost(message, repeated, tag = "1")]
     pub nodes: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
-/// ** BASIC TYPES **
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+/// \** BASIC TYPES **
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Tokens {
     #[prost(uint64, tag = "1")]
     pub e8s: u64,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Payment {
     #[prost(message, optional, tag = "1")]
     pub receiver_gets: ::core::option::Option<Tokens>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BlockIndex {
     #[prost(uint64, tag = "1")]
     pub height: u64,
 }
 /// This is the
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Block {
     #[prost(message, optional, tag = "1")]
     pub parent_hash: ::core::option::Option<Hash>,
@@ -268,19 +268,19 @@ pub struct Block {
     #[prost(message, optional, tag = "3")]
     pub transaction: ::core::option::Option<Transaction>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Hash {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Account {
     #[prost(message, optional, tag = "1")]
     pub identifier: ::core::option::Option<AccountIdentifier>,
     #[prost(message, optional, tag = "2")]
     pub balance: ::core::option::Option<Tokens>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Transaction {
     #[prost(message, optional, tag = "4")]
     pub memo: ::core::option::Option<Memo>,
@@ -296,7 +296,7 @@ pub struct Transaction {
 }
 /// Nested message and enum types in `Transaction`.
 pub mod transaction {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Transfer {
         #[prost(message, tag = "1")]
         Burn(super::Burn),
@@ -306,18 +306,20 @@ pub mod transaction {
         Send(super::Send),
     }
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Send {
     /// The meaning of the \[from\] field depends on the transaction type:
-    ///    - Transfer: \[from\] is the source account.
-    ///    - TransferFrom: \[from\] is the approver.
-    ///    - Approve: \[from\] is the approver.
+    ///
+    /// * Transfer: \[from\] is the source account.
+    /// * TransferFrom: \[from\] is the approver.
+    /// * Approve: \[from\] is the approver.
     #[prost(message, optional, tag = "1")]
     pub from: ::core::option::Option<AccountIdentifier>,
     /// The meaning of the \[to\] field depends on the transaction type:
-    ///    - Transfer: \[to\] is the destination account.
-    ///    - TransferFrom: \[to\] is the destination account.
-    ///    - Approve: \[to\] is the default account id of the approved principal.
+    ///
+    /// * Transfer: \[to\] is the destination account.
+    /// * TransferFrom: \[to\] is the destination account.
+    /// * Approve: \[to\] is the default account id of the approved principal.
     #[prost(message, optional, tag = "2")]
     pub to: ::core::option::Option<AccountIdentifier>,
     /// If the transaction type is Approve, the amount must be zero.
@@ -334,7 +336,7 @@ pub struct Send {
 pub mod send {
     /// We represent metadata of new operation types as submessages for
     /// backward compatibility with old clients.
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Extension {
         #[prost(message, tag = "5")]
         Approve(super::Approve),
@@ -342,13 +344,13 @@ pub mod send {
         TransferFrom(super::TransferFrom),
     }
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransferFrom {
     /// The default account id of the principal who sent the transaction.
     #[prost(message, optional, tag = "1")]
     pub spender: ::core::option::Option<AccountIdentifier>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Approve {
     #[prost(message, optional, tag = "1")]
     pub allowance: ::core::option::Option<Tokens>,
@@ -357,14 +359,14 @@ pub struct Approve {
     #[prost(message, optional, tag = "3")]
     pub expected_allowance: ::core::option::Option<Tokens>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Mint {
     #[prost(message, optional, tag = "2")]
     pub to: ::core::option::Option<AccountIdentifier>,
     #[prost(message, optional, tag = "3")]
     pub amount: ::core::option::Option<Tokens>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Burn {
     #[prost(message, optional, tag = "1")]
     pub from: ::core::option::Option<AccountIdentifier>,
@@ -380,55 +382,58 @@ pub struct Burn {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AccountIdentifier {
     /// Can contain either:
-    ///   * the 32 byte identifier (4 byte checksum + 28 byte hash)
-    ///   * the 28 byte hash
+    ///
+    /// * the 32 byte identifier (4 byte checksum + 28 byte hash)
+    /// * the 28 byte hash
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Subaccount {
     #[prost(bytes = "vec", tag = "1")]
     pub sub_account: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Memo {
     #[prost(uint64, tag = "1")]
     pub memo: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Icrc1Memo {
     #[prost(bytes = "vec", tag = "1")]
     pub memo: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(
-    Eq,
     PartialOrd,
     Ord,
-    Hash,
     candid::CandidType,
     serde::Deserialize,
     serde::Serialize,
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TimeStamp {
     #[prost(uint64, tag = "1")]
     pub timestamp_nanos: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Certification {
     #[prost(bytes = "vec", tag = "1")]
     pub certification: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransferFeeRequest {}
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransferFeeResponse {
     #[prost(message, optional, tag = "1")]
     pub transfer_fee: ::core::option::Option<Tokens>,

@@ -129,7 +129,7 @@ impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
 
 impl std::fmt::Display for IDkgMasterPublicKeyId {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "{}", &self.0)
+        write!(fmt, "{}", self.0)
     }
 }
 

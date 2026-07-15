@@ -70,6 +70,14 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             )
             .into(),
             log_memory_limit: item.log_memory_limit.get(),
+            canister_log_records: item
+                .canister_log
+                .records()
+                .iter()
+                .map(|record| record.into())
+                .collect(),
+            next_canister_log_record_idx: item.next_canister_log_record_idx,
+            log_memory_store_migrated: item.log_memory_store_migrated,
             log_memory_store_persistent_next_idx: item.log_memory_store_persistent_next_idx,
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
@@ -218,6 +226,16 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )
             .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
+            canister_log: CanisterLog::new_aggregate(
+                value.next_canister_log_record_idx,
+                value
+                    .canister_log_records
+                    .into_iter()
+                    .map(|record| record.into())
+                    .collect(),
+            ),
+            next_canister_log_record_idx: value.next_canister_log_record_idx,
+            log_memory_store_migrated: value.log_memory_store_migrated,
             log_memory_store_persistent_next_idx: value.log_memory_store_persistent_next_idx,
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,

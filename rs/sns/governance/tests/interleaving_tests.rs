@@ -104,7 +104,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // disburse_neuron (in particular, the locks).
     atomic::fence(AOrdering::SeqCst);
     unsafe {
-        println!("{:#?}", &mut (*raw_ptr).proto.in_flight_commands);
+        println!("{:#?}", (*raw_ptr).proto.in_flight_commands);
     }
     let increase_dissolve_result = increase_dissolve_delay(
         unsafe { &mut *raw_ptr },

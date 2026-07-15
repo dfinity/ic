@@ -17,4 +17,9 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* Corrected the `DeleteSubnet` proposal description: dropped the outdated
+  "Currently limited to CloudEngine subnets" clause, added that the subnet
+  is also removed from the subnet list, and noted that system subnets cannot
+  be deleted.
+
 ## Security
