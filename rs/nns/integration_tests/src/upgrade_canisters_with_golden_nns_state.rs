@@ -449,11 +449,18 @@ mod sanity_check {
         // Advance time in the state machine to just before the next node provider
         // rewards distribution time.
         // Important to reach the exact moment when node provider rewards are distributed!
+        //
+        // Note that the golden state's most recently distributed reward can already be
+        // more than one full `NODE_PROVIDER_REWARD_PERIOD_SECONDS` behind the state
+        // machine's current time (e.g. if minting has fallen behind on mainnet), in which
+        // case a new distribution is already due and there is nothing to wait for. We use
+        // `saturating_sub` (rather than plain `-`) to represent that as 0, instead of
+        // underflowing.
         let seconds_to_node_provider_reward_distribution = before_timestamp
-            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
-            - state_machine.get_time().as_secs_since_unix_epoch();
+            .saturating_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
+            .saturating_sub(state_machine.get_time().as_secs_since_unix_epoch());
         state_machine.advance_time(std::time::Duration::from_secs(
-            seconds_to_node_provider_reward_distribution - 1,
+            seconds_to_node_provider_reward_distribution.saturating_sub(1),
         ));
 
         // Node provider rewards are minted by the governance heartbeat, but only once
@@ -468,9 +475,11 @@ mod sanity_check {
         tick_until_node_provider_rewards_distributed(state_machine, before_timestamp);
 
         // Advance time in the state machine by one month to ensure that voting rewards
-        // are also distributed.
+        // are also distributed. `seconds_to_node_provider_reward_distribution` is at most
+        // `NODE_PROVIDER_REWARD_PERIOD_SECONDS` (== `ONE_MONTH_SECONDS`), so this cannot
+        // underflow, but we use `saturating_sub` defensively for the same reason as above.
         state_machine.advance_time(std::time::Duration::from_secs(
-            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
+            ONE_MONTH_SECONDS.saturating_sub(seconds_to_node_provider_reward_distribution),
         ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
