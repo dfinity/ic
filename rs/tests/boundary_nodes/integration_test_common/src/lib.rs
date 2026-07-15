@@ -177,7 +177,7 @@ pub fn api_query_test(env: TestEnv) {
 
         let out = agent.query(&cid, "read").call().await?;
         if !out.eq(&[0, 0, 0, 0]) {
-            bail!("{name} failed: got {:?}, expected {:?}", out, &[0, 0, 0, 0],)
+            bail!("{name} failed: got {:?}, expected {:?}", out, [0, 0, 0, 0],)
         }
 
         Ok(())
@@ -219,7 +219,7 @@ pub fn api_call_test(env: TestEnv) {
 
         let out = agent.query(&cid, "read").call().await?;
         if !out.eq(&[1, 0, 0, 0]) {
-            bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
+            bail!("{name} failed: got {:?}, expected {:?}", out, [1, 0, 0, 0],)
         }
 
         Ok(())
@@ -256,7 +256,7 @@ pub fn api_sync_call_test(env: TestEnv) {
         // check that the update call went through
         let out = agent.query(&cid, "read").call().await?;
         if !out.eq(&[1, 0, 0, 0]) {
-            bail!("{name} failed: got {:?}, expected {:?}", out, &[1, 0, 0, 0],)
+            bail!("{name} failed: got {:?}, expected {:?}", out, [1, 0, 0, 0],)
         }
         Ok(())
     })

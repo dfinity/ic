@@ -1347,7 +1347,7 @@ fn test_icrc3_get_blocks() {
             expected_block_count,
             all_blocks.len(),
             expected_blocks_by_id.len(),
-            &ranges
+            ranges
         );
         for (pos, BlockWithId { id, block }) in all_blocks.into_iter().enumerate() {
             let expected_block = match expected_blocks_by_id.get(&id) {
