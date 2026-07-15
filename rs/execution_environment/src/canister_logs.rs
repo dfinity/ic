@@ -1,22 +1,18 @@
 use crate::canister_manager::types::{CanisterManagerError, CanisterManagerResponse};
 use crate::canister_settings::VisibilitySettings;
 use candid::Encode;
-use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_management_canister_types_private::{
-    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
-    FetchCanisterLogsResponse, LogVisibilityV2,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::CanisterState;
 use ic_types::messages::CanisterCall;
 use ic_types::{NumBytes, PrincipalId};
-use std::collections::VecDeque;
 
 pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
     canister: &CanisterState,
     args: FetchCanisterLogsRequest,
-    log_memory_store_feature: FlagStatus,
     msg: &mut CanisterCall,
     cycles_account_manager: &CyclesAccountManager,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
@@ -30,7 +26,7 @@ pub(crate) fn fetch_canister_logs(
         });
     }
     let canister_id = canister.canister_id();
-    let reply = fetch_canister_logs_response(sender, canister, args, log_memory_store_feature)?;
+    let reply = fetch_canister_logs_response(sender, canister, args)?;
     msg.deduct_cycles(
         cycles_account_manager
             .fetch_canister_logs_fee(NumBytes::new(reply.len() as u64), subnet_cycles_config),
@@ -50,16 +46,9 @@ pub(crate) fn fetch_canister_logs_response(
     sender: PrincipalId,
     canister: &CanisterState,
     args: FetchCanisterLogsRequest,
-    log_memory_store_feature: FlagStatus,
 ) -> Result<Vec<u8>, CanisterManagerError> {
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
-    let s = &canister.system_state;
-    let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Enabled if s.log_memory_store.is_migrated() => {
-            s.log_memory_store.records(args.filter)
-        }
-        _ => filter_records(&args, s.canister_log.records()),
-    };
+    let canister_log_records = canister.system_state.log_memory_store.records(args.filter);
     Ok(Encode!(&FetchCanisterLogsResponse {
         canister_log_records
     })
@@ -76,28 +65,4 @@ pub(crate) fn check_log_visibility_permission(
         return Err(CanisterManagerError::FetchCanisterLogsAccessDenied { caller: *caller });
     }
     Ok(())
-}
-
-fn filter_records(
-    args: &FetchCanisterLogsRequest,
-    records: &VecDeque<CanisterLogRecord>,
-) -> Vec<CanisterLogRecord> {
-    let Some(filter) = &args.filter else {
-        return records.iter().cloned().collect();
-    };
-
-    let (range, key): (&FetchCanisterLogsRange, fn(&CanisterLogRecord) -> u64) = match filter {
-        FetchCanisterLogsFilter::ByIdx(r) => (r, |rec| rec.idx),
-        FetchCanisterLogsFilter::ByTimestampNanos(r) => (r, |rec| rec.timestamp_nanos),
-    };
-
-    if range.is_empty() {
-        return Vec::new();
-    }
-
-    records
-        .iter()
-        .filter(|r| range.contains(key(r)))
-        .cloned()
-        .collect()
 }

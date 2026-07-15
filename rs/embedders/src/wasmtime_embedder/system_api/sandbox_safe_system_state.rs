@@ -396,11 +396,11 @@ impl SystemStateModifications {
             // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
-        if system_state.log_memory_store.is_migrated() {
-            system_state
-                .log_memory_store
-                .append_delta_log(&mut self.canister_log.clone());
-        }
+        system_state
+            .log_memory_store
+            .append_delta_log(&mut self.canister_log.clone());
+        // Keep the legacy `canister_log` store up to date so that checkpoints
+        // remain readable by replicas that predate the log memory store.
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
@@ -813,14 +813,10 @@ impl SandboxSafeSystemState {
             })
             .min()
             .unwrap_or(DEFAULT_QUEUE_CAPACITY);
-        let (next_canister_log_record_idx, canister_log_memory_limit) =
-            if system_state.log_memory_store.is_migrated() {
-                let lms = &system_state.log_memory_store;
-                (lms.next_idx(), lms.byte_capacity())
-            } else {
-                let cl = &system_state.canister_log;
-                (cl.next_idx(), cl.byte_capacity())
-            };
+        let (next_canister_log_record_idx, canister_log_memory_limit) = {
+            let lms = &system_state.log_memory_store;
+            (lms.next_idx(), lms.byte_capacity())
+        };
 
         Self::new_internal(
             system_state.canister_id(),

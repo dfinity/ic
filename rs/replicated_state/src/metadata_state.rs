@@ -177,18 +177,6 @@ pub struct SystemMetadata {
     /// This field is transient and is emptied before writing the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
 
-    /// Whether the logs have been migrated from `CanisterLog` to `LogMemoryStore`
-    /// or from `LogMemoryStore` to `CanisterLog`, as per the
-    /// `log_memory_store_feature` flag.
-    ///
-    /// This is a (temporary) transient field tracking whether all canisters are
-    /// definitely using the log store required by the `log_memory_store_feature`
-    /// flag. It is intended to be used as a one-time trigger (when `false`) to
-    /// launch the (idempotent, if already performed) logs migration exactly once
-    /// per replica process (since the flag is hardcoded into the binary).
-    #[validate_eq(Ignore)]
-    pub logs_migrated: bool,
-
     /// The subnet list from network topology that was last used by
     /// `generate_reject_responses_for_deleted_subnets()`. The function
     /// exits early if the subnet list has not changed since the last call.
@@ -551,6 +539,39 @@ impl SubnetMetrics {
     }
 }
 
+const GIB: u64 = 1024 * 1024 * 1024;
+
+/// The upper limit on the total size of all guaranteed response messages on a
+/// subnet.
+///
+/// Guaranteed response message memory usage is the total size of enqueued
+/// guaranteed responses plus the maximum allowed response size per reserved
+/// guaranteed response slot.
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
+
+/// The limit on the total size of all best-effort messages on a subnet,
+/// restored at the end of each round by shedding messages.
+const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
+
+/// Message memory is capped at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of the
+/// subnet's heap delta capacity.
+const MESSAGE_MEMORY_HEAP_DELTA_DIVISOR: u64 = 3;
+
+/// Caps `configured_default_capacity` at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR`
+/// of `heap_delta_capacity`.
+///
+/// Message memory is held in RAM alongside the heap delta pages, so this bounds
+/// message memory relative to a subnet's heap delta capacity (which is itself
+/// sized relative to available RAM).
+fn message_memory_capacity(
+    configured_default_capacity: NumBytes,
+    heap_delta_capacity: NumBytes,
+) -> NumBytes {
+    configured_default_capacity.min(NumBytes::new(
+        heap_delta_capacity.get() / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR,
+    ))
+}
+
 impl SystemMetadata {
     /// Creates a new empty system metadata state.
     pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Self {
@@ -581,7 +602,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
             subnet_ids_at_last_reject_generation: None,
         }
     }
@@ -612,6 +632,32 @@ impl SystemMetadata {
     pub fn own_reference_subnet_size(&self) -> Option<usize> {
         self.network_topology
             .get_reference_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns the subnet's guaranteed response message memory capacity, capped
+    /// relative to the subnet's heap delta capacity.
+    pub fn guaranteed_response_message_memory_capacity(&self) -> NumBytes {
+        message_memory_capacity(
+            SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// Returns the subnet's best-effort message memory capacity, capped relative
+    /// to the subnet's heap delta capacity.
+    pub fn best_effort_message_memory_capacity(&self) -> NumBytes {
+        message_memory_capacity(
+            SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// The effective heap delta capacity: the registry override if set, else the
+    /// protocol default.
+    fn heap_delta_capacity(&self) -> NumBytes {
+        self.own_subnet_info
+            .resource_limits
+            .maximum_state_delta_or(ic_config::execution_environment::SUBNET_HEAP_DELTA_CAPACITY)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
@@ -887,7 +933,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            logs_migrated: _,
             subnet_ids_at_last_reject_generation: _,
         } = self;
 
@@ -990,7 +1035,6 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            logs_migrated,
             subnet_ids_at_last_reject_generation: _,
         } = self;
 
@@ -1098,7 +1142,6 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
-            logs_migrated,
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
             subnet_ids_at_last_reject_generation: None,
@@ -2081,6 +2124,15 @@ impl UnflushedCheckpointOps {
 pub mod testing {
     use super::*;
 
+    /// Test helper for configuring a subnet's `maximum_state_delta`: returns the
+    /// heap delta capacity required to allow `message_memory` of message memory,
+    /// i.e. the inverse of the cap applied by `message_memory_capacity`. Lives
+    /// here so the message-memory/heap-delta factor stays confined to this
+    /// module rather than being duplicated across tests.
+    pub fn heap_delta_capacity_for_message_memory(message_memory: NumBytes) -> NumBytes {
+        NumBytes::new(message_memory.get() * MESSAGE_MEMORY_HEAP_DELTA_DIVISOR)
+    }
+
     /// Exposes `SystemMetadata` internals for use in tests.
     pub trait SystemMetadataTesting {
         fn modify_network_topology(&mut self, f: impl FnOnce(&mut NetworkTopology));
@@ -2217,7 +2269,6 @@ pub mod testing {
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            logs_migrated: false,
             subnet_ids_at_last_reject_generation: None,
         };
     }

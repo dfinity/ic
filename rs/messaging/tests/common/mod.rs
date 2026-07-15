@@ -3,10 +3,12 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_registry_resource_limits::ResourceLimits;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
-    SubnetId,
+    NumBytes, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, RequestOrResponse},
 };
@@ -241,16 +243,14 @@ impl TestSubnetConfig {
                 },
                 cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
             },
-            HypervisorConfig {
-                guaranteed_response_message_memory_capacity: self
-                    .guaranteed_response_message_memory_capacity
-                    .into(),
-                best_effort_message_memory_capacity: self
-                    .best_effort_message_memory_capacity
-                    .into(),
-                ..HypervisorConfig::default()
-            },
+            HypervisorConfig::default(),
         )
+        .with_resource_limits(ResourceLimits {
+            maximum_state_size: None,
+            maximum_state_delta: Some(heap_delta_capacity_for_message_memory(NumBytes::from(
+                self.guaranteed_response_message_memory_capacity,
+            ))),
+        })
     }
 }
 
