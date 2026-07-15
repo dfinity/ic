@@ -178,7 +178,8 @@ fn fetch_canister_logs_intercanister(
     universal_canister: CanisterId,
     canister_id: CanisterId,
 ) -> Result<WasmResult, UserError> {
-    // `fetch_canister_logs` charges no cycles fee, so no cycles are attached.
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated),
+    // so no cycles are attached.
     env.execute_ingress(
         universal_canister,
         "update",
@@ -2626,9 +2627,10 @@ fn test_fetch_canister_logs_update_call_succeeds_without_cycles() {
 
 #[test]
 fn test_fetch_canister_logs_update_call_refunds_all_attached_cycles() {
-    // `fetch_canister_logs` charges no cycles fee, so every cycle the caller
-    // attaches to the call is refunded (the incidental transmission and execution
-    // fees are paid from the caller's balance, not from the attached payment).
+    // `fetch_canister_logs` charges no cycles fee (only round instructions are updated),
+    // so every cycle the caller attaches to the call is refunded (the incidental
+    // transmission and execution fees are paid from the caller's balance, not from the
+    // attached payment).
     let user_controller = PrincipalId::new_user_test_id(42);
     let env = setup_env();
     let canister_a = create_and_install_canister(

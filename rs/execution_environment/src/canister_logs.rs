@@ -22,7 +22,7 @@ pub(crate) fn fetch_canister_logs(
     // term of that cost is already covered by a fee the caller pays. The fixed base
     // is bounded by the flat per-message execution fee the caller pays to run its
     // response callback; the per-record and per-content-byte terms are dominated by
-    // the per-byte message transmission fee the caller prepays on the response
+    // the per-byte message transmission fee the caller pays on the response
     // (which is ~1000x the per-byte instruction cost). On a subnet with a "free"
     // cost schedule the fee for the call is zero, but the fee for the subnet
     // covers the work.
@@ -70,7 +70,7 @@ pub(crate) fn fetch_canister_logs(
 ///   full 2 MiB buffer of 0-byte messages returns ~50_000 records in ~17 ms, i.e.
 ///   ~0.35 µs/record measured. The per-content-byte term (~0.5 ns/byte) bounds the
 ///   ~0.2 ns/byte measured for a full 2 MiB content payload. Both stay well below the
-///   per-byte message transmission fee (1000 cycles/byte) the caller prepays on the
+///   per-byte message transmission fee (1000 cycles/byte) the caller pays on the
 ///   response, since each record adds ~17 response bytes and each content byte adds
 ///   one.
 ///

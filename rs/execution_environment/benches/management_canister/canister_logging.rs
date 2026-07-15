@@ -300,7 +300,8 @@ fn run_bench_fetch_no_match_scan<M: criterion::measurement::Measurement>(
         end: oldest_idx,
     });
     // Guard against the benchmark silently measuring a normal read: the filter must
-    // match nothing (while still forcing a full-buffer scan, see the doc comment).
+    // match nothing (while remaining head-positioned so it would force a full-buffer
+    // scan absent the early-exit, see the doc comment).
     assert!(log_memory_store.records(Some(filter)).is_empty());
     group.bench_function(bench_name, |b| {
         b.iter_batched(

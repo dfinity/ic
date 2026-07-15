@@ -511,15 +511,6 @@ fn fetch_canister_logs_response_within_limit() {
         // The returned records are trimmed to `RESULT_MAX_SIZE` by stored data size.
         let returned_size = total_size(&records);
         assert_le!(returned_size, RESULT_MAX_SIZE.get() as usize);
-        // The last (largest) content case is a single record whose `data_size()`
-        // equals `RESULT_MAX_SIZE` exactly (content = `RESULT_MAX_SIZE` minus the
-        // fixed per-record overhead), so the trim keeps precisely that one record and
-        // the returned size hits the cap exactly — not merely below it. This pins the
-        // trim boundary: an off-by-one that dropped the boundary record (`>` vs `>=`)
-        // would leave `returned_size` short of the cap and fail here.
-        if i == last {
-            assert_eq!(returned_size, RESULT_MAX_SIZE.get() as usize);
-        }
 
         let response = FetchCanisterLogsResponse {
             canister_log_records: records,
@@ -531,6 +522,21 @@ fn fetch_canister_logs_response_within_limit() {
             "content_len={content_len}: encoded response of {encoded_len} bytes exceeds \
              the result cap plus Candid framing ({max_response})"
         );
+
+        // The last (largest) content case is a single record whose `data_size()` equals
+        // `RESULT_MAX_SIZE` exactly (content = `RESULT_MAX_SIZE` minus the fixed per-record
+        // overhead), so the trim keeps precisely that one record and the returned size hits
+        // the cap exactly — not merely below it. This pins the trim boundary: an off-by-one
+        // that dropped the boundary record (`>` vs `>=`) would leave `returned_size` short
+        // of the cap and fail here. And because the stored per-record overhead (40 B)
+        // exceeds the Candid-encoded fixed fields (16 B), that maximal record's encoding
+        // still spills past `RESULT_MAX_SIZE` once content plus framing are counted — the
+        // exact case the 4 KiB `max_response` margin exists for, so assert the margin is
+        // genuinely exercised rather than slack.
+        if i == last {
+            assert_eq!(returned_size, RESULT_MAX_SIZE.get() as usize);
+            assert_gt!(encoded_len, RESULT_MAX_SIZE.get() as usize);
+        }
     }
 }
 
