@@ -25,21 +25,26 @@ use icrc_ledger_types::icrc::{
     },
 };
 
-use crate::blocks::encoded_block_to_generic_block;
+use crate::blocks::try_generic_block_from_value;
 use crate::known_tags::SELF_DESCRIBED;
 
 /// Validates that `encoded_block` conforms to the `block.cddl` schema.
 ///
 /// This checks both:
 ///  1. the outer self-describe CBOR tag (`#6.55799`), which the block encoder
-///     always emits and which `encoded_block_to_generic_block` transparently
-///     strips, and
+///     always emits, and
 ///  2. the structure of the decoded block content.
+///
+/// It returns an error (rather than panicking) for any malformed input,
+/// including CBOR that decodes but cannot be converted into a block.
 pub fn validate(encoded_block: &EncodedBlock) -> Result<(), String> {
-    // 1. `Block = #6.55799(BlockContent)`: the encoding must be wrapped in the
-    // self-describe CBOR tag.
+    // Decode the CBOR once; the tag check and the block conversion below both
+    // operate on this value.
     let cbor: ciborium::value::Value = ciborium::de::from_reader(encoded_block.as_slice())
         .map_err(|e| format!("failed to decode block as CBOR: {e}"))?;
+
+    // 1. `Block = #6.55799(BlockContent)`: the encoding must be wrapped in the
+    // self-describe CBOR tag.
     match &cbor {
         ciborium::value::Value::Tag(tag, _) if *tag == SELF_DESCRIBED => {}
         other => {
@@ -50,8 +55,10 @@ pub fn validate(encoded_block: &EncodedBlock) -> Result<(), String> {
         }
     }
 
-    // 2. `BlockContent`: validate the decoded block content.
-    let block = encoded_block_to_generic_block(encoded_block);
+    // 2. `BlockContent`: validate the decoded block content. `cbor` is consumed
+    // here; the conversion transparently strips the self-describe tag checked
+    // above.
+    let block = try_generic_block_from_value(cbor)?;
     block_content_schema()(Cow::Borrowed(&block)).map_err(|e| e.to_string())
 }
 
@@ -314,6 +321,14 @@ mod tests {
             ),
         ]);
         assert!(validate(&encode_tagged(block)).is_err());
+    }
+
+    #[test]
+    fn returns_err_without_panicking_on_unconvertible_cbor() {
+        // A self-describe-tagged CBOR value whose content decodes as CBOR but
+        // cannot be converted into a block (a bool is not a supported ledger
+        // value) must return `Err`, not panic.
+        assert!(validate(&encode_tagged(C::Bool(true))).is_err());
     }
 
     #[test]
