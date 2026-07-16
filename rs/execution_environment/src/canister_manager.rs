@@ -2244,6 +2244,7 @@ impl CanisterManager {
                 self.hypervisor.create_execution_state(
                     execution_snapshot.wasm_binary.clone(),
                     canister_id,
+                    time,
                     round_limits,
                     compilation_cost_handling,
                 );

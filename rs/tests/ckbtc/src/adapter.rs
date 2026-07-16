@@ -38,7 +38,12 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         let mgr = ManagementCanister::create(agent);
 
-        match mgr.canister_status(&bitcoin_principal).await {
+        match mgr
+            .canister_status(&bitcoin_principal)
+            .as_update()
+            .call()
+            .await
+        {
             Ok((status,)) => {
                 if status.status != CanisterStatus::Running {
                     panic!("Message canister in unexpected status");

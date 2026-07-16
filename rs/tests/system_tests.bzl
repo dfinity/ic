@@ -306,8 +306,6 @@ def system_test(
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
         for name, dep in _local_only_deps.items()
-    } | {
-        "NET_ADMIN_LAUNCHER_PATH": "/usr/local/bin/ic-net-admin",
     }
 
     # The local backend runs in a sandbox without external network access, so it
