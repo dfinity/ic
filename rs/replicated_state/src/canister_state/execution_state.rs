@@ -5,7 +5,7 @@ use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_
 use ic_management_canister_types_private::Global;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CountBytes, ExecutionRound, NumBytes,
+    CountBytes, ExecutionRound, NumBytes, Time,
     methods::{SystemMethod, WasmMethod},
 };
 use ic_validate_eq::ValidateEq;
@@ -314,6 +314,14 @@ pub struct ExecutionState {
     #[validate_eq(CompareWithValidateEq)]
     pub wasm_binary: Arc<WasmBinary>,
 
+    /// The round time at which this execution state's code was installed
+    /// (install, reinstall, or upgrade) or restored from a snapshot, in
+    /// nanoseconds since the Unix epoch. It is `None` only for canisters whose
+    /// code was installed before this field was introduced (i.e. loaded from a
+    /// checkpoint that predates it); every freshly created execution state has
+    /// it set.
+    pub last_install_timestamp: Option<Time>,
+
     /// The persistent heap of the module. The size of this memory is expected
     /// to fit in a `u32`.
     #[validate_eq(CompareWithValidateEq)]
@@ -355,6 +363,7 @@ impl PartialEq for ExecutionState {
         // an error. Hence pointing to appropriate change here.
         let ExecutionState {
             wasm_binary,
+            last_install_timestamp,
             wasm_memory,
             stable_memory,
             exported_globals,
@@ -367,6 +376,7 @@ impl PartialEq for ExecutionState {
 
         (
             &self.wasm_binary.binary,
+            &self.last_install_timestamp,
             &self.wasm_memory,
             &self.stable_memory,
             &self.exported_globals,
@@ -377,6 +387,7 @@ impl PartialEq for ExecutionState {
             &self.wasm_execution_mode,
         ) == (
             &wasm_binary.binary,
+            last_install_timestamp,
             wasm_memory,
             stable_memory,
             exported_globals,
@@ -398,6 +409,7 @@ impl ExecutionState {
     /// Be sure to change these if needed.
     pub fn new(
         wasm_binary: Arc<WasmBinary>,
+        last_install_timestamp: Option<Time>,
         exports: ExportedFunctions,
         wasm_memory: Memory,
         stable_memory: Memory,
@@ -406,6 +418,7 @@ impl ExecutionState {
     ) -> Self {
         Self {
             wasm_binary,
+            last_install_timestamp,
             exports,
             wasm_memory,
             stable_memory,
