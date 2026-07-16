@@ -187,7 +187,7 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
-            // Exercise the `system_metadata` leaf added in `V27`.
+            // Exercise the `last_install_timestamp` leaf added in `V27`.
             let last_install_timestamp = (certification_version >= CertificationVersion::V27)
                 .then(|| Time::from_nanos_since_unix_epoch(1234));
             let execution_state = ExecutionState::new(
@@ -400,7 +400,7 @@ mod tests {
             "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
             "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
             "057FA1842C06C958F79C6394C54E12F9C9DCF5036D186EBBB9A49CDB4E3683BF",
-            "4DC0CC8B9054368F02407596AD2B8CD225EF191BE346913D6A6A065B716FA50E",
+            "70D1FCB311A682DAB0350E075806E0A37985456D7BD171750C41A735CF8077F3",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

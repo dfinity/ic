@@ -22,7 +22,7 @@ pub enum CertificationVersion {
     V25 = 25,
     /// Introdue `EngineNotAllowed` signals
     V26 = 26,
-    /// Add `/canister/<canister_id>/system_metadata` leaf.
+    /// Add `/canister/<canister_id>/last_install_timestamp` leaf.
     V27 = 27,
 }
 

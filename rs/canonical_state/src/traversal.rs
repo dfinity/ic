@@ -289,14 +289,6 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
-                // A canister with no installed code still exposes `system_metadata`
-                // from `V27` onwards; its map is currently empty.
-                (certification_version >= CertificationVersion::V27).then(|| {
-                    vec![
-                        edge("system_metadata"),
-                        E::VisitBlob(crate::encoding::encode_canister_system_metadata(None)),
-                    ]
-                }),
                 Some(vec![
                     E::EndSubtree, // canister
                     E::EndSubtree, // canisters
@@ -395,6 +387,10 @@ mod tests {
                     edge("controllers"),
                     E::VisitBlob(controllers_cbor.clone()),
                 ]),
+                // The `last_install_timestamp` leaf is only present from `V27`
+                // onwards, and sorts between `controllers` and `metadata`.
+                (certification_version >= CertificationVersion::V27)
+                    .then(|| vec![edge("last_install_timestamp"), leb_num(1234)]),
                 Some(vec![
                     edge("metadata"),
                     E::StartSubtree,
@@ -410,14 +406,6 @@ mod tests {
                     edge("module_hash"),
                     E::VisitBlob(wasm_binary_hash.to_vec()),
                 ]),
-                // The `system_metadata` leaf is only present from `V27` onwards,
-                // and sorts after `module_hash`.
-                (certification_version >= CertificationVersion::V27).then(|| {
-                    vec![
-                        edge("system_metadata"),
-                        E::VisitBlob(crate::encoding::encode_canister_system_metadata(Some(1234))),
-                    ]
-                }),
                 Some(vec![
                     E::EndSubtree, // canister
                     E::EndSubtree, // canisters
@@ -451,15 +439,14 @@ mod tests {
         }
     }
 
-    /// At `V27` every canister exposes a `system_metadata` leaf, but its map is
-    /// empty whenever there is no metadata to report. This covers the two such
-    /// conditions: a canister with no installed code, and a canister whose code
-    /// was installed before the install timestamp existed (`last_install_timestamp`
+    /// The `last_install_timestamp` leaf is omitted (rather than present with a
+    /// default value) whenever there is no timestamp to report. This covers the
+    /// two such conditions: a canister with no installed code, and a canister
+    /// whose code was installed before the field existed (`last_install_timestamp`
     /// is `None`).
     #[test]
-    fn system_metadata_leaf_is_empty_when_there_is_no_metadata() {
-        use ic_canonical_state_tree_hash::lazy_tree::{LazyTree, follow_path};
-        use std::collections::BTreeMap;
+    fn last_install_timestamp_leaf_is_omitted_without_a_timestamp() {
+        use ic_canonical_state_tree_hash::lazy_tree::follow_path;
 
         let controller = user_test_id(24);
 
@@ -487,7 +474,7 @@ mod tests {
             Memory::new_for_testing(),
             Memory::new_for_testing(),
             vec![],
-            WasmMetadata::new(BTreeMap::new()),
+            WasmMetadata::new(Default::default()),
         ));
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
@@ -499,17 +486,10 @@ mod tests {
 
         for canister_id in [codeless_id, no_timestamp_id] {
             let principal = canister_id.get();
-            let path: [&[u8]; 3] = [b"canister", principal.as_slice(), b"system_metadata"];
-            let leaf =
-                follow_path(&tree, &path).expect("every canister exposes `system_metadata` at V27");
-            // The `system_metadata` leaf is always encoded via `blob(..)`.
-            let LazyTree::LazyBlob(thunk) = leaf else {
-                unreachable!("the `system_metadata` leaf is a lazy blob");
-            };
-            let map: BTreeMap<String, u64> = serde_cbor::from_slice(&thunk()).unwrap();
+            let path: [&[u8]; 3] = [b"canister", principal.as_slice(), b"last_install_timestamp"];
             assert!(
-                map.is_empty(),
-                "expected an empty system_metadata map for {canister_id}, got {map:?}"
+                follow_path(&tree, &path).is_none(),
+                "`last_install_timestamp` leaf should be omitted for {canister_id}"
             );
         }
     }
