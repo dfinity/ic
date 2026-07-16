@@ -137,6 +137,7 @@ where
         .create_execution_state(
             CanisterModule::new(wat::parse_str(wat.as_ref()).unwrap()),
             canister_id,
+            UNIX_EPOCH,
             &mut round_limits,
             CompilationCostHandling::CountFullAmount,
         )

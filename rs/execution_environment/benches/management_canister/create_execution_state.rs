@@ -36,6 +36,7 @@ fn run_benchmark(
                 let _ = hypervisor.create_execution_state(
                     CanisterModule::new(wasm.clone()),
                     canister_id,
+                    ic_types::time::UNIX_EPOCH,
                     &mut round_limits,
                     compilation_cost_handling,
                 );

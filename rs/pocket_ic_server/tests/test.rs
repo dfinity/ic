@@ -1039,6 +1039,8 @@ fn test_query_stats_live() {
 
         let query_stats = ic00
             .canister_status(&canister_id)
+            .as_update()
+            .call()
             .await
             .unwrap()
             .0
@@ -1059,6 +1061,8 @@ fn test_query_stats_live() {
         loop {
             let current_query_stats = ic00
                 .canister_status(&canister_id)
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0

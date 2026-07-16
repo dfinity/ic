@@ -253,6 +253,11 @@ pub struct ExecutionStateBits {
     pub next_scheduled_method: ::core::option::Option<i32>,
     #[prost(bool, tag = "8")]
     pub is_wasm64: bool,
+    /// The round time at which this code was installed/upgraded or restored from a
+    /// snapshot, in nanoseconds since the Unix epoch. Absent for execution states
+    /// persisted before this field was introduced.
+    #[prost(uint64, optional, tag = "9")]
+    pub last_install_timestamp_nanos: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StopCanisterContext {
