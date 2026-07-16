@@ -1203,6 +1203,9 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             last_executed_round: execution_state.last_executed_round,
             metadata: execution_state.metadata.clone(),
             binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
+            last_install_timestamp_nanos: execution_state
+                .last_install_timestamp
+                .map(|t| t.as_nanos_since_unix_epoch()),
             next_scheduled_method: execution_state.next_scheduled_method,
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });

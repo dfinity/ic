@@ -769,6 +769,9 @@ pub fn load_canister_state(
 
             Some(ExecutionState {
                 wasm_binary,
+                last_install_timestamp: execution_state_bits
+                    .last_install_timestamp_nanos
+                    .map(Time::from_nanos_since_unix_epoch),
                 exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
