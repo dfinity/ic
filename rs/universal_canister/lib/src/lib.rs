@@ -847,6 +847,22 @@ impl PayloadBuilder {
         self
     }
 
+    /// Loops indefinitely — each iteration performing a `canister_status`
+    /// inter-canister call to the executing canister itself — until the
+    /// canister's global data equals `trigger`, and then replies with `reply`.
+    ///
+    /// Because each loop iteration is an inter-canister call, the reply to the
+    /// caller is delayed across message boundaries until some other message
+    /// sets the global data to `trigger` (e.g. via `set_global_data`). This is
+    /// useful for holding a response in an XNet stream until an external
+    /// condition is met.
+    pub fn loop_until_global_data_set(mut self, trigger: &[u8], reply: &[u8]) -> Self {
+        self = self.push_bytes(trigger);
+        self = self.push_bytes(reply);
+        self.0.push(Ops::LoopUntilGlobalDataSet as u8);
+        self
+    }
+
     pub fn build(self) -> Vec<u8> {
         self.0
     }
@@ -1044,5 +1060,6 @@ mod test {
     #[test]
     fn try_from_macro_works() {
         assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());
+        assert_eq!(Ops::LoopUntilGlobalDataSet, Ops::try_from(100).unwrap());
     }
 }
