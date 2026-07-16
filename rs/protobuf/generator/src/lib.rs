@@ -282,6 +282,9 @@ fn build_registry_proto(def: &Path, out: &Path) {
         def.join("registry/node_rewards/v2/node_rewards.proto"),
         def.join("registry/dc/v1/dc.proto"),
         def.join("registry/unassigned_nodes_config/v1/unassigned_nodes_config.proto"),
+        def.join(
+            "registry/standard_engine_replica_version/v1/standard_engine_replica_version.proto",
+        ),
     ];
 
     compile_protos(config, def, &registry_files);

@@ -248,6 +248,7 @@ fn can_recover_from_a_checkpoint() {
         let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
         let execution_state = ExecutionState::new(
             WasmBinary::new(wasm.clone()),
+            None,
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory.clone(),
             stable_memory,
@@ -829,6 +830,7 @@ fn flush_checkpoint_ops_and_page_maps_strips_execution_state_memories() {
     let stable_memory = one_page_of(2);
     let execution_state = ExecutionState::new(
         WasmBinary::new(empty_wasm()),
+        None,
         ExportedFunctions::new(BTreeSet::new()),
         wasm_memory,
         stable_memory,
