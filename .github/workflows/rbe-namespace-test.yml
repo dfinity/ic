@@ -85,8 +85,7 @@ jobs:
             --remote_default_exec_properties=namespace_action_isolation=sandboxed
             --remote_default_exec_properties=container-image="$worker_image"
 
-            # Namespace currently limits the number of workers to 15
-            --jobs=15
+            --jobs=64
 
             --build_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
@@ -142,8 +141,7 @@ jobs:
             --remote_default_exec_properties=namespace_action_isolation=sandboxed
             --remote_default_exec_properties=container-image="$worker_image"
 
-            # Namespace currently limits the number of workers to 15
-            --jobs=15
+            --jobs=64
 
             --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
@@ -200,8 +198,7 @@ jobs:
             --remote_default_exec_properties=namespace_action_isolation=sandboxed
             --remote_default_exec_properties=container-image="$worker_image"
 
-            # Namespace currently limits the number of workers to 15
-            --jobs=15
+            --jobs=64
 
             --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
