@@ -450,12 +450,8 @@ mod sanity_check {
         // rewards distribution time.
         // Important to reach the exact moment when node provider rewards are distributed!
         //
-        // Note that the golden state's most recently distributed reward can already be
-        // more than one full `NODE_PROVIDER_REWARD_PERIOD_SECONDS` behind the state
-        // machine's current time (e.g. if minting has fallen behind on mainnet), in which
-        // case a new distribution is already due and there is nothing to wait for. We use
-        // `saturating_sub` (rather than plain `-`) to represent that as 0, instead of
-        // underflowing.
+        // It is possible that node provider rewards are already due, e.g. because this
+        // test runs shortly after they were supposed to have been distributed.
         let seconds_to_node_provider_reward_distribution = before_timestamp
             .saturating_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
             .saturating_sub(state_machine.get_time().as_secs_since_unix_epoch());
@@ -475,9 +471,7 @@ mod sanity_check {
         tick_until_node_provider_rewards_distributed(state_machine, before_timestamp);
 
         // Advance time in the state machine by one month to ensure that voting rewards
-        // are also distributed. `seconds_to_node_provider_reward_distribution` is at most
-        // `NODE_PROVIDER_REWARD_PERIOD_SECONDS` (== `ONE_MONTH_SECONDS`), so this cannot
-        // underflow, but we use `saturating_sub` defensively for the same reason as above.
+        // are also distributed.
         state_machine.advance_time(std::time::Duration::from_secs(
             ONE_MONTH_SECONDS.saturating_sub(seconds_to_node_provider_reward_distribution),
         ));
