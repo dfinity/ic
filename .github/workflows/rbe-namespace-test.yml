@@ -85,7 +85,8 @@ jobs:
             --remote_default_exec_properties=namespace_action_isolation=sandboxed
             --remote_default_exec_properties=container-image="$worker_image"
 
-            --jobs=64
+            # Namespace currently deploys 15 workers that can run 8 actions:
+            --jobs=120
 
             --build_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
