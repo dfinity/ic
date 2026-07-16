@@ -1,4 +1,3 @@
-pub mod block_schema;
 pub mod blocks;
 mod compact_account;
 pub mod endpoints;

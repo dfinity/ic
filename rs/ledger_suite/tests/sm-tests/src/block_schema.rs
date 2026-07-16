@@ -1,10 +1,11 @@
-//! Validation of the CBOR encoding of ICRC-1/ICRC-2 ledger blocks.
+//! Test-only validation of the CBOR encoding of ICRC-1/ICRC-2 ledger blocks.
 //!
 //! This is a hand-written port of the `block.cddl` schema
 //! (`rs/ledger_suite/icrc1/ledger/block.cddl`) onto the
 //! [`icrc_ledger_types::icrc::generic_value_predicate`] combinators, replacing
 //! the `cddl` crate (and its large, otherwise-unused dependency tree) that was
-//! previously used to validate the schema in tests.
+//! previously used to validate the schema. It lives in this test-only crate
+//! because it is exercised solely by ledger tests.
 //!
 //! Note on strictness: the shared `icrc3`/`icrc107` schema validators do not
 //! reject *unknown* map keys, because ICRC standards intentionally allow blocks
@@ -16,6 +17,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::EncodedBlock;
 use icrc_ledger_types::icrc::{
     generic_value::Value,
@@ -25,40 +27,27 @@ use icrc_ledger_types::icrc::{
     },
 };
 
-use crate::blocks::try_generic_block_from_value;
-use crate::known_tags::SELF_DESCRIBED;
+/// The CBOR encoding of the self-describe tag (`#6.55799`,
+/// `ic_icrc1::known_tags::SELF_DESCRIBED`): major type 6 with a 2-byte tag,
+/// i.e. the three bytes `0xD9 0xD9 0xF7`. Every encoded block starts with it.
+const SELF_DESCRIBE_TAG_BYTES: [u8; 3] = [0xD9, 0xD9, 0xF7];
 
-/// Validates that `encoded_block` conforms to the `block.cddl` schema.
-///
-/// This checks both:
-///  1. the outer self-describe CBOR tag (`#6.55799`), which the block encoder
-///     always emits, and
-///  2. the structure of the decoded block content.
-///
-/// It returns an error (rather than panicking) for any malformed input,
-/// including CBOR that decodes but cannot be converted into a block.
+/// Validates that `encoded_block` conforms to the `block.cddl` schema: the
+/// outer self-describe CBOR tag plus the structure of the block content.
 pub fn validate(encoded_block: &EncodedBlock) -> Result<(), String> {
-    // Decode the CBOR once; the tag check and the block conversion below both
-    // operate on this value.
-    let cbor: ciborium::value::Value = ciborium::de::from_reader(encoded_block.as_slice())
-        .map_err(|e| format!("failed to decode block as CBOR: {e}"))?;
-
     // 1. `Block = #6.55799(BlockContent)`: the encoding must be wrapped in the
     // self-describe CBOR tag.
-    match &cbor {
-        ciborium::value::Value::Tag(tag, _) if *tag == SELF_DESCRIBED => {}
-        other => {
-            return Err(format!(
-                "expected the block to be wrapped in the self-describe CBOR tag \
-                 (#6.{SELF_DESCRIBED}), got: {other:?}"
-            ));
-        }
+    if !encoded_block
+        .as_slice()
+        .starts_with(&SELF_DESCRIBE_TAG_BYTES)
+    {
+        return Err(
+            "expected the block to be wrapped in the self-describe CBOR tag (#6.55799)".to_string(),
+        );
     }
 
-    // 2. `BlockContent`: validate the decoded block content. `cbor` is consumed
-    // here; the conversion transparently strips the self-describe tag checked
-    // above.
-    let block = try_generic_block_from_value(cbor)?;
+    // 2. `BlockContent`: validate the decoded block content.
+    let block = encoded_block_to_generic_block(encoded_block);
     block_content_schema()(Cow::Borrowed(&block)).map_err(|e| e.to_string())
 }
 
@@ -217,134 +206,114 @@ fn block_content_schema() -> ValuePredicate {
     ])
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ciborium::value::Value as C;
+/// Asserts that [`validate`] rejects a representative set of malformed blocks.
+///
+/// The happy path (real, randomly-generated blocks) is exercised by the
+/// `block_encoding_agrees_with_the_schema` proptest; this complements it by
+/// checking that the validator actually has teeth. Blocks are built from
+/// generic values and encoded with the real encoder, so they carry the
+/// self-describe tag unless we deliberately strip it.
+pub fn assert_catches_malformed_blocks() {
+    use ic_icrc1::blocks::generic_block_to_encoded_block;
 
-    // The happy path (real, randomly-generated blocks) is exercised by the
-    // `block_encoding_agrees_with_the_schema` proptest in the ledger tests.
-    // These unit tests verify the complementary property: that the validator
-    // actually *rejects* malformed blocks.
-
-    /// Wraps `content` in the self-describe tag and CBOR-encodes it, as the
-    /// block encoder does.
-    fn encode_tagged(content: C) -> EncodedBlock {
-        let tagged = C::Tag(SELF_DESCRIBED, Box::new(content));
-        let mut bytes = vec![];
-        ciborium::into_writer(&tagged, &mut bytes).unwrap();
-        EncodedBlock::from_vec(bytes)
-    }
-
-    fn nat(n: u64) -> C {
-        C::Integer(n.into())
-    }
-
-    /// `Account = [1*2 bytes]`.
-    fn account() -> C {
-        C::Array(vec![C::Bytes(vec![1, 2, 3])])
-    }
-
-    fn valid_mint_block() -> C {
-        C::Map(vec![
-            (C::Text("ts".into()), nat(100)),
+    let account = Value::Array(vec![Value::blob(vec![1, 2, 3])]);
+    let valid_mint_block = || {
+        Value::map([
+            ("ts", Value::Nat64(100)),
             (
-                C::Text("tx".into()),
-                C::Map(vec![
-                    (C::Text("op".into()), C::Text("mint".into())),
-                    (C::Text("to".into()), account()),
-                    (C::Text("amt".into()), nat(10)),
+                "tx",
+                Value::map([
+                    ("op", Value::text("mint")),
+                    ("to", account.clone()),
+                    ("amt", Value::Nat64(10)),
                 ]),
             ),
         ])
-    }
+    };
+    let encode = |block: Value| generic_block_to_encoded_block(block).unwrap();
 
-    #[test]
-    fn accepts_valid_block() {
-        assert_eq!(validate(&encode_tagged(valid_mint_block())), Ok(()));
-    }
+    // Sanity: a well-formed block is accepted.
+    assert_eq!(validate(&encode(valid_mint_block())), Ok(()));
 
-    #[test]
-    fn rejects_block_without_self_describe_tag() {
-        let mut bytes = vec![];
-        ciborium::into_writer(&valid_mint_block(), &mut bytes).unwrap();
-        assert!(validate(&EncodedBlock::from_vec(bytes)).is_err());
-    }
+    // A block that is not wrapped in the self-describe tag is rejected.
+    let encoded = encode(valid_mint_block());
+    let untagged =
+        EncodedBlock::from_vec(encoded.as_slice()[SELF_DESCRIBE_TAG_BYTES.len()..].to_vec());
+    assert!(
+        validate(&untagged).is_err(),
+        "should reject a block without the self-describe tag"
+    );
 
-    #[test]
-    fn rejects_block_missing_required_timestamp() {
-        let mut block = valid_mint_block();
-        if let C::Map(entries) = &mut block {
-            entries.retain(|(k, _)| k != &C::Text("ts".into()));
-        }
-        assert!(validate(&encode_tagged(block)).is_err());
+    // Unknown key at the block level (closed-map strictness).
+    let mut block = valid_mint_block();
+    if let Value::Map(map) = &mut block {
+        map.insert("surprise".to_string(), Value::Nat64(1));
     }
+    assert!(
+        validate(&encode(block)).is_err(),
+        "should reject an unknown block-level key"
+    );
 
-    #[test]
-    fn rejects_unknown_operation() {
-        let block = C::Map(vec![
-            (C::Text("ts".into()), nat(100)),
-            (
-                C::Text("tx".into()),
-                C::Map(vec![
-                    (C::Text("op".into()), C::Text("frobnicate".into())),
-                    (C::Text("amt".into()), nat(10)),
-                ]),
-            ),
-        ]);
-        assert!(validate(&encode_tagged(block)).is_err());
-    }
+    // Unknown key at the transaction level.
+    let bad_tx_key = Value::map([
+        ("ts", Value::Nat64(100)),
+        (
+            "tx",
+            Value::map([
+                ("op", Value::text("mint")),
+                ("to", account.clone()),
+                ("amt", Value::Nat64(10)),
+                // `spender` is not part of a mint transaction.
+                ("spender", account.clone()),
+            ]),
+        ),
+    ]);
+    assert!(
+        validate(&encode(bad_tx_key)).is_err(),
+        "should reject an unknown transaction-level key"
+    );
 
-    #[test]
-    fn rejects_unknown_block_level_key() {
-        // The legacy block format is a closed CDDL map: extra keys are rejected.
-        let mut block = valid_mint_block();
-        if let C::Map(entries) = &mut block {
-            entries.push((C::Text("surprise".into()), nat(1)));
-        }
-        assert!(validate(&encode_tagged(block)).is_err());
-    }
+    // Unknown operation.
+    let unknown_op = Value::map([
+        ("ts", Value::Nat64(100)),
+        (
+            "tx",
+            Value::map([("op", Value::text("frobnicate")), ("amt", Value::Nat64(10))]),
+        ),
+    ]);
+    assert!(
+        validate(&encode(unknown_op)).is_err(),
+        "should reject an unknown operation"
+    );
 
-    #[test]
-    fn rejects_unknown_transaction_level_key() {
-        let block = C::Map(vec![
-            (C::Text("ts".into()), nat(100)),
-            (
-                C::Text("tx".into()),
-                C::Map(vec![
-                    (C::Text("op".into()), C::Text("mint".into())),
-                    (C::Text("to".into()), account()),
-                    (C::Text("amt".into()), nat(10)),
-                    // `spender` is not part of a mint transaction.
-                    (C::Text("spender".into()), account()),
-                ]),
-            ),
-        ]);
-        assert!(validate(&encode_tagged(block)).is_err());
-    }
+    // Missing the required `ts` field.
+    let missing_ts = Value::map([(
+        "tx",
+        Value::map([
+            ("op", Value::text("mint")),
+            ("to", account.clone()),
+            ("amt", Value::Nat64(10)),
+        ]),
+    )]);
+    assert!(
+        validate(&encode(missing_ts)).is_err(),
+        "should reject a block missing the required timestamp"
+    );
 
-    #[test]
-    fn returns_err_without_panicking_on_unconvertible_cbor() {
-        // A self-describe-tagged CBOR value whose content decodes as CBOR but
-        // cannot be converted into a block (a bool is not a supported ledger
-        // value) must return `Err`, not panic.
-        assert!(validate(&encode_tagged(C::Bool(true))).is_err());
-    }
-
-    #[test]
-    fn rejects_malformed_account() {
-        // `Account = [1*2 bytes]`: an empty array is not a valid account.
-        let block = C::Map(vec![
-            (C::Text("ts".into()), nat(100)),
-            (
-                C::Text("tx".into()),
-                C::Map(vec![
-                    (C::Text("op".into()), C::Text("mint".into())),
-                    (C::Text("to".into()), C::Array(vec![])),
-                    (C::Text("amt".into()), nat(10)),
-                ]),
-            ),
-        ]);
-        assert!(validate(&encode_tagged(block)).is_err());
-    }
+    // Malformed account: `Account = [1*2 bytes]`, so an empty array is invalid.
+    let bad_account = Value::map([
+        ("ts", Value::Nat64(100)),
+        (
+            "tx",
+            Value::map([
+                ("op", Value::text("mint")),
+                ("to", Value::Array(vec![])),
+                ("amt", Value::Nat64(10)),
+            ]),
+        ),
+    ]);
+    assert!(
+        validate(&encode(bad_account)).is_err(),
+        "should reject a malformed account"
+    );
 }

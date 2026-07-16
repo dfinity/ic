@@ -308,6 +308,12 @@ fn block_encoding_agrees_with_the_schema() {
     ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema::<Tokens>();
 }
 
+// Check that the CDDL schema validator rejects malformed blocks.
+#[test]
+fn block_encoding_schema_catches_malformed_blocks() {
+    ic_ledger_suite_state_machine_tests::block_encoding_schema_catches_malformed_blocks();
+}
+
 // Generate random blocks and check that their value encoding complies with the ICRC-3 spec.
 #[test]
 fn block_encoding_agrees_with_the_icrc3_schema() {

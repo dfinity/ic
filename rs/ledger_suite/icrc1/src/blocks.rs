@@ -78,13 +78,6 @@ pub fn encoded_block_to_generic_block(encoded_block: &EncodedBlock) -> GenericBl
     icrc1_block_from_value(value, 0).expect("failed to decode encoded block")
 }
 
-/// Fallible variant of [`encoded_block_to_generic_block`] that operates on an
-/// already-decoded CBOR value and returns an error instead of panicking on
-/// malformed input.
-pub(crate) fn try_generic_block_from_value(value: CiboriumValue) -> Result<GenericBlock, String> {
-    icrc1_block_from_value(value, 0).map_err(|e| e.to_string())
-}
-
 #[derive(Debug, Error)]
 enum ValueDecodingError {
     #[error("CBOR value depth must not exceed {max_depth}")]

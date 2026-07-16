@@ -73,6 +73,7 @@ use std::{
 };
 
 mod allowances;
+mod block_schema;
 pub mod fee_collector;
 pub mod icrc_106;
 pub mod metrics;
@@ -1630,13 +1631,13 @@ where
 }
 
 // Generate random blocks and check that their CBOR encoding complies with the
-// `block.cddl` schema (ported to `ic_icrc1::block_schema`).
+// `block.cddl` schema (ported to the `block_schema` module).
 pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
     let mut runner = TestRunner::default();
     runner
         .run(&arb_block::<Tokens>(), |block| {
             let encoded_block = block.encode();
-            ic_icrc1::block_schema::validate(&encoded_block).map_err(|e| {
+            block_schema::validate(&encoded_block).map_err(|e| {
                 TestCaseError::fail(format!(
                     "Failed to validate CBOR: {} (inspect it on https://cbor.me), error: {}",
                     hex::encode(encoded_block.as_slice()),
@@ -1645,6 +1646,11 @@ pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
             })
         })
         .unwrap();
+}
+
+// Check that the `block.cddl` schema validator rejects malformed blocks.
+pub fn block_encoding_schema_catches_malformed_blocks() {
+    block_schema::assert_catches_malformed_blocks();
 }
 
 pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
