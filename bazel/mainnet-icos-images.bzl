@@ -78,7 +78,9 @@ genrule(
     name = "guest-img",
     srcs = ["disk-img.tar.zst"],
     outs = ["guest-img.tar.zst"],
-    tags = [ "manual" ],
+    # no-remote-exec because the setupOS image input is a multi gigabyte file
+    # which would then have to be copied to the remote worker.
+    tags = [ "manual", "no-remote-exec" ],
     cmd = \"""#!/bin/bash
         $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     \""",
