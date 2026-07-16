@@ -20,6 +20,9 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
 use rand::RngCore;
+use sev::Generation;
+use sev::firmware::host::TcbVersion;
+use sev::parser::ByteParser;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
@@ -46,6 +49,14 @@ const BOGUS_CUSTOM_DATA: [u8; 64] = [255; 64];
 const DEFAULT_CHIP_ID: [u8; 64] = [88; 64];
 /// Chip ID that is different from the expected one.
 const DIFFERENT_CHIP_ID: [u8; 64] = [123; 64];
+
+fn default_launch_tcb_as_u64() -> u64 {
+    u64::from_le_bytes(
+        TcbVersion::new(None, 1, 0, 0, 0)
+            .to_bytes_with(Generation::Milan)
+            .unwrap(),
+    )
+}
 
 #[derive(Debug, Clone)]
 struct TestConfig {
@@ -181,6 +192,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .server_sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
+                .with_launch_tcb(TcbVersion::new(None, 1, 0, 0, 0))
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)
@@ -295,6 +307,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             Key::DiskEncryptionKey {
                 device_path: self.server_store.path(),
             },
+            default_launch_tcb_as_u64(),
         )
         .unwrap();
 

@@ -9,15 +9,29 @@ use std::path::Path;
 
 /// Derives a key for the given `Key` variant using the SEV firmware.
 /// The key is in base64 format (useful e.g., if the key must be entered manually).
+///
+/// `tcb_version` specifies the TCB version (as a raw `u64`) to use for key derivation.
+/// The `tcb_version` must be ≤ the current platform TCB version. Callers must remember the
+/// `tcb_version` they use for the key derivation in order to retrieve the same key later.
+///
+/// The recommended approach is using the launch TCB version when deriving the key for the first
+/// time. This ensures the key cannot be recovered using an older firmware version (defense against
+/// downgrade attacks). Upon firmware upgrade, it's recommended to derive a new key using the new
+/// launch TCB version and rotate the key to the newly derived key.
 pub fn derive_key_from_sev_measurement(
     sev_firmware: &mut dyn SevGuestFirmware,
     key: Key,
+    tcb_version: u64,
 ) -> Result<String> {
     let mut field_select = GuestFieldSelect::default();
     field_select.set_measurement(true);
+    field_select.set_tcb_version(true);
 
     let derived_key = sev_firmware
-        .get_derived_key(Some(1), DerivedKey::new(false, field_select, 0, 0, 0, None))
+        .get_derived_key(
+            Some(1),
+            DerivedKey::new(false, field_select, 0, 0, tcb_version, None),
+        )
         .context("Failed to get derived key from SEV firmware")?;
 
     let mut output = vec![0; 32];
@@ -50,21 +64,40 @@ impl Key<'_> {
 mod tests {
     use super::*;
     use crate::firmware::MockSevGuestFirmware;
+    use sev::parser::Encoder;
+    use sev_guest_testing::AttestationReportBuilder;
     use std::collections::HashSet;
+
+    fn make_report_bytes() -> Vec<u8> {
+        let report = AttestationReportBuilder::new().build_unsigned();
+        let mut out = vec![];
+        report.encode(&mut out, ()).unwrap();
+        out
+    }
 
     #[test]
     fn test_derives_key() {
         let mut mock_sev_guest_firmware = MockSevGuestFirmware::new();
         mock_sev_guest_firmware
+            .expect_get_report()
+            .returning(|_, _, _| Ok(make_report_bytes()));
+        mock_sev_guest_firmware
             .expect_get_derived_key()
-            .returning(|_, _| Ok([42; 32]));
+            .returning(|version, derived_key| {
+                assert_eq!(version, Some(1));
+                assert_eq!(derived_key.tcb_version, 123456);
+                assert!(derived_key.guest_field_select.get_measurement());
+                assert!(derived_key.guest_field_select.get_tcb_version());
+                Ok([42; 32])
+            });
 
         assert_eq!(
             derive_key_from_sev_measurement(
                 &mut mock_sev_guest_firmware,
                 Key::DiskEncryptionKey {
                     device_path: Path::new("/dev/vda8")
-                }
+                },
+                123456,
             )
             .unwrap(),
             // This value does not have any particular meaning, but it should not change
@@ -77,6 +110,9 @@ mod tests {
     fn test_derives_unique_keys() {
         let mut mock_sev_guest_firmware = MockSevGuestFirmware::new();
         mock_sev_guest_firmware
+            .expect_get_report()
+            .returning(|_, _, _| Ok(make_report_bytes()));
+        mock_sev_guest_firmware
             .expect_get_derived_key()
             .returning(|_, _| Ok([42; 32]));
 
@@ -87,6 +123,7 @@ mod tests {
                     Key::DiskEncryptionKey {
                         device_path: Path::new(&format!("/dev/vda{i}")),
                     },
+                    123456,
                 )
                 .unwrap()
             })

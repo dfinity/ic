@@ -34,7 +34,7 @@ impl DiskEncryption for GeneratedKeyDiskEncryption<'_> {
             false,
             Some(self.metrics_registry),
         )
-        .context("Failed to initialize crypt device")?;
+        .context("Failed to activate crypt device")?;
 
         Ok(())
     }

@@ -2,6 +2,35 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/config/tool:config_lib",
+    "//rs/ic_os/config/types:config_types",
+    "//rs/ic_os/device",
+    "//rs/ic_os/logging",
+    "//rs/ic_os/sev/attestation",
+    "//rs/ic_os/sev/guest",
+    "//rs/sys",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:hex",
+    "@crate_index//:itertools",
+    "@crate_index//:libcryptsetup-rs",
+    "@crate_index//:mockall",
+    "@crate_index//:nix",
+    "@crate_index//:prometheus",
+    "@crate_index//:rand",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:sev",
+    "@crate_index//:tempfile",
+    "@crate_index//:tracing",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/ic_os/sev/guest/testing",
+    "@crate_index//:parking_lot",
+]
 rust_binary(
     name = "guest_disk",
     srcs = [
@@ -36,6 +65,15 @@ rust_binary(
         "@crate_index//:tempfile",
         "@crate_index//:tracing",
     ],
+)
+
+rust_test(
+    name = "guest_disk_test",
+    crate = ":guest_disk",
+    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
+    tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_library(
@@ -75,35 +113,7 @@ rust_library(
 )
 
 rust_test(
-    name = "guest_disk_test",
-    crate = ":guest_disk",
-    # This test needs root, so we mark it manual here and expose it in //rs/tests/node:root_tests
-    tags = ["manual"],
-    visibility = ["//rs/tests/node:__subpackages__"],
-    deps = [
-        # Keep sorted.
-        "//rs/ic_os/config/tool:config_lib",
-        "//rs/ic_os/config/types:config_types",
-        "//rs/ic_os/device",
-        "//rs/ic_os/logging",
-        "//rs/ic_os/sev/attestation",
-        "//rs/ic_os/sev/guest",
-        "//rs/ic_os/sev/guest/testing",
-        "//rs/sys",
-        "@crate_index//:anyhow",
-        "@crate_index//:clap",
-        "@crate_index//:hex",
-        "@crate_index//:itertools",
-        "@crate_index//:libcryptsetup-rs",
-        "@crate_index//:mockall",
-        "@crate_index//:nix",
-        "@crate_index//:parking_lot",
-        "@crate_index//:prometheus",
-        "@crate_index//:rand",
-        "@crate_index//:serde",
-        "@crate_index//:serde_json",
-        "@crate_index//:sev",
-        "@crate_index//:tempfile",
-        "@crate_index//:tracing",
-    ],
+    name = "guest_disk_lib_test",
+    crate = ":guest_disk_lib",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

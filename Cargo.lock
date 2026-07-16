@@ -5465,6 +5465,7 @@ dependencies = [
  "ic-types",
  "rand 0.8.6",
  "rustls 0.23.37",
+ "sev",
  "sev_guest",
  "sev_guest_testing",
  "tempfile",

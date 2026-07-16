@@ -1,16 +1,22 @@
 use sev::firmware::host::TcbVersion;
 use sev::parser::Encoder;
-use sev_guest_firmware::MockSevGuestFirmware;
-use sev_guest_firmware::SevGuestFirmware;
+use sev_guest_firmware::{MockSevGuestFirmware, SevGuestFirmware};
 
 pub use attestation_testing::attestation_report::{
     AttestationReportBuilder, FakeAttestationReportSigner,
 };
 
+fn default_derived_key(measurement: [u8; 48], tcb_version: u64) -> [u8; 32] {
+    let mut derived_key = [0_u8; 32];
+    derived_key[..24].copy_from_slice(&measurement[..24]);
+    derived_key[24..].copy_from_slice(&tcb_version.to_le_bytes());
+    derived_key
+}
+
 #[derive(Clone)]
 pub struct MockSevGuestFirmwareBuilder {
     custom_data_override: Option<[u8; 64]>,
-    /// If not set, the derived key will be derived from the measurement bytes.
+    /// If not set, the derived key will be derived from the measurement bytes and requested TCB.
     derived_key: Option<[u8; 32]>,
     measurement: [u8; 48],
     chip_id: [u8; 64],
@@ -92,6 +98,7 @@ impl MockSevGuestFirmwareBuilder {
     }
 
     /// Set the reported TCB version that will appear in attestation reports.
+    /// This is used by `get_current_tcb()` to determine the current platform TCB.
     pub fn with_reported_tcb(mut self, reported_tcb: TcbVersion) -> Self {
         self.reported_tcb = reported_tcb;
         self
@@ -129,13 +136,15 @@ impl MockSevGuestFirmwareBuilder {
                 Ok(out)
             });
 
-        firmware.expect_get_derived_key().returning(move |_, _| {
-            // In reality, the chip would use a more complex process to derive the key from the
-            // measurement. In testing, we use a simple approach.
-            Ok(this
-                .derived_key
-                .unwrap_or(this.measurement[4..36].try_into().unwrap()))
-        });
+        firmware
+            .expect_get_derived_key()
+            .returning(move |_, derived_key_request| {
+                // In reality, the SEV secure processor would use a more complex process to derive the
+                // key from the measurement and TCB. In testing, we use a simple deterministic approach.
+                Ok(this.derived_key.unwrap_or_else(|| {
+                    default_derived_key(this.measurement, derived_key_request.tcb_version)
+                }))
+            });
 
         firmware
             .expect_generates_report_with_fake_root_cert()

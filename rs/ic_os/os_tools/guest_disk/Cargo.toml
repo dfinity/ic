@@ -2,8 +2,6 @@
 name = "guest_disk"
 edition.workspace = true
 
-[lib]
-
 [[bin]]
 name = "guest_disk"
 path = "src/main.rs"
