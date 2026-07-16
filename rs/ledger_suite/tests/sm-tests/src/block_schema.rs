@@ -1,18 +1,20 @@
 //! Test-only validation of the CBOR encoding of ICRC-1/ICRC-2 ledger blocks.
 //!
-//! This is a hand-written port of the `block.cddl` schema
-//! (`rs/ledger_suite/icrc1/ledger/block.cddl`) onto the
-//! [`icrc_ledger_types::icrc::generic_value_predicate`] combinators, replacing
-//! the `cddl` crate (and its large, otherwise-unused dependency tree) that was
-//! previously used to validate the schema. It lives in this test-only crate
-//! because it is exercised solely by ledger tests.
+//! This is a hand-written validator for the legacy ledger block format,
+//! expressed with the [`icrc_ledger_types::icrc::generic_value_predicate`]
+//! combinators. It replaces the `cddl` crate (and its large, otherwise-unused
+//! dependency tree) that previously validated blocks against a `block.cddl`
+//! schema file. The CDDL grammar is reproduced inline in the comments below,
+//! next to the predicates that enforce it (the original `block.cddl` file
+//! remains in the git history). It lives in this test-only crate because it is
+//! exercised solely by ledger tests.
 //!
 //! Note on strictness: the shared `icrc3`/`icrc107` schema validators do not
 //! reject *unknown* map keys, because ICRC standards intentionally allow blocks
-//! to carry extra fields for forward compatibility. The legacy `block.cddl`
-//! format, by contrast, is a closed CDDL map: unknown keys are rejected. We
-//! preserve that here with the local [`only_keys`] combinator, so this port
-//! matches the strictness the `cddl` crate provided.
+//! to carry extra fields for forward compatibility. The legacy block format, by
+//! contrast, is a closed CDDL map: unknown keys are rejected. We preserve that
+//! here with the local [`only_keys`] combinator, so this validator matches the
+//! strictness the `cddl` crate provided.
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -32,7 +34,7 @@ use icrc_ledger_types::icrc::{
 /// i.e. the three bytes `0xD9 0xD9 0xF7`. Every encoded block starts with it.
 const SELF_DESCRIBE_TAG_BYTES: [u8; 3] = [0xD9, 0xD9, 0xF7];
 
-/// Validates that `encoded_block` conforms to the `block.cddl` schema: the
+/// Validates that `encoded_block` conforms to the ledger block CBOR schema: the
 /// outer self-describe CBOR tag plus the structure of the block content.
 pub fn validate(encoded_block: &EncodedBlock) -> Result<(), String> {
     // 1. `Block = #6.55799(BlockContent)`: the encoding must be wrapped in the

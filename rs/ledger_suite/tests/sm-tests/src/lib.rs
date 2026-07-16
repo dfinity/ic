@@ -1631,7 +1631,7 @@ where
 }
 
 // Generate random blocks and check that their CBOR encoding complies with the
-// `block.cddl` schema (ported to the `block_schema` module).
+// ledger block CBOR schema (see the `block_schema` module).
 pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
     let mut runner = TestRunner::default();
     runner
@@ -1648,7 +1648,7 @@ pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
         .unwrap();
 }
 
-// Check that the `block.cddl` schema validator rejects malformed blocks.
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
 pub fn block_encoding_schema_catches_malformed_blocks() {
     block_schema::assert_catches_malformed_blocks();
 }
