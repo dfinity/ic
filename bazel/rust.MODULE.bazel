@@ -267,7 +267,7 @@ crate.spec(
 )
 crate.spec(
     package = "cddl",
-    version = "^0.9.4",
+    version = "^0.10.6",
 )
 crate.spec(
     package = "cfg-if",
@@ -1258,13 +1258,6 @@ crate.spec(
 crate.spec(
     package = "proptest-derive",
     version = "^0.5.0",
-)
-
-# why are both needed?
-crate.spec(
-    package = "prost",
-    package_alias = "prost_0_12",
-    version = "^0.12.2",
 )
 crate.spec(
     package = "prost",
