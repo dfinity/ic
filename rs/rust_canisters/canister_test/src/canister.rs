@@ -770,6 +770,7 @@ impl<'a> Canister<'a> {
                         reserved_cycles_limit: None,
                         log_visibility: None,
                         log_memory_limit: None,
+                        snapshot_visibility: None,
                         wasm_memory_limit: None,
                         wasm_memory_threshold: None,
                         environment_variables: None,

@@ -124,7 +124,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
             // Construct large `UpdateSettings` argument.
             let mut controllers = mgr
                 .canister_status(&canister.canister_id())
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0
@@ -190,7 +191,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             let balance_before = mgr
                 .canister_status(&canister.canister_id())
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0
@@ -209,7 +211,8 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
 
             let balance_after = mgr
                 .canister_status(&canister.canister_id())
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0
@@ -354,8 +357,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 logger,
                 "Assert that the user cannot access canister C's status."
             );
-            assert_http_submit_fails(
-                mgr.canister_status(&canister_c).call().await,
+            assert_reject(
+                mgr.canister_status(&canister_c).as_update().call().await,
                 RejectCode::CanisterError,
             );
 
@@ -400,7 +403,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
 
             // `user` can now fetch the status too.
             mgr.canister_status(&canister_c)
-                .call_and_wait()
+                .as_update()
+                .call()
                 .await
                 .unwrap();
 
@@ -420,8 +424,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 logger,
                 "Assert that the user can no longer access canister C's status."
             );
-            assert_http_submit_fails(
-                mgr.canister_status(&canister_c).call().await,
+            assert_reject(
+                mgr.canister_status(&canister_c).as_update().call().await,
                 RejectCode::CanisterError,
             );
 
@@ -650,8 +654,9 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
 
             // Nor does fetching the status.
             info!(logger, "Asserting that fetching the canister status fails.");
-            assert_http_submit_fails(
+            assert_reject(
                 mgr.canister_status(&wallet_canister.canister_id())
+                    .as_update()
                     .call()
                     .await,
                 RejectCode::CanisterError,
