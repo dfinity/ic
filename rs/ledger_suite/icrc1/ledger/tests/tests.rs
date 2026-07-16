@@ -302,13 +302,14 @@ fn test_get_blocks() {
     ic_ledger_suite_state_machine_tests::test_get_blocks(ledger_wasm(), encode_init_args);
 }
 
-// Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
+// Generate random blocks and check that their CBOR encoding complies with the
+// ledger block CBOR schema.
 #[test]
 fn block_encoding_agrees_with_the_schema() {
     ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema::<Tokens>();
 }
 
-// Check that the CDDL schema validator rejects malformed blocks.
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
 #[test]
 fn block_encoding_schema_catches_malformed_blocks() {
     ic_ledger_suite_state_machine_tests::block_encoding_schema_catches_malformed_blocks();
