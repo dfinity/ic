@@ -1,13 +1,15 @@
 //! `StateMachine` analogue of the system test
 //! `rs/tests/message_routing/xnet/subnet_delete_test.rs`.
 //!
-//! It verifies that deleting a subnet correctly causes in-flight XNet requests
-//! to be rejected, and that messages from the deleted subnet that are still in
-//! its stream are not pulled after subnet deletion. The scenario is run as a
-//! matrix over the type of the deleted subnet: it must behave the same whether
-//! the deleted subnet is a CloudEngine subnet or a regular application subnet
-//! (subnet deletion is handled by the routing/topology layer, which is
-//! subnet-type agnostic).
+//! It verifies that deleting a subnet correctly handles in-flight XNet messages:
+//! requests towards the deleted subnet are rejected, responses towards the
+//! deleted subnet are silently dropped (a response is never turned into a
+//! reject), and messages from the deleted subnet that are still in its stream
+//! are not pulled after subnet deletion. The scenario is run as a matrix over
+//! the type of the deleted subnet: it must behave the same whether the deleted
+//! subnet is a CloudEngine subnet or a regular application subnet (subnet
+//! deletion is handled by the routing/topology layer, which is subnet-type
+//! agnostic).
 //!
 //! The scenario wires together three `StateMachine`s sharing a single registry
 //! (see `rs/state_machine_tests/tests/multi_subnet.rs` for the basic wiring):
@@ -21,25 +23,41 @@
 //! implements subnet deletion).
 //!
 //! Runbook:
-//!   1. Install universal canisters `US` on `S`, `UT` on `T`, `UC` on `C`.
-//!   2. Halt `T` (stop executing rounds on it).
-//!   3. From `UC` fire a bounded-wait call to `UT` that would set `UT`'s
-//!      global data to a fixed blob. The call is fire-and-forget (`UC` replies
-//!      to its ingress immediately) and remains stuck in the `C -> T` stream.
-//!   4. Halt `C`.
-//!   5. From `US` submit 10 bounded-wait calls to `UC` with a 2 MB payload each
-//!      (generated at runtime, so the ingress stays small). Each call's
-//!      `on_reject` handler replies with the reject code as a 4-byte LE integer.
-//!      The 2 MB payloads fill the `S -> C` stream (`TARGET_STREAM_SIZE_BYTES`),
-//!      so some calls reach the stream while the rest stay in `US`'s output queue.
-//!   6. Delete `C`, unhalt `T`, check `UT`'s global data is still empty, and wait
-//!      for all 10 calls from `US` to complete.
-//!   7. Assert at least one call from `US` was rejected with `DestinationInvalid`
-//!      (call did not reach the stream: no route after deletion) and at least one
-//!      with `CanisterReject` (call reached the stream, so its callback was still
-//!      open when `C` was deleted; `generate_reject_responses_for_deleted_subnets`
-//!      then synthesizes an immediate reject for it, rather than waiting for the
-//!      bounded-wait callback to time out).
+//! ```text
+//! 1.  Install universal canisters US on S, UT on T, UC on C, plus two more
+//!     canisters US2 and US3 on S (for the response-dropping part).
+//! 2.  Halt T (stop executing rounds on it).
+//! 3.  From UC fire a bounded-wait call to UT that would set UT's global data to
+//!     a fixed blob. The call is fire-and-forget (UC replies to its ingress
+//!     immediately) and remains stuck in the C -> T stream.
+//! 3b. From UC fire two bounded-wait calls to US2 and US3 on S. Each callee loops
+//!     (self canister_status calls) holding its reply back until its global data
+//!     is set. Both calls are fire-and-forget.
+//! 4.  Halt C.
+//! 4b. Release US2's reply (set its global data). Its response is destined for UC
+//!     on the halted subnet C; C does not consume it and, since the S -> C stream
+//!     is still empty, it is inducted into that stream.
+//! 5.  From US submit 10 bounded-wait calls to UC with a 2 MB payload each
+//!     (generated at runtime, so the ingress stays small). Each call's on_reject
+//!     handler replies with the reject code as a 4-byte LE integer. The 2 MB
+//!     payloads fill the S -> C stream (TARGET_STREAM_SIZE_BYTES), so some calls
+//!     reach the stream while the rest stay in US's output queue.
+//! 5b. Release US3's reply. As the S -> C stream is now full, its response cannot
+//!     be inducted and stays in US3's output queue.
+//! 6.  Delete C, unhalt T, check UT's global data is still empty, and wait for
+//!     all 10 calls from US to complete.
+//! 7.  Assert at least one call from US was rejected with DestinationInvalid
+//!     (call did not reach the stream: no route after deletion) and at least one
+//!     with CanisterReject (call reached the stream, so its callback was still
+//!     open when C was deleted; generate_reject_responses_for_deleted_subnets
+//!     then synthesizes an immediate reject for it, rather than waiting for the
+//!     bounded-wait callback to time out).
+//! 7b. Assert both responses towards C were silently dropped: the one that sat in
+//!     US3's output queue is dropped by the stream builder (counted by
+//!     mr_routed_message_count{type="response",status="canister_not_found"}), and
+//!     the one that sat in the S -> C stream is dropped together with the whole
+//!     stream (metric-silent, asserted by the stream being gone).
+//! ```
 //!
 //! Bounded-wait (best-effort) calls with no cycles are used throughout because
 //! they are the only cross-subnet calls allowed to/from a CloudEngine subnet;
@@ -58,6 +76,7 @@ use ic_state_machine_tests::{
     add_initial_registry_records, remove_subnet_local_registry_records,
     update_global_registry_records,
 };
+use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{MessageId, StreamMessage};
 use ic_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
@@ -70,11 +89,25 @@ const NUM_CALLS: usize = 10;
 /// (`2 MiB`) and `6` such payloads exceed `TARGET_STREAM_SIZE_BYTES` (`10 MiB`),
 /// so the `S -> C` stream fills up and only some of the calls reach it.
 const PAYLOAD_SIZE: u32 = 2 * 1000 * 1000;
-/// Best-effort call timeout. Chosen comfortably larger than the number of rounds
-/// executed before deleting `C`, so that calls do not time out prematurely, yet
-/// small enough to keep the post-deletion round count modest.
-const CALL_TIMEOUT_SECS: u32 = 30;
+/// Best-effort call timeout. `with_execute_round_time_increment` advances each
+/// subnet's clock by 1s per round, so a best-effort call/response times out after
+/// this many rounds. It is chosen comfortably larger than the number of rounds
+/// executed while any best-effort call or response is still pending (in
+/// particular the two responses towards `C`, which are produced early yet must
+/// survive until `C` is deleted), so that nothing times out prematurely; it is
+/// still smaller than the post-deletion round budget, so a regression that fails
+/// to reject/drop in-flight messages surfaces as a timeout rather than a hang.
+const CALL_TIMEOUT_SECS: u32 = 120;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
+/// Blobs used by the response-dropping scenario. A looping canister on `S` holds
+/// its reply back until its global data is set to `RESPONSE_TRIGGER_BLOB`, then
+/// replies with the given reply blob (the payload of the response that must be
+/// silently dropped once `C` is deleted). Two responses are produced: one that
+/// ends up in `S`'s stream towards `C`, and one that stays in the sender
+/// canister's output queue (because the stream is already full).
+const RESPONSE_TRIGGER_BLOB: &[u8] = b"subnet-delete-response-trigger";
+const RESPONSE_STREAM_REPLY_BLOB: &[u8] = b"subnet-delete-response-in-stream";
+const RESPONSE_QUEUE_REPLY_BLOB: &[u8] = b"subnet-delete-response-in-queue";
 
 /// Reject codes (see `ic_error_types::RejectCode`).
 const DESTINATION_INVALID: u32 = 3;
@@ -147,6 +180,88 @@ fn ingress_result(sm: &StateMachine, msg_id: &MessageId) -> Option<WasmResult> {
     }
 }
 
+/// Fires a fire-and-forget bounded-wait call from `uc` on subnet `c` to
+/// `callee`'s `update` method running the looping op: `callee` holds its reply
+/// back (looping on self `canister_status` calls) until its global data equals
+/// `RESPONSE_TRIGGER_BLOB`, then replies with `reply_blob`. `uc` replies to its
+/// own ingress immediately; `c` is driven until that ingress completes, so the
+/// resulting request is placed in `c`'s outgoing stream towards `callee`'s subnet.
+fn fire_looping_call(
+    c: &StateMachine,
+    uc: CanisterId,
+    callee: CanisterId,
+    user_id: PrincipalId,
+    reply_blob: &[u8],
+) {
+    let payload = wasm()
+        .call_simple_with_cycles_and_best_effort_response(
+            callee,
+            "update",
+            call_args()
+                .other_side(wasm().loop_until_global_data_set(RESPONSE_TRIGGER_BLOB, reply_blob))
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+            0_u128,
+            CALL_TIMEOUT_SECS,
+        )
+        .reply_data(&[])
+        .build();
+    let msg_id = c.submit_ingress_as(user_id, uc, "update", payload).unwrap();
+    let mut completed = false;
+    for _ in 0..10 {
+        c.execute_round();
+        if ingress_result(c, &msg_id).is_some() {
+            completed = true;
+            break;
+        }
+    }
+    assert!(
+        completed,
+        "UC fire-and-forget looping ingress did not complete"
+    );
+}
+
+/// Releases a looping canister's held-back reply by setting its global data to
+/// `RESPONSE_TRIGGER_BLOB` (a fire-and-forget ingress; the canister's loop then
+/// replies on its next iteration).
+fn release_looping_reply(sm: &StateMachine, canister: CanisterId, user_id: PrincipalId) {
+    let payload = wasm()
+        .set_global_data(RESPONSE_TRIGGER_BLOB)
+        .reply_data(&[])
+        .build();
+    sm.submit_ingress_as(user_id, canister, "update", payload)
+        .unwrap();
+}
+
+/// Counts the `Response` messages in `sm`'s stream towards `remote` (0 if there
+/// is no such stream).
+fn stream_response_count(sm: &StateMachine, remote: SubnetId) -> usize {
+    sm.get_latest_state()
+        .get_stream(&remote)
+        .map(|stream| {
+            stream
+                .messages()
+                .iter()
+                .filter(|(_, m)| matches!(m, StreamMessage::Response(_)))
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Returns the number of responses that the stream builder on `sm` has silently
+/// dropped because their destination canister had no known route, i.e. the value
+/// of `mr_routed_message_count{type="response",status="canister_not_found"}`.
+fn dropped_no_route_response_count(sm: &StateMachine) -> u64 {
+    fetch_int_counter_vec(sm.metrics_registry(), "mr_routed_message_count")
+        .into_iter()
+        .filter(|(labels, _)| {
+            labels.get("type").map(String::as_str) == Some("response")
+                && labels.get("status").map(String::as_str) == Some("canister_not_found")
+        })
+        .map(|(_, value)| value)
+        .sum()
+}
+
 // The subnet-deletion scenario is run once per supported type of the deleted
 // subnet `C`; the observable behavior must be identical. Each type gets its own
 // test so they run in parallel and failures are easy to attribute.
@@ -211,8 +326,13 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     t.reload_registry();
     c.reload_registry();
 
-    // Step 1: Install universal canisters US on S, UT on T, UC on C.
+    // Step 1: Install universal canisters US on S, UT on T, UC on C, plus two
+    // more canisters US2 and US3 on S dedicated to the response-dropping
+    // scenario: US2 produces the response that ends up in S's stream towards C,
+    // US3 the response that stays in US3's output queue.
     let us = install_universal_canister(&s);
+    let us2 = install_universal_canister(&s);
+    let us3 = install_universal_canister(&s);
     let ut = install_universal_canister(&t);
     let uc = install_universal_canister(&c);
 
@@ -275,7 +395,61 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     }
     drop(c_state);
 
+    // Step 3b: Fire two more fire-and-forget bounded-wait calls from UC to US2
+    // and US3 on the surviving subnet S. Each callee loops (self canister_status
+    // calls) holding its reply back until its global data is set (Steps 4b, 5b).
+    // Both requests are placed in the C -> S stream while C is still running, so
+    // S can induct them (and start the loops) before C is deleted. Their eventual
+    // replies are *responses* destined for UC on the deleted subnet C.
+    fire_looping_call(&c, uc, us2, user_id, RESPONSE_STREAM_REPLY_BLOB);
+    fire_looping_call(&c, uc, us3, user_id, RESPONSE_QUEUE_REPLY_BLOB);
+
     // Step 4: Halt subnet C by not executing any more rounds on it.
+
+    // Step 4b: Release US2's reply by setting its global data, and drive S until
+    // the resulting response reaches the S -> C stream. C is halted, so it does
+    // not consume the response; and the S -> C stream is still empty (Step 5 has
+    // not run yet), so the response is inducted into it. Driving S here also
+    // inducts the two C -> S requests (from Step 3b) and starts US2/US3 looping.
+    release_looping_reply(&s, us2, user_id);
+    let mut response_in_stream = false;
+    for _ in 0..50 {
+        s.execute_round();
+        if stream_response_count(&s, c_id) >= 1 {
+            response_in_stream = true;
+            break;
+        }
+    }
+    assert!(
+        response_in_stream,
+        "US2's response did not reach the S -> C stream"
+    );
+    // The S -> C stream must hold exactly US2's response and nothing else yet.
+    let state = s.get_latest_state();
+    let stream = state
+        .get_stream(&c_id)
+        .expect("expected an S -> C stream holding US2's response");
+    let stream_messages: Vec<&StreamMessage> = stream.messages().iter().map(|(_, m)| m).collect();
+    assert_eq!(
+        stream_messages.len(),
+        1,
+        "expected exactly US2's response in the S -> C stream, got {} messages",
+        stream_messages.len()
+    );
+    match stream_messages[0] {
+        StreamMessage::Response(resp) => {
+            assert_eq!(
+                resp.respondent, us2,
+                "unexpected respondent of the streamed response"
+            );
+            assert_eq!(
+                resp.originator, uc,
+                "unexpected originator of the streamed response"
+            );
+        }
+        other => panic!("expected a Response in the S -> C stream, got {other:?}"),
+    }
+    drop(state);
 
     // Step 5: Submit 10 bounded-wait calls from US to UC, each producing a 2 MB
     // payload at runtime (the ingress itself stays small). The on_reject handler
@@ -333,7 +507,8 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     // Assert that the S -> C stream is partially filled: some (but not all)
     // US -> UC calls reached the stream and the rest are still in US's output
     // queue. This partition is what yields both reject codes in step 7 (streamed
-    // calls -> CanisterReject, queued calls -> DestinationInvalid).
+    // calls -> CanisterReject, queued calls -> DestinationInvalid). The stream
+    // also still holds the single US2 response from Step 4b.
     let state = s.get_latest_state();
     let stream = state
         .get_stream(&c_id)
@@ -349,10 +524,19 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
             )
         })
         .count();
+    let response_count = stream
+        .messages()
+        .iter()
+        .filter(|(_, m)| matches!(m, StreamMessage::Response(_)))
+        .count();
     assert_eq!(
-        stream_request_count,
+        response_count, 1,
+        "expected exactly US2's response among the S -> C stream messages"
+    );
+    assert_eq!(
+        stream_request_count + response_count,
         stream.messages().len(),
-        "expected only US -> UC requests in the S -> C stream"
+        "expected only US -> UC requests and US2's response in the S -> C stream"
     );
     assert!(
         (1..NUM_CALLS).contains(&stream_request_count),
@@ -364,6 +548,28 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
         "expected the remaining US -> UC calls in US's output queue before deleting C"
     );
     drop(state);
+
+    // Step 5b: Release US3's reply, now that the S -> C stream is full. US3's
+    // response towards UC on C therefore cannot be inducted into the stream and
+    // stays in US3's output queue. We drive S enough rounds for US3's loop to
+    // reply, then assert the stream is unchanged (still exactly one response, the
+    // US2 one from Step 4b), confirming US3's response did not enter the stream.
+    release_looping_reply(&s, us3, user_id);
+    for _ in 0..20 {
+        s.execute_round();
+    }
+    assert_eq!(
+        stream_response_count(&s, c_id),
+        1,
+        "US3's response must stay in US3's output queue, not enter the full S -> C stream"
+    );
+    assert!(
+        s.get_latest_state()
+            .canister_state(&us3)
+            .unwrap()
+            .has_output(),
+        "expected US3's response in US3's output queue before deleting C"
+    );
 
     // Step 6a: Delete subnet C. We remove it from the shared pool of subnets
     // (making it unreachable for S and T) and tombstone its registry records,
@@ -459,6 +665,31 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     assert!(
         canister_reject_count >= 1,
         "expected at least one CanisterReject rejection, got {canister_reject_count} \
+         (deleted subnet type: {deleted_subnet_type:?})"
+    );
+
+    // Step 7b: Verify the two responses towards C were silently dropped.
+    //
+    // The response that sat in US3's output queue (Step 5b) is dropped by the
+    // stream builder when it finds no route to C, incrementing
+    // `mr_routed_message_count{type="response",status="canister_not_found"}`.
+    // (The queued US -> UC requests increment the same counter with
+    // `type="request"` and are additionally rejected, see Step 7.) Unlike a
+    // request, a response is never turned into a reject.
+    assert_eq!(
+        dropped_no_route_response_count(&s),
+        1,
+        "expected exactly the queued US3 response to be silently dropped as no_route \
+         (deleted subnet type: {deleted_subnet_type:?})"
+    );
+
+    // The response that sat in the S -> C stream (Step 4b) is dropped together
+    // with the whole stream when C is deleted; that bulk discard is intentionally
+    // metric-silent, so we assert it directly: S no longer has a stream towards
+    // the deleted subnet C.
+    assert!(
+        s.get_latest_state().get_stream(&c_id).is_none(),
+        "expected S's stream towards the deleted subnet C to be discarded \
          (deleted subnet type: {deleted_subnet_type:?})"
     );
 }
