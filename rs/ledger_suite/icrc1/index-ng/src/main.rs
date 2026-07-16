@@ -1225,7 +1225,7 @@ fn account_block_ids_key(account: Account, block_index: BlockIndex64) -> Account
     (account_sha256(account), Reverse(block_index))
 }
 
-fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
+fn decode_icrc1_block(bytes: Vec<u8>) -> GenericBlock {
     let encoded_block = EncodedBlock::from(bytes);
     encoded_block_to_generic_block(&encoded_block)
 }
@@ -1244,12 +1244,12 @@ fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     }
 }
 
-fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
+fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(Vec<u8>) -> R) -> Vec<R> {
     let length = length.min(with_state(|opts| opts.max_blocks_per_response));
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         (start..limit)
-            .map(|i| decoder(i, blocks.get(i).unwrap()))
+            .map(|i| decoder(blocks.get(i).unwrap()))
             .collect()
     })
 }
