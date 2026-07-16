@@ -17,8 +17,7 @@ use crate::{
 };
 use ic_base_types::NumSeconds;
 use ic_config::{
-    embedders::Config as EmbeddersConfig,
-    execution_environment::Config as HypervisorConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
