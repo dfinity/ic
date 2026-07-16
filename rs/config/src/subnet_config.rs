@@ -149,7 +149,7 @@ pub const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 pub const SEV_REFERENCE_SUBNET_SIZE: usize = 7;
 
 /// Costs for each newly created dirty page in stable memory.
-const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
+pub const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(5_000);
 
 /// Accumulated priority reset interval, rounds.
 ///
