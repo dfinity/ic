@@ -63,25 +63,6 @@ mod test {
     use super::*;
     use config_types::HostOSDevSettings;
     use once_cell::sync::Lazy;
-    use serde_json::{Value, json};
-
-    static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
-        json!({
-              "deployment": {
-                "deployment_environment": "mainnet",
-                "mgmt_mac": null
-              },
-              "nns": {
-                "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
-              },
-              "dev_vm_resources": {
-                "memory": "16",
-                "cpu": "kvm",
-                "nr_of_vcpus": 64
-              }
-            }
-        )
-    });
 
     const DEPLOYMENT_STR: &str = r#"{
   "deployment": {
@@ -119,14 +100,19 @@ mod test {
 
     #[test]
     fn deserialize_deployment() {
-        let parsed_deployment = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
+        let parsed_deployment = serde_json::from_str(DEPLOYMENT_STR).unwrap();
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
 
-        // Exercise DeserializeOwned using serde_json::from_value.
-        // DeserializeOwned is used by serde_json::from_reader, which is the
+        // Exercise DeserializeOwned using serde_json::from_reader. This is the
         // main entrypoint of this code, in practice.
-        let parsed_deployment = { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
+        let parsed_deployment = serde_json::from_reader(DEPLOYMENT_STR.as_bytes()).unwrap();
+
+        assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+
+        // Exercise DeserializeOwned using serde_json::from_reader. This is the
+        // main entrypoint of this code, in practice.
+        let parsed_deployment = serde_json::from_reader(DEPLOYMENT_STR.as_bytes()).unwrap();
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
     }
