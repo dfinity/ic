@@ -80,7 +80,6 @@ genrule(
     outs = ["guest-img.tar.zst"],
     # no-remote-exec because the setupOS image input is a multi gigabyte file
     # which would then have to be copied to the remote worker.
-    # Additionally Namespace had a /tmp of only 1G which was too small to extract the setupOS image to.
     tags = [ "manual", "no-remote-exec" ],
     cmd = \"""#!/bin/bash
         $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
