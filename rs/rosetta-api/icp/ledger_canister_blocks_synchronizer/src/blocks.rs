@@ -1273,7 +1273,7 @@ impl Blocks {
                         }
                         if *item > other_indices[idx_b] {
                             /* Vector a is representative of the block_idxes in the blocks table and since other tables refer to the blocks
-                            table with a forein key constraint it should not be possible for other tables to have a block idx that is
+                            table with a foreign key constraint it should not be possible for other tables to have a block idx that is
                             not present in the blocks table. */
                             while idx_b < other_indices.len() {
                                 if *item == other_indices[idx_b] {
