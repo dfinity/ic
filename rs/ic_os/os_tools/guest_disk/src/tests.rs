@@ -10,7 +10,7 @@
 //! lightweight view of a single partition that borrows the fixture's run context and
 //! carries all partition-specific LUKS inspection and device-mapper helpers. Simple
 //! tests touch only the store or the active slot's var device; the A/B slot machinery
-//! ([`TestFixture::upgrade_guestos_to`] / [`TestFixture::rollback`]) supports
+//! ([`TestFixture::upgrade_sev_guestos_to`] / [`TestFixture::rollback`]) supports
 //! upgrade/rollback tests.
 
 use crate::{crypt_name, metrics_file_path, run, Args, Partition};
@@ -291,7 +291,7 @@ impl BootSlot {
 /// A/B boot slots, each with its own var device and var directory.
 ///
 /// `active_slot` is the slot currently "booted". Simple tests that do not care about
-/// A/B leave it at 0 (slot A); upgrade/rollback tests flip it via [`Self::upgrade_guestos_to`]
+/// A/B leave it at 0 (slot A); upgrade/rollback tests flip it via [`Self::upgrade_sev_guestos_to`]
 /// / [`Self::rollback`].
 struct TestFixture {
     store_device_path: PathBuf,
@@ -511,7 +511,7 @@ impl TestFixture {
     /// measurement) on the other boot slot, then rotates the SEV key (copy detached header,
     /// exchange key) and boots. Returns the result of opening the store so callers can attach
     /// context (e.g. an iteration index).
-    fn upgrade_guestos_to(&mut self, new_launch_measurement: [u8; 48]) -> Result<()> {
+    fn upgrade_sev_guestos_to(&mut self, new_launch_measurement: [u8; 48]) -> Result<()> {
         // Derive the current slot's key (upgrade protocol key exchange).
         let old_key = self.derive_sev_key(Partition::Store);
 
@@ -537,7 +537,7 @@ impl TestFixture {
         self.store_partition().open()
     }
 
-    /// SEV rollback: switches to the other boot slot with no key exchange or var formatting.
+    /// Switches to the other boot slot with no key exchange or var formatting.
     /// The other slot boots with its own frozen var partition (detached header + SEV key from
     /// its last boot).
     fn rollback(&mut self) {
@@ -1016,7 +1016,7 @@ fn test_rollback_uses_frozen_header_without_key_exchange() {
     fixture.store_partition().deactivate();
 
     // Upgrade to the other slot.
-    fixture.upgrade_guestos_to([0x11; 48]).unwrap();
+    fixture.upgrade_sev_guestos_to([0x11; 48]).unwrap();
     fixture.store_partition().deactivate();
 
     // Rollback: no key file, uses the original slot's frozen detached header.
@@ -1236,7 +1236,7 @@ fn test_open_store_multiple_times_with_different_keys() {
 
     for iteration in 0..6 {
         fixture
-            .upgrade_guestos_to([iteration as u8; 48])
+            .upgrade_sev_guestos_to([iteration as u8; 48])
             .unwrap_or_else(|e| {
                 panic!("Failed to open store partition on iteration {iteration}: {e:#}")
             });
