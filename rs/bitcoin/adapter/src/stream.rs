@@ -454,62 +454,13 @@ pub mod test {
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        // Bind a loopback listener with a minimal backlog and never accept from
-        // it. Once its accept queue is full the kernel silently drops further
-        // SYNs (see `tcp_conn_request`/`sk_acceptq_is_full`), so a fresh TCP
-        // connect neither completes nor is refused: it hangs until the stream's
-        // connect timeout fires. This exercises the connect-timeout path using
-        // only loopback, so the test does not require network egress. (A
-        // non-routable address like 192.168.2.0 only times out when a default
-        // route exists to black-hole the packets; without one the OS returns an
-        // immediate "network unreachable" error instead.)
-        let socket = tokio::net::TcpSocket::new_v4().unwrap();
-        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
-        let listener = socket.listen(1).unwrap();
-        let address = listener.local_addr().unwrap();
-
-        // Fill the accept queue with connections that are never accepted. We
-        // keep the successful ones alive so the queue stays full; the queue is
-        // saturated once a fresh connect no longer completes but hangs.
-        //
-        // The loop is self-terminating (it stops as soon as a connect hangs),
-        // so the bound is just a safety cap to avoid running away. With
-        // `listen(1)` the queue saturates after `backlog + 1 = 2` connects on
-        // Linux (`sk_acceptq_is_full`), so the 3rd connect already hangs; 16
-        // leaves a generous margin and is far above any real accept-queue
-        // capacity for this backlog.
-        let mut blockers = Vec::new();
-        let mut saturated = false;
-        for _ in 0..16 {
-            match timeout(
-                Duration::from_millis(200),
-                tokio::net::TcpStream::connect(address),
-            )
-            .await
-            {
-                // Connect succeeded quickly: still room in the queue, keep it
-                // alive and keep filling.
-                Ok(Ok(stream)) => blockers.push(stream),
-                // Connect hung past the probe timeout: the queue is saturated
-                // and further SYNs are being dropped, which is exactly the
-                // state we need for the stream's connect to time out.
-                Err(_elapsed) => {
-                    saturated = true;
-                    break;
-                }
-                // An immediate connect error means the queue is *not*
-                // saturated (e.g. the connection was refused). Failing here
-                // rather than proceeding keeps the test deterministic and
-                // surfaces the real cause instead of a confusing downstream
-                // failure.
-                Ok(Err(e)) => panic!("unexpected error while filling accept queue: {e}"),
-            }
-        }
-        assert!(
-            saturated,
-            "accept queue never saturated after {} connects; cannot exercise the connect timeout",
-            blockers.len()
-        );
+        // Connect to a loopback listener whose accept queue is saturated, so
+        // the connect hangs until the stream's timeout fires. This exercises
+        // the connect-timeout path using only loopback, so the test does not
+        // require network egress. `_saturated` must stay alive for the duration
+        // of the test to keep the address unconnectable.
+        let _saturated = ic_test_utilities_net::saturated_loopback_listener().await;
+        let address = _saturated.addr();
 
         let stream_config = StreamConfig {
             address,
