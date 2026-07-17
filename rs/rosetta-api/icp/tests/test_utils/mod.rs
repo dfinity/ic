@@ -51,7 +51,6 @@ impl TestLedger {
         )
     }
 
-    #[allow(dead_code)]
     pub(crate) fn from_blockchain(blocks: Blocks) -> Self {
         Self {
             blockchain: RwLock::new(blocks),
