@@ -1,3 +1,7 @@
+This file is derived mechanically from STANDARDS_AND_CONVENTIONS.md, and
+tells Claude how to write code here.
+
+
 ## Basic Principles
 
 Optimize for the reader, not the writer.

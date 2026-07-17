@@ -40,6 +40,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "STANDARDS_AND_CONVENTIONS.md"
 OUTPUT = Path(__file__).resolve().parent / "claude_author_instructions.md"
 
+FRONT_MATTER = (
+    "This file is derived mechanically from STANDARDS_AND_CONVENTIONS.md, and\n"
+    "tells Claude how to write code here.\n"
+)
+
 # "((" and "))" are only ever recognized here when each is alone on its own
 # line. A "((" or "))" appearing elsewhere (e.g. inside a sentence or code)
 # just isn't matched by this regex at all -- it isn't treated as a marker, so
@@ -138,14 +143,14 @@ def main():
     text = cleanup_whitespace(text).strip() + "\n"
     text = restore_code(text, saved_code)
 
-    OUTPUT.write_text(text)
-
     def non_ws_len(s):
         return sum(1 for c in s if not c.isspace())
 
     original_chars = non_ws_len(original)
     kept_chars = non_ws_len(text)
     cut_chars = original_chars - kept_chars
+
+    OUTPUT.write_text(FRONT_MATTER + "\n\n" + text)
 
     print(f"Wrote {OUTPUT.relative_to(REPO_ROOT)}")
     print(f"Original non-whitespace chars: {original_chars}")
