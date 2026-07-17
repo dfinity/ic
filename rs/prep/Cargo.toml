@@ -35,8 +35,8 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-json5 = "0.4.1"
-maplit = "1.0.2"
+json5 = { workspace = true }
+maplit = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }

@@ -13,23 +13,23 @@ path = "src/lib.rs"
 [dependencies]
 base64 = { workspace = true }
 bytes = { workspace = true }
-by_address = "1.1.0"
+by_address = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 ic-stable-structures = { workspace = true }
-json5 = "0.4.1"
+json5 = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 num-traits = { workspace = true }
-priority-queue = "1.3.1"
+priority-queue = { workspace = true }
 prost = { workspace = true }
-rust_decimal = "1.36.0"
+rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
