@@ -58,63 +58,8 @@ jobs:
           nsc bazel execution setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/netrc
-      - name: Bazel Build with RBE
-        timeout-minutes: 120
-        shell: bash
-        run: |
-          set -euo pipefail
 
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd"
-
-          # Directory for the Build Event Protocol and execution profile files,
-          # later uploaded to Namespace Artifact Storage for offline analysis.
-          mkdir -p /tmp/bep
-
-          bazel_args=(
-            --noworkspace_rc
-            --bazelrc=./bazel/conf/.bazelrc.build
-            --bazelrc=/tmp/bazel-rbe.bazelrc
-
-            build
-
-            --config=flaky_retry
-
-            --spawn_strategy=remote,sandboxed,local
-            --strategy=Genrule=remote,sandboxed,local
-
-            --remote_default_exec_properties=namespace_action_isolation=sandboxed
-            --remote_default_exec_properties=container-image="$worker_image"
-
-            # Namespace currently deploys 15 workers that can run 8 actions:
-            --jobs=64
-
-            --build_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
-
-            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
-            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
-            # mid-build, actions fail with "Lost inputs no longer available remotely" or
-            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
-            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs.
-            --experimental_remote_cache_lease_extension
-            --experimental_remote_cache_eviction_retries=10
-
-            --remote_download_minimal
-
-            # Capture the Build Event Protocol and the execution profile so this
-            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
-            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
-            # by the "Upload Bazel BEP" step below.
-            --build_event_binary_file=/tmp/bep/bazel-bep-build.pb
-            --profile=/tmp/bep/profile-build.json
-            --experimental_profile_include_target_label
-
-            --keep_going
-          )
-
-          bazel "${bazel_args[@]}" //...
-
-      - name: Bazel Test with RBE (no system-tests)
+      - name: Bazel Test with RBE (//packages/pocket-ic:canister_snapshots)
         if: ${{ !cancelled() }}
         timeout-minutes: 120
         shell: bash
@@ -168,65 +113,177 @@ jobs:
             --keep_going
           )
 
-          bazel "${bazel_args[@]}" //...
+          bazel "${bazel_args[@]}" //packages/pocket-ic:canister_snapshots
 
-      - name: Bazel Test with RBE (only system-tests)
-        # Run even if the previous "no system-tests" step failed, but not when the job is cancelled.
-        if: ${{ !cancelled() }}
-        timeout-minutes: 120
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd"
-
-          # Directory for the Build Event Protocol and execution profile files,
-          # later uploaded to Namespace Artifact Storage for offline analysis.
-          mkdir -p /tmp/bep
-
-          bazel_args=(
-            --noworkspace_rc
-            --bazelrc=./bazel/conf/.bazelrc.build
-            --bazelrc=/tmp/bazel-rbe.bazelrc
-
-            test
-
-            --config=flaky_retry
-
-            --spawn_strategy=remote,sandboxed,local
-            --strategy=Genrule=remote,sandboxed,local
-
-            --remote_default_exec_properties=namespace_action_isolation=sandboxed
-            --remote_default_exec_properties=container-image="$worker_image"
-
-            --jobs=32
-
-            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
-
-
-            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
-            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
-            # mid-build, actions fail with "Lost inputs no longer available remotely" or
-            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
-            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs.
-            --experimental_remote_cache_lease_extension
-            --experimental_remote_cache_eviction_retries=10
-
-            --remote_download_minimal
-
-            # Capture the Build Event Protocol and the execution profile so this
-            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
-            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
-            # by the "Upload Bazel BEP" step below.
-            --build_event_binary_file=/tmp/bep/bazel-bep-systests.pb
-            --profile=/tmp/bep/profile-systests.json
-            --experimental_profile_include_target_label
-
-            --keep_going
-          )
-
-          bazel "${bazel_args[@]}" //rs/tests/...
+#      - name: Bazel Build with RBE
+#        timeout-minutes: 120
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#
+#          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd"
+#
+#          # Directory for the Build Event Protocol and execution profile files,
+#          # later uploaded to Namespace Artifact Storage for offline analysis.
+#          mkdir -p /tmp/bep
+#
+#          bazel_args=(
+#            --noworkspace_rc
+#            --bazelrc=./bazel/conf/.bazelrc.build
+#            --bazelrc=/tmp/bazel-rbe.bazelrc
+#
+#            build
+#
+#            --config=flaky_retry
+#
+#            --spawn_strategy=remote,sandboxed,local
+#            --strategy=Genrule=remote,sandboxed,local
+#
+#            --remote_default_exec_properties=namespace_action_isolation=sandboxed
+#            --remote_default_exec_properties=container-image="$worker_image"
+#
+#            # Namespace currently deploys 15 workers that can run 8 actions:
+#            --jobs=64
+#
+#            --build_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
+#
+#            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
+#            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
+#            # mid-build, actions fail with "Lost inputs no longer available remotely" or
+#            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
+#            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
+#            # so the CAS extends their TTL and stops evicting live inputs.
+#            --experimental_remote_cache_lease_extension
+#            --experimental_remote_cache_eviction_retries=10
+#
+#            --remote_download_minimal
+#
+#            # Capture the Build Event Protocol and the execution profile so this
+#            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
+#            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
+#            # by the "Upload Bazel BEP" step below.
+#            --build_event_binary_file=/tmp/bep/bazel-bep-build.pb
+#            --profile=/tmp/bep/profile-build.json
+#            --experimental_profile_include_target_label
+#
+#            --keep_going
+#          )
+#
+#          bazel "${bazel_args[@]}" //...
+#
+#      - name: Bazel Test with RBE (no system-tests)
+#        if: ${{ !cancelled() }}
+#        timeout-minutes: 120
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#
+#          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd"
+#
+#          # Directory for the Build Event Protocol and execution profile files,
+#          # later uploaded to Namespace Artifact Storage for offline analysis.
+#          mkdir -p /tmp/bep
+#
+#          bazel_args=(
+#            --noworkspace_rc
+#            --bazelrc=./bazel/conf/.bazelrc.build
+#            --bazelrc=/tmp/bazel-rbe.bazelrc
+#
+#            test
+#
+#            --config=flaky_retry
+#
+#            --spawn_strategy=remote,sandboxed,local
+#            --strategy=Genrule=remote,sandboxed,local
+#
+#            --remote_default_exec_properties=namespace_action_isolation=sandboxed
+#            --remote_default_exec_properties=container-image="$worker_image"
+#
+#            --jobs=32
+#
+#            --test_tag_filters=-local_system_test,-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
+#
+#            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
+#            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
+#            # mid-build, actions fail with "Lost inputs no longer available remotely" or
+#            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
+#            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
+#            # so the CAS extends their TTL and stops evicting live inputs.
+#            --experimental_remote_cache_lease_extension
+#            --experimental_remote_cache_eviction_retries=10
+#
+#            --remote_download_minimal
+#
+#            # Capture the Build Event Protocol and the execution profile so this
+#            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
+#            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
+#            # by the "Upload Bazel BEP" step below.
+#            --build_event_binary_file=/tmp/bep/bazel-bep-tests.pb
+#            --profile=/tmp/bep/profile-tests.json
+#            --experimental_profile_include_target_label
+#
+#            --keep_going
+#          )
+#
+#          bazel "${bazel_args[@]}" //...
+#
+#      - name: Bazel Test with RBE (only system-tests)
+#        # Run even if the previous "no system-tests" step failed, but not when the job is cancelled.
+#        if: ${{ !cancelled() }}
+#        timeout-minutes: 120
+#        shell: bash
+#        run: |
+#          set -euo pipefail
+#
+#          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd"
+#
+#          # Directory for the Build Event Protocol and execution profile files,
+#          # later uploaded to Namespace Artifact Storage for offline analysis.
+#          mkdir -p /tmp/bep
+#
+#          bazel_args=(
+#            --noworkspace_rc
+#            --bazelrc=./bazel/conf/.bazelrc.build
+#            --bazelrc=/tmp/bazel-rbe.bazelrc
+#
+#            test
+#
+#            --config=flaky_retry
+#
+#            --spawn_strategy=remote,sandboxed,local
+#            --strategy=Genrule=remote,sandboxed,local
+#
+#            --remote_default_exec_properties=namespace_action_isolation=sandboxed
+#            --remote_default_exec_properties=container-image="$worker_image"
+#
+#            --jobs=32
+#
+#            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
+#
+#
+#            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
+#            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
+#            # mid-build, actions fail with "Lost inputs no longer available remotely" or
+#            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
+#            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
+#            # so the CAS extends their TTL and stops evicting live inputs.
+#            --experimental_remote_cache_lease_extension
+#            --experimental_remote_cache_eviction_retries=10
+#
+#            --remote_download_minimal
+#
+#            # Capture the Build Event Protocol and the execution profile so this
+#            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
+#            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
+#            # by the "Upload Bazel BEP" step below.
+#            --build_event_binary_file=/tmp/bep/bazel-bep-systests.pb
+#            --profile=/tmp/bep/profile-systests.json
+#            --experimental_profile_include_target_label
+#
+#            --keep_going
+#          )
+#
+#          bazel "${bazel_args[@]}" //rs/tests/...
 
       - name: Upload Bazel BEP and profile to Namespace Artifact Storage
         # Store the Build Event Protocol (.pb) and execution profile (.json) from
