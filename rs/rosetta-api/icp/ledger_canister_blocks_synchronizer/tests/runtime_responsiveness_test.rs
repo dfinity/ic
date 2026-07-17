@@ -34,6 +34,12 @@ use std::time::{Duration, Instant};
 
 /// Deliberately small so the starvation is deterministic regardless of the host
 /// core count (production integrators are recommended to run with ~4 CPUs).
+///
+/// The assertion is wall-clock based (it compares canary ticks against an ideal
+/// tick count), so it assumes the test can actually run its threads in parallel:
+/// the two tokio worker threads plus the `block_on`/canary thread. The bazel
+/// target reserves CPUs accordingly (`tags = ["cpu:4"]`) to keep it from
+/// under-ticking and flaking on an oversubscribed CI runner.
 const WORKER_THREADS: usize = 2;
 /// More concurrent DB tasks than worker threads, so every worker is kept busy.
 const NUM_HAMMER_TASKS: usize = 8;
