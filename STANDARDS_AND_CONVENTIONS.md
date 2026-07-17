@@ -1,3 +1,4 @@
+((
 # Standards & Conventions
 
 These are enforced rules for this repo.
@@ -12,13 +13,32 @@ us enforce these rules. It will be a bit messy, but no rules is far worse.
 
 Even if we say that X is "good", that does NOT mean over-do X!
 
+## How This File Is Used
+
+From this, two sets of Claude instructions are derived mechanically:
+
+1. How to WRITE code.
+2. How to REVIEW code.
+
+1 is kept small to avoid overwhelming the AI. 2 is sharded out so that reviews
+can be complete. To achieve 1, we put some content here between pairs of single
+parentheses (for inline elisions), and pairs of double parentheses for eliding
+whole swaths.
+
+For simplicity, we require that pairs of single parentheses not be nested. This
+limitation could be lifted later.
+
+Also for simplicity, double parentheses must occur on their own line. Again,
+this could be relaxed later.
+))
+
 
 ## Basic Principles
 
 Optimize for the reader, not the writer.
 
-Do not assume the reader has "esoteric" domain-specific knowledge, only GENERAL
-knowledge, plus a little bit of BASIC knowledge of your domain.
+Do not assume the reader has lots of domain-specific knowledge (only GENERAL
+knowledge, plus a little bit of BASIC knowledge of your domain).
 
 > Explicit is better than implicit.
 > --Zen of Python
@@ -27,20 +47,22 @@ Always be MEANINGFUL.
 
 Lead with the lede.
 
-Guide the eye.
+(Guide the eye.)
 
-Idiomatic Rust is sometimes bad.
+(Idiomatic Rust is sometimes bad.)
 
-Likely future modifications must be easy.
+(Likely future modifications must be easy.)
 
+((
 > Premature optimization is the root of all evil.
 > --Donald Knuth
+))
 
-All general principles of good communication apply.
+(All general principles of good communication apply.)
 
 Consistency is king.
 
-Control access on a "need to know" basis. (E.g. minimize bazel visibility.)
+(Control access on a "need to know" basis. E.g. minimize bazel visibility.)
 
 Data is gold. Diagnostics are diamonds.
 
@@ -137,19 +159,17 @@ One input and one output object when calling remote code (process or canister):
 * `ListWidgetsResponse`, or `ListWidgetsResult` if it `Ok` or `Err` can be
   returned.
 
-Paginate `list_` APIs. Requests must
-
+Paginate `list_` APIs. (Requests must
 * have `limit`
-
 * NOT have `offset` or something like it. Instead, `exclusive_lower_bound` for
-  efficiency.
+  efficiency.)
 
 
 ## Formatting
 
 Locality: Use space to indicate how closely things are related to one another.
 
-When a heading has multiple items, put a blank line after it.
+(When a heading has multiple items, put a blank line after it.)
 
 
 ## Abstraction
@@ -177,31 +197,31 @@ signifies.
 No multi-line `if` conditions. Ditto for `while`, `match`, and `for ... in`
 expressions.
 
-Exception: when looping over a collection literal, each element can be on its
-own line.
+(Exception: when looping over a collection literal, each element can be on its
+own line.)
 
 Branch "on" `enum`s using `match`.
 
-Spin out branch arms.
+Short branch arms. (Spin out if necessary.)
 
-If a function has a `match` with four or more arms, it should have little (if
-any) other code.
+(If a function has a `match` with four or more arms, it should have little if
+any other code.)
 
-`continue` and `break` are good.
+(`continue` and `break` are good.)
 
-If a return value is not used, say so explicitly. E.g.
+(If a return value is not used, say so explicitly. E.g.
 ```
-let _maybe_replaced_element = map.insert(k, v);
-```
+let _displaced_element = map.insert(k, v);
+```)
 
 
 ## Problematic Rust Idioms
 
 Do not directly call `into`.
 
-More generally, only leave types unmentioned when they can be easily determined
-from very nearby code. In particular, do `.collect::<Vec<Widget>>()`, not bare
-`.collect()`.
+More generally, leave types unmentioned only when they can be easily determined
+from very nearby code. (In particular, do `.collect::<Vec<Widget>>()`, not bare
+`.collect()`.)
 
 Do not be afraid to use the `return` keyword.
 
@@ -211,24 +231,24 @@ Do not be afraid to use semicolons.
 ## Comments
 
 The main question that doc comments MUST answer is, "How do I actually USE this
-thing?". This is usually explained by the code's behavior, not how it is
-implemented.
+thing?". (This is usually explained by the code's behavior, not how it is
+implemented.)
 
 Define terms BEFORE using them. E.g. the "Glossary" section above.
 
 More generally, in order to explain X EFFECTIVELY, you must start with things
 that the reader ALREADY knows, and build up to X.
 
-Do NOT be vacuous. E.g. do NOT just say "validates widget". Instead, list the
-properties of a "valid" widget.
+Do NOT be vacuous. (E.g. do NOT just say "validates widget". Instead, list the
+properties of a "valid" widget.)
 
-Sometimes, the best way to explain something is by example. Sometimes, negative
-examples are needed.
+(Sometimes, the best way to explain something is by example. Sometimes, negative
+examples are needed.)
 
-Do NOT simply transcribe code into prose. Comments ADD information that is not
-"readily gleaned" from the code itself. E.g. intent.
+Do NOT simply transcribe code into prose. (Comments ADD information that is not
+"readily gleaned" from the code itself. E.g. intent.)
 
-Code is NOT the ultimate source of truth on nominal behavior.
+(Code is NOT the ultimate source of truth on nominal behavior.)
 
 
 ## Defining Types
@@ -236,7 +256,7 @@ Code is NOT the ultimate source of truth on nominal behavior.
 No `pub` fields.
 Exception: Prost, Candid.
 
-Derive as much as possible. In particular,
+(Derive as much as possible. In particular,
 * `Debug` - For visibility.
 * Construction:
     * `Default`
@@ -244,50 +264,51 @@ Derive as much as possible. In particular,
 * Comparison:
     * `Eq`
     * `Ord`
-    * `Hash`
+    * `Hash`)
 
-When inserting an object into a collection, take ownership.
+(When inserting an object into a collection, take ownership.)
 
 
 ### Constructors
 
 Avoid incomplete objects by defining constructor(s).
 
-Supply `new` (and/or `try_new`). `new` "just assembles", and otherwise does no
-"real work" (besides validation).
+Supply `new` and/or `try_new`. (`new` "just assembles", and otherwise does no
+"real work" besides validation.)
 
-If you want to construct from a file or something that requires "real work", do
-NOT name the constructor `new` (or `try_new`). Instead, name it `from_file` or
-something. The last line would generally consist of calling `new`.
+If you need a constructor that does "real work" (e.g. load from a file) do
+NOT name the constructor `new`. (Instead, name it `from_file` or
+something. The last line would generally consist of calling `new`.)
 
 
+((
 ### Conversions
 
 Implement `From`/`TryFrom` in three steps: fully disassemble, validate and
 transform, and reassemble.
+))
 
 
 ## Anti-Features (not just Rust)
 
-Do not create type aliases. Re-exporting (under the exact same name) is
-acceptable.
+Do not create type aliases. (Re-exporting is acceptable.)
 
-To avoid name collisions when importing, use the module to disambiguate, not
-alias.
+(To avoid name collisions when importing, use the module to disambiguate, not
+alias.)
 
 
 ## Errors
 
-Leave breadcrumbs. Include the offending value, not just the failure category.
+Leave breadcrumbs. Include the offending values (not just the failure category).
 
-List all defects in invalid data.
+List all defects in invalid data (not just the first one).
 
 
 ## Testing
 
 When expecting an error, be specific.
 
-New tests must live in separate `*_tests` (or `tests`) files.
+New tests must live in separate `*_tests.rs` (or `tests.rs`) files.
 
 Do not assert EXACT wording of error messages. Instead, look for key words and
 phrases.
@@ -315,17 +336,18 @@ assert_eq!(get_widget_ids(&registry), vec![widget_id]);
 // etc...
 ```
 
-Use `lazy_static!` for "constants" when you cannot define a `const` due to
-limitations in `const` initialization. Do NOT define a 0-argument `fn` for this!
+(Use `lazy_static!` for "constants" when you cannot define a `const` due to
+limitations in `const` initialization. Do NOT define a 0-argument `fn` for this!)
 
-Define your own (application-specific) asserts to maximize meaningfulness (and
-reduce tedious reading):
+(Define your own application-specific asserts to maximize meaningfulness and
+reduce tedious reading:
 ```
 #[track_caller]
 fn assert_${property}(observed, expected) { ... }
-```
+```)
 
 
+((
 ## Code Review Protocol
 
 When a reviewer asks you (the author) a question, answer it via comments in the
@@ -334,15 +356,15 @@ source code itself.
 Do not simply close suggestion threads. Reply. At a minimum, if you took the
 suggestion, reply with "Done", or react with 👍. If you rejected, explain and
 leave the thread unresolved.
+))
 
 
+((
 ## Grandfathering
-
-DO NOT MERGE - Figure out where this section really belongs. Probably not here,
-since it's not about new code, but rather old (non-compliant) code.
 
 This has been adopted without making existing code compliant. Legacy code will
 be fixed in a parallel effort. Therefore, there will be an interstitial period
 where legacy code is not compliant. Ditto for when we add rules: the rules can
 be added quickly without first fixing existing legacy code, but there needs to
 be a commitment to actually fix legacy code when rules are added.
+))
