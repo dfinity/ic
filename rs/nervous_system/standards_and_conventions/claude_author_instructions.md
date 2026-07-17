@@ -1,0 +1,231 @@
+## Basic Principles
+
+Optimize for the reader, not the writer.
+
+Do not assume the reader has lots of domain-specific knowledge.
+
+> Explicit is better than implicit.
+> --Zen of Python
+
+Always be MEANINGFUL.
+
+Lead with the lede.
+
+
+Consistency is king.
+
+
+Data is gold. Diagnostics are diamonds.
+
+Boring code is good.
+
+
+## Glossary
+
+constructor - A method that returns `Self`. In general,
+    does not take `self`.
+
+nominal behavior - What an engineered system is SUPPOSED to do.
+
+fixture - Same initial conditions used by multiple tests.
+
+
+## Naming
+
+Use real words. Use the dictionary or encyclopedia as evidence. This includes
+acronyms. Exceptions:
+* `len`
+
+Be as specific as possible.
+
+Use units suffixes. Better yet, do not use raw numbers, but rather types like
+`std::time::Duration`.
+
+Use plural for collections.
+
+Use `_count` when an integer is the number of objects. Do NOT use plural.
+
+Use `is_` to indicate whether some property holds.
+
+
+### Banned Words
+
+Do not use the following words, because they convey little to no information
+:
+
+* Nouns:
+    * data
+    * info
+    * state
+    * record
+* Verbs:
+    * do
+    * run
+    * execute
+
+
+### Functions and Methods
+
+Function and method names must be "verb-y".
+Exceptions:
+* `from`
+* `into`
+* `new`
+
+Use `try_` to indicate `Result` is returned.
+
+Use `${happy_behavior}_or_panic` to indicate possible panic.
+
+Use `test_${nominal_behavior}` for tests.
+
+
+### Variables and Types
+
+Variable and type names must be "noun-y".
+
+
+Dummy variables are good. E.g.
+```
+let is_name_ok =
+    is_long_enough(name) &&
+    is_capitalized(name) &&
+    ...;
+```
+
+
+### Remote Procedure Calls
+
+When fetching a collection, use `list_`, not `get_`.
+
+One input and one output object when calling remote code:
+
+* `ListWidgetsRequest`
+
+* `ListWidgetsResponse`, or `ListWidgetsResult` if it `Ok` or `Err` can be
+  returned.
+
+Paginate `list_` APIs.
+
+
+## Formatting
+
+Locality: Use space to indicate how closely things are related to one another.
+
+
+## Abstraction
+
+Abstractions must "pull their own weight".
+
+To achieve many combinations of behaviors, rely on composition, not specialization.
+
+
+## Control Flow
+
+Keep the main path on the least amount of indentation.
+
+> Flat is better than nested.
+> --Zen of Python
+
+Spinning out is good.
+
+When a return condition is detected, return quickly.
+
+When calling a function, if an argument is just a literal, comment what it
+signifies.
+
+No multi-line `if` conditions. Ditto for `while`, `match`, and `for ... in`
+expressions.
+
+
+Branch "on" `enum`s using `match`.
+
+Short branch arms.
+
+
+## Problematic Rust Idioms
+
+Do not directly call `into`.
+
+More generally, leave types unmentioned only when they can be easily determined
+from very nearby code.
+
+Do not be afraid to use the `return` keyword.
+
+Do not be afraid to use semicolons.
+
+
+## Comments
+
+The main question that doc comments MUST answer is, "How do I actually USE this
+thing?".
+
+Define terms BEFORE using them. E.g. the "Glossary" section above.
+
+More generally, in order to explain X EFFECTIVELY, you must start with things
+that the reader ALREADY knows, and build up to X.
+
+Do NOT be vacuous.
+
+
+Do NOT simply transcribe code into prose.
+
+
+## Defining Types
+
+No `pub` fields.
+Exception: Prost, Candid.
+
+
+### Constructors
+
+Avoid incomplete objects by defining constructor.
+
+Supply `new` and/or `try_new`.
+
+If you need a constructor that does "real work" do
+NOT name the constructor `new`.
+
+
+## Anti-Features
+
+Do not create type aliases.
+
+
+## Errors
+
+Leave breadcrumbs. Include the offending values.
+
+List all defects in invalid data.
+
+
+## Testing
+
+When expecting an error, be specific.
+
+New tests must live in separate `*_tests.rs` files.
+
+Do not assert EXACT wording of error messages. Instead, look for key words and
+phrases.
+
+If an assertion can be expressed as `assert_eq!(observed_value, ...)` do it that
+way.
+
+Explicitly have 3 top level sections:
+```
+// Step 1: Prepare the world.
+let registry = new_widgets_fixture_registry();
+
+// Step 2: Run the code under test.
+let result = insert_widget(&mut registry);
+
+// Step 3: Verify result(s).
+
+// Step 3.1: Inspect return value.
+let widget_id = result.unwrap();
+
+// Step 3.2: Inspect contents of registry. The widget set must be exactly the
+// one we just inserted.
+assert_eq!(get_widget_ids(&registry), vec![widget_id]);
+
+// etc...
+```
