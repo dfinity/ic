@@ -14,7 +14,7 @@ documentation.workspace = true
 curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
 hex-literal = "0.4"
-hkdf = "0.12"
+hkdf = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false }
 pem = { workspace = true }
 rand = { workspace = true, optional = true }

@@ -32,7 +32,7 @@ base64 = { workspace = true }
 candid = { workspace = true }
 candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 hex = { workspace = true }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }

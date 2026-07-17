@@ -43,7 +43,7 @@ minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-traits = { workspace = true }
 ripemd = "0.1.1"
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

@@ -18,7 +18,7 @@ path = "src/lib.rs"
 anyhow = { workspace = true }
 candid = { workspace = true }
 colored = "2.0.0"
-csv = "1.1"
+csv = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
