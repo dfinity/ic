@@ -326,6 +326,16 @@ fn assert_${property}(observed, expected) { ... }
 ```
 
 
+## Code Review Protocol
+
+When a reviewer asks you (the author) a question, answer it via comments in the
+source code itself.
+
+Do not simply close suggestion threads. Reply. At a minimum, if you took the
+suggestion, reply with "Done", or react with 👍. If you rejected, explain and
+leave the thread unresolved.
+
+
 ## Grandfathering
 
 DO NOT MERGE - Figure out where this section really belongs. Probably not here,
