@@ -749,16 +749,17 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let addr = listener.local_addr().unwrap();
 
         // Fill the accept queue with connections that are never accepted. We
-        // keep the successful ones alive so the queue stays full; the first
-        // connect that starts to hang tells us the queue is saturated.
+        // keep the successful ones alive so the queue stays full; the queue is
+        // saturated once a fresh connect no longer completes but hangs.
         //
-        // The loop is self-terminating (it breaks as soon as a connect hangs),
+        // The loop is self-terminating (it stops as soon as a connect hangs),
         // so the bound is just a safety cap to avoid running away. With
         // `listen(1)` the queue saturates after `backlog + 1 = 2` connects on
         // Linux (`sk_acceptq_is_full`), so the 3rd connect already hangs; 16
         // leaves a generous margin and is far above any real accept-queue
         // capacity for this backlog.
         let mut blockers = Vec::new();
+        let mut saturated = false;
         for _ in 0..16 {
             match tokio::time::timeout(
                 std::time::Duration::from_millis(200),
@@ -766,12 +767,29 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             )
             .await
             {
+                // Connect succeeded quickly: still room in the queue, keep it
+                // alive and keep filling.
                 Ok(Ok(stream)) => blockers.push(stream),
-                // Either the connect started to hang (queue full) or errored;
-                // in both cases the queue is saturated, so stop filling it.
-                _ => break,
+                // Connect hung past the probe timeout: the queue is saturated
+                // and further SYNs are being dropped, which is exactly the
+                // state we need for the adapter's connect to time out.
+                Err(_elapsed) => {
+                    saturated = true;
+                    break;
+                }
+                // An immediate connect error means the queue is *not*
+                // saturated (e.g. the connection was refused). Failing here
+                // rather than proceeding keeps the test deterministic and
+                // surfaces the real cause instead of a confusing downstream
+                // failure.
+                Ok(Err(e)) => panic!("unexpected error while filling accept queue: {e}"),
             }
         }
+        assert!(
+            saturated,
+            "accept queue never saturated after {} connects; cannot exercise the connect timeout",
+            blockers.len()
+        );
 
         let mut client = spawn_grpc_server(server_config);
 
