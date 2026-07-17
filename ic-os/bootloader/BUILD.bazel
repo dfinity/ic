@@ -21,6 +21,7 @@ genrule(
         "bootloader-tree.tar",
     ],
     cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
+    exec_properties = {"namespace_requires_network": "true"},
     tags = [
         "manual",
         "requires-network",

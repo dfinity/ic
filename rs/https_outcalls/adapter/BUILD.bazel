@@ -233,6 +233,7 @@ rust_test(
 rust_test_suite(
     name = "adapter_integration",
     srcs = glob(["tests/**/*.rs"]),
+    exec_properties = {"namespace_requires_network": "true"},
     tags = ["requires-network"],
     deps = [
         # Keep sorted.
@@ -277,6 +278,7 @@ rust_test_suite(
     name = "adapter_integration_with_http",
     srcs = glob(["tests/**/*.rs"]),
     crate_features = ["http"],
+    exec_properties = {"namespace_requires_network": "true"},
     tags = ["requires-network"],
     deps = [
         # Keep sorted.

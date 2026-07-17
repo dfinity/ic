@@ -104,6 +104,7 @@ rust_test(
         "test_data/first_2500_testnet_headers.json",
     ],
     crate = ":adapter",
+    exec_properties = {"namespace_requires_network": "true"},
     tags = ["requires-network"],
     deps = [
         # Keep sorted.
