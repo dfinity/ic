@@ -67,7 +67,7 @@ const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
-pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 2000;
+pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 10_000;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
