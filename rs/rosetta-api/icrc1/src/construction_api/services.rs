@@ -338,6 +338,30 @@ mod tests {
         assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max + 1).is_err());
     }
 
+    // Regression test for DEFI-2944: a near-`u64::MAX` `ingress_start` supplied
+    // via caller metadata with `ingress_end` omitted overflows the default
+    // `ingress_end = ingress_start + ingress_interval` computation, panicking
+    // the request thread before `validate_ingress_window` ever runs. This test
+    // documents that (currently panicking) behaviour; the accompanying fix
+    // makes the request be rejected with an error instead.
+    #[test]
+    #[should_panic(expected = "attempt to add with overflow")]
+    fn near_u64_max_ingress_start_is_rejected_without_panic() {
+        let metadata = ConstructionPayloadsRequestMetadata {
+            memo: None,
+            ingress_start: Some(u64::MAX - 10),
+            ingress_end: None,
+            created_at_time: None,
+        };
+        let _ = construction_payloads(
+            vec![],
+            Some(metadata),
+            &Principal::anonymous(),
+            vec![],
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS),
+        );
+    }
+
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {
         let principal_id = key_pair.generate_principal_id().unwrap();
         let public_key = ic_rosetta_test_utils::to_public_key(key_pair);
