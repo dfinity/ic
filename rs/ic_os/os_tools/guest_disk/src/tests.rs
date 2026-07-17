@@ -1497,8 +1497,9 @@ fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
     }
 }
 
-fn assert_verification_result_with_tampered_luks_parameters(
-    enable_trusted_execution_environment: bool,
+/// SEV: opening the var partition must fail with `expected_error` when the on-disk LUKS
+/// parameters were tampered with, because the SEV path verifies them before activating.
+fn assert_sev_rejects_tampered_luks_parameters(
     cipher: &str,
     cipher_mode: &str,
     volume_key_size: usize,
@@ -1506,25 +1507,10 @@ fn assert_verification_result_with_tampered_luks_parameters(
     pbkdf_iterations: u32,
     expected_error: &str,
 ) {
-    let fixture = if enable_trusted_execution_environment {
-        TestFixture::new_sev()
-    } else {
-        TestFixture::new_with_generated_key()
-    };
+    let fixture = TestFixture::new_sev();
     let device_path = fixture.disk(Partition::Var).device_path().to_path_buf();
-    // Reuse the same key material the implementation would use to open the device.
-    // Under SEV the key is derived from the launch measurement and never persisted, while in
-    // the generated-key case we first let the implementation format the device so it can
-    // generate and store the key file that this tampering setup must reuse.
-    let passphrase = if enable_trusted_execution_environment {
-        fixture.derive_sev_key(Partition::Var)
-    } else {
-        fixture
-            .var_partition()
-            .format()
-            .expect("Failed to format var partition to generate key");
-        fs::read(fixture.generated_key_path()).expect("Failed to read generated key")
-    };
+    // The SEV key is derived from the launch measurement and never persisted.
+    let passphrase = fixture.derive_sev_key(Partition::Var);
 
     create_crypt_device_luks_parameters(
         &device_path,
@@ -1536,42 +1522,74 @@ fn assert_verification_result_with_tampered_luks_parameters(
         pbkdf_iterations,
     );
 
-    if enable_trusted_execution_environment {
-        let open_err = fixture
-            .var_partition()
-            .open()
-            .expect_err("Open should fail because LUKS parameters are invalid");
-        assert!(
-            format!("{open_err:#}").contains(expected_error),
-            "Unexpected error message: {open_err:#}"
-        );
-    } else {
-        fixture
-            .var_partition()
-            .open()
-            .expect("Failed to open var partition");
-    }
+    let open_err = fixture
+        .var_partition()
+        .open()
+        .expect_err("Open should fail because LUKS parameters are invalid");
+    assert!(
+        format!("{open_err:#}").contains(expected_error),
+        "Unexpected error message: {open_err:#}"
+    );
+}
+
+/// Generated-key path: opening the var partition succeeds even with tampered LUKS
+/// parameters, because the generated-key path does not verify them.
+fn assert_generated_key_accepts_tampered_luks_parameters(
+    cipher: &str,
+    cipher_mode: &str,
+    volume_key_size: usize,
+    pbkdf_type: CryptKdf,
+    pbkdf_iterations: u32,
+) {
+    let fixture = TestFixture::new_with_generated_key();
+    let device_path = fixture.disk(Partition::Var).device_path().to_path_buf();
+    // Let the implementation format the device so it generates and persists the key, then
+    // reuse that key for the tampered formatting below.
+    fixture
+        .var_partition()
+        .format()
+        .expect("Failed to format var partition to generate key");
+    let passphrase = fs::read(fixture.generated_key_path()).expect("Failed to read generated key");
+
+    create_crypt_device_luks_parameters(
+        &device_path,
+        &passphrase,
+        cipher,
+        cipher_mode,
+        volume_key_size,
+        pbkdf_type,
+        pbkdf_iterations,
+    );
+
+    fixture
+        .var_partition()
+        .open()
+        .expect("Failed to open var partition");
 }
 
 #[test]
 fn test_verification_cipher_tampered() {
-    for enable_trusted_execution_environment in [true, false] {
-        assert_verification_result_with_tampered_luks_parameters(
-            enable_trusted_execution_environment,
-            "cipher_null",
-            "ecb",
-            TEST_VOLUME_KEY_BYTES,
-            CryptKdf::Pbkdf2,
-            TEST_PBKDF_ITERATIONS,
-            "Unexpected cipher",
-        );
-    }
+    // SEV rejects the tampered cipher; the generated-key path ignores LUKS parameters.
+    assert_sev_rejects_tampered_luks_parameters(
+        "cipher_null",
+        "ecb",
+        TEST_VOLUME_KEY_BYTES,
+        CryptKdf::Pbkdf2,
+        TEST_PBKDF_ITERATIONS,
+        "Unexpected cipher",
+    );
+    assert_generated_key_accepts_tampered_luks_parameters(
+        "cipher_null",
+        "ecb",
+        TEST_VOLUME_KEY_BYTES,
+        CryptKdf::Pbkdf2,
+        TEST_PBKDF_ITERATIONS,
+    );
 }
 
 #[test]
 fn test_verification_volume_key_size_tampered() {
-    assert_verification_result_with_tampered_luks_parameters(
-        true,
+    assert_sev_rejects_tampered_luks_parameters(
         "aes",
         "xts-plain64",
         256 / 8,
@@ -1583,8 +1601,7 @@ fn test_verification_volume_key_size_tampered() {
 
 #[test]
 fn test_verification_pbkdf_type_tampered() {
-    assert_verification_result_with_tampered_luks_parameters(
-        true,
+    assert_sev_rejects_tampered_luks_parameters(
         "aes",
         "xts-plain64",
         TEST_VOLUME_KEY_BYTES,
