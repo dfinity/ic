@@ -168,22 +168,22 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             canisters_installed,
             Estimates {
-                source: 14,
-                destination: 6,
+                source: 10,
+                destination: 10,
             }
         );
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        assert_near!(states_sizes_bytes.source, 6290434, 0.1);
-        assert_near!(states_sizes_bytes.destination, 2917930, 0.1);
+        assert_near!(states_sizes_bytes.source, 4778330, 0.1);
+        assert_near!(states_sizes_bytes.destination, 4473176, 0.1);
         assert_near!(instructions_executed.source, 144966571, 0.1);
         assert_near!(instructions_executed.destination, 144966571, 0.1);
         assert_eq!(
             ingress_messages_executed,
             Estimates {
-                source: 25,
-                destination: 14,
+                source: 22,
+                destination: 17,
             }
         );
         assert_eq!(
@@ -196,22 +196,22 @@ fn load_metrics_e2e_test() {
         assert_eq!(
             local_subnet_messages_executed_upper_bound,
             Estimates {
-                source: 18,
-                destination: 10,
+                source: 15,
+                destination: 13,
             }
         );
         assert_eq!(
             http_outcalls_executed,
             Estimates {
-                source: 8,
-                destination: 2,
+                source: 4,
+                destination: 6,
             }
         );
         assert_eq!(
             heartbeats_and_global_timers_executed,
             Estimates {
-                source: 312,
-                destination: 382,
+                source: 339,
+                destination: 355,
             }
         );
         // Check if the split finder found a split satisfying the load constraints
