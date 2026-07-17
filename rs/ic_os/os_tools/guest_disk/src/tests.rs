@@ -13,16 +13,16 @@
 //! ([`TestFixture::upgrade_sev_guestos_to`] / [`TestFixture::rollback`]) supports
 //! upgrade/rollback tests.
 
-use crate::{crypt_name, metrics_file_path, run, Args, Partition};
-use anyhow::{anyhow, Result};
+use crate::{Args, Partition, crypt_name, metrics_file_path, run};
+use anyhow::{Result, anyhow};
 use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
-use guest_disk::crypt::{
-    activate_crypt_device, backup_luks_header_to_file, check_encryption_key, deactivate_crypt_device, format_crypt_device,
-    open_luks2_device, read_keyslot_metadata, KeyslotMetadata, LuksHeaderLocation,
-    LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS,
-};
-use guest_disk::sev::{can_open_store, SevDiskEncryption};
 use guest_disk::DiskEncryption;
+use guest_disk::crypt::{
+    KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation, activate_crypt_device,
+    backup_luks_header_to_file, check_encryption_key, deactivate_crypt_device, format_crypt_device,
+    open_luks2_device, read_keyslot_metadata,
+};
+use guest_disk::sev::{SevDiskEncryption, can_open_store};
 use ic_device::device_mapping::{Bytes, TempDevice};
 use ic_os_logging::init_logging;
 use itertools::Either::Right;
@@ -32,17 +32,17 @@ use libcryptsetup_rs::{
     CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
 };
 use prometheus::Registry;
+use sev::Generation;
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
-use sev::Generation;
-use sev_guest::key_deriver::{derive_key_from_sev_measurement, Key};
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::MockSevGuestFirmwareBuilder;
 use std::fs;
 use std::fs::{File, OpenOptions, Permissions};
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 // All tests interact with the same device mapper and use shared crypt device names, so we must run
 // the tests sequentially.
@@ -362,7 +362,10 @@ impl TestFixture {
         PartitionView::new(
             self,
             Partition::Var,
-            self.active_boot_slot().var_device.path().expect("var path is required"),
+            self.active_boot_slot()
+                .var_device
+                .path()
+                .expect("var path is required"),
             None,
         )
     }
@@ -622,9 +625,11 @@ fn test_generated_key_init_and_reopen() {
         let mapper_path = partition.mapper_path();
 
         // Test format & open
-        partition.format()
+        partition
+            .format()
             .expect("Failed to format device encryption with generated key");
-        partition.open()
+        partition
+            .open()
             .expect("Failed to open device encryption with generated key");
 
         assert!(
@@ -635,7 +640,8 @@ fn test_generated_key_init_and_reopen() {
 
         // Test reopening
         partition.deactivate();
-        partition.open()
+        partition
+            .open()
             .expect("Failed to reopen partition with generated key");
 
         partition.assert_payload(b"test_data");
@@ -689,9 +695,11 @@ fn test_sev_key_init_and_reopen() {
         );
 
         // Test format & open
-        partition.format()
+        partition
+            .format()
             .expect("Failed to format device encryption with generated key");
-        partition.open()
+        partition
+            .open()
             .expect("Failed to open device encryption with generated key");
 
         assert!(mapper_path.exists());
@@ -704,7 +712,8 @@ fn test_sev_key_init_and_reopen() {
 
         // Test reopening
         partition.deactivate();
-        partition.open()
+        partition
+            .open()
             .expect("Failed to reopen partition with SEV key");
 
         partition.assert_payload(b"test_data");
@@ -1178,7 +1187,9 @@ fn test_fails_to_open_var_if_key_doesnt_work() {
 
     fixture.var_partition().format().unwrap();
     fixture.var_partition().open().unwrap();
-    fixture.partition(Partition::Var).write_payload(b"some data");
+    fixture
+        .partition(Partition::Var)
+        .write_payload(b"some data");
 
     fixture.partition(Partition::Var).deactivate();
 
@@ -1508,7 +1519,10 @@ fn assert_sev_rejects_tampered_luks_parameters(
     expected_error: &str,
 ) {
     let fixture = TestFixture::new_sev();
-    let device_path = fixture.partition(Partition::Var).device_path().to_path_buf();
+    let device_path = fixture
+        .partition(Partition::Var)
+        .device_path()
+        .to_path_buf();
     // The SEV key is derived from the launch measurement and never persisted.
     let passphrase = fixture.derive_sev_key(Partition::Var);
 
@@ -1542,7 +1556,10 @@ fn assert_generated_key_accepts_tampered_luks_parameters(
     pbkdf_iterations: u32,
 ) {
     let fixture = TestFixture::new_with_generated_key();
-    let device_path = fixture.partition(Partition::Var).device_path().to_path_buf();
+    let device_path = fixture
+        .partition(Partition::Var)
+        .device_path()
+        .to_path_buf();
     // Let the implementation format the device so it generates and persists the key, then
     // reuse that key for the tampered formatting below.
     fixture
