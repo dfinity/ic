@@ -99,7 +99,7 @@ def system_test(
         `"minIntraDistanceLoadBalanceAllocation"` or `"distributeAcrossDcs"`.
         When None it defaults to `"minIntraDistanceLoadBalanceAllocation"`.
       cpus: Optional number of CPU cores to reserve for the local variant of the test.
-        This will translate into a `cpu:N` tag for the `_local` variant.
+        This will translate into an `exec_properties = {"cpu": str(cpus)}` setting for the `_local` variant.
         Heuristic: set it to MIN_LOCAL_CPUS + number of vCPUs required for the whole testnet. DEFAULT_VCPUS_PER_VM can be used for the default number of vCPUs per VM if not overridden.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
@@ -315,8 +315,6 @@ def system_test(
     # (--stream-console-logs).
     local_args = ([] if "--no-logs" in extra_args_simple else ["--no-logs"]) + ["--stream-ic-node-logs", "--stream-console-logs"]
 
-    reserve_cpus = [] if cpus == None else ["cpu:{}".format(cpus)]
-
     sh_test(
         name = test_name + "_local",
         srcs = ["//rs/tests:run_systest.sh"],
@@ -328,7 +326,9 @@ def system_test(
             "RUN_SCRIPT_RUNTIME_DEP_ENV_VARS": ";".join(_runtime_deps.keys() + _local_only_deps.keys()),
         },
         env_inherit = env_inherit,
-        tags = tags + ["local_system_test"] + reserve_cpus + (["manual"] if backend == "farm" else []),
+        tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
+        exec_properties = {"cpu": str(cpus)} if cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
