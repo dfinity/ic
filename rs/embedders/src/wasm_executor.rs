@@ -310,6 +310,9 @@ impl WasmExecutor for WasmExecutorImpl {
         // Create the execution state.
         let execution_state = ExecutionState {
             wasm_binary,
+            // The install timestamp is a deployment-round value that the embedder
+            // does not know; it is stamped by `Hypervisor::create_execution_state`.
+            last_install_timestamp: None,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory: Memory::new(wasm_page_map, wasm_memory_size),
             stable_memory: Memory::new(

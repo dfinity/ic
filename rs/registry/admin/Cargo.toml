@@ -56,9 +56,9 @@ ic-registry-transport = { path = "../transport" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-types = { path = "../../types/types" }
-indexmap = "2.2.6"                                                                        # TODO: consider using the std's BTreeMap instead
+indexmap = { workspace = true }                                                           # TODO: consider using the std's BTreeMap instead
 itertools = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 pretty_assertions = { workspace = true }
 prost = { workspace = true }
 registry-canister = { path = "../canister" }

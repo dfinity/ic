@@ -548,9 +548,7 @@ impl CanisterManager {
         }
 
         // Log memory limit: validate, charge cycles for resize, and apply.
-        if canister.system_state.log_memory_store.is_migrated()
-            && let Some(requested_limit) = settings.log_memory_limit()
-        {
+        if let Some(requested_limit) = settings.log_memory_limit() {
             let max_limit = NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64);
             if requested_limit > max_limit {
                 return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
@@ -1484,7 +1482,6 @@ impl CanisterManager {
             state.metadata.batch_time,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
-            self.config.log_memory_store_feature,
         );
 
         system_state.consume_cycles(creation_fee);
@@ -2247,6 +2244,7 @@ impl CanisterManager {
                 self.hypervisor.create_execution_state(
                     execution_snapshot.wasm_binary.clone(),
                     canister_id,
+                    time,
                     round_limits,
                     compilation_cost_handling,
                 );

@@ -158,6 +158,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }

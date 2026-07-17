@@ -55,7 +55,7 @@ use ic_types::{
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{
-    call::{AsyncCall, SyncCall},
+    call::SyncCall,
     interfaces::{
         ManagementCanister,
         management_canister::{CanisterLogRecord, FetchCanisterLogsArgs},
@@ -1315,7 +1315,8 @@ pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {err}"))
         .0;
@@ -1489,7 +1490,8 @@ pub fn to_principal_id(principal: &Principal) -> PrincipalId {
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     ManagementCanister::create(agent)
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .is_ok_and(|s| s.0.module_hash.is_some())
 }
