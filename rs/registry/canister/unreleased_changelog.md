@@ -9,11 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* A new method: update_standard_engine_replica_version. As usual, only callable
-  by Governance, and so far, Governance does not call this, so this code is for
-  all practical purposes not active yet, but the entry point is visible in
-  registry.did now.
-
 ## Changed
 
 ## Deprecated
