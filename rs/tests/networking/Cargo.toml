@@ -49,7 +49,7 @@ ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
 itertools = { workspace = true }
 leb128 = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

@@ -3057,7 +3057,7 @@ fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins(
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -3077,10 +3077,7 @@ fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
-        err.code()
-    );
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
