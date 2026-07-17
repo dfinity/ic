@@ -104,7 +104,6 @@ rust_test(
         "test_data/first_2500_testnet_headers.json",
     ],
     crate = ":adapter",
-    tags = ["requires-network"],
     deps = [
         # Keep sorted.
         "//rs/bitcoin/adapter/test_utils",
