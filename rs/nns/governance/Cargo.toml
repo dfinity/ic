@@ -39,7 +39,7 @@ ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -83,13 +83,13 @@ icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 mockall = { workspace = true }
 num-traits = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
-rust_decimal = "1.36.0"
-rust_decimal_macros = "1.36.0"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 rand = { workspace = true }
