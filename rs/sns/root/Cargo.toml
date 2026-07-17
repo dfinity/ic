@@ -16,7 +16,7 @@ async-trait = { workspace = true }
 build-info = { workspace = true }
 
 candid = { workspace = true }
-comparable = { version = "0.5.1", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }

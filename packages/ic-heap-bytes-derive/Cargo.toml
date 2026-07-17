@@ -14,4 +14,4 @@ proc-macro = true
 darling = "0.20.11"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
-syn = { version = "2.0.100", features = ["derive"] }
+syn = { workspace = true, features = ["derive"] }
