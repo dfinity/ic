@@ -4,7 +4,7 @@ use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_machine_tests::{StateMachine, two_subnets_simple};
-use ic_subnet_splitting::post_split_estimations::{Estimates, LoadEstimates, StateSizeEstimates};
+use ic_subnet_splitting::post_split_estimations::{LoadEstimates, StateSizeEstimates};
 use ic_test_utilities_logger::with_test_logger;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::CanisterId;
@@ -27,6 +27,32 @@ macro_rules! assert_near {
             stringify!($left),
             relative_error,
             $max_relative_error
+        );
+    };
+}
+
+/// Checks that an `Estimates` holds the expected two values, ignoring which one is
+/// labeled `source` and which is `destination`.
+///
+/// The `split-finder` solves a symmetric MILP: the two resulting canister groups are
+/// interchangeable, so which group is reported as `source` and which as `destination`
+/// is arbitrary and may flip across CBC solver versions/platforms. The test only cares
+/// that the split is near-symmetric, so we compare the values regardless of orientation.
+macro_rules! assert_eq_unordered {
+    ($actual:expr, $a:expr, $b:expr) => {
+        let actual = &$actual;
+        let got = (
+            actual.source.min(actual.destination),
+            actual.source.max(actual.destination),
+        );
+        let want = (std::cmp::min($a, $b), std::cmp::max($a, $b));
+        assert_eq!(
+            got,
+            want,
+            "{} = {actual:?} does not match the expected {{{}, {}}} (in either orientation)",
+            stringify!($actual),
+            $a,
+            $b,
         );
     };
 }
@@ -165,55 +191,21 @@ fn load_metrics_e2e_test() {
             .expect("Should succeed given valid inputs")
         );
 
-        assert_eq!(
-            canisters_installed,
-            Estimates {
-                source: 10,
-                destination: 10,
-            }
-        );
+        assert_eq_unordered!(canisters_installed, 10, 10);
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
+        // The source/destination orientation is not asserted (see `assert_eq_unordered`); the
+        // near-symmetry of the split means the `assert_near` checks pass in either orientation.
         assert_near!(states_sizes_bytes.source, 4604164, 0.1);
         assert_near!(states_sizes_bytes.destination, 4604180, 0.1);
         assert_near!(instructions_executed.source, 8296137, 0.1);
         assert_near!(instructions_executed.destination, 8290079, 0.1);
-        assert_eq!(
-            ingress_messages_executed,
-            Estimates {
-                source: 20,
-                destination: 19,
-            }
-        );
-        assert_eq!(
-            remote_subnet_messages_executed_lower_bound,
-            Estimates {
-                source: 5,
-                destination: 5,
-            }
-        );
-        assert_eq!(
-            local_subnet_messages_executed_upper_bound,
-            Estimates {
-                source: 15,
-                destination: 13,
-            }
-        );
-        assert_eq!(
-            http_outcalls_executed,
-            Estimates {
-                source: 5,
-                destination: 5,
-            }
-        );
-        assert_eq!(
-            heartbeats_and_global_timers_executed,
-            Estimates {
-                source: 328,
-                destination: 366,
-            }
-        );
+        assert_eq_unordered!(ingress_messages_executed, 20, 19);
+        assert_eq_unordered!(remote_subnet_messages_executed_lower_bound, 5, 5);
+        assert_eq_unordered!(local_subnet_messages_executed_upper_bound, 15, 13);
+        assert_eq_unordered!(http_outcalls_executed, 5, 5);
+        assert_eq_unordered!(heartbeats_and_global_timers_executed, 328, 366);
         // Check if the split finder found a split satisfying the load constraints
         assert_near!(
             instructions_executed.source,
