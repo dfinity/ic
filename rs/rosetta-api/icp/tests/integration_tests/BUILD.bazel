@@ -46,11 +46,11 @@ rust_test_suite(
         "IC_SENDER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp/test_utils/sender_canister:ic-sender-canister)",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
     },
+    exec_properties = {"cpu": "4"},
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
     proc_macro_deps = [
     ],
-    tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":rosetta-integration-tests-lib",

@@ -84,20 +84,20 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "accc4ec8d067e59878dc640e3aa9afcc14e630bff48f73063ec46e503d7bde07",
-    "tag": "release-2026-07-06"
+    "sha256": "d51ef5ce871d2231360e6abb84aed7f51b21b5337716ed67f37ccdeaabe29862",
+    "tag": "release-2026-07-16"
   },
   "internet_identity_frontend": {
-    "sha256": "8195f416bdc8f39e7d34823651020ce20190e33f33e8dfbb5e3bf6d0e61ac77f",
-    "tag": "release-2026-07-06"
+    "sha256": "fa86870b7cdb0881283aff1996bec2ecf41a71a394872ba38533cf9a65251695",
+    "tag": "release-2026-07-14"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
     "sha256": "51f4be010f23064137defacd627ffbec024c5133210c68ca3b80ab8f257101d6"
   },
   "lifeline": {
-    "rev": "36ceffe4c47f4c3a881e75951178f5413f777f6c",
-    "sha256": "0d9221e28781e8b627c0e0696b16c0301424d4387514ed5fdae4fa74ad4b696b"
+    "rev": "d0bbf767fd8cb054f6195f17db2962e5490ab597",
+    "sha256": "a6724efba9d02f11b1b105723c309abb2023e5daca90b6e67427af9c1937d5a5"
   },
   "migration": {
     "rev": "8facd5635c5e05de9b423b64aeabc2e1ad58d66e",
@@ -108,12 +108,12 @@
     "tag": "proposal-142801"
   },
   "node-rewards": {
-    "rev": "f8ed7058fec7919727fbe5a41ff955795048486b",
-    "sha256": "2871c4c885ba201ec83dd5876277af79241ffa591b209663659c114dda8d2d5f"
+    "rev": "6590c85f0688693e0b3a93d89f47ca4b99c2bd76",
+    "sha256": "d7b1cde1d87bcf45d9e02b0455306ad7ee7191a528d4838fad2de34604ed8629"
   },
   "registry": {
-    "rev": "8b837843a22013ec5bbd42488a516a8aee62e2b7",
-    "sha256": "009f6add239b8d519e14b1bc0b0d101ed610e3224d07505728c2444e34559971"
+    "rev": "d0bbf767fd8cb054f6195f17db2962e5490ab597",
+    "sha256": "492b0be730323d5a856188f6eb6cc0e62e777093e4c7cb85ec5a2af4eb996c0d"
   },
   "root": {
     "rev": "613e85748f462bc8e169195b16ddcf04706f5d7c",

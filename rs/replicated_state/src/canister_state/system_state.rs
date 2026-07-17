@@ -41,8 +41,8 @@ use ic_types::messages::{
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, CountBytes, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, CountBytes, MemoryAllocation,
+    NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
@@ -585,6 +585,10 @@ pub struct SystemState {
     /// Snapshot visibility of the canister.
     pub snapshot_visibility: SnapshotVisibility,
 
+    /// Log records of the canister.
+    #[validate_eq(CompareWithValidateEq)]
+    pub canister_log: CanisterLog,
+
     /// The memory used for storing log entries.
     #[validate_eq(CompareWithValidateEq)]
     pub log_memory_store: LogMemoryStore,
@@ -768,6 +772,10 @@ impl SystemState {
             wasm_chunk_store,
             log_visibility: Default::default(),
             snapshot_visibility: Default::default(),
+            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
+            // therefore it should not scale to memory limit from above.
+            // Remove this field after migration is done.
+            canister_log: CanisterLog::default_aggregate(),
             log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -801,6 +809,7 @@ impl SystemState {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
+        canister_log: CanisterLog,
         log_memory_store_data: Option<PageMap>,
         log_memory_store_persistent_next_idx: u64,
         wasm_memory_limit: Option<NumBytes>,
@@ -836,6 +845,7 @@ impl SystemState {
             ),
             log_visibility,
             snapshot_visibility,
+            canister_log,
             log_memory_store: LogMemoryStore::from_checkpoint(
                 log_memory_store_data,
                 log_memory_store_persistent_next_idx,
@@ -2670,6 +2680,10 @@ pub mod testing {
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
             snapshot_visibility: Default::default(),
+            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
+            // therefore it should not scale to memory limit from above.
+            // Remove this field after migration is done.
+            canister_log: CanisterLog::default_aggregate(),
             log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

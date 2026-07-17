@@ -32,7 +32,7 @@ pub struct EngineControllerInitArgs {
 pub struct CreateEngineArgs {
     pub node_ids: Vec<Principal>,
     pub subnet_admins: Vec<Principal>,
-    /// Blessed replica version that the new engine subnet should run.
+    /// Elected replica version that the new engine subnet should run.
     pub replica_version_id: String,
 }
 

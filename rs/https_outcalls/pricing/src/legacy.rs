@@ -50,7 +50,7 @@ impl BudgetTracker for LegacyTracker {
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
         // Legacy pricing does not perform cycles accounting, so no cycles
-        // are ever refunded.
+        // are ever spent.
         CanisterHttpPaymentReceipt::default()
     }
 }

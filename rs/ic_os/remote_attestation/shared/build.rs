@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Rebuild if protos change
     println!("cargo::rerun-if-changed=proto/remote_attestation.proto");
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .extern_path(".attestation", "::attestation")
         .build_transport(true)
         .compile_protos(

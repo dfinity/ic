@@ -539,6 +539,39 @@ impl SubnetMetrics {
     }
 }
 
+const GIB: u64 = 1024 * 1024 * 1024;
+
+/// The upper limit on the total size of all guaranteed response messages on a
+/// subnet.
+///
+/// Guaranteed response message memory usage is the total size of enqueued
+/// guaranteed responses plus the maximum allowed response size per reserved
+/// guaranteed response slot.
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(15 * GIB);
+
+/// The limit on the total size of all best-effort messages on a subnet,
+/// restored at the end of each round by shedding messages.
+const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
+
+/// Message memory is capped at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR` of the
+/// subnet's heap delta capacity.
+const MESSAGE_MEMORY_HEAP_DELTA_DIVISOR: u64 = 3;
+
+/// Caps `configured_default_capacity` at `1 / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR`
+/// of `heap_delta_capacity`.
+///
+/// Message memory is held in RAM alongside the heap delta pages, so this bounds
+/// message memory relative to a subnet's heap delta capacity (which is itself
+/// sized relative to available RAM).
+fn message_memory_capacity(
+    configured_default_capacity: NumBytes,
+    heap_delta_capacity: NumBytes,
+) -> NumBytes {
+    configured_default_capacity.min(NumBytes::new(
+        heap_delta_capacity.get() / MESSAGE_MEMORY_HEAP_DELTA_DIVISOR,
+    ))
+}
+
 impl SystemMetadata {
     /// Creates a new empty system metadata state.
     pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Self {
@@ -599,6 +632,32 @@ impl SystemMetadata {
     pub fn own_reference_subnet_size(&self) -> Option<usize> {
         self.network_topology
             .get_reference_subnet_size(&self.own_subnet_id)
+    }
+
+    /// Returns the subnet's guaranteed response message memory capacity, capped
+    /// relative to the subnet's heap delta capacity.
+    pub fn guaranteed_response_message_memory_capacity(&self) -> NumBytes {
+        message_memory_capacity(
+            SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// Returns the subnet's best-effort message memory capacity, capped relative
+    /// to the subnet's heap delta capacity.
+    pub fn best_effort_message_memory_capacity(&self) -> NumBytes {
+        message_memory_capacity(
+            SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
+            self.heap_delta_capacity(),
+        )
+    }
+
+    /// The effective heap delta capacity: the registry override if set, else the
+    /// protocol default.
+    fn heap_delta_capacity(&self) -> NumBytes {
+        self.own_subnet_info
+            .resource_limits
+            .maximum_state_delta_or(ic_config::execution_environment::SUBNET_HEAP_DELTA_CAPACITY)
     }
 
     /// One-off initialization: populate `canister_allocation_ranges` with the only
@@ -2064,6 +2123,15 @@ impl UnflushedCheckpointOps {
 
 pub mod testing {
     use super::*;
+
+    /// Test helper for configuring a subnet's `maximum_state_delta`: returns the
+    /// heap delta capacity required to allow `message_memory` of message memory,
+    /// i.e. the inverse of the cap applied by `message_memory_capacity`. Lives
+    /// here so the message-memory/heap-delta factor stays confined to this
+    /// module rather than being duplicated across tests.
+    pub fn heap_delta_capacity_for_message_memory(message_memory: NumBytes) -> NumBytes {
+        NumBytes::new(message_memory.get() * MESSAGE_MEMORY_HEAP_DELTA_DIVISOR)
+    }
 
     /// Exposes `SystemMetadata` internals for use in tests.
     pub trait SystemMetadataTesting {

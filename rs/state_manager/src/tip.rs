@@ -1203,6 +1203,9 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             last_executed_round: execution_state.last_executed_round,
             metadata: execution_state.metadata.clone(),
             binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
+            last_install_timestamp_nanos: execution_state
+                .last_install_timestamp
+                .map(|t| t.as_nanos_since_unix_epoch()),
             next_scheduled_method: execution_state.next_scheduled_method,
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
@@ -1283,6 +1286,13 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             log_visibility: canister_state.system_state.log_visibility.clone(),
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
+            canister_log: canister_state.system_state.canister_log.clone(),
+            next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
+            // The one-time migration from `CanisterLog` to `LogMemoryStore`
+            // completed on all subnets, so this is always `true`. The field is
+            // still serialized (rather than dropped) so checkpoints remain
+            // readable by replicas that predate the log memory store.
+            log_memory_store_migrated: true,
             log_memory_store_persistent_next_idx: canister_state
                 .system_state
                 .log_memory_store

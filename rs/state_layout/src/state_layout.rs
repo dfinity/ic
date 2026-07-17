@@ -19,8 +19,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
-    NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound, Height,
+    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
@@ -158,6 +158,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -204,6 +208,9 @@ pub struct CanisterStateBits {
     pub log_visibility: LogVisibilityV2,
     pub snapshot_visibility: SnapshotVisibility,
     pub log_memory_limit: NumBytes,
+    pub canister_log: CanisterLog,
+    pub next_canister_log_record_idx: u64,
+    pub log_memory_store_migrated: bool,
     pub log_memory_store_persistent_next_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
@@ -1310,7 +1317,7 @@ impl StateLayout {
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
-            .join(format!("diverged_checkpoint_{}", &checkpoint_name));
+            .join(format!("diverged_checkpoint_{}", checkpoint_name));
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
@@ -1360,7 +1367,7 @@ impl StateLayout {
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
-        let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
+        let tmp_path = self.fs_tmp().join(format!("backup_{}", backup_name));
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),

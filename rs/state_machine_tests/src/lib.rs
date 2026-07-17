@@ -59,12 +59,12 @@ use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::test_logger;
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterLogRecord, CanisterSnapshotDataKind,
-    CanisterSnapshotDataOffset, InstallCodeArgs, ListCanisterSnapshotArgs,
-    ListCanisterSnapshotResponse, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotDataResponse, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse,
+    self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
+    InstallCodeArgs, ListCanisterSnapshotArgs, ListCanisterSnapshotResponse, MasterPublicKeyId,
+    Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotDataResponse,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse,
 };
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
@@ -141,8 +141,9 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes,
-    PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId, SubnetId, UserId,
+    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
+    SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
@@ -681,6 +682,7 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 pub struct StateMachineConfig {
     subnet_config: SubnetConfig,
     hypervisor_config: HypervisorConfig,
+    resource_limits: ResourceLimits,
 }
 
 impl StateMachineConfig {
@@ -688,7 +690,13 @@ impl StateMachineConfig {
         Self {
             subnet_config,
             hypervisor_config,
+            resource_limits: ResourceLimits::default(),
         }
+    }
+
+    pub fn with_resource_limits(mut self, resource_limits: ResourceLimits) -> Self {
+        self.resource_limits = resource_limits;
+        self
     }
 }
 
@@ -1253,7 +1261,6 @@ pub struct StateMachine {
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    hypervisor_config: HypervisorConfig,
 }
 
 impl Default for StateMachine {
@@ -2437,7 +2444,6 @@ impl StateMachine {
             chain_key_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
-            hypervisor_config,
         }
     }
 
@@ -5023,25 +5029,13 @@ impl StateMachine {
         dst
     }
 
-    /// Returns all canister log records of the specified canister.
-    pub fn canister_log_records(&self, canister_id: CanisterId) -> Vec<CanisterLogRecord> {
+    /// Returns the canister log of the specified canister.
+    pub fn canister_log(&self, canister_id: CanisterId) -> CanisterLog {
         let replicated_state = self.state_manager.get_latest_state().take();
         let canister_state = replicated_state
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        canister_state
-            .system_state
-            .log_memory_store
-            .all_records_for_testing()
-    }
-
-    /// Returns the number of bytes used by the canister log of the specified canister.
-    pub fn canister_log_bytes_used(&self, canister_id: CanisterId) -> usize {
-        let replicated_state = self.state_manager.get_latest_state().take();
-        let canister_state = replicated_state
-            .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        canister_state.system_state.log_memory_store.bytes_used()
+        canister_state.system_state.canister_log.clone()
     }
 
     /// Sets the content of the stable memory for the specified canister.
@@ -5340,9 +5334,9 @@ impl StateMachine {
                 }
             }
         });
-        let mut available_guaranteed_response_memory = self
-            .hypervisor_config
-            .guaranteed_response_message_memory_capacity
+        let mut available_guaranteed_response_memory = replicated_state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
             .get() as i64
             - replicated_state
                 .guaranteed_response_message_memory_taken()
@@ -5612,6 +5606,7 @@ fn multi_subnet_setup(
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     StateMachineBuilder::new()
+        .with_resource_limits(config.resource_limits)
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
         .with_subnet_type(subnet_type)

@@ -93,7 +93,7 @@ pub fn generate_systemd_config_files(
             match has_ipv6_connectivity(i, ipv6_address, ipv6_config.prefix_length, &ping_target) {
                 Ok(result) => result,
                 Err(e) => {
-                    eprintln!("Error testing connectivity on {}: {}", &i.name, e);
+                    eprintln!("Error testing connectivity on {}: {}", i.name, e);
                     false
                 }
             }
@@ -103,11 +103,7 @@ pub fn generate_systemd_config_files(
     eprintln!("Using fastest interface: {fastest_interface:?}");
 
     // Format the IP address to include the subnet length. See `man systemd.network`.
-    let ipv6_address = format!(
-        "{}/{}",
-        &ipv6_address.to_string(),
-        ipv6_config.prefix_length
-    );
+    let ipv6_address = format!("{}/{}", ipv6_address, ipv6_config.prefix_length);
     generate_and_write_systemd_files(
         output_directory,
         fastest_interface,

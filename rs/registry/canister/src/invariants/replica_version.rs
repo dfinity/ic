@@ -8,11 +8,13 @@ use crate::invariants::common::{
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::{
-    replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
-    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    replica_version::v1::ReplicaVersionRecord,
+    standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
+    subnet::v1::SubnetRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_replica_version_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
+    make_replica_version_key, make_standard_engine_replica_version_record_key,
+    make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use prost::Message;
 
@@ -40,18 +42,12 @@ pub(crate) fn check_replica_version_invariants(
     if let Some(version) = unassigned_version_id {
         versions_in_use.insert(version);
     }
+    versions_in_use.append(&mut get_all_standard_engine_replica_versions(snapshot));
     versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
-    let elected_version_ids = get_all_replica_version_records(snapshot)
-        .into_iter()
-        .map(|(k, _)| k);
-
-    let num_elected = elected_version_ids.len();
-    let elected_set = BTreeSet::from_iter(elected_version_ids);
-    assert!(
-        elected_set.len() == num_elected,
-        "A version was elected multiple times."
-    );
+    let elected_set: BTreeSet<_> = get_all_replica_version_records(snapshot)
+        .into_keys()
+        .collect();
     assert!(
         elected_set.is_superset(&versions_in_use),
         "Using a version that isn't elected. Elected versions: {elected_set:?}, in use: {versions_in_use:?}."
@@ -111,6 +107,21 @@ fn get_all_api_boundary_node_versions(snapshot: &RegistrySnapshot) -> BTreeSet<S
         .collect()
 }
 
+/// Returns the replica versions referenced by the
+/// StandardEngineReplicaVersionRecord (i.e. new_replica_version_id and
+/// old_replica_version_id).
+fn get_all_standard_engine_replica_versions(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
+    snapshot
+        .get(make_standard_engine_replica_version_record_key().as_bytes())
+        .map(|bytes| {
+            let record = StandardEngineReplicaVersionRecord::decode(bytes.as_slice()).unwrap();
+            [record.new_replica_version_id, record.old_replica_version_id]
+        })
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
@@ -127,19 +138,18 @@ mod tests {
     const MOCK_HASH: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
     const MOCK_URL: &str = "http://release_package.tar.gz";
 
+    // Replica version IDs are git commit IDs (pointing to the source code used
+    // to build the Replica).
+    const REPLICA_VERSION_ID_1: &str = "eb3ab997954f2a91db8a42f84132cf37078d481c";
+    const REPLICA_VERSION_ID_2: &str = "63d086714a1e2bc6b0615008d5582f527d554cd3";
+
     fn elect_version_mutations(versions: Vec<String>) -> Vec<RegistryMutation> {
         versions
             .into_iter()
             .map(|v| {
-                let value = ReplicaVersionRecord {
-                    release_package_sha256_hex: "".to_string(),
-                    release_package_urls: Vec::new(),
-                    guest_launch_measurements: None,
-                };
-
                 insert(
                     make_replica_version_key(v).as_bytes(),
-                    value.encode_to_vec(),
+                    ReplicaVersionRecord::default().encode_to_vec(),
                 )
             })
             .collect()
@@ -199,6 +209,91 @@ mod tests {
     }
 
     #[test]
+    fn test_can_update_standard_engine_replica_version_record() {
+        // Step 1: Prepare the world. In particular, elect a couple of replica versions.
+        let mut registry = invariant_compliant_registry(0);
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+            REPLICA_VERSION_ID_2.to_string(),
+        ]));
+
+        // Step 2: Run the code under test.
+
+        // Prepare the mutation that's supposed to succeed.
+        let key = make_standard_engine_replica_version_record_key();
+        let value = StandardEngineReplicaVersionRecord {
+            new_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+            old_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+            deployment_progress: 0.1,
+        }
+        .encode_to_vec();
+
+        // Attempt the mutation.
+        let mutation = vec![insert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The implicit assertion here is the previous line did not panic.
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_new_replica_version_is_not_elected_in_standard_engine_replica_version_record() {
+        // Step 1: Prepare the world. Elect old, but not new.
+        let mut registry = invariant_compliant_registry(0);
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+        ]));
+
+        // Step 2: Run the code under test.
+
+        // Prepare mutation.
+        let key = make_standard_engine_replica_version_record_key();
+        let value = StandardEngineReplicaVersionRecord {
+            new_replica_version_id: "garbage".to_string(), // <- This is the bomb.
+            old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+            deployment_progress: 0.1,
+        }
+        .encode_to_vec();
+
+        // Attempt mutation.
+        let mutation = vec![insert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_old_replica_version_is_not_elected_in_standard_engine_replica_version_record() {
+        // Step 1: Prepare the world. Elect new, but not old.
+        // (Same initial state as previous test.)
+        let mut registry = invariant_compliant_registry(0);
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+        ]));
+
+        // Step 2: Run the code under test.
+
+        // Prepare mutation.
+        let key = make_standard_engine_replica_version_record_key();
+        let value = StandardEngineReplicaVersionRecord {
+            new_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+            old_replica_version_id: "garbage".to_string(), // <- This is the bomb.
+            deployment_progress: 0.1,
+        }
+        .encode_to_vec();
+
+        // Attempt mutation.
+        let mutation = vec![insert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+    }
+
+    #[test]
     #[should_panic(expected = "Using a version that isn't elected.")]
     fn panic_when_retiring_a_version_in_use() {
         let registry = invariant_compliant_registry(0);
@@ -241,6 +336,39 @@ mod tests {
             make_replica_version_key(replica_version_id).as_bytes(),
         )];
         registry.check_global_state_invariants(&mutation);
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_retiring_a_version_referenced_by_standard_engine_record() {
+        // Step 1: Prepare the world.
+
+        // Step 1.1: Elect two replica versions.
+        let mut registry = invariant_compliant_registry(0);
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+            REPLICA_VERSION_ID_2.to_string(),
+        ]));
+
+        // Step 1.2: Start upgrading engines from one elected version to the
+        // other.
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_standard_engine_replica_version_record_key(),
+            StandardEngineReplicaVersionRecord {
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+                deployment_progress: 0.1,
+            }
+            .encode_to_vec(),
+        )]);
+
+        // Step 2: Run the code under test. Try to un-elect one of the versions
+        // referenced by the (engine replica version) upgrade.
+        let mutation = delete(make_replica_version_key(REPLICA_VERSION_ID_2).as_bytes());
+        registry.check_global_state_invariants(&[mutation]);
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
     }
 
     fn check_replica_version(hash: &str, urls: Vec<String>) {

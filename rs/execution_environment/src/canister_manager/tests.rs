@@ -20,9 +20,10 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
-        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
+        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -535,8 +536,11 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     // Try installing canister2, should fail due to insufficient memory capacity on the subnet.
     let err = test.install_canister(canister2, wasm).unwrap_err();
-    let msg =
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
+    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
+    } else {
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
+    };
     err.assert_contains(ErrorCode::SubnetOversubscribed, msg);
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2290,8 +2294,11 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     // Try upgrading the canister, should fail because there is not enough memory capacity
     // on the subnet.
-    let msg =
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
+    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
+    } else {
+        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
+    };
     test.upgrade_canister(canister2, wasm)
         .unwrap_err()
         .assert_contains(ErrorCode::SubnetOversubscribed, msg);
@@ -5105,6 +5112,50 @@ fn uninstall_code_clears_canister_state() {
     };
 
     operation_clears_canister_state(uninstall_code, true);
+}
+
+#[test]
+fn last_install_timestamp_tracks_code_deployment_and_uninstall() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let last_install_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .execution_state
+            .as_ref()
+            .and_then(|es| es.last_install_timestamp)
+    };
+
+    // A freshly created canister has no installed code, hence no install time.
+    assert_eq!(last_install_timestamp(&test), None);
+
+    // Install records the current round time as the install time.
+    let install_time = test.state().time();
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(install_time));
+
+    // Reinstall updates the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let reinstall_time = test.state().time();
+    assert!(reinstall_time > install_time);
+    test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(reinstall_time));
+
+    // Upgrade updates the install time.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let upgrade_time = test.state().time();
+    assert!(upgrade_time > reinstall_time);
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(last_install_timestamp(&test), Some(upgrade_time));
+
+    // Uninstall drops the execution state, so the install time is gone. This
+    // exercises the same `uninstall_canister` primitive used by the
+    // out-of-cycles force uninstall.
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(last_install_timestamp(&test), None);
 }
 
 #[test]
