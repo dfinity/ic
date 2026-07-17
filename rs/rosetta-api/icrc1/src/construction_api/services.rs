@@ -162,10 +162,14 @@ pub fn construction_payloads(
         .and_then(|meta| meta.ingress_start)
         .unwrap_or(now);
 
+    // `ingress_start` originates from optional, caller-controlled metadata, so a
+    // near-`u64::MAX` value would overflow this default computation and panic
+    // before `validate_ingress_window` runs. Saturate instead: the resulting
+    // out-of-range window is then rejected by the validation below.
     let ingress_end = metadata
         .as_ref()
         .and_then(|meta| meta.ingress_end)
-        .unwrap_or(ingress_start + ingress_interval);
+        .unwrap_or(ingress_start.saturating_add(ingress_interval));
 
     let created_at_time = metadata
         .as_ref()
@@ -338,14 +342,7 @@ mod tests {
         assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max + 1).is_err());
     }
 
-    // Regression test for DEFI-2944: a near-`u64::MAX` `ingress_start` supplied
-    // via caller metadata with `ingress_end` omitted overflows the default
-    // `ingress_end = ingress_start + ingress_interval` computation, panicking
-    // the request thread before `validate_ingress_window` ever runs. This test
-    // documents that (currently panicking) behaviour; the accompanying fix
-    // makes the request be rejected with an error instead.
     #[test]
-    #[should_panic(expected = "attempt to add with overflow")]
     fn near_u64_max_ingress_start_is_rejected_without_panic() {
         let metadata = ConstructionPayloadsRequestMetadata {
             memo: None,
@@ -353,12 +350,23 @@ mod tests {
             ingress_end: None,
             created_at_time: None,
         };
-        let _ = construction_payloads(
+        let err = construction_payloads(
             vec![],
             Some(metadata),
             &Principal::anonymous(),
             vec![],
             SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.0.message,
+            "Processing of the construction request failed."
+        );
+        assert!(
+            err.0
+                .description
+                .unwrap()
+                .contains("ingress_end must not be more than"),
         );
     }
 
