@@ -337,7 +337,7 @@ impl TestFixture {
     }
 
     /// A view of the partition of the given kind, resolved against the active slot.
-    fn disk(&self, partition: Partition) -> PartitionView<'_> {
+    fn partition(&self, partition: Partition) -> PartitionView<'_> {
         match partition {
             Partition::Store => self.store_partition(),
             Partition::Var => self.var_partition(),
@@ -362,7 +362,7 @@ impl TestFixture {
         PartitionView::new(
             self,
             Partition::Var,
-            self.active_boot_slot().var_device.path(),
+            self.active_boot_slot().var_device.path().expect("var path is required"),
             None,
         )
     }
@@ -428,7 +428,7 @@ impl TestFixture {
     /// Derives the current SEV disk-encryption key for the given partition's data device,
     /// using the active slot's measurement.
     fn derive_sev_key(&self, partition: Partition) -> Vec<u8> {
-        let device_path = self.disk(partition).device_path().to_path_buf();
+        let device_path = self.partition(partition).device_path().to_path_buf();
         let mut firmware = self.sev_firmware_builder();
         derive_key_from_sev_measurement(
             &mut firmware,
@@ -616,29 +616,29 @@ fn create_crypt_device_luks_parameters(
 
 #[test]
 fn test_generated_key_init_and_reopen() {
-    for partition in [Partition::Store, Partition::Var] {
+    for partition_name in [Partition::Store, Partition::Var] {
         let fixture = TestFixture::new_with_generated_key();
-        let disk = fixture.disk(partition);
-        let mapper_path = disk.mapper_path();
+        let partition = fixture.partition(partition_name);
+        let mapper_path = partition.mapper_path();
 
         // Test format & open
-        disk.format()
+        partition.format()
             .expect("Failed to format device encryption with generated key");
-        disk.open()
+        partition.open()
             .expect("Failed to open device encryption with generated key");
 
         assert!(
             mapper_path.exists(),
-            "mapper device for {partition:?} should exist after open"
+            "mapper device for {partition_name:?} should exist after open"
         );
-        disk.write_payload(b"test_data");
+        partition.write_payload(b"test_data");
 
         // Test reopening
-        disk.deactivate();
-        disk.open()
+        partition.deactivate();
+        partition.open()
             .expect("Failed to reopen partition with generated key");
 
-        disk.assert_payload(b"test_data");
+        partition.assert_payload(b"test_data");
 
         let generated_key_path = fixture.generated_key_path();
         assert!(generated_key_path.exists());
@@ -648,16 +648,16 @@ fn test_generated_key_init_and_reopen() {
             // Type file, readable and writable by owner only
             Permissions::from_mode(0o100600)
         );
-        if partition == Partition::Store {
+        if partition_name == Partition::Store {
             assert!(
                 !fixture.store_header_path().exists(),
-                "detached Store header should not exist for {partition:?} with generated key"
+                "detached Store header should not exist for {partition_name:?} with generated key"
             );
         }
         assert_eq!(
-            disk.read_keyslot_metadata().len(),
+            partition.read_keyslot_metadata().len(),
             0,
-            "Unexpected keyslot metadata when using generated key for {partition:?}"
+            "Unexpected keyslot metadata when using generated key for {partition_name:?}"
         );
     }
 }
@@ -678,43 +678,43 @@ fn test_does_not_change_existing_generated_key() {
 
 #[test]
 fn test_sev_key_init_and_reopen() {
-    for partition in [Partition::Store, Partition::Var] {
+    for partition_name in [Partition::Store, Partition::Var] {
         let fixture = TestFixture::new_sev();
-        let disk = fixture.disk(partition);
-        let mapper_path = disk.mapper_path();
+        let partition = fixture.partition(partition_name);
+        let mapper_path = partition.mapper_path();
 
         assert!(
             !mapper_path.exists(),
-            "mapper for {partition:?} should not exist before open"
+            "mapper for {partition_name:?} should not exist before open"
         );
 
         // Test format & open
-        disk.format()
+        partition.format()
             .expect("Failed to format device encryption with generated key");
-        disk.open()
+        partition.open()
             .expect("Failed to open device encryption with generated key");
 
         assert!(mapper_path.exists());
         assert!(
             !fixture.generated_key_path().exists(),
-            "generated key should not exist for {partition:?} when SEV is enabled"
+            "generated key should not exist for {partition_name:?} when SEV is enabled"
         );
 
-        disk.write_payload(b"test_data");
+        partition.write_payload(b"test_data");
 
         // Test reopening
-        disk.deactivate();
-        disk.open()
+        partition.deactivate();
+        partition.open()
             .expect("Failed to reopen partition with SEV key");
 
-        disk.assert_payload(b"test_data");
+        partition.assert_payload(b"test_data");
 
-        if partition == Partition::Store {
+        if partition_name == Partition::Store {
             assert!(fixture.store_header_path().exists());
-            assert!(disk.has_detached_luks2_header());
+            assert!(partition.has_detached_luks2_header());
             // The store partition is formatted with a detached header only; no attached
             // LUKS header should be present on the data device.
-            assert!(!disk.has_attached_luks2_header());
+            assert!(!partition.has_attached_luks2_header());
         }
     }
 }
@@ -723,9 +723,9 @@ fn test_sev_key_init_and_reopen() {
 fn test_sev_format_writes_keyslot_metadata() {
     for partition in [Partition::Store, Partition::Var] {
         let fixture = TestFixture::new_sev();
-        fixture.disk(partition).format().unwrap();
+        fixture.partition(partition).format().unwrap();
 
-        let metadata = fixture.disk(partition).read_keyslot_metadata();
+        let metadata = fixture.partition(partition).read_keyslot_metadata();
         assert_eq!(
             metadata.len(),
             1,
@@ -758,11 +758,11 @@ fn test_detached_header_is_only_used_for_store_when_sev_is_enabled() {
         };
 
         fixture
-            .disk(partition)
+            .partition(partition)
             .format()
             .expect("Failed to format encrypted partition");
         fixture
-            .disk(partition)
+            .partition(partition)
             .open()
             .expect("Failed to open encrypted partition");
 
@@ -775,7 +775,7 @@ fn test_detached_header_is_only_used_for_store_when_sev_is_enabled() {
         );
 
         assert_eq!(
-            fixture.disk(partition).has_detached_luks2_header(),
+            fixture.partition(partition).has_detached_luks2_header(),
             expect_detached_header,
             "unexpected detached LUKS header state for {:?} with SEV enabled = {}",
             partition,
@@ -783,7 +783,7 @@ fn test_detached_header_is_only_used_for_store_when_sev_is_enabled() {
         );
 
         assert_eq!(
-            fixture.disk(partition).has_attached_luks2_header(),
+            fixture.partition(partition).has_attached_luks2_header(),
             expect_attached_header,
             "unexpected attached LUKS header state for {:?} with SEV enabled = {}",
             partition,
@@ -1178,9 +1178,9 @@ fn test_fails_to_open_var_if_key_doesnt_work() {
 
     fixture.var_partition().format().unwrap();
     fixture.var_partition().open().unwrap();
-    fixture.disk(Partition::Var).write_payload(b"some data");
+    fixture.partition(Partition::Var).write_payload(b"some data");
 
-    fixture.disk(Partition::Var).deactivate();
+    fixture.partition(Partition::Var).deactivate();
 
     // Overwrite the key
     fs::write(fixture.generated_key_path(), "wrong key").unwrap();
@@ -1487,11 +1487,11 @@ fn test_open_store_wipes_attached_header_when_detached_header_is_available() {
 fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
     for partition in [Partition::Store, Partition::Var] {
         let mut fixture = TestFixture::new_with_generated_key();
-        fixture.disk(partition).format().unwrap();
-        fixture.disk(partition).open().unwrap();
+        fixture.partition(partition).format().unwrap();
+        fixture.partition(partition).open().unwrap();
         fixture.enable_sev();
         fixture
-            .disk(partition)
+            .partition(partition)
             .open()
             .expect_err("opening with generated key should fail when SEV is enabled");
     }
@@ -1508,7 +1508,7 @@ fn assert_sev_rejects_tampered_luks_parameters(
     expected_error: &str,
 ) {
     let fixture = TestFixture::new_sev();
-    let device_path = fixture.disk(Partition::Var).device_path().to_path_buf();
+    let device_path = fixture.partition(Partition::Var).device_path().to_path_buf();
     // The SEV key is derived from the launch measurement and never persisted.
     let passphrase = fixture.derive_sev_key(Partition::Var);
 
@@ -1542,7 +1542,7 @@ fn assert_generated_key_accepts_tampered_luks_parameters(
     pbkdf_iterations: u32,
 ) {
     let fixture = TestFixture::new_with_generated_key();
-    let device_path = fixture.disk(Partition::Var).device_path().to_path_buf();
+    let device_path = fixture.partition(Partition::Var).device_path().to_path_buf();
     // Let the implementation format the device so it generates and persists the key, then
     // reuse that key for the tampered formatting below.
     fixture
