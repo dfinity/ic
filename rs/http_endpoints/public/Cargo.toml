@@ -82,7 +82,7 @@ ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = { workspace = true }
@@ -90,7 +90,7 @@ reqwest = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }
 serde_bytes = { workspace = true }
-tower-test = "0.4.0"
+tower-test = { workspace = true }
 
 [features]
 fuzzing_code = []
