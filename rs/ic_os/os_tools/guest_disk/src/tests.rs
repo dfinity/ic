@@ -327,7 +327,7 @@ impl TestFixture {
             _store_device: store_device,
             slots: [
                 BootSlot::new("A", default_launch_measurement()),
-                BootSlot::new("B", [0u8; 48]),
+                BootSlot::new("B", [0_u8; 48]),
             ],
             active_slot: 0,
             guestos_config,
@@ -1272,11 +1272,11 @@ fn test_open_store_multiple_times_with_different_keys() {
         .map(|m| m.sev_metadata.launch_measurement_hex.clone())
         .collect();
     assert!(
-        measurements.contains(&hex::encode([4u8; 48])),
+        measurements.contains(&hex::encode([4_u8; 48])),
         "expected a keyslot from iteration 4, got {measurements:?}"
     );
     assert!(
-        measurements.contains(&hex::encode([5u8; 48])),
+        measurements.contains(&hex::encode([5_u8; 48])),
         "expected a keyslot from iteration 5, got {measurements:?}"
     );
     assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
