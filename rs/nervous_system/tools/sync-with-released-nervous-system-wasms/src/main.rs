@@ -260,14 +260,7 @@ struct ReleaseAsset {
 impl ReleaseAsset {
     // Returns the sha256 hash of the asset content.
     async fn sha256(&self) -> Result<String> {
-        let (client, token) = github_api_client_and_token()?;
-
-        let response = client
-            .get(&self.browser_download_url)
-            .bearer_auth(&token)
-            .send()
-            .await?;
-        let response = ensure_success(&self.browser_download_url, response).await?;
+        let response = fetch(&self.browser_download_url).await?;
         let asset_bytes = response.bytes().await?;
 
         Ok(module_hash_hex(sha2::Sha256::digest(&asset_bytes).to_vec()))
@@ -275,14 +268,7 @@ impl ReleaseAsset {
 
     // Returns the textual content of the asset.
     async fn text(&self) -> Result<String> {
-        let (client, token) = github_api_client_and_token()?;
-
-        let response = client
-            .get(&self.browser_download_url)
-            .bearer_auth(&token)
-            .send()
-            .await?;
-        let response = ensure_success(&self.browser_download_url, response).await?;
+        let response = fetch(&self.browser_download_url).await?;
 
         Ok(response.text().await?)
     }
@@ -322,15 +308,13 @@ async fn get_mainnet_canister_release(
     canister_filename: String,
     expected_module_hash_str: String,
 ) -> Result<Release> {
-    let (client, token) = github_api_client_and_token()?;
-
     let tags_per_page = 30; // maximum allowed is 100, but let's save bandwidth since typically we should find the deployed canister WASM early
     let mut page = 1;
     loop {
         let tags_url = format!(
             "{GITHUB_API}/repos/{canister_repository}/tags?per_page={tags_per_page}&page={page}"
         );
-        let response = client.get(&tags_url).bearer_auth(&token).send().await?;
+        let response = fetch(&tags_url).await?;
         let tags: Vec<Tag> = decode_json_response(&tags_url, response).await?;
 
         for tag in &tags {
@@ -636,10 +620,11 @@ fn update_mainnet_canisters_bzl_file(
     Ok(())
 }
 
-// Diagnostic-only helpers below: they do not change any behavior; they just make GitHub API
-// request failures (which otherwise surface as an opaque error, e.g. "expected value at line 1
-// column 1") diagnosable from the CI logs by attaching the HTTP status and (truncated) response
-// body to the returned error.
+// Shared request plumbing and diagnostic-only helpers below. `fetch` is the common way to issue an
+// authenticated GET against the GitHub API (or a release asset's download URL); the diagnostic
+// helpers do not change any behavior, they just make GitHub API request failures (which otherwise
+// surface as an opaque error, e.g. "expected value at line 1 column 1") diagnosable from the CI
+// logs by attaching the HTTP status and (truncated) response body to the returned error.
 
 /// Maximum number of response-body bytes to include in an error/log message. The GitHub API can
 /// return large HTML error pages (e.g., during an outage); truncating keeps logs readable while
@@ -662,6 +647,14 @@ async fn ensure_success(url: &str, response: Response) -> Result<Response> {
         "GET {url} failed with status {status}. Response body: {}",
         clamp_string_len(&body, MAX_LOGGED_BODY_LEN)
     ))
+}
+
+/// Sends an authenticated GET request to `url` and returns the response after checking (via
+/// [`ensure_success`]) that its status is a success.
+async fn fetch(url: &str) -> Result<Response> {
+    let (client, token) = github_api_client_and_token()?;
+    let response = client.get(url).bearer_auth(&token).send().await?;
+    ensure_success(url, response).await
 }
 
 /// Diagnostic-only: like [`Response::json`], but on failure (either a non-success status, or a
