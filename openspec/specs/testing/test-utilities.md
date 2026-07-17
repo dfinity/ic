@@ -1,6 +1,6 @@
 # Test Utilities
 
-**Crates**: `attestation_testing`, `canister-test`, `ic-bitcoin-canister-mock`, `ic-btc-adapter-test-utils`, `ic-canonical-state-tree-hash-test-utils`, `ic-certification-test-utils`, `ic-ckdoge-minter-test-utils`, `ic-cketh-test-utils`, `ic-consensus-mocks`, `ic-crypto-iccsa-test-utils`, `ic-crypto-internal-csp-test-utils`, `ic-crypto-internal-test-vectors`, `ic-crypto-test-utils`, `ic-crypto-test-utils-canister-sigs`, `ic-crypto-test-utils-canister-threshold-sigs`, `ic-crypto-test-utils-crypto-returning-ok`, `ic-crypto-test-utils-csp`, `ic-crypto-test-utils-keygen`, `ic-crypto-test-utils-keys`, `ic-crypto-test-utils-local-csp-vault`, `ic-crypto-test-utils-metrics`, `ic-crypto-test-utils-multi-sigs`, `ic-crypto-test-utils-ni-dkg`, `ic-crypto-test-utils-reproducible-rng`, `ic-crypto-test-utils-root-of-trust`, `ic-crypto-test-utils-tls`, `ic-crypto-test-utils-vetkd`, `ic-crypto-tls-interfaces-mocks`, `ic-crypto-tree-hash-test-utils`, `ic-http-endpoints-test-agent`, `ic-icp-test-ledger`, `ic-icrc1-test-utils`, `ic-icrc3-test-ledger`, `ic-interfaces-certified-stream-store-mocks`, `ic-interfaces-mocks`, `ic-interfaces-registry-mocks`, `ic-interfaces-state-manager-mocks`, `ic-ledger-canister-blocks-synchronizer-test-utils`, `ic-ledger-suite-orchestrator-test-utils`, `ic-ledger-test-utils`, `ic-nervous-system-common-test-canister`, `ic-nervous-system-common-test-keys`, `ic-nervous-system-common-test-utils`, `ic-nns-delegation-manager-test-utils`, `ic-nns-test-utils`, `ic-nns-test-utils-golden-nns-state`, `ic-nns-test-utils-macros`, `ic-nns-test-utils-prepare-golden-state`, `ic-p2p-test-utils`, `ic-rosetta-test-utils`, `ic-sns-test-utils`, `ic-sns-testing`, `ic-test-artifact-pool`, `ic-test-identity`, `ic-test-utilities-embedders`, `ic-test-utilities-io`, `ic-test-utilities-privileges`, `ic-test-utilities-privileges-macros`, `ic-test-utilities-registry`, `ic-test-utilities-serialization`, `ic-test-utilities-tmpdir`, `ic-types-test-utils`, `ic-validator-http-request-test-utils`, `ic-validator-ingress-message-test-canister`, `messaging-test-utils`, `mock_treasury_manager`, `rejoin-test-lib`, `rosetta_test_lib`, `sev_guest_testing`, `test-canister`, `xrc-mock`
+**Crates**: `attestation_testing`, `canister-test`, `ic-bitcoin-canister-mock`, `ic-btc-adapter-test-utils`, `ic-canonical-state-tree-hash-test-utils`, `ic-certification-test-utils`, `ic-ckdoge-minter-test-utils`, `ic-cketh-test-utils`, `ic-consensus-mocks`, `ic-crypto-iccsa-test-utils`, `ic-crypto-internal-csp-test-utils`, `ic-crypto-internal-test-vectors`, `ic-crypto-test-utils`, `ic-crypto-test-utils-canister-sigs`, `ic-crypto-test-utils-canister-threshold-sigs`, `ic-crypto-test-utils-crypto-returning-ok`, `ic-crypto-test-utils-csp`, `ic-crypto-test-utils-keygen`, `ic-crypto-test-utils-keys`, `ic-crypto-test-utils-local-csp-vault`, `ic-crypto-test-utils-metrics`, `ic-crypto-test-utils-multi-sigs`, `ic-crypto-test-utils-ni-dkg`, `ic-crypto-test-utils-reproducible-rng`, `ic-crypto-test-utils-root-of-trust`, `ic-crypto-test-utils-tls`, `ic-crypto-test-utils-vetkd`, `ic-crypto-tls-interfaces-mocks`, `ic-crypto-tree-hash-test-utils`, `ic-http-endpoints-test-agent`, `ic-icp-test-ledger`, `ic-icrc1-test-utils`, `ic-icrc3-test-ledger`, `ic-interfaces-certified-stream-store-mocks`, `ic-interfaces-mocks`, `ic-interfaces-registry-mocks`, `ic-interfaces-state-manager-mocks`, `ic-ledger-canister-blocks-synchronizer-test-utils`, `ic-ledger-suite-orchestrator-test-utils`, `ic-ledger-test-utils`, `ic-nervous-system-common-test-canister`, `ic-nervous-system-common-test-keys`, `ic-nervous-system-common-test-utils`, `ic-nns-delegation-manager-test-utils`, `ic-nns-test-utils`, `ic-nns-test-utils-golden-nns-state`, `ic-nns-test-utils-macros`, `ic-nns-test-utils-prepare-golden-state`, `ic-p2p-test-utils`, `ic-rosetta-test-utils`, `ic-sns-test-utils`, `ic-sns-testing`, `ic-test-artifact-pool`, `ic-test-identity`, `ic-test-utilities-embedders`, `ic-test-utilities-io`, `ic-test-utilities-net`, `ic-test-utilities-privileges`, `ic-test-utilities-privileges-macros`, `ic-test-utilities-registry`, `ic-test-utilities-serialization`, `ic-test-utilities-tmpdir`, `ic-types-test-utils`, `ic-validator-http-request-test-utils`, `ic-validator-ingress-message-test-canister`, `messaging-test-utils`, `mock_treasury_manager`, `rejoin-test-lib`, `rosetta_test_lib`, `sev_guest_testing`, `test-canister`, `xrc-mock`
 
 The `ic-test-utilities` crate (`rs/test_utilities/`) and its sub-crates provide mock implementations, builders, helpers, and test infrastructure used across the IC codebase.
 
@@ -227,6 +227,26 @@ Provides an in-memory logger for capturing and asserting on log output.
 - **WHEN** the in-memory logger is used in tests
 - **THEN** log messages are stored in memory
 - **AND** tests can assert on the content of logged messages
+
+### Requirement: Networking Test Helpers (ic-test-utilities-net)
+
+Provides small `tokio`-only networking helpers for tests, notably a saturated loopback TCP listener for exercising connect-timeout code paths without requiring network egress. Used by the bitcoin adapter (`ic-btc-adapter`) and HTTPS-outcalls adapter (`ic-https-outcalls-adapter`) connect-timeout tests.
+
+#### Scenario: Saturate a loopback listener's accept queue
+- **WHEN** `saturated_loopback_listener()` is called
+- **THEN** it binds a loopback TCP listener with `listen(1)` and fills its accept queue with never-accepted connections until a fresh connect hangs instead of completing
+- **AND** it returns a `SaturatedTcpListener` holding the listener and blocker connections alive
+- **AND** it panics if the accept queue cannot be saturated within the safety cap, keeping the test deterministic
+
+#### Scenario: Connecting to the saturated address hangs
+- **WHEN** a new connection is made to `SaturatedTcpListener::addr()`
+- **THEN** the connection neither completes nor is refused
+- **AND** it hangs until the connecting side's own timeout fires
+
+#### Scenario: Dropping the listener restores the address
+- **WHEN** the `SaturatedTcpListener` is dropped
+- **THEN** the listener is closed and the blocker connections are dropped, emptying the accept queue
+- **AND** the address behaves normally again
 
 ### Requirement: Unprivileged-User Permission Tests (ic-test-utilities-privileges, ic-test-utilities-privileges-macros)
 
