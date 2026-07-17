@@ -20,16 +20,6 @@ Data is gold. Diagnostics are diamonds.
 Boring code is good.
 
 
-## Glossary
-
-constructor - A method that returns `Self`. In general,
-    does not take `self`.
-
-nominal behavior - What an engineered system is SUPPOSED to do.
-
-fixture - Same initial conditions used by multiple tests.
-
-
 ## Naming
 
 Use real words. Use the dictionary or encyclopedia as evidence. This includes
@@ -50,8 +40,7 @@ Use `is_` to indicate whether some property holds.
 
 ### Banned Words
 
-Do not use the following words, because they convey little to no information
-:
+Do not use the following words:
 
 * Nouns:
     * data
@@ -111,6 +100,8 @@ Paginate `list_` APIs.
 
 Locality: Use space to indicate how closely things are related to one another.
 
+When a heading has multiple items, put a blank line after it.
+
 
 ## Abstraction
 
@@ -137,9 +128,13 @@ No multi-line `if` conditions. Ditto for `while`, `match`, and `for ... in`
 expressions.
 
 
-Branch "on" `enum`s using `match`.
-
 Short branch arms.
+
+
+If a return value is not used, say so explicitly. E.g.
+```
+let _displaced_element = map.insert(k, v);
+```
 
 
 ## Problematic Rust Idioms
@@ -147,7 +142,8 @@ Short branch arms.
 Do not directly call `into`.
 
 More generally, leave types unmentioned only when they can be easily determined
-from very nearby code.
+from very nearby code. In particular, do `.collect::<Vec<Widget>>()`, not bare
+`.collect()`.
 
 Do not be afraid to use the `return` keyword.
 
@@ -159,7 +155,7 @@ Do not be afraid to use semicolons.
 The main question that doc comments MUST answer is, "How do I actually USE this
 thing?".
 
-Define terms BEFORE using them. E.g. the "Glossary" section above.
+Define terms BEFORE using them.
 
 More generally, in order to explain X EFFECTIVELY, you must start with things
 that the reader ALREADY knows, and build up to X.
@@ -167,13 +163,20 @@ that the reader ALREADY knows, and build up to X.
 Do NOT be vacuous.
 
 
-Do NOT simply transcribe code into prose.
-
-
 ## Defining Types
 
 No `pub` fields.
 Exception: Prost, Candid.
+
+Derive as much as possible. In particular,
+* `Debug` - For visibility.
+* Construction:
+    * `Default`
+    * `Copy`
+* Comparison:
+    * `Eq`
+    * `Ord`
+    * `Hash`
 
 
 ### Constructors
@@ -184,6 +187,12 @@ Supply `new` and/or `try_new`.
 
 If you need a constructor that does "real work" do
 NOT name the constructor `new`.
+
+
+### Conversions
+
+Implement `From`/`TryFrom` in three steps: fully disassemble, validate and
+transform components, and reassemble.
 
 
 ## Anti-Features

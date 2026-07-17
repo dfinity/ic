@@ -69,6 +69,7 @@ Data is gold. Diagnostics are diamonds.
 Boring code is good.
 
 
+((
 ## Glossary
 
 constructor - A method that returns `Self` (or `Result<Self, ...>`). In general,
@@ -79,6 +80,7 @@ nominal behavior - What an engineered system is SUPPOSED to do. (This is not the
     occur, where there is an actual useful result.)
 
 fixture - Same initial conditions used by multiple tests.
+))
 
 
 ## Naming
@@ -103,8 +105,8 @@ Use `is_` to indicate whether some property holds.
 
 ### Banned Words
 
-Do not use the following words, because they convey little to no information
-(just like the word "marklar" in _South Park_):
+Do not use the following words (because they convey little to no information,
+just like the word "marklar" in _South Park_):
 
 * Nouns:
     * data
@@ -169,7 +171,7 @@ Paginate `list_` APIs. (Requests must
 
 Locality: Use space to indicate how closely things are related to one another.
 
-(When a heading has multiple items, put a blank line after it.)
+When a heading has multiple items, put a blank line after it.
 
 
 ## Abstraction
@@ -200,7 +202,7 @@ expressions.
 (Exception: when looping over a collection literal, each element can be on its
 own line.)
 
-Branch "on" `enum`s using `match`.
+(Branch "on" `enum`s using `match`.)
 
 Short branch arms. (Spin out if necessary.)
 
@@ -209,10 +211,10 @@ any other code.)
 
 (`continue` and `break` are good.)
 
-(If a return value is not used, say so explicitly. E.g.
+If a return value is not used, say so explicitly. E.g.
 ```
 let _displaced_element = map.insert(k, v);
-```)
+```
 
 
 ## Problematic Rust Idioms
@@ -220,8 +222,8 @@ let _displaced_element = map.insert(k, v);
 Do not directly call `into`.
 
 More generally, leave types unmentioned only when they can be easily determined
-from very nearby code. (In particular, do `.collect::<Vec<Widget>>()`, not bare
-`.collect()`.)
+from very nearby code. In particular, do `.collect::<Vec<Widget>>()`, not bare
+`.collect()`.
 
 Do not be afraid to use the `return` keyword.
 
@@ -234,7 +236,7 @@ The main question that doc comments MUST answer is, "How do I actually USE this
 thing?". (This is usually explained by the code's behavior, not how it is
 implemented.)
 
-Define terms BEFORE using them. E.g. the "Glossary" section above.
+Define terms BEFORE using them. (E.g. the "Glossary" section above.)
 
 More generally, in order to explain X EFFECTIVELY, you must start with things
 that the reader ALREADY knows, and build up to X.
@@ -245,7 +247,7 @@ properties of a "valid" widget.)
 (Sometimes, the best way to explain something is by example. Sometimes, negative
 examples are needed.)
 
-Do NOT simply transcribe code into prose. (Comments ADD information that is not
+(Do NOT simply transcribe code into prose. Comments ADD information that is not
 "readily gleaned" from the code itself. E.g. intent.)
 
 (Code is NOT the ultimate source of truth on nominal behavior.)
@@ -256,7 +258,7 @@ Do NOT simply transcribe code into prose. (Comments ADD information that is not
 No `pub` fields.
 Exception: Prost, Candid.
 
-(Derive as much as possible. In particular,
+Derive as much as possible. In particular,
 * `Debug` - For visibility.
 * Construction:
     * `Default`
@@ -264,7 +266,7 @@ Exception: Prost, Candid.
 * Comparison:
     * `Eq`
     * `Ord`
-    * `Hash`)
+    * `Hash`
 
 (When inserting an object into a collection, take ownership.)
 
@@ -281,12 +283,10 @@ NOT name the constructor `new`. (Instead, name it `from_file` or
 something. The last line would generally consist of calling `new`.)
 
 
-((
 ### Conversions
 
 Implement `From`/`TryFrom` in three steps: fully disassemble, validate and
-transform, and reassemble.
-))
+transform components, and reassemble.
 
 
 ## Anti-Features (not just Rust)
