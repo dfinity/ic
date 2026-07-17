@@ -266,10 +266,6 @@ crate.spec(
     version = "=1.2.48",
 )
 crate.spec(
-    package = "cddl",
-    version = "^0.9.4",
-)
-crate.spec(
     package = "cfg-if",
     version = "^1.0.0",
 )
