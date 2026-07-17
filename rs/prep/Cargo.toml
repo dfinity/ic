@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-fs_extra = "1.2.0"
+fs_extra = { workspace = true }
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }

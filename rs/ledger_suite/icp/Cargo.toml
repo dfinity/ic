@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 crc32fast = "1.2.0"
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
