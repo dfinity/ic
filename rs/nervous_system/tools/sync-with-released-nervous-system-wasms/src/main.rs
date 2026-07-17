@@ -3,6 +3,7 @@ use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
+use ic_nervous_system_string::clamp_string_len;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -184,58 +185,6 @@ fn github_api_client_and_token() -> Result<(Client, String)> {
     Ok((client, token))
 }
 
-/// Maximum number of response-body bytes to include in an error/log message. The GitHub API can
-/// return large HTML error pages (e.g., during an outage); truncating keeps logs readable while
-/// still showing enough of the body to diagnose the failure.
-const MAX_LOGGED_BODY_LEN: usize = 2000;
-
-fn truncate_body(body: &str) -> String {
-    if body.len() <= MAX_LOGGED_BODY_LEN {
-        return body.to_string();
-    }
-    let truncated: String = body.chars().take(MAX_LOGGED_BODY_LEN).collect();
-    format!(
-        "{truncated}... <truncated, full response body was {} bytes>",
-        body.len()
-    )
-}
-
-/// Reads the body of `response` (which was fetched from `url`) and decodes it as JSON into `T`.
-///
-/// If the response status is not a success, or if the body fails to decode as JSON (which is
-/// exactly what happens when the GitHub API responds with something other than the expected
-/// JSON, e.g., a rate-limiting or transient error page), this returns an error that includes the
-/// HTTP status code and the (possibly truncated) response body, so that a failure is diagnosable
-/// from the CI logs instead of just showing a generic "expected value at line 1 column 1" error.
-///
-/// This function does not retry: the CI step that invokes this binary already retries the whole
-/// process several times with backoff, so retrying here as well would be redundant.
-async fn decode_json_response<T: serde::de::DeserializeOwned>(
-    url: &str,
-    response: Response,
-) -> Result<T> {
-    let status = response.status();
-    let body = response
-        .text()
-        .await
-        .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
-
-    if !status.is_success() {
-        return Err(anyhow!(
-            "GET {url} failed with status {status}. Response body: {}",
-            truncate_body(&body)
-        ));
-    }
-
-    serde_json::from_str(&body).map_err(|e| {
-        anyhow!(
-            "GET {url} returned status {status} but the response body failed to decode as JSON: \
-             {e}. Response body: {}",
-            truncate_body(&body)
-        )
-    })
-}
-
 // GitHub API types
 
 #[derive(Debug, Deserialize)]
@@ -263,24 +212,13 @@ impl Tag {
 
         let (client, token) = github_api_client_and_token()?;
         let res = client.get(&release_url).bearer_auth(&token).send().await?;
-        let status = res.status();
 
         // not every tag must have a release so we do not report an error if it does not
-        if !status.is_success() {
+        if !res.status().is_success() {
             return Ok(None);
         }
 
-        let body = res
-            .text()
-            .await
-            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
-        let release: Release = serde_json::from_str(&body).map_err(|e| {
-            anyhow!(
-                "GET {release_url} returned status {status} but the response body failed to \
-                 decode as JSON: {e}. Response body: {}",
-                truncate_body(&body)
-            )
-        })?;
+        let release: Release = decode_json_response(&release_url, res).await?;
 
         if release.tag_name != self.name {
             return Err(anyhow!(
@@ -329,15 +267,7 @@ impl ReleaseAsset {
             .bearer_auth(&token)
             .send()
             .await?;
-        let status = response.status();
-        if !status.is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(anyhow!(
-                "Failed to download asset {}: status {status}. Response body: {}",
-                self.browser_download_url,
-                truncate_body(&body)
-            ));
-        }
+        let response = ensure_success(&self.browser_download_url, response).await?;
         let asset_bytes = response.bytes().await?;
 
         Ok(module_hash_hex(sha2::Sha256::digest(&asset_bytes).to_vec()))
@@ -352,20 +282,9 @@ impl ReleaseAsset {
             .bearer_auth(&token)
             .send()
             .await?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
-        if !status.is_success() {
-            return Err(anyhow!(
-                "Failed to download asset {}: status {status}. Response body: {}",
-                self.browser_download_url,
-                truncate_body(&body)
-            ));
-        }
+        let response = ensure_success(&self.browser_download_url, response).await?;
 
-        Ok(body)
+        Ok(response.text().await?)
     }
 }
 
@@ -715,4 +634,54 @@ fn update_mainnet_canisters_bzl_file(
     serde_json::to_writer_pretty(file, &m).unwrap();
 
     Ok(())
+}
+
+// Diagnostic-only helpers below: they do not change any behavior; they just make GitHub API
+// request failures (which otherwise surface as an opaque error, e.g. "expected value at line 1
+// column 1") diagnosable from the CI logs by attaching the HTTP status and (truncated) response
+// body to the returned error.
+
+/// Maximum number of response-body bytes to include in an error/log message. The GitHub API can
+/// return large HTML error pages (e.g., during an outage); truncating keeps logs readable while
+/// still showing enough of the body to diagnose the failure.
+const MAX_LOGGED_BODY_LEN: usize = 2000;
+
+/// Diagnostic-only: returns `response` unchanged if its status is a success. Otherwise, reads the
+/// body and returns an error containing the status and the (possibly truncated) response body.
+async fn ensure_success(url: &str, response: Response) -> Result<Response> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(response);
+    }
+
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+    Err(anyhow!(
+        "GET {url} failed with status {status}. Response body: {}",
+        clamp_string_len(&body, MAX_LOGGED_BODY_LEN)
+    ))
+}
+
+/// Diagnostic-only: like [`Response::json`], but on failure (either a non-success status, or a
+/// body that fails to decode as JSON), the returned error includes the status and the (possibly
+/// truncated) response body.
+async fn decode_json_response<T: serde::de::DeserializeOwned>(
+    url: &str,
+    response: Response,
+) -> Result<T> {
+    let response = ensure_success(url, response).await?;
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+
+    serde_json::from_str(&body).map_err(|e| {
+        anyhow!(
+            "GET {url} returned a success status, but the response body failed to decode as \
+             JSON: {e}. Response body: {}",
+            clamp_string_len(&body, MAX_LOGGED_BODY_LEN)
+        )
+    })
 }
