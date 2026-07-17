@@ -36,6 +36,7 @@ tower = { workspace = true }
 [dev-dependencies]
 async-stream = { workspace = true }
 bytes = { workspace = true }
+ic-test-utilities-net = { path = "../../test_utilities/net" }
 once_cell = { workspace = true }
 rustls = { workspace = true }
 rustls-pemfile = { workspace = true }

@@ -453,6 +453,7 @@ members = [
     "rs/test_utilities/load_wasm",
     "rs/test_utilities/logger",
     "rs/test_utilities/metrics",
+    "rs/test_utilities/net",
     "rs/test_utilities/privileges",
     "rs/test_utilities/privileges/macros",
     "rs/test_utilities/registry",
@@ -968,7 +969,7 @@ walrus = "0.23.3"
 wasm-encoder = { version = "0.251.0", features = ["wasmparser"] }
 wasmparser = "0.251.0"
 wasmprinter = "0.251.0"
-wasmtime = { version = "45.0.0", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
+wasmtime = { version = "46.0.1", default-features = false, features = ["cranelift", "gc", "gc-null", "parallel-compilation", "runtime"] }
 wast = "251.0.0"
 wat = "~1.251.0"
 webpki-roots = "1.0.6"
