@@ -17,8 +17,8 @@ Even if we say that X is "good", that does NOT mean over-do X!
 
 Optimize for the reader, not the writer.
 
-Do not assume the reader has "esoteric" knowledge, only GENERAL knowledge, plus
-a little bit of BASIC knowledge of your domain.
+Do not assume the reader has "esoteric" domain-specific knowledge, only GENERAL
+knowledge, plus a little bit of BASIC knowledge of your domain.
 
 > Explicit is better than implicit.
 > --Zen of Python
