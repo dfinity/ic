@@ -57,9 +57,6 @@ rust_test(
         "RUST_TEST_THREADS": "4",
     },
     exec_properties = {"cpu": "4"},
-    tags = [
-        "requires-network",
-    ],
     deps = [
         "//rs/certification/test-utils",
         "//rs/crypto/tls_interfaces",
