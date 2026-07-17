@@ -51,6 +51,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
@@ -2614,9 +2615,9 @@ impl ExecutionTestBuilder {
         mut self,
         subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
-        self.execution_config
-            .guaranteed_response_message_memory_capacity =
-            NumBytes::from(subnet_guaranteed_response_message_memory);
+        self.resource_limits.maximum_state_delta = Some(heap_delta_capacity_for_message_memory(
+            NumBytes::from(subnet_guaranteed_response_message_memory),
+        ));
         self
     }
 
@@ -2666,16 +2667,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
         self
     }
 
@@ -2983,6 +2974,7 @@ impl ExecutionTestBuilder {
             own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
+        own_subnet_info.resource_limits = self.resource_limits;
 
         let metrics_registry = MetricsRegistry::new();
 

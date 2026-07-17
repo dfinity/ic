@@ -769,6 +769,9 @@ pub fn load_canister_state(
 
             Some(ExecutionState {
                 wasm_binary,
+                last_install_timestamp: execution_state_bits
+                    .last_install_timestamp_nanos
+                    .map(Time::from_nanos_since_unix_epoch),
                 exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
@@ -864,22 +867,19 @@ pub fn load_canister_state(
         canister_state_bits.canister_log,
         log_memory_store_data,
         canister_state_bits.log_memory_store_persistent_next_idx,
-        canister_state_bits.log_memory_store_migrated,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.environment_variables,
         metrics,
     );
 
-    if system_state.log_memory_store.is_migrated() {
-        let lms_next_idx = system_state.log_memory_store.next_idx();
-        let log_next_idx = system_state.canister_log.next_idx();
-        if lms_next_idx != log_next_idx {
-            metrics.observe_broken_soft_invariant(format!(
-                "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
-                 != canister_log.next_idx ({log_next_idx})",
-            ));
-        }
+    let lms_next_idx = system_state.log_memory_store.next_idx();
+    let log_next_idx = system_state.canister_log.next_idx();
+    if lms_next_idx != log_next_idx {
+        metrics.observe_broken_soft_invariant(format!(
+            "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
+             != canister_log.next_idx ({log_next_idx})",
+        ));
     }
 
     let canister_state = CanisterState {

@@ -268,6 +268,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
             binary_hash: item.binary_hash.to_vec(),
+            last_install_timestamp_nanos: item.last_install_timestamp_nanos,
             next_scheduled_method: Some(
                 pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
                     .into(),
@@ -302,6 +303,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
             binary_hash: WasmHash::from(binary_hash),
+            last_install_timestamp_nanos: value.last_install_timestamp_nanos,
             next_scheduled_method: match value.next_scheduled_method {
                 Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()
