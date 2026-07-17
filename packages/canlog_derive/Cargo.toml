@@ -14,7 +14,7 @@ documentation = "https://docs.rs/canlog"
 syn = { workspace = true }
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
-darling = "0.20.11"
+darling = { workspace = true }
 
 [lib]
 proc-macro = true
