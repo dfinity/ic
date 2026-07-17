@@ -39,7 +39,7 @@ num-traits = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
-rolling-file = "0.2.0"
+rolling-file = { workspace = true }
 rosetta-core = { path = "../common/rosetta_core" }
 rusqlite = { version = "0.37", features = ["bundled"] }
 tokio-rusqlite = "0.7"

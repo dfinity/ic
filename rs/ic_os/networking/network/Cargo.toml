@@ -8,7 +8,7 @@ anyhow = { workspace = true }
 config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../deterministic_ips" }
 macaddr = { workspace = true }
-ping = { version = "^0.5.0" }
+ping = { workspace = true }
 rayon = { workspace = true }
 regex = { workspace = true }
 utils = { path = "../../utils" }
