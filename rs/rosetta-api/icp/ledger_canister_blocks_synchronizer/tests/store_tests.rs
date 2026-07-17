@@ -85,6 +85,34 @@ async fn store_smoke_test() {
 }
 
 #[actix_rt::test]
+async fn store_push_rolls_back_on_error() {
+    let tmpdir = create_tmp_dir();
+    let mut store = sqlite_on_disk_store(tmpdir.path()).await;
+    let scribe = Scribe::new_with_sample_data(10, 100);
+
+    let blocks: Vec<_> = scribe.blockchain.iter().cloned().collect();
+
+    // Push the first two blocks successfully.
+    store.push(&blocks[0]).await.unwrap();
+    store.push(&blocks[1]).await.unwrap();
+
+    // Pushing an already-present block violates the PRIMARY KEY constraint on
+    // `block_idx` and must return an error.
+    let err = store.push(&blocks[0]).await;
+    assert!(err.is_err(), "expected duplicate push to fail, got {err:?}");
+
+    // The failed push must have rolled back its transaction. If the transaction
+    // had been left open, this subsequent valid push would fail with "cannot
+    // start a transaction within a transaction".
+    store.push(&blocks[2]).await.unwrap();
+
+    assert_eq!(
+        store.get_hashed_block(&blocks[2].index).await.unwrap(),
+        blocks[2]
+    );
+}
+
+#[actix_rt::test]
 async fn store_coherence_test() {
     let tmpdir = create_tmp_dir();
 

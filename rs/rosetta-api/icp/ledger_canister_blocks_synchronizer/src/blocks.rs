@@ -1108,17 +1108,31 @@ impl Blocks {
         let index = hb.index;
         self.connection
             .call::<_, (), BlockStoreError>(move |connection| {
+                // The connection is long-lived and reused, so any error path that
+                // returns without closing the transaction would leave it open and
+                // cause every subsequent write to fail with "cannot start a
+                // transaction within a transaction". Explicitly roll back on every
+                // error path (mirroring `push_batch`).
                 connection
                     .execute_batch("BEGIN TRANSACTION;")
                     .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
 
-                database_access::prune_account_balances(connection, &index)?;
-                connection
-                    .execute(
-                        "DELETE FROM blocks WHERE block_idx > 0 AND block_idx < ?",
-                        params![index],
-                    )
-                    .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                if let Err(e) = database_access::prune_account_balances(connection, &index)
+                    .and_then(|_| {
+                        connection
+                            .execute(
+                                "DELETE FROM blocks WHERE block_idx > 0 AND block_idx < ?",
+                                params![index],
+                            )
+                            .map(|_| ())
+                            .map_err(|e| BlockStoreError::Other(e.to_string()))
+                    })
+                {
+                    connection
+                        .execute_batch("ROLLBACK TRANSACTION;")
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+                    return Err(e);
+                }
 
                 connection
                     .execute_batch("COMMIT TRANSACTION;")
@@ -1410,10 +1424,20 @@ impl Blocks {
         let hb_owned = hb.clone();
         self.connection
             .call::<_, (), BlockStoreError>(move |con| {
+                // The connection is long-lived and reused, so any error path that
+                // returns without closing the transaction would leave it open and
+                // cause every subsequent write to fail with "cannot start a
+                // transaction within a transaction". Explicitly roll back on every
+                // error path (mirroring `push_batch`).
                 con.execute_batch("BEGIN TRANSACTION;")
                     .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
-                database_access::push_hashed_block(con, &hb_owned)?;
-                database_access::update_balance_book(con, &hb_owned)?;
+                if let Err(e) = database_access::push_hashed_block(con, &hb_owned)
+                    .and_then(|_| database_access::update_balance_book(con, &hb_owned))
+                {
+                    con.execute_batch("ROLLBACK TRANSACTION;")
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
+                    return Err(e);
+                }
                 con.execute_batch("COMMIT TRANSACTION;")
                     .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
                 Ok(())
