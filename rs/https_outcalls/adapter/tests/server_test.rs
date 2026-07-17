@@ -723,7 +723,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_connect_timeout() {
-        // Test that adapter hits connect timeout when connecting to unreachable host.
+        // Test that adapter hits connect timeout when connecting to a host that
+        // accepts no new connections (simulates an unreachable host).
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
             http_connect_timeout_secs: 1,
@@ -733,12 +734,50 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         };
 
-        let _url = start_server(CERT_INIT.get_or_init(generate_certs));
+        // Bind a loopback listener with a minimal backlog and never accept from
+        // it. Once its accept queue is full the kernel silently drops further
+        // SYNs (see `tcp_conn_request`/`sk_acceptq_is_full`), so a fresh TCP
+        // connect neither completes nor is refused: it hangs until the adapter's
+        // connect timeout fires. This exercises the connect-timeout path using
+        // only loopback, so the test does not require network egress. (A
+        // non-routable address like 10.255.255.1 only times out when a default
+        // route exists to black-hole the packets; without one the OS returns an
+        // immediate "network unreachable" error instead.)
+        let socket = TcpSocket::new_v4().unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let listener = socket.listen(1).unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Fill the accept queue with connections that are never accepted. We
+        // keep the successful ones alive so the queue stays full; the first
+        // connect that starts to hang tells us the queue is saturated.
+        //
+        // The loop is self-terminating (it breaks as soon as a connect hangs),
+        // so the bound is just a safety cap to avoid running away. With
+        // `listen(1)` the queue saturates after `backlog + 1 = 2` connects on
+        // Linux (`sk_acceptq_is_full`), so the 3rd connect already hangs; 16
+        // leaves a generous margin and is far above any real accept-queue
+        // capacity for this backlog.
+        let mut blockers = Vec::new();
+        for _ in 0..16 {
+            match tokio::time::timeout(
+                std::time::Duration::from_millis(200),
+                tokio::net::TcpStream::connect(addr),
+            )
+            .await
+            {
+                Ok(Ok(stream)) => blockers.push(stream),
+                // Either the connect started to hang (queue full) or errored;
+                // in both cases the queue is saturated, so stop filling it.
+                _ => break,
+            }
+        }
+
         let mut client = spawn_grpc_server(server_config);
 
-        // Non routable address that causes a connect timeout.
+        // Connecting to the saturated listener hangs and triggers the connect timeout.
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: "https://10.255.255.1".to_string(),
+            url: format!("https://{addr}"),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
