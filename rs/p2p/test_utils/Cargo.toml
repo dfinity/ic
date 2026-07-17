@@ -34,7 +34,7 @@ ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
-pin-project-lite = "0.2"
+pin-project-lite = { workspace = true }
 quinn = { workspace = true }
 quinn-udp = { workspace = true }
 rcgen = { workspace = true }
