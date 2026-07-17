@@ -23985,7 +23985,6 @@ name = "sync-with-released-nervous-system-wasms"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "backoff",
  "candid",
  "colored 2.2.0",
  "futures",

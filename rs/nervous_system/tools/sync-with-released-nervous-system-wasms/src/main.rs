@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow};
-use backoff::backoff::Backoff;
 use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
@@ -19,7 +18,6 @@ use std::env;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 12] = [
     ("registry", REGISTRY_CANISTER_ID),
@@ -186,110 +184,56 @@ fn github_api_client_and_token() -> Result<(Client, String)> {
     Ok((client, token))
 }
 
-fn github_api_backoff_policy() -> backoff::ExponentialBackoff {
-    backoff::ExponentialBackoff {
-        initial_interval: Duration::from_secs(1),
-        max_interval: Duration::from_secs(30),
-        multiplier: 2.0,
-        max_elapsed_time: Some(Duration::from_secs(120)),
-        ..Default::default()
+/// Maximum number of response-body bytes to include in an error/log message. The GitHub API can
+/// return large HTML error pages (e.g., during an outage); truncating keeps logs readable while
+/// still showing enough of the body to diagnose the failure.
+const MAX_LOGGED_BODY_LEN: usize = 2000;
+
+fn truncate_body(body: &str) -> String {
+    if body.len() <= MAX_LOGGED_BODY_LEN {
+        return body.to_string();
     }
+    let truncated: String = body.chars().take(MAX_LOGGED_BODY_LEN).collect();
+    format!(
+        "{truncated}... <truncated, full response body was {} bytes>",
+        body.len()
+    )
 }
 
-/// Sends a GET request to `url` (with bearer auth `token`), retrying with exponential backoff
-/// if the request fails to even complete (e.g., a network error) or if the GitHub API responds
-/// with a status code that is likely transient (a server error or rate limiting).
+/// Reads the body of `response` (which was fetched from `url`) and decodes it as JSON into `T`.
 ///
-/// A non-transient failure status (e.g., 404 for a tag with no corresponding release) is
-/// returned as-is (without retrying) so that callers can keep handling it themselves, exactly
-/// as before this function existed.
+/// If the response status is not a success, or if the body fails to decode as JSON (which is
+/// exactly what happens when the GitHub API responds with something other than the expected
+/// JSON, e.g., a rate-limiting or transient error page), this returns an error that includes the
+/// HTTP status code and the (possibly truncated) response body, so that a failure is diagnosable
+/// from the CI logs instead of just showing a generic "expected value at line 1 column 1" error.
 ///
-/// On every failed attempt, the status code and response body are logged via `eprintln!` so
-/// that unexpected GitHub API responses are diagnosable instead of silently crashing the whole
-/// sync (see the caller of this function for context on the bug this fixes).
-async fn get_with_retry(client: &Client, url: &str, token: &str) -> Result<Response> {
-    let mut backoff = github_api_backoff_policy();
-
-    loop {
-        match client.get(url).bearer_auth(token).send().await {
-            Ok(response) => {
-                let status = response.status();
-                let is_transient_failure = status.is_server_error() || status.as_u16() == 429;
-
-                if status.is_success() || !is_transient_failure {
-                    return Ok(response);
-                }
-
-                let body = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
-                eprintln!(
-                    "GET {url} failed with status {status}, will retry. Response body: {body}"
-                );
-            }
-            Err(e) => {
-                eprintln!("GET {url} failed with error, will retry: {e}");
-            }
-        }
-
-        match backoff.next_backoff() {
-            Some(duration) => tokio::time::sleep(duration).await,
-            None => {
-                return Err(anyhow!(
-                    "GET {url} failed after exhausting retries; giving up"
-                ));
-            }
-        }
-    }
-}
-
-/// Like [`get_with_retry`], but also expects and decodes a JSON response body of type `T`.
-/// A non-success status is treated as a (non-retried) hard error, since none of the call sites
-/// of this function expect (or can meaningfully recover from) a failure response.
-/// If the response has a success status but the body fails to decode as JSON (which has been
-/// observed to happen intermittently for the GitHub API), the whole request (including the
-/// status check above) is retried a few times with exponential backoff, logging the decoding
-/// error and the response body on each failed attempt.
-async fn get_json_with_retry<T: serde::de::DeserializeOwned>(
-    client: &Client,
+/// This function does not retry: the CI step that invokes this binary already retries the whole
+/// process several times with backoff, so retrying here as well would be redundant.
+async fn decode_json_response<T: serde::de::DeserializeOwned>(
     url: &str,
-    token: &str,
+    response: Response,
 ) -> Result<T> {
-    const MAX_JSON_DECODE_ATTEMPTS: u32 = 3;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
 
-    let mut last_decode_error = None;
-    for attempt in 1..=MAX_JSON_DECODE_ATTEMPTS {
-        let response = get_with_retry(client, url, token).await?;
-        let status = response.status();
-        let body = response
-            .text()
-            .await
-            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
-
-        if !status.is_success() {
-            return Err(anyhow!(
-                "GET {url} failed with status {status}. Response body: {body}"
-            ));
-        }
-
-        match serde_json::from_str::<T>(&body) {
-            Ok(value) => return Ok(value),
-            Err(e) => {
-                eprintln!(
-                    "GET {url} returned status {status} but the response body failed to decode \
-                     as JSON (attempt {attempt}/{MAX_JSON_DECODE_ATTEMPTS}): {e}. Response body: {body}"
-                );
-                last_decode_error = Some(anyhow!(
-                    "GET {url} returned a response body that could not be decoded as JSON: {e}"
-                ));
-            }
-        }
+    if !status.is_success() {
+        return Err(anyhow!(
+            "GET {url} failed with status {status}. Response body: {}",
+            truncate_body(&body)
+        ));
     }
 
-    Err(last_decode_error.unwrap_or_else(|| {
-        anyhow!("GET {url} failed to decode a JSON response after exhausting retries")
-    }))
+    serde_json::from_str(&body).map_err(|e| {
+        anyhow!(
+            "GET {url} returned status {status} but the response body failed to decode as JSON: \
+             {e}. Response body: {}",
+            truncate_body(&body)
+        )
+    })
 }
 
 // GitHub API types
@@ -318,14 +262,25 @@ impl Tag {
         );
 
         let (client, token) = github_api_client_and_token()?;
-        let res = get_with_retry(&client, &release_url, &token).await?;
+        let res = client.get(&release_url).bearer_auth(&token).send().await?;
+        let status = res.status();
 
         // not every tag must have a release so we do not report an error if it does not
-        if !res.status().is_success() {
+        if !status.is_success() {
             return Ok(None);
         }
 
-        let release: Release = res.json().await?;
+        let body = res
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+        let release: Release = serde_json::from_str(&body).map_err(|e| {
+            anyhow!(
+                "GET {release_url} returned status {status} but the response body failed to \
+                 decode as JSON: {e}. Response body: {}",
+                truncate_body(&body)
+            )
+        })?;
 
         if release.tag_name != self.name {
             return Err(anyhow!(
@@ -369,13 +324,18 @@ impl ReleaseAsset {
     async fn sha256(&self) -> Result<String> {
         let (client, token) = github_api_client_and_token()?;
 
-        let response = get_with_retry(&client, &self.browser_download_url, &token).await?;
-        if !response.status().is_success() {
-            let status = response.status();
+        let response = client
+            .get(&self.browser_download_url)
+            .bearer_auth(&token)
+            .send()
+            .await?;
+        let status = response.status();
+        if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
             return Err(anyhow!(
-                "Failed to download asset {}: status {status}. Response body: {body}",
-                self.browser_download_url
+                "Failed to download asset {}: status {status}. Response body: {}",
+                self.browser_download_url,
+                truncate_body(&body)
             ));
         }
         let asset_bytes = response.bytes().await?;
@@ -387,17 +347,25 @@ impl ReleaseAsset {
     async fn text(&self) -> Result<String> {
         let (client, token) = github_api_client_and_token()?;
 
-        let response = get_with_retry(&client, &self.browser_download_url, &token).await?;
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+        let response = client
+            .get(&self.browser_download_url)
+            .bearer_auth(&token)
+            .send()
+            .await?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read response body: {e}>"));
+        if !status.is_success() {
             return Err(anyhow!(
-                "Failed to download asset {}: status {status}. Response body: {body}",
-                self.browser_download_url
+                "Failed to download asset {}: status {status}. Response body: {}",
+                self.browser_download_url,
+                truncate_body(&body)
             ));
         }
 
-        Ok(response.text().await?)
+        Ok(body)
     }
 }
 
@@ -443,7 +411,8 @@ async fn get_mainnet_canister_release(
         let tags_url = format!(
             "{GITHUB_API}/repos/{canister_repository}/tags?per_page={tags_per_page}&page={page}"
         );
-        let tags: Vec<Tag> = get_json_with_retry(&client, &tags_url, &token).await?;
+        let response = client.get(&tags_url).bearer_auth(&token).send().await?;
+        let tags: Vec<Tag> = decode_json_response(&tags_url, response).await?;
 
         for tag in &tags {
             if let Some(ref tag_name_prefix) = canister_tag_name_prefix

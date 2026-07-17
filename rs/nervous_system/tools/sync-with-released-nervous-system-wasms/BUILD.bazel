@@ -22,7 +22,6 @@ rust_binary(
         "//rs/nns/constants",
         "//rs/types/base_types",
         "@crate_index//:anyhow",
-        "@crate_index//:backoff",
         "@crate_index//:candid",
         "@crate_index//:colored",
         "@crate_index//:futures",
