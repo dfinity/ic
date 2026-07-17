@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-arc-swap = "1.7.1"
+arc-swap = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
@@ -88,6 +88,6 @@ url = { workspace = true }
 x509-parser = { workspace = true }
 
 [dev-dependencies]
-indoc = "1.0"
+indoc = { workspace = true }
 tempfile = { workspace = true }
 tokio-tungstenite = "0.26"

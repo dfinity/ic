@@ -52,9 +52,9 @@ ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
 idna = { workspace = true }
-ipnet = "2.5.0"
+ipnet = { workspace = true }
 lazy_static = { workspace = true }
-leb128 = "0.2.4"
+leb128 = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
@@ -67,7 +67,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["custom"] }
+getrandom = { workspace = true, features = ["custom"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }

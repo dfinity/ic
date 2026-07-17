@@ -25,4 +25,4 @@ ic-cdk-management-canister = { workspace = true, optional = true }
 ic-management-canister-types = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4"
+hex = { workspace = true }

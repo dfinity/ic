@@ -41,7 +41,6 @@ leb128 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-cddl = "0.9.4"
 ciborium = { workspace = true }
 ic-agent = { workspace = true }
 ic-cbor = { workspace = true }
