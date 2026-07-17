@@ -109,6 +109,7 @@ rust_test(
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/replica_types",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/net",
         "@crate_index//:tempfile",
     ],
 )
