@@ -31,32 +31,6 @@ macro_rules! assert_near {
     };
 }
 
-/// Checks that an `Estimates` holds the expected two values, ignoring which one is
-/// labeled `source` and which is `destination`.
-///
-/// The `split-finder` solves a symmetric MILP: the two resulting canister groups are
-/// interchangeable, so which group is reported as `source` and which as `destination`
-/// is arbitrary and may flip across CBC solver versions/platforms. The test only cares
-/// that the split is near-symmetric, so we compare the values regardless of orientation.
-macro_rules! assert_eq_unordered {
-    ($actual:expr, $a:expr, $b:expr) => {
-        let actual = &$actual;
-        let got = (
-            actual.source.min(actual.destination),
-            actual.source.max(actual.destination),
-        );
-        let want = (std::cmp::min($a, $b), std::cmp::max($a, $b));
-        assert_eq!(
-            got,
-            want,
-            "{} = {actual:?} does not match the expected {{{}, {}}} (in either orientation)",
-            stringify!($actual),
-            $a,
-            $b,
-        );
-    };
-}
-
 #[test]
 /// Tests that three tools needed for subnet splitting are compatible with each other:
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
@@ -191,21 +165,61 @@ fn load_metrics_e2e_test() {
             .expect("Should succeed given valid inputs")
         );
 
-        assert_eq_unordered!(canisters_installed, 10, 10);
+        // The `split-finder` solves a symmetric MILP, so the two resulting canister groups are
+        // interchangeable: which one is reported as `source` and which as `destination` is
+        // arbitrary and may flip across CBC solver versions/platforms. We therefore accept either
+        // orientation, but require it to be *consistent* across all metrics. Rather than checking
+        // each metric's orientation in isolation (which would also accept a physically impossible
+        // per-metric mix), we track which of the two global labelings — original or fully swapped —
+        // remains viable, and assert at the end that at least one does.
+        //
+        // `orientation_unflipped` stays `true` only while every metric matches with
+        // `source == $a && destination == $b`; `orientation_flipped` only while every metric
+        // matches the swapped labeling. Symmetric metrics (`$a == $b`) satisfy both and thus do
+        // not constrain the orientation.
+        let mut orientation_unflipped = true;
+        let mut orientation_flipped = true;
+        macro_rules! assert_eq_oriented {
+            ($actual:expr, $a:expr, $b:expr) => {
+                let actual = &$actual;
+                let unflipped_ok = actual.source == $a && actual.destination == $b;
+                let flipped_ok = actual.source == $b && actual.destination == $a;
+                assert!(
+                    unflipped_ok || flipped_ok,
+                    "{} = {actual:?} does not match the expected {{{}, {}}} (in either orientation)",
+                    stringify!($actual),
+                    $a,
+                    $b,
+                );
+                orientation_unflipped &= unflipped_ok;
+                orientation_flipped &= flipped_ok;
+            };
+        }
+
+        assert_eq_oriented!(canisters_installed, 10, 10);
         // Accept up to 10% error. The precise values are not important here and they're very sensitive
         // to the changes to the replicated state / execution. It's mostly a sanity check that the
         // returned values are not too ridiculous and they might have to be updated once in a while.
-        // The source/destination orientation is not asserted (see `assert_eq_unordered`); the
-        // near-symmetry of the split means the `assert_near` checks pass in either orientation.
+        // These metrics are near-symmetric, so they do not pin down the orientation; the
+        // orientation is determined and checked for consistency by the exact `assert_eq_oriented`
+        // checks below, and these `assert_near` checks pass in either orientation.
         assert_near!(states_sizes_bytes.source, 4604164, 0.1);
         assert_near!(states_sizes_bytes.destination, 4604180, 0.1);
         assert_near!(instructions_executed.source, 8296137, 0.1);
         assert_near!(instructions_executed.destination, 8290079, 0.1);
-        assert_eq_unordered!(ingress_messages_executed, 20, 19);
-        assert_eq_unordered!(remote_subnet_messages_executed_lower_bound, 5, 5);
-        assert_eq_unordered!(local_subnet_messages_executed_upper_bound, 15, 13);
-        assert_eq_unordered!(http_outcalls_executed, 5, 5);
-        assert_eq_unordered!(heartbeats_and_global_timers_executed, 328, 366);
+        assert_eq_oriented!(ingress_messages_executed, 20, 19);
+        assert_eq_oriented!(remote_subnet_messages_executed_lower_bound, 5, 5);
+        assert_eq_oriented!(local_subnet_messages_executed_upper_bound, 15, 13);
+        assert_eq_oriented!(http_outcalls_executed, 5, 5);
+        assert_eq_oriented!(heartbeats_and_global_timers_executed, 328, 366);
+        // A single split cannot report some metrics in the original orientation and others in the
+        // swapped one, so require all the orientation-sensitive metrics to agree on one labeling.
+        assert!(
+            orientation_unflipped || orientation_flipped,
+            "The source/destination orientation is inconsistent across metrics: some match only \
+             the original labeling and others only the swapped labeling, which cannot arise from \
+             a single split."
+        );
         // Check if the split finder found a split satisfying the load constraints
         assert_near!(
             instructions_executed.source,
