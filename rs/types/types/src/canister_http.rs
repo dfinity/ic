@@ -1098,7 +1098,7 @@ impl CountBytes for CanisterHttpPaymentReceipt {
 ///
 /// Free subnets charge nothing, so the reported spend (used only for cost
 /// accounting) is not bounded by the per-replica allowance. To keep it from
-/// being arbitrarily large, it is instead bounded by this constant, which is a
+/// being arbitrarily large, it is instead bounded by this constant, which is
 /// above the largest per-replica cost the pay-as-you-go tracker can ever compute
 /// for a single outcall.
 ///
