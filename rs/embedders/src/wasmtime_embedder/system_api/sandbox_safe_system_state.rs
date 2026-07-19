@@ -393,16 +393,10 @@ impl SystemStateModifications {
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
         if !self.canister_log.is_empty() {
-            // TODO(DSM-11): Move this into append_delta_log() once there is only one of it.
             metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
         system_state
             .log_memory_store
-            .append_delta_log(&mut self.canister_log.clone());
-        // Keep the legacy `canister_log` store up to date so that checkpoints
-        // remain readable by replicas that predate the log memory store.
-        system_state
-            .canister_log
             .append_delta_log(&mut self.canister_log);
 
         // Verify total cycle change is not positive and update cycles balance.

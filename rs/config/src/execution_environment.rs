@@ -15,23 +15,8 @@ const REPLICATED_INTER_CANISTER_LOG_FETCH_FEATURE: FlagStatus = FlagStatus::Disa
 
 const FLEXIBLE_HTTP_REQUESTS_FEATURE: FlagStatus = FlagStatus::Disabled;
 
-// TODO(DSM-105): remove after the feature is enabled by default.
-pub const LOG_MEMORY_STORE_FEATURE_ENABLED: bool = true;
-pub const LOG_MEMORY_STORE_FEATURE: FlagStatus = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    FlagStatus::Enabled
-} else {
-    FlagStatus::Disabled
-};
-pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    4 * KIB
-} else {
-    0
-};
-pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-    4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT // header, index table, data region
-} else {
-    0
-};
+pub const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4 * KIB;
+pub const TEST_DEFAULT_LOG_MEMORY_USAGE: u64 = 4 * KIB + 4 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT; // header, index table, data region
 
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet

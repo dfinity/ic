@@ -361,9 +361,25 @@ impl LogMemoryStore {
     }
 
     /// Returns the canister log records, optionally filtered.
+    ///
+    /// The result is trimmed to fit within the maximum message response size
+    /// (`RESULT_MAX_SIZE`), so this must NOT be used (e.g. with a `None` filter)
+    /// to obtain the complete set of stored records: doing so silently drops
+    /// records once they exceed the response-size limit. Callers that need all
+    /// records must use [`Self::all_records_for_testing`] instead.
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer()
             .map(|rb| rb.records(filter))
+            .unwrap_or_default()
+    }
+
+    /// Returns all canister log records currently stored in the ring buffer.
+    ///
+    /// Unlike `records`, this does not trim the result to the maximum message
+    /// response size, so it is only intended for testing.
+    pub fn all_records_for_testing(&self) -> Vec<CanisterLogRecord> {
+        self.load_ring_buffer()
+            .map(|rb| rb.iter().collect())
             .unwrap_or_default()
     }
 
