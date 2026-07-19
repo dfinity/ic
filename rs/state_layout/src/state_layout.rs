@@ -2,6 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -158,6 +159,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -203,6 +208,7 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
     pub snapshot_visibility: SnapshotVisibility,
+    pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub next_canister_log_record_idx: u64,

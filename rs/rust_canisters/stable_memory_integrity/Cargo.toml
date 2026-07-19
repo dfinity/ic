@@ -15,7 +15,7 @@ ic-cdk = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 ic-types-cycles = { path = "../../types/cycles" }
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }
 proptest = { workspace = true }
 serde = { workspace = true }
 

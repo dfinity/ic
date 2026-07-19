@@ -449,11 +449,14 @@ mod sanity_check {
         // Advance time in the state machine to just before the next node provider
         // rewards distribution time.
         // Important to reach the exact moment when node provider rewards are distributed!
+        //
+        // It is possible that node provider rewards are already due, e.g. because this
+        // test runs shortly after they were supposed to have been distributed.
         let seconds_to_node_provider_reward_distribution = before_timestamp
-            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
-            - state_machine.get_time().as_secs_since_unix_epoch();
+            .saturating_add(NODE_PROVIDER_REWARD_PERIOD_SECONDS)
+            .saturating_sub(state_machine.get_time().as_secs_since_unix_epoch());
         state_machine.advance_time(std::time::Duration::from_secs(
-            seconds_to_node_provider_reward_distribution - 1,
+            seconds_to_node_provider_reward_distribution.saturating_sub(1),
         ));
 
         // Node provider rewards are minted by the governance heartbeat, but only once
@@ -470,7 +473,7 @@ mod sanity_check {
         // Advance time in the state machine by one month to ensure that voting rewards
         // are also distributed.
         state_machine.advance_time(std::time::Duration::from_secs(
-            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
+            ONE_MONTH_SECONDS.saturating_sub(seconds_to_node_provider_reward_distribution),
         ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));

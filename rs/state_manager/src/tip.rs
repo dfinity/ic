@@ -1203,6 +1203,9 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             last_executed_round: execution_state.last_executed_round,
             metadata: execution_state.metadata.clone(),
             binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
+            last_install_timestamp_nanos: execution_state
+                .last_install_timestamp
+                .map(|t| t.as_nanos_since_unix_epoch()),
             next_scheduled_method: execution_state.next_scheduled_method,
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
@@ -1282,6 +1285,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
+            status_visibility: canister_state.system_state.status_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
             next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),

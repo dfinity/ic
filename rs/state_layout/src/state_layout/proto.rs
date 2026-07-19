@@ -69,6 +69,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 &item.snapshot_visibility,
             )
             .into(),
+            status_visibility: pb_canister_state_bits::StatusVisibility::from(
+                &item.status_visibility,
+            )
+            .into(),
             log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
@@ -225,6 +229,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::snapshot_visibility",
             )
             .unwrap_or_default(),
+            status_visibility: try_from_option_field(
+                value.status_visibility,
+                "CanisterStateBits::status_visibility",
+            )
+            .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
             canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
@@ -268,6 +277,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
             binary_hash: item.binary_hash.to_vec(),
+            last_install_timestamp_nanos: item.last_install_timestamp_nanos,
             next_scheduled_method: Some(
                 pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
                     .into(),
@@ -302,6 +312,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
             binary_hash: WasmHash::from(binary_hash),
+            last_install_timestamp_nanos: value.last_install_timestamp_nanos,
             next_scheduled_method: match value.next_scheduled_method {
                 Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()

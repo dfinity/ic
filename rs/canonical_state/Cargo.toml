@@ -18,7 +18,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 ic-types-cycles = { path = "../types/cycles" }
-leb128 = "0.2.1"
+leb128 = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -40,7 +40,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 test-strategy = "0.4.0"
