@@ -1407,7 +1407,7 @@ fn validate_replicated_state_is_called() {
             metrics,
             "state_manager_tip_handler_request_duration_seconds",
         );
-        for (label, _stats) in request_duration.iter() {
+        for label in request_duration.keys() {
             if label.get("request") == Some(&"validate_replicated_state_and_finalize".to_string()) {
                 return true;
             }
@@ -7377,6 +7377,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
     canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
     canister.execution_state = Some(ExecutionState::new(
         WasmBinary::new(snapshot.execution_snapshot().wasm_binary.clone()),
+        None,
         ExportedFunctions::new(Default::default()),
         Memory::from(&snapshot.execution_snapshot().wasm_memory),
         Memory::from(&snapshot.execution_snapshot().stable_memory),

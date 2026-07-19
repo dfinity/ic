@@ -23,7 +23,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    CountBytes, Height, NodeId, RegistryVersion, ReplicaVersion,
+    CountBytes, Height, NodeId, NumberOfNodes, RegistryVersion, ReplicaVersion,
     batch::{
         CanisterHttpPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
         ValidationContext,
@@ -283,7 +283,7 @@ impl<'a> PayloadAssembler<'a> {
     }
 
     /// Builds a node's contribution to an aggregated proof: a default (zero
-    /// refund) payment receipt together with that node's signature over the
+    /// spent) payment receipt together with that node's signature over the
     /// corresponding receipt share.
     fn signature(
         &self,
@@ -303,7 +303,7 @@ impl<'a> PayloadAssembler<'a> {
     }
 
     /// Builds a single signed [`CanisterHttpResponseShare`] (receipt share with
-    /// a default, zero-refund payment receipt) for the given node.
+    /// a default, zero-spent payment receipt) for the given node.
     fn share(
         &self,
         signer: &Signer,
@@ -489,6 +489,8 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: None,
     }
 }
 

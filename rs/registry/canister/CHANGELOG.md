@@ -11,6 +11,31 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-07-17: Proposal 142937
+
+http://dashboard.internetcomputer.org/proposal/142937
+
+## Added
+
+* A new method: update_standard_engine_replica_version. As usual, only callable
+  by Governance, and so far, Governance does not call this, so this code is for
+  all practical purposes not active yet, but the entry point is visible in
+  registry.did now.
+
+
+# 2026-07-10: Proposal 142805
+
+http://dashboard.internetcomputer.org/proposal/142805
+
+## Changed
+
+* `delete_subnet` may now delete any non-System subnet, lifting the previous
+  restriction to `CloudEngine` subnets. Authorization by subnet type:
+  System subnets (e.g. the NNS) may never be deleted; the engine controller
+  canister may only delete `CloudEngine` subnets; governance may delete any
+  non-System subnet.
+
+
 # 2026-07-03: Proposal 142680
 
 http://dashboard.internetcomputer.org/proposal/142680

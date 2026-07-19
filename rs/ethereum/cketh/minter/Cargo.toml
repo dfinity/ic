@@ -23,15 +23,15 @@ evm_rpc_client = { workspace = true }
 evm_rpc_types = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-hex-literal = "0.4.1"
-ic-canister-log = "0.2.0"
+hex-literal = { workspace = true }
+ic-canister-log = { workspace = true }
 ic-canister-runtime = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-sha3 = { workspace = true }
 ic-stable-structures = { workspace = true }
@@ -44,20 +44,20 @@ num-bigint = { workspace = true }
 num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
 rlp = "0.5.2"
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 thiserror = { workspace = true }
-thousands = "0.2"
+thousands = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-ethers-core = "2.0.8"
+ethers-core = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
@@ -67,10 +67,11 @@ ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
-maplit = "1"
+maplit = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
-scraper = "0.17.1"
+reqwest = { workspace = true }
+scraper = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 

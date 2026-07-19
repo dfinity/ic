@@ -60,6 +60,7 @@ use ic_management_canister_types_private::{
 };
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
+    registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto,
     state::system_metadata::v1 as pb_metadata,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -142,6 +143,10 @@ pub struct CanisterHttpRequestContext {
     pub refund_status: RefundStatus,
     /// The registry version at which this request is being processed.
     pub registry_version: RegistryVersion,
+    /// The subnet size at the registry version above.
+    pub subnet_size: NumberOfNodes,
+    /// The cycles cost schedule at the registry version above.
+    pub cost_schedule: Option<CanisterCyclesCostSchedule>,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -304,6 +309,13 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             pricing_version: Some(pricing_message),
             refund_status: Some(refund_status),
             registry_version: context.registry_version.get(),
+            subnet_size: context.subnet_size.get(),
+            cost_schedule: context
+                .cost_schedule
+                .map(|cost_schedule| {
+                    i32::from(CanisterCyclesCostScheduleProto::from(cost_schedule))
+                })
+                .unwrap_or_default(),
         }
     }
 }
@@ -429,6 +441,17 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             pricing_version,
             refund_status,
             registry_version: RegistryVersion::from(context.registry_version),
+            subnet_size: NumberOfNodes::from(context.subnet_size),
+            cost_schedule: match CanisterCyclesCostScheduleProto::try_from(context.cost_schedule)
+                .map_err(|err| ProxyDecodeError::ValueOutOfRange {
+                    typ: "CanisterCyclesCostSchedule",
+                    err: format!(
+                        "Failed to convert CanisterCyclesCostSchedule for CanisterHttpRequestContext: {err:?}"
+                    ),
+                })? {
+                CanisterCyclesCostScheduleProto::Unspecified => None,
+                cost_schedule => Some(CanisterCyclesCostSchedule::from(cost_schedule)),
+            },
         })
     }
 }
@@ -620,6 +643,10 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
+            // TODO: populate with the actual subnet size this request is processed at.
+            subnet_size: NumberOfNodes::from(0),
+            // TODO: populate with the actual cost schedule this request is processed at.
+            cost_schedule: None,
         })
     }
 
@@ -726,6 +753,10 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
+            // TODO: populate with the actual subnet size this request is processed at.
+            subnet_size: NumberOfNodes::from(0),
+            // TODO: populate with the actual cost schedule this request is processed at.
+            cost_schedule: None,
         })
     }
 }
@@ -1058,15 +1089,16 @@ impl CountBytes for CanisterHttpResponseDivergence {
 #[derive(Clone, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpPaymentReceipt {
-    /// The amount of cycles, out of the per-replica allowance, that the
-    /// replica did not use and wishes to refund to the caller.
-    pub refund: Cycles,
+    /// The amount of cycles, out of the per-replica allowance, that the replica
+    /// has spent. The cycles to refund to the caller are derived downstream as
+    /// `per_replica_allowance - spent`.
+    pub spent: Cycles,
 }
 
 impl CountBytes for CanisterHttpPaymentReceipt {
     fn count_bytes(&self) -> usize {
-        let Self { refund } = self;
-        size_of_val(refund)
+        let Self { spent } = self;
+        size_of_val(spent)
     }
 }
 
@@ -1139,8 +1171,8 @@ impl CanisterHttpResponseReceipt {
         &self.metadata.replica_version
     }
 
-    pub fn refund(&self) -> Cycles {
-        self.payment_receipt.refund
+    pub fn spent(&self) -> Cycles {
+        self.payment_receipt.spent
     }
 }
 
@@ -1272,6 +1304,8 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         let expected_size = context.url.len()
@@ -1318,6 +1352,8 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         };
 
         let expected_size = context.url.len()
@@ -1398,10 +1434,65 @@ mod tests {
                     refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
                 },
                 registry_version: RegistryVersion::from(7),
+                subnet_size: NumberOfNodes::from(13),
+                cost_schedule: Some(CanisterCyclesCostSchedule::Free),
             };
 
             let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
             let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn canister_http_request_context_cost_schedule_proto_round_trip() {
+        let base = CanisterHttpRequestContext {
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "transform".to_string(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            url: "https://example.com".to_string(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication: Replication::FullyReplicated,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
+        };
+
+        for cost_schedule in [
+            None,
+            Some(CanisterCyclesCostSchedule::Normal),
+            Some(CanisterCyclesCostSchedule::Free),
+        ] {
+            let initial = CanisterHttpRequestContext {
+                cost_schedule,
+                ..base.clone()
+            };
+
+            let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+            // An unpopulated cost schedule must serialize to the proto default
+            // (`Unspecified` == 0) so that it stays non-existent in the proto
+            // representation for compatibility.
+            if cost_schedule.is_none() {
+                assert_eq!(pb.cost_schedule, 0);
+            }
+
+            let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+            // In particular, `None` must not decode back as `Some(Normal)`.
+            assert_eq!(round_trip.cost_schedule, cost_schedule);
             assert_eq!(initial, round_trip);
         }
     }

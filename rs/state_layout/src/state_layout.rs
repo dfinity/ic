@@ -2,6 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -158,6 +159,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -203,6 +208,7 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
     pub snapshot_visibility: SnapshotVisibility,
+    pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub next_canister_log_record_idx: u64,
@@ -1313,7 +1319,7 @@ impl StateLayout {
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
-            .join(format!("diverged_checkpoint_{}", &checkpoint_name));
+            .join(format!("diverged_checkpoint_{}", checkpoint_name));
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
@@ -1363,7 +1369,7 @@ impl StateLayout {
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
-        let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
+        let tmp_path = self.fs_tmp().join(format!("backup_{}", backup_name));
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),

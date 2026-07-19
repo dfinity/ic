@@ -375,8 +375,7 @@ fn canister_and_replica_logs() {
         .read_to_string(&mut stdout)
         .unwrap();
     assert!(stdout.contains(&format!(
-        "Finished executing install_code message on canister CanisterId({})",
-        canister_id
+        "Finished executing install_code message on canister {canister_id}"
     )));
 
     let mut stderr = String::new();
@@ -415,8 +414,7 @@ fn canister_and_no_replica_logs() {
         .read_to_string(&mut stdout)
         .unwrap();
     assert!(!stdout.contains(&format!(
-        "Finished executing install_code message on canister CanisterId({})",
-        canister_id
+        "Finished executing install_code message on canister {canister_id}"
     )));
 
     let mut stderr = String::new();
@@ -844,7 +842,7 @@ fn with_app_subnet_state_twice() {
 
 #[test]
 #[should_panic(
-    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }, CanisterIdRange { start: CanisterId(xp3jw-ot777-77777-aaaaa-cai), end: CanisterId(le5t5-53777-77777-p777q-cai) }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] for a different subnet kind NNS."
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: rwlgt-iiaaa-aaaaa-aaaaa-cai }, end: CanisterId { is_u64: true, id: renrk-eyaaa-aaaaa-aaada-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: qoctq-giaaa-aaaaa-aaaea-cai }, end: CanisterId { is_u64: true, id: n5n4y-3aaaa-aaaaa-p777q-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: xp3jw-ot777-77777-aaaaa-cai }, end: CanisterId { is_u64: true, id: le5t5-53777-77777-p777q-cai } }] for the subnet kind Application are not disjoint from the canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: rwlgt-iiaaa-aaaaa-aaaaa-cai }, end: CanisterId { is_u64: true, id: renrk-eyaaa-aaaaa-aaada-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: qoctq-giaaa-aaaaa-aaaea-cai }, end: CanisterId { is_u64: true, id: n5n4y-3aaaa-aaaaa-p777q-cai } }] for a different subnet kind NNS."
 )]
 fn with_nns_as_app_subnet_state() {
     let (_state_dir, nns_state_dir) = create_nns_subnet_state();
@@ -857,7 +855,7 @@ fn with_nns_as_app_subnet_state() {
 
 #[test]
 #[should_panic(
-    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId(xp3jw-ot777-77777-aaaaa-cai), end: CanisterId(le5t5-53777-77777-p777q-cai) }] do not contain the canister ranges [CanisterIdRange { start: CanisterId(rwlgt-iiaaa-aaaaa-aaaaa-cai), end: CanisterId(renrk-eyaaa-aaaaa-aaada-cai) }, CanisterIdRange { start: CanisterId(qoctq-giaaa-aaaaa-aaaea-cai), end: CanisterId(n5n4y-3aaaa-aaaaa-p777q-cai) }] expected for the subnet kind NNS."
+    expected = "The actual subnet canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: xp3jw-ot777-77777-aaaaa-cai }, end: CanisterId { is_u64: true, id: le5t5-53777-77777-p777q-cai } }] do not contain the canister ranges [CanisterIdRange { start: CanisterId { is_u64: true, id: rwlgt-iiaaa-aaaaa-aaaaa-cai }, end: CanisterId { is_u64: true, id: renrk-eyaaa-aaaaa-aaada-cai } }, CanisterIdRange { start: CanisterId { is_u64: true, id: qoctq-giaaa-aaaaa-aaaea-cai }, end: CanisterId { is_u64: true, id: n5n4y-3aaaa-aaaaa-p777q-cai } }] expected for the subnet kind NNS."
 )]
 fn with_app_as_nns_subnet_state() {
     let (_state_dir, app_state_dir) = create_app_subnet_state();
@@ -1016,6 +1014,8 @@ fn test_query_stats_live() {
 
         let query_stats = ic00
             .canister_status(&canister_id)
+            .as_update()
+            .call()
             .await
             .unwrap()
             .0
@@ -1036,6 +1036,8 @@ fn test_query_stats_live() {
         loop {
             let current_query_stats = ic00
                 .canister_status(&canister_id)
+                .as_update()
+                .call()
                 .await
                 .unwrap()
                 .0

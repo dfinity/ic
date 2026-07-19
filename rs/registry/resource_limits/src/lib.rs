@@ -35,6 +35,15 @@ impl ResourceLimits {
             .filter(|maximum_state_size| maximum_state_size.get() != 0)
             .unwrap_or(default)
     }
+
+    /// Returns the subnet heap delta capacity.
+    ///
+    /// This is `maximum_state_delta` if not `0`, otherwise the provided `default`.
+    pub fn maximum_state_delta_or(&self, default: NumBytes) -> NumBytes {
+        self.maximum_state_delta
+            .filter(|maximum_state_delta| maximum_state_delta.get() != 0)
+            .unwrap_or(default)
+    }
 }
 
 impl From<ResourceLimits> for pb::ResourceLimits {

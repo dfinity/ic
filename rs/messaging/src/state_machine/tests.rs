@@ -175,7 +175,6 @@ fn state_machine_populates_network_topology() {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -208,7 +207,6 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -638,7 +636,6 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             scheduler,
             demux,
             stream_builder,
-            Default::default(),
             log,
             message_routing_metrics,
         ));
@@ -829,7 +826,6 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -938,7 +934,6 @@ fn test_batch_time_impl(
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         );
