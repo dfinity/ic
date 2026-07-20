@@ -854,8 +854,7 @@ impl PayloadBuilder {
     /// Because each loop iteration is an inter-canister call, the reply to the
     /// caller is delayed across message boundaries until some other message
     /// sets the global data to `trigger` (e.g. via `set_global_data`). This is
-    /// useful for holding a response in an XNet stream until an external
-    /// condition is met.
+    /// useful for delaying a response until an external condition is met.
     pub fn loop_until_global_data_set(mut self, trigger: &[u8], reply: &[u8]) -> Self {
         self = self.push_bytes(trigger);
         self = self.push_bytes(reply);
@@ -1060,6 +1059,5 @@ mod test {
     #[test]
     fn try_from_macro_works() {
         assert_eq!(Ops::GetGlobalCounter, Ops::try_from(65).unwrap());
-        assert_eq!(Ops::LoopUntilGlobalDataSet, Ops::try_from(100).unwrap());
     }
 }

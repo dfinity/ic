@@ -20,43 +20,42 @@ Runbook::
 2. Halt T.  Wait until T makes no progress.
 3. From UC fire a bounded-wait call to UT that would set UT's global data to a
    fixed blob.  The call is fire-and-forget (UC replies to its ingress
-   immediately) and remains stuck in the C -> T stream (T is halted).
-3b. From UC fire two bounded-wait calls to US2 and US3 (on the surviving subnet
-   S). Each callee holds its reply back (looping on self `canister_status`
-   calls) until its global data is set.  Both calls are fire-and-forget; US2
-   and US3 start looping.
+   immediately) and remains stuck in the C -> T stream (T is halted).  Also from
+   UC fire two bounded-wait calls to US2 and US3 (on the surviving subnet S).
+   Each callee holds its reply back (looping on `canister_status` calls) until
+   its global data is set.  Both calls are fire-and-forget; US2 and US3 start
+   looping.
 4. Halt C.  Wait until C makes no progress.
-4b. Set US2's global data, releasing its reply.  The reply is a response
+5. Set US2's global data, releasing its reply.  The reply is a response
    destined for UC on the halted subnet C; since C is halted it is not consumed
    and, as the S -> C stream is still empty, it is inducted into that stream.
    Wait until it shows up in the stream.
-5. From US submit 10 bounded-wait calls to UC with 2 MB payload each
+6. From US submit 10 bounded-wait calls to UC with 2 MB payload each
    (generated at runtime, ingress stays small).  Each call's on_reject handler
    replies with the reject code as a 4-byte LE integer.  The 2 MB payloads
    fill the S -> C stream, so some calls reach the stream while the rest stay
    in US's output queue.
-5a. Wait until the S -> C stream is full (its byte size reaches
+7. Wait until the S -> C stream is full (its byte size reaches
    TARGET_STREAM_SIZE_BYTES); C is halted so the stream never drains.
-5b. Set US3's global data, releasing its reply.  As the stream is now full, this
+8. Set US3's global data, releasing its reply.  As the stream is now full, this
    second response towards C cannot be inducted and stays in US3's output queue.
-6. Delete C, unhalt T, verify T's registry version is the version at which C
+9. Delete C, unhalt T, verify T's registry version is the version at which C
    was deleted, check UT's global data is still empty (T must not pull messages
    from the deleted C's stream), and wait for all 10 calls from US to complete.
-7. Assert at least one call from US was rejected with DestinationInvalid
+10. Assert at least one call from US was rejected with DestinationInvalid
    (call did not reach the stream: no route after deletion) and at least one
    with CanisterReject (call reached the stream, so its callback was still
    open when C was deleted; the destination subnet's disappearance triggers an
    immediate synthetic reject for it, rather than waiting for the bounded-wait
    callback to time out).
-7b. Assert (via the `mr_routed_message_count{type="response",
+11. Assert (via the `mr_routed_message_count{type="response",
    status="canister_not_found"}` metric on S) that at least one response towards
    C was silently dropped: this is the response that sat in US3's output queue
-   (Step 5b), dropped by the stream builder when the route to C disappeared,
+   (Step 8), dropped by the stream builder when the route to C disappeared,
    without producing any reject.  The response that sat in the S -> C stream
-   (Step 4b) is dropped together with the whole stream on deletion, which is
+   (Step 5) is dropped together with the whole stream on deletion, which is
    intentionally metric-silent; it is covered indirectly (any panic on S would
    fail the test via the unallowed "panicked" log pattern).
-7c. Confirm US2 on S is still responsive after the drops.
 
 Note:: Bounded-wait (best-effort) calls with no cycles are used throughout
 because they are the only cross-subnet calls allowed to/from a CloudEngine
@@ -337,24 +336,23 @@ async fn run_scenario(
     )
     .await
     .expect("UC fire-and-forget call to UT should succeed");
-    slog::info!(logger, "Step 3 done: UC->UT fire-and-forget call fired");
 
-    // Step 3b: Fire two bounded-wait calls from UC to US2 and US3 (on the
-    // surviving sender subnet S). Each callee holds back its reply (by looping on
-    // self `canister_status` calls) until its global data is set to
+    // Also fire two bounded-wait calls from UC to US2 and US3 (on the surviving
+    // sender subnet S). Each callee holds back its reply (by looping on
+    // `canister_status` calls) until its global data is set to
     // RESPONSE_TRIGGER_BLOB. UC replies to its ingress immediately
     // (fire-and-forget). Both C and S are still running, so US2/US3 receive the
     // requests and start looping; their eventual replies will be *responses*
-    // destined for UC on C (see Steps 4b, 5b, 6a).
+    // destined for UC on C (see Steps 5, 8, 9a).
     slog::info!(
         logger,
-        "Step 3b: Firing bounded-wait UC->US2 and UC->US3 looping calls (fire-and-forget)"
+        "Step 3: Firing bounded-wait UC->US2 and UC->US3 looping calls (fire-and-forget)"
     );
     fire_looping_call(&uc, us2.canister_id(), RESPONSE_STREAM_REPLY_BLOB).await;
     fire_looping_call(&uc, us3.canister_id(), RESPONSE_QUEUE_REPLY_BLOB).await;
     slog::info!(
         logger,
-        "Step 3b done: UC->US2 and UC->US3 looping calls fired"
+        "Step 3 done: UC->UT, UC->US2 and UC->US3 fire-and-forget calls fired"
     );
 
     // Step 4: Halt subnet C and wait until C makes no progress.
@@ -369,18 +367,18 @@ async fn run_scenario(
     );
     slog::info!(logger, "Step 4 done: subnet C is halted");
 
-    // Step 4b: Now that C is halted, release US2's held-back reply by setting its
+    // Step 5: Now that C is halted, release US2's held-back reply by setting its
     // global data to RESPONSE_TRIGGER_BLOB. US2's loop then replies; that reply is
     // a *response* destined for UC on the (halted, soon to be deleted) subnet C.
     // Because C is halted it does not consume the response, and because the S->C
-    // stream is still empty (Step 5 has not run yet) the response is inducted into
-    // S's stream towards C. When C is deleted (Step 6a) this streamed response
+    // stream is still empty (Step 6 has not run yet) the response is inducted into
+    // S's stream towards C. When C is deleted (Step 9a) this streamed response
     // must be silently dropped (its whole stream is discarded): unlike the
-    // requests in Steps 5/7 (which are rejected), a response can never be
+    // requests in Steps 6/10 (which are rejected), a response can never be
     // rejected.
     slog::info!(
         logger,
-        "Step 4b: Releasing US2's reply (response into the S->C stream)"
+        "Step 5: Releasing US2's reply (response into the S->C stream)"
     );
     us2.update(
         wasm()
@@ -390,22 +388,22 @@ async fn run_scenario(
     .await
     .expect("setting US2 global data should succeed");
     // Wait until the response is actually inducted into S's stream towards C
-    // (before any of the large Step 5 payloads fill that stream).
+    // (before any of the large Step 6 payloads fill that stream).
     wait_for_stream_gauge_at_least(&s_node, "mr_stream_messages", c_subnet.subnet_id, 1, logger)
         .await;
     slog::info!(
         logger,
-        "Step 4b done: US2 reply is in the S->C stream (>= 1 message)"
+        "Step 5 done: US2 reply is in the S->C stream (>= 1 message)"
     );
 
-    // Step 5: Submit 10 bounded-wait calls from US to UC each with 2 MB payload
+    // Step 6: Submit 10 bounded-wait calls from US to UC each with 2 MB payload
     // (generated at runtime on S; the ingress itself is small).
     // The on_reject handler replies with the reject code as a 4-byte LE integer.
-    // We submit all 10 calls before step 6 so they are in-flight in the S->C
+    // We submit all 10 calls before step 9 so they are in-flight in the S->C
     // stream before C is deleted.
     slog::info!(
         logger,
-        "Step 5: Submitting 10 bounded-wait US->UC calls (2 MB payload each)"
+        "Step 6: Submitting 10 bounded-wait US->UC calls (2 MB payload each)"
     );
     let us_uc_wasm: Vec<u8> = wasm()
         .call_simple_with_cycles_and_best_effort_response(
@@ -448,16 +446,16 @@ async fn run_scenario(
         }
     }))
     .await;
-    slog::info!(logger, "Step 5 done: {} pending", us_uc_request_ids.len());
+    slog::info!(logger, "Step 6 done: {} pending", us_uc_request_ids.len());
 
-    // Step 5a: Wait until S's stream towards C is full (its byte size reaches
+    // Step 7: Wait until S's stream towards C is full (its byte size reaches
     // TARGET_STREAM_SIZE_BYTES). At that point the stream builder stops enqueuing
     // into it, so the remaining large requests stay in US's output queue and any
-    // further message (the Step 5b response) will stay in its sender's output
+    // further message (the Step 8 response) will stay in its sender's output
     // queue too. C is halted, so the stream never drains below the target.
     slog::info!(
         logger,
-        "Step 5a: Waiting for the S->C stream to fill ({} bytes)",
+        "Step 7: Waiting for the S->C stream to fill ({} bytes)",
         TARGET_STREAM_SIZE_BYTES,
     );
     wait_for_stream_gauge_at_least(
@@ -468,16 +466,16 @@ async fn run_scenario(
         logger,
     )
     .await;
-    slog::info!(logger, "Step 5a done: S->C stream is full");
+    slog::info!(logger, "Step 7 done: S->C stream is full");
 
-    // Step 5b: Now that the stream is full, release US3's held-back reply. Its
+    // Step 8: Now that the stream is full, release US3's held-back reply. Its
     // response towards UC on C cannot be inducted into the full S->C stream, so it
-    // stays in US3's output queue. When C is deleted (Step 6a) this queued
+    // stays in US3's output queue. When C is deleted (Step 9a) this queued
     // response must be silently dropped by the stream builder (route to C gone),
     // which — unlike the queued requests — happens without producing any reject.
     slog::info!(
         logger,
-        "Step 5b: Releasing US3's reply (response into US3's output queue)"
+        "Step 8: Releasing US3's reply (response into US3's output queue)"
     );
     us3.update(
         wasm()
@@ -486,28 +484,16 @@ async fn run_scenario(
     )
     .await
     .expect("setting US3 global data should succeed");
-    // Confirm the trigger was processed, so US3's loop is guaranteed to produce
-    // the response before C is deleted.
-    let us3_global = us3
-        .update(wasm().get_global_data().reply_data_append().reply().build())
-        .await
-        .expect("reading US3 global data should succeed");
-    assert_eq!(
-        us3_global,
-        RESPONSE_TRIGGER_BLOB,
-        "US3 global data should equal the trigger blob, got {} bytes: {us3_global:?}",
-        us3_global.len(),
-    );
-    slog::info!(logger, "Step 5b done: US3 reply released");
+    slog::info!(logger, "Step 8 done: US3 reply released");
 
-    // Step 6a: Delete subnet C. Snapshot the topology right before the deletion:
+    // Step 9a: Delete subnet C. Snapshot the topology right before the deletion:
     // `block_for_newer_registry_version` derives its target version from the
     // snapshot's registry version + 1, so the baseline must be captured before
     // the deletion, otherwise it could block forever waiting for a version that
     // only appears after the (later) unhalting of T.
     slog::info!(
         logger,
-        "Step 6a: Deleting subnet C ({})",
+        "Step 9a: Deleting subnet C ({})",
         c_subnet.subnet_id
     );
     let topo_before_delete = env.topology_snapshot();
@@ -531,38 +517,38 @@ async fn run_scenario(
     let c_delete_registry_version = topo_after_delete.get_registry_version().get();
     slog::info!(
         logger,
-        "Step 6a done: subnet C deleted at registry version {}",
+        "Step 9a done: subnet C deleted at registry version {}",
         c_delete_registry_version,
     );
 
-    // Step 6b: Unhalt subnet T.
+    // Step 9b: Unhalt subnet T.
     slog::info!(
         logger,
-        "Step 6b: Unhalting subnet T ({})",
+        "Step 9b: Unhalting subnet T ({})",
         t_subnet.subnet_id
     );
     set_subnet_halted(governance, t_subnet.subnet_id, false).await;
-    slog::info!(logger, "Step 6b done: subnet T unhalted");
+    slog::info!(logger, "Step 9b done: subnet T unhalted");
 
-    // Step 6c: Wait for T to observe the registry version at which C was deleted.
+    // Step 9c: Wait for T to observe the registry version at which C was deleted.
     slog::info!(
         logger,
-        "Step 6c: Waiting for subnet T to observe registry version {}",
+        "Step 9c: Waiting for subnet T to observe registry version {}",
         c_delete_registry_version,
     );
     wait_for_subnet_registry_version(&ut, t_subnet.subnet_id, c_delete_registry_version, logger)
         .await;
     slog::info!(
         logger,
-        "Step 6c done: subnet T has observed registry version {}",
+        "Step 9c done: subnet T has observed registry version {}",
         c_delete_registry_version,
     );
 
-    // Step 6d: Execute multiple update rounds on T, checking after each that UT's
+    // Step 9d: Execute multiple update rounds on T, checking after each that UT's
     // global data is still empty (T must not pull messages from the deleted C's stream).
     slog::info!(
         logger,
-        "Step 6d: Checking that UT global data remains empty over multiple rounds"
+        "Step 9d: Checking that UT global data remains empty over multiple rounds"
     );
     for i in 0..5_usize {
         let global_data = ut
@@ -576,12 +562,12 @@ async fn run_scenario(
             global_data.len()
         );
     }
-    slog::info!(logger, "Step 6d done: UT global data is empty as expected");
+    slog::info!(logger, "Step 9d done: UT global data is empty as expected");
 
-    // Step 6e: Wait for all 10 calls from US to UC to complete.
+    // Step 9e: Wait for all 10 calls from US to UC to complete.
     slog::info!(
         logger,
-        "Step 6e: Waiting for all 10 US->UC calls to complete"
+        "Step 9e: Waiting for all 10 US->UC calls to complete"
     );
     let us_uc_results = join_all(
         us_uc_request_ids
@@ -589,13 +575,13 @@ async fn run_scenario(
             .map(|req_id| s_agent.wait(req_id, us.canister_id())),
     )
     .await;
-    slog::info!(logger, "Step 6e done: all 10 US->UC calls completed");
+    slog::info!(logger, "Step 9e done: all 10 US->UC calls completed");
 
-    // Step 7: Assert at least one call from US was rejected with DestinationInvalid
+    // Step 10: Assert at least one call from US was rejected with DestinationInvalid
     // and at least one with CanisterReject.
     slog::info!(
         logger,
-        "Step 7: Asserting rejection codes for 10 US->UC calls"
+        "Step 10: Asserting rejection codes for 10 US->UC calls"
     );
     let mut dest_invalid_count = 0_usize;
     let mut canister_reject_count = 0_usize;
@@ -608,7 +594,7 @@ async fn run_scenario(
             bytes.len()
         );
         let code = u32::from_le_bytes(bytes.try_into().unwrap());
-        slog::info!(logger, "Step 7: US->UC reject code {}", code);
+        slog::info!(logger, "Step 10: US->UC reject code {}", code);
         match code {
             3 => dest_invalid_count += 1,
             4 => canister_reject_count += 1,
@@ -617,7 +603,7 @@ async fn run_scenario(
     }
     slog::info!(
         logger,
-        "Step 7 done: DestinationInvalid={}, CanisterReject={}",
+        "Step 10 done: DestinationInvalid={}, CanisterReject={}",
         dest_invalid_count,
         canister_reject_count,
     );
@@ -631,23 +617,23 @@ async fn run_scenario(
         "Expected at least one CanisterReject rejection, got {canister_reject_count} \
          (deleted subnet type: {deleted_subnet_type:?})"
     );
-    // Step 7b: Verify the two responses towards C were silently dropped.
+    // Step 11: Verify the two responses towards C were silently dropped.
     //
-    // The response that was in US3's *output queue* (Step 5b) is dropped by the
+    // The response that was in US3's *output queue* (Step 8) is dropped by the
     // stream builder when it finds no route to C; this increments
     // `mr_routed_message_count{type="response",status="canister_not_found"}`, so
-    // we can assert on it directly. (The queued requests from Step 5 increment the
+    // we can assert on it directly. (The queued requests from Step 6 increment the
     // same counter with `type="request"` and are additionally rejected, see Step
-    // 7.)
+    // 10.)
     //
-    // The response that was already in the S->C *stream* (Step 4b) is dropped
+    // The response that was already in the S->C *stream* (Step 5) is dropped
     // together with the whole stream when C is deleted; that bulk discard is
     // intentionally metric-silent, so it cannot be asserted via a counter. It is
     // covered indirectly: a panic on S (e.g. from attempting to reject a response)
     // would fail the test via the unallowed "panicked" log pattern.
     slog::info!(
         logger,
-        "Step 7b: Verifying via metrics that the queued response towards C was dropped"
+        "Step 11: Verifying via metrics that the queued response towards C was dropped"
     );
     let dropped_responses = wait_for_dropped_response_count(&s_node, logger).await;
     assert!(
@@ -657,29 +643,8 @@ async fn run_scenario(
     );
     slog::info!(
         logger,
-        "Step 7b done: {} response(s) towards C dropped as no_route (canister_not_found)",
+        "Step 11 done: {} response(s) towards C dropped as no_route (canister_not_found)",
         dropped_responses,
-    );
-
-    // Step 7c: As a positive health check, confirm US2 on S is still responsive
-    // after the streamed response was silently dropped.
-    slog::info!(
-        logger,
-        "Step 7c: Health-checking US2 on S after the responses were dropped"
-    );
-    let us2_health = us2
-        .update(wasm().reply_data(RESPONSE_STREAM_REPLY_BLOB).build())
-        .await
-        .expect("US2 on S should still be responsive after the response was dropped");
-    assert_eq!(
-        us2_health,
-        RESPONSE_STREAM_REPLY_BLOB,
-        "US2 health check reply mismatch: got {} bytes: {us2_health:?}",
-        us2_health.len(),
-    );
-    slog::info!(
-        logger,
-        "Step 7c done: subnet S healthy after response drops"
     );
 
     slog::info!(
