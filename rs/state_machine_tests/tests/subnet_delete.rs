@@ -488,9 +488,13 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
         .collect();
 
     // Step 7: Execute rounds on S until all calls have been performed by US (i.e.
-    // all ingress messages are being processed, waiting for their callbacks). At
-    // this point the S -> C stream has filled up to TARGET_STREAM_SIZE_BYTES and
-    // the remaining calls stay in US's output queue.
+    // all ingress messages are being processed, waiting for their callbacks). Each
+    // round the stream builder moves queued messages into the S -> C stream but
+    // stops adding to it once its byte size reaches the soft limit
+    // TARGET_STREAM_SIZE_BYTES (the check is `count_bytes() >=
+    // TARGET_STREAM_SIZE_BYTES`, evaluated before each message, so the last one may
+    // push it slightly over). By the time all calls are processing the stream is
+    // full to that target, so the remaining calls stay in US's output queue.
     let mut all_processing = false;
     for _ in 0..50 {
         s.execute_round();

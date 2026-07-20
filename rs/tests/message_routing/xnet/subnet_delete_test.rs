@@ -448,11 +448,16 @@ async fn run_scenario(
     .await;
     slog::info!(logger, "Step 6 done: {} pending", us_uc_request_ids.len());
 
-    // Step 7: Wait until S's stream towards C is full (its byte size reaches
-    // TARGET_STREAM_SIZE_BYTES). At that point the stream builder stops enqueuing
-    // into it, so the remaining large requests stay in US's output queue and any
-    // further message (the Step 8 response) will stay in its sender's output
-    // queue too. C is halted, so the stream never drains below the target.
+    // Step 7: Wait until S's stream towards C is full. Each round the stream
+    // builder moves queued messages into the S -> C stream, but stops adding to it
+    // once its byte size reaches the soft limit TARGET_STREAM_SIZE_BYTES (the
+    // check is `count_bytes() >= TARGET_STREAM_SIZE_BYTES`, evaluated before each
+    // message, so the last one may push it slightly over). We detect this via the
+    // `mr_stream_bytes` gauge. Once the stream is full the remaining large
+    // requests stay in US's output queue, and any further message (the Step 8
+    // response) will stay in its sender's output queue too. C is halted, so it
+    // never garbage-collects the stream and the stream never drains below the
+    // target.
     slog::info!(
         logger,
         "Step 7: Waiting for the S->C stream to fill ({} bytes)",
