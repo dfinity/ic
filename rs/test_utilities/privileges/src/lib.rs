@@ -58,6 +58,10 @@ mod imp {
     /// * Temporary directories must be derived from `TMPDIR`/`TEST_TMPDIR` (as
     ///   `tempfile` and `ic_test_utilities_tmpdir::tmpdir` are); the child points
     ///   both at a `nobody`-owned base with mode `0700`, prepared by the parent.
+    ///   The parent also grants others-execute on the base's ancestor
+    ///   directories where missing, so `nobody` can traverse into it even when
+    ///   the temp root is not world-traversable (as under some sandboxed
+    ///   remote-execution setups); see `TmpDirRedirect::prepare`.
     /// * The parent test process may be multi-threaded, and after `fork` the
     ///   child must not wait on locks that another parent thread held at fork
     ///   time. The temp base and the `putenv(3)` strings are therefore prepared
@@ -103,6 +107,19 @@ mod imp {
             chown(&base, Some(NOBODY), Some(NOBODY)).expect("failed to chown the nobody temp base");
             std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700))
                 .expect("failed to chmod the nobody temp base");
+            // The child creates its temporary files under `base` as `nobody`,
+            // which requires *search* (execute) permission on every ancestor
+            // directory. Some sandboxed remote-execution setups leave the temp
+            // root not world-traversable: Namespace's
+            // `namespace_action_isolation=sandboxed` runs the action as uid 0
+            // with `TMPDIR` unset, so `std::env::temp_dir()` is a root-owned,
+            // non-traversable `/tmp` that `nobody` cannot descend into. As root
+            // (in the parent) grant others-execute on each ancestor that lacks
+            // it — the minimal relaxation permitting traversal, without exposing
+            // directory listings or write access (the base itself stays `0700`
+            // `nobody`). The sandbox is ephemeral and per-action, so this has no
+            // effect beyond the running test.
+            grant_ancestor_traversal(&base);
             let entry = |name: &str| {
                 CString::new(format!("{name}={}", base.display()))
                     .expect("temp base path contains an interior NUL byte")
@@ -130,6 +147,34 @@ mod imp {
                 }
             }
             Ok(())
+        }
+    }
+
+    /// Adds others-execute (search) permission to every ancestor directory of
+    /// `dir`, so the unprivileged `nobody` child can traverse the path down to
+    /// it. Only the execute bit is added, and only to directories that lack it,
+    /// so no directory becomes listable or writable by others. Runs as root in
+    /// the parent; see the call site in `TmpDirRedirect::prepare` for why this
+    /// is needed under sandboxed remote execution.
+    fn grant_ancestor_traversal(dir: &std::path::Path) {
+        // `ancestors()` yields `dir` first; skip it (it is already owned by
+        // `nobody`) and walk its parent, grandparent, ... up to the root.
+        for ancestor in dir.ancestors().skip(1) {
+            let Ok(metadata) = std::fs::metadata(ancestor) else {
+                // Unreadable ancestor (e.g. we walked above the mount root):
+                // nothing to relax here.
+                continue;
+            };
+            let mode = metadata.permissions().mode();
+            if mode & 0o001 == 0 {
+                std::fs::set_permissions(ancestor, std::fs::Permissions::from_mode(mode | 0o001))
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "failed to make {} traversable for nobody: {err}",
+                            ancestor.display()
+                        )
+                    });
+            }
         }
     }
 
