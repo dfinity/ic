@@ -3673,6 +3673,49 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
 }
 
 #[test]
+fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
+    // System subnets charge nothing for HTTP outcalls despite a normal cost
+    // schedule, so flexible outcalls are available there by default (without the
+    // feature flag) and fall back to legacy pricing.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        // A system subnet keeps the default (normal) cost schedule but charges
+        // zero for HTTP outcalls; the feature flag is left disabled.
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    // Routed through legacy pricing with flexible replication, just like a
+    // free-cost-schedule subnet.
+    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert!(
+        matches!(
+            http_request_context.replication,
+            Replication::Flexible { .. }
+        ),
+        "expected flexible replication, got {:?}",
+        http_request_context.replication
+    );
+}
+
+#[test]
 fn execute_flexible_canister_http_request_explicit_replication() {
     // An explicit replication request with total_requests < subnet_size yields a
     // committee smaller than the subnet, so the per-replica allowance is split

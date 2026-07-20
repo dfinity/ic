@@ -1245,16 +1245,21 @@ impl ExecutionEnvironment {
                 // pricing model. That model is gated behind the
                 // `flexible_http_requests` feature flag and, once enabled,
                 // applies to every subnet. Until then, flexible outcalls are
-                // still offered on free subnets, where pricing is moot, by
-                // falling back to the legacy (charge-everything-up-front)
-                // pricing. On paying subnets they remain unavailable until the
-                // flag is enabled.
+                // still offered on subnets where HTTP outcalls are free (pricing
+                // is moot), by falling back to the legacy
+                // (charge-everything-up-front) pricing. That covers subnets on a
+                // free cost schedule as well as system subnets, which charge
+                // zero for HTTP outcalls despite a normal cost schedule. On
+                // paying subnets flexible outcalls remain unavailable until the
+                // flag is enabled, since legacy pricing would overcharge them
+                // (it charges the maximum response size up front).
+                let http_outcalls_are_free = state.get_own_cost_schedule()
+                    == CanisterCyclesCostSchedule::Free
+                    || self.own_subnet_type == SubnetType::System;
                 let pricing_version = match self.config.flexible_http_requests {
                     FlagStatus::Enabled => Some(PricingVersion::PayAsYouGo),
-                    FlagStatus::Disabled => match state.get_own_cost_schedule() {
-                        CanisterCyclesCostSchedule::Free => Some(PricingVersion::Legacy),
-                        CanisterCyclesCostSchedule::Normal => None,
-                    },
+                    FlagStatus::Disabled if http_outcalls_are_free => Some(PricingVersion::Legacy),
+                    FlagStatus::Disabled => None,
                 };
                 match pricing_version {
                     None => ExecuteSubnetMessageResult::Finished {

@@ -84,6 +84,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_min_responses_fit_max_would_exceed))
                 .add_test(systest!(test_single_large_response_ok))
                 .add_test(systest!(test_fire_and_forget))
+                // System subnet (free for outcalls despite a normal cost schedule).
+                .add_test(systest!(test_system_subnet_outcall))
                 // Transform behavior.
                 .add_test(systest!(test_transform_appends_context))
                 .add_test(systest!(test_transform_sets_status_and_headers))
@@ -132,6 +134,20 @@ fn app_runtime(env: &TestEnv) -> Runtime {
 /// Returns the proxy canister installed during setup.
 fn proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a> {
     let principal_id = get_proxy_canister_id(env);
+    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
+/// Returns a runtime for the (single) system-subnet node.
+fn system_runtime(env: &TestEnv) -> Runtime {
+    let node = get_system_subnet_node_snapshots(env)
+        .next()
+        .expect("there is no system-subnet node");
+    get_runtime_from_node(&node)
+}
+
+/// Returns the proxy canister installed on the system subnet during setup.
+fn system_proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a> {
+    let principal_id = get_system_proxy_canister_id(env);
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
 }
 
@@ -1323,6 +1339,40 @@ fn test_too_many_rejects_composite_transform(env: TestEnv) {
             Ok(())
         },
     );
+}
+
+// ---------------------------------------------------------------------------
+// System subnet
+// ---------------------------------------------------------------------------
+
+/// Flexible outcalls work on a system subnet too: system subnets are free for
+/// HTTP outcalls (despite a normal cost schedule), so the request is routed
+/// through legacy pricing. The system subnet has a single node, so exactly one
+/// response comes back.
+fn test_system_subnet_outcall(env: TestEnv) {
+    let logger = env.logger();
+    let runtime = system_runtime(&env);
+    let proxy = system_proxy_canister(&env, &runtime);
+
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            "flexible outcall on a system subnet succeeds".to_string(),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let args = get_args(format!("{}/ascii/system", webserver_base(&env)));
+                let result = send_flexible(&proxy, args, CYCLES).await?;
+                // A single-node subnet returns exactly one response.
+                let payloads = expect_ok(result, 1, 1)?;
+                expect_all_status(&payloads, 200)?;
+                expect_all_bodies(&payloads, b"system")?;
+                Ok(())
+            }
+        )
+        .await
+        .expect("flexible outcall on the system subnet did not succeed");
+    });
 }
 
 // ---------------------------------------------------------------------------
