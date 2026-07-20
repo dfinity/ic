@@ -9736,8 +9736,8 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "hpke",
- "rand 0.9.3",
- "rand_chacha 0.9.0",
+ "rand 0.8.6",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
