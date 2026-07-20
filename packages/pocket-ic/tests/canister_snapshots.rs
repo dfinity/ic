@@ -106,7 +106,8 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
     // Rewrite the URL host from `localhost` to `127.0.0.1` since some
     // sandboxed environments (e.g. Namespace RBE) cannot resolve `localhost`
     // (the HTTP gateway binds to `127.0.0.1` and accepts it as a host).
-    url.set_host(Some("127.0.0.1")).unwrap();
+    url.set_host(Some("127.0.0.1"))
+        .expect("Failed to rewrite PocketIC URL host to 127.0.0.1");
 
     // Create a home directory for dfx (that contains a configuration file)
     // and a snapshot directory for the snapshot downloaded using dfx.
