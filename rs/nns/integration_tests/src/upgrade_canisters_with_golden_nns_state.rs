@@ -14,6 +14,7 @@ use ic_nns_constants::{
 use ic_nns_governance_api::{MonthlyNodeProviderRewards, Vote};
 use ic_nns_test_utils::state_test_helpers::{
     nns_get_most_recent_monthly_node_provider_rewards, scrape_metrics,
+    try_nns_get_most_recent_monthly_node_provider_rewards,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -23,7 +24,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{ErrorCode, StateMachine};
 use icp_ledger::Tokens;
 use serde::Deserialize;
 use std::{
@@ -503,11 +504,18 @@ mod sanity_check {
             state_machine.tick();
 
             if (tick + 1) % POLL_EVERY_TICKS == 0 {
-                let timestamp = nns_get_most_recent_monthly_node_provider_rewards(state_machine)
-                    .unwrap()
-                    .timestamp;
-                if timestamp > before_timestamp {
-                    return;
+                match try_nns_get_most_recent_monthly_node_provider_rewards(state_machine) {
+                    Ok(rewards) => {
+                        if rewards.unwrap().timestamp > before_timestamp {
+                            return;
+                        }
+                    }
+                    // Governance can be transiently stopped (e.g. while this test's many
+                    // ticks race a canister upgrade in progress); just keep polling.
+                    Err(err) if err.code() == ErrorCode::CanisterStopped => {}
+                    Err(err) => {
+                        panic!("Unexpected error while polling for node provider rewards: {err:#?}")
+                    }
                 }
             }
         }
