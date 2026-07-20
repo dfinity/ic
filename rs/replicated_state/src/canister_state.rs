@@ -717,10 +717,10 @@ impl CanisterState {
     ///
     /// Fails with [`SubnetAvailableMemoryError::InsufficientMemory`] if the
     /// subnet does not have enough available execution memory to account for the
-    /// additional canister history. Callers operate on a clone of the
-    /// `CanisterState` that is only committed to the replicated state when the
-    /// operation succeeds, so the canister change recorded in the clone is
-    /// discarded when the caller propagates the error.
+    /// additional canister history.
+    /// Note: the canister history entry is recorded before charging subnet memory.
+    /// On `Err`, the `CanisterState` is already mutated; callers must roll back
+    /// (e.g. operate on a clone or restore a snapshot) before propagating the error.
     pub fn add_canister_change(
         &mut self,
         subnet_available_memory: &mut SubnetAvailableMemory,
