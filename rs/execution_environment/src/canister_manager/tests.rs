@@ -3095,90 +3095,6 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
 }
 
 #[test]
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn uninstall_code_by_governance_clears_history_when_subnet_memory_exhausted() {
-    use crate::util::GOVERNANCE_CANISTER_ID;
-
-    let canister_manager = CanisterManagerBuilder::default().build();
-    let mut state = ReplicatedStateBuilder::new()
-        .with_canister(
-            CanisterStateBuilder::new()
-                .with_canister_id(canister_test_id(0))
-                // Give the canister a random wasm so that it has an execution state.
-                .with_wasm(vec![1, 2, 3])
-                .build(),
-        )
-        .build();
-
-    // Give the canister a non-empty canister history so that we can observe it
-    // being dropped on uninstall.
-    let time = state.time();
-    state
-        .canister_state_make_mut(&canister_test_id(0))
-        .unwrap()
-        .system_state
-        .add_canister_change(
-            time,
-            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
-            CanisterChangeDetails::CanisterCodeUninstall,
-        );
-    let canister = state.canister_state(&canister_test_id(0)).unwrap();
-    assert_ne!(canister.canister_history_memory_usage().get(), 0);
-    let memory_allocated_before = canister.memory_allocated_bytes();
-
-    // Make the subnet available execution memory too low to account for the
-    // `CanisterCodeUninstall` change recorded by uninstalling, even after the
-    // memory freed by dropping the execution state is credited back. Since the
-    // uninstall can free at most `memory_allocated_before` bytes, starting one
-    // byte below `size_of::<CanisterChange>() - memory_allocated_before`
-    // guarantees the change cannot be accounted for.
-    let uninstall_change_bytes = size_of::<CanisterChange>() as i64;
-    let subnet_available_memory_before =
-        uninstall_change_bytes - 1 - memory_allocated_before.get() as i64;
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: SubnetAvailableMemory::new_for_testing(
-            subnet_available_memory_before,
-            i64::MAX / 2,
-            i64::MAX / 2,
-        ),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
-
-    // The NNS governance canister can uninstall the canister even though the
-    // subnet cannot account for the additional canister history entry.
-    let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
-    canister_manager
-        .uninstall_code(
-            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
-            canister,
-            &mut round_limits,
-            None,
-            time,
-        )
-        .unwrap();
-
-    let canister = state.canister_state(&canister_test_id(0)).unwrap();
-    // The code was uninstalled and the canister history was dropped (rather than a
-    // `CanisterCodeUninstall` change being recorded, which would have required
-    // subnet available execution memory).
-    assert_eq!(canister.execution_state, None);
-    assert_eq!(canister.canister_history_memory_usage().get(), 0);
-
-    // The subnet available execution memory was credited with all the memory
-    // freed by the uninstall, including the dropped canister history: it changed
-    // by exactly the decrease in the canister's allocated memory.
-    let memory_allocated_after = canister.memory_allocated_bytes();
-    assert_eq!(
-        round_limits.subnet_available_memory.get_execution_memory(),
-        subnet_available_memory_before + memory_allocated_before.get() as i64
-            - memory_allocated_after.get() as i64
-    );
-}
-
-#[test]
 fn max_number_of_canisters_is_respected_when_creating_canisters() {
     let max_number_of_canisters = 3;
     let mut test = ExecutionTestBuilder::new()
@@ -5080,23 +4996,33 @@ fn uninstall_code_fails_if_subnet_cannot_account_for_canister_history() {
     test.install_canister(canister_id, MINIMAL_WASM.to_vec())
         .unwrap();
 
-    // Uninstalling first frees the canister's memory (everything except its
-    // canister history) and then records a `CanisterCodeUninstall` change in the
-    // canister history, which must be accounted for in the subnet available
-    // execution memory.
-    let history_before = test
+    // Uninstalling first frees the canister's execution state and Wasm chunk
+    // store (but keeps its canister log and canister history) and then records a
+    // `CanisterCodeUninstall` change in the canister history, which must be
+    // accounted for in the subnet available execution memory.
+    let total_num_changes_before = test
         .canister_state(canister_id)
-        .canister_history_memory_usage();
-    // The canister has no memory allocation, so `memory_allocated_bytes` equals
-    // its memory usage; uninstalling frees everything but the canister history.
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+    // The canister has no memory allocation, so the memory freed and credited
+    // back to the subnet available execution memory by the uninstall is exactly
+    // the memory usage of its execution state and Wasm chunk store.
     let freed = test
         .canister_state(canister_id)
-        .memory_allocated_bytes()
+        .execution_memory_usage()
         .get() as i64
-        - history_before.get() as i64;
+        + test
+            .canister_state(canister_id)
+            .wasm_chunk_store_memory_usage()
+            .get() as i64;
     // A single `CanisterCodeUninstall` change (with no controllers) occupies
     // `size_of::<CanisterChange>()` bytes.
     let uninstall_change_bytes = size_of::<CanisterChange>() as i64;
+    // The memory freed by the uninstall does not cover a canister history entry,
+    // so accounting for the `CanisterCodeUninstall` change requires additional
+    // subnet available execution memory.
+    assert!(uninstall_change_bytes > freed);
 
     // Set the subnet available execution memory one byte too low to account for
     // the canister history entry, even after the freed memory is credited back.
@@ -5107,12 +5033,124 @@ fn uninstall_code_fails_if_subnet_cannot_account_for_canister_history() {
 
     // The operation failed atomically (it operates on a clone of the canister
     // that is discarded on error): the code is still installed and no
-    // `CanisterCodeUninstall` change was recorded.
+    // `CanisterCodeUninstall` change was recorded (the total number of changes is
+    // unchanged).
     assert!(test.canister_state(canister_id).execution_state.is_some());
     assert_eq!(
         test.canister_state(canister_id)
-            .canister_history_memory_usage(),
-        history_before
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        total_num_changes_before
+    );
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn uninstall_code_by_governance_clears_history_when_subnet_memory_exhausted() {
+    use crate::util::GOVERNANCE_CANISTER_ID;
+
+    let canister_manager = CanisterManagerBuilder::default().build();
+    let mut state = ReplicatedStateBuilder::new()
+        .with_canister(
+            CanisterStateBuilder::new()
+                .with_canister_id(canister_test_id(0))
+                // Give the canister a random wasm so that it has an execution state.
+                .with_wasm(vec![1, 2, 3])
+                .build(),
+        )
+        .build();
+
+    // Give the canister a non-empty canister history so that we can observe it
+    // being dropped on uninstall.
+    let time = state.time();
+    state
+        .canister_state_make_mut(&canister_test_id(0))
+        .unwrap()
+        .system_state
+        .add_canister_change(
+            time,
+            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
+            CanisterChangeDetails::CanisterCodeUninstall,
+        );
+    let canister = state.canister_state(&canister_test_id(0)).unwrap();
+
+    // Uninstalling first frees the canister's execution state and Wasm chunk
+    // store (but keeps its canister log and canister history) and then records a
+    // `CanisterCodeUninstall` change in the canister history, which must be
+    // accounted for in the subnet available execution memory.
+    let history_before = canister.canister_history_memory_usage();
+    assert_ne!(history_before.get(), 0);
+    let total_num_changes_before = canister
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+    let memory_allocated_before = canister.memory_allocated_bytes();
+    // The canister has no memory allocation, so the memory freed and credited
+    // back to the subnet available execution memory by the uninstall is exactly
+    // the memory usage of its execution state and Wasm chunk store.
+    let freed = canister.execution_memory_usage().get() as i64
+        + canister.wasm_chunk_store_memory_usage().get() as i64;
+    // A single `CanisterCodeUninstall` change (with no controllers) occupies
+    // `size_of::<CanisterChange>()` bytes.
+    let uninstall_change_bytes = size_of::<CanisterChange>() as i64;
+    // The memory freed by the uninstall does not cover a canister history entry,
+    // so accounting for the `CanisterCodeUninstall` change requires additional
+    // subnet available execution memory.
+    assert!(uninstall_change_bytes > freed);
+
+    // Set the subnet available execution memory one byte too low to account for
+    // the canister history entry, even after the freed memory is credited back.
+    let subnet_available_memory_before = uninstall_change_bytes - freed - 1;
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: SubnetAvailableMemory::new_for_testing(
+            subnet_available_memory_before,
+            i64::MAX / 2,
+            i64::MAX / 2,
+        ),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
+
+    // The NNS governance canister can uninstall the canister even though the
+    // subnet cannot account for the additional canister history entry.
+    let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
+    canister_manager
+        .uninstall_code(
+            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
+            canister,
+            &mut round_limits,
+            None,
+            time,
+        )
+        .unwrap();
+
+    let canister = state.canister_state(&canister_test_id(0)).unwrap();
+    // The code was uninstalled and the canister history was dropped (rather than
+    // retaining a `CanisterCodeUninstall` change, which would have required subnet
+    // available execution memory).
+    assert_eq!(canister.execution_state, None);
+    assert_eq!(canister.canister_history_memory_usage().get(), 0);
+    // The `CanisterCodeUninstall` change was still recorded (bumping the total
+    // number of changes) before the canister history was dropped.
+    assert_eq!(
+        canister
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        total_num_changes_before + 1
+    );
+
+    // The subnet available execution memory was credited with all the memory
+    // freed by the uninstall, including the dropped canister history: it changed
+    // by exactly the decrease in the canister's allocated memory.
+    let memory_allocated_after = canister.memory_allocated_bytes();
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
+        subnet_available_memory_before + memory_allocated_before.get() as i64
+            - memory_allocated_after.get() as i64
     );
 }
 
@@ -5130,16 +5168,27 @@ fn uninstall_code_succeeds_if_freed_execution_state_covers_canister_history() {
     let history_before = test
         .canister_state(canister_id)
         .canister_history_memory_usage();
-    // The canister has no memory allocation, so `memory_allocated_bytes` equals
-    // its memory usage; uninstalling frees everything but the canister history.
+    let total_num_changes_before = test
+        .canister_state(canister_id)
+        .system_state
+        .get_canister_history()
+        .get_total_num_changes();
+    // The canister has no memory allocation, so the memory freed and credited
+    // back to the subnet available execution memory by the uninstall is exactly
+    // the memory usage of its execution state and Wasm chunk store.
     let freed = test
         .canister_state(canister_id)
-        .memory_allocated_bytes()
+        .execution_memory_usage()
         .get() as i64
-        - history_before.get() as i64;
+        + test
+            .canister_state(canister_id)
+            .wasm_chunk_store_memory_usage()
+            .get() as i64;
     let uninstall_change_bytes = size_of::<CanisterChange>() as i64;
     // Dropping the execution state frees more than one canister history entry.
     assert!(freed >= uninstall_change_bytes);
+
+    let memory_usage_before = test.canister_state(canister_id).memory_usage();
 
     // No subnet execution memory is available up front, so the
     // `CanisterCodeUninstall` history entry can only be accounted for thanks to
@@ -5148,13 +5197,75 @@ fn uninstall_code_succeeds_if_freed_execution_state_covers_canister_history() {
 
     test.uninstall_code(canister_id).unwrap();
 
-    // The code was uninstalled and the `CanisterCodeUninstall` change recorded.
+    // The code was uninstalled and the `CanisterCodeUninstall` change recorded
+    // (bumping the total number of changes and the canister history memory usage).
     assert!(test.canister_state(canister_id).execution_state.is_none());
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        total_num_changes_before + 1
+    );
     assert_eq!(
         test.canister_state(canister_id)
             .canister_history_memory_usage()
             .get() as i64,
         history_before.get() as i64 + uninstall_change_bytes
+    );
+    // The canister memory usage decreased by the freed memory net of the recorded
+    // `CanisterCodeUninstall` change: it dropped by `freed - uninstall_change_bytes`.
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage().get() as i64,
+        memory_usage_before.get() as i64 - (freed - uninstall_change_bytes)
+    );
+}
+
+#[test]
+fn create_canister_fails_if_subnet_cannot_account_for_canister_history() {
+    let canister_manager = CanisterManagerBuilder::default().build();
+    let mut state = initial_state(subnet_test_id(1), false);
+
+    // Creating a canister with default settings (no memory allocation and no log
+    // memory limit) decrements the subnet available execution memory only to
+    // account for the `CanisterCreation` canister history entry. With no subnet
+    // available execution memory, that entry cannot be accounted for and the
+    // creation fails.
+    let subnet_available_memory_before = 0;
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: SubnetAvailableMemory::new_for_testing(
+            subnet_available_memory_before,
+            i64::MAX / 2,
+            i64::MAX / 2,
+        ),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
+    let sender = canister_test_id(100).get();
+
+    let (result, _cycles) = canister_manager.create_canister(
+        canister_change_origin_from_principal(&sender),
+        *INITIAL_CYCLES,
+        CanisterSettings::default(),
+        MAX_NUMBER_OF_CANISTERS,
+        &mut state,
+        &mut round_limits,
+        ResourceSaturation::default(),
+        &no_op_counter(),
+    );
+
+    let err = result.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+
+    // The creation failed atomically: no canister was inserted into the
+    // replicated state and the subnet available execution memory was fully
+    // restored (rather than left decremented by the recorded canister history).
+    assert_eq!(state.num_canisters(), 0);
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
+        subnet_available_memory_before
     );
 }
 

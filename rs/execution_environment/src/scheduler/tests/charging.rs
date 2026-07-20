@@ -7,8 +7,7 @@ use super::super::*;
 use super::zero_instruction_overhead_config;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, Method, Payload as _, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs,
+    Method, Payload as _, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
@@ -289,11 +288,14 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 #[test]
 fn out_of_cycles_uninstall_succeeds_without_subnet_available_memory() {
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);
-    // The subnet has no available execution memory.
+    // The subnet has no available execution memory. The scheduler test builder
+    // also fixes the subnet memory reservation to zero, so the subnet available
+    // execution memory is exactly zero.
     let mut test = SchedulerTestBuilder::new()
         .with_subnet_memory_capacity(0)
         .build();
-    // A canister with an (empty) Wasm module installed and barely any cycles.
+    // A canister with a minimal (header-only, i.e., no functions or exports)
+    // Wasm module installed and barely any cycles.
     let canister = test.create_canister_with(
         Cycles::new(100),
         ComputeAllocation::zero(),
@@ -303,21 +305,14 @@ fn out_of_cycles_uninstall_succeeds_without_subnet_available_memory() {
         None,
     );
     assert!(test.canister_state(canister).execution_state.is_some());
-    // Record a canister history change so that we can observe it being dropped
-    // (rather than a `CanisterCodeUninstall` change being added) on uninstall.
-    test.canister_state_mut(canister)
+    // The out-of-cycles path drops the canister history without recording a
+    // `CanisterCodeUninstall` change, so the total number of changes must not
+    // increase across the uninstall.
+    let total_num_changes_before = test
+        .canister_state(canister)
         .system_state
-        .add_canister_change(
-            initial_time,
-            CanisterChangeOrigin::from_user(canister_test_id(0).get()),
-            CanisterChangeDetails::CanisterCodeUninstall,
-        );
-    assert_ne!(
-        test.canister_state(canister)
-            .canister_history_memory_usage()
-            .get(),
-        0
-    );
+        .get_canister_history()
+        .get_total_num_changes();
 
     test.set_time(initial_time + test.duration_between_allocation_charges());
     // Checkpoint round, to force charging for storage, which the canister cannot
@@ -325,15 +320,16 @@ fn out_of_cycles_uninstall_succeeds_without_subnet_available_memory() {
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
     // The canister was uninstalled out of cycles despite the subnet having no
-    // available execution memory, and its canister history was dropped (no
-    // `CanisterCodeUninstall` change was recorded, so no subnet available
-    // execution memory was needed).
+    // available execution memory, and no `CanisterCodeUninstall` change was
+    // recorded (so no subnet available execution memory was needed): the total
+    // number of changes is unchanged.
     assert!(test.canister_state(canister).execution_state.is_none());
     assert_eq!(
         test.canister_state(canister)
-            .canister_history_memory_usage()
-            .get(),
-        0
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        total_num_changes_before
     );
     assert_eq!(
         test.scheduler()
