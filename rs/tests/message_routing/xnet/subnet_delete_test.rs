@@ -732,10 +732,12 @@ async fn read_stream_gauge(
         .await
         .map_err(|e| anyhow::anyhow!("failed to fetch {metric}: {e}"))?;
     // The stream gauges are labelled with the destination subnet id (`remote`);
-    // match on the id substring to stay robust to the exact label layout.
+    // match on the full `remote="<id>"` label to avoid selecting a different
+    // series whose subnet id happens to contain `remote` as a substring.
+    let label_match = format!("remote=\"{remote}\"");
     Ok(map
         .iter()
-        .find(|(key, _)| key.contains(remote))
+        .find(|(key, _)| key.contains(&label_match))
         .and_then(|(_, values)| values.first().copied())
         .unwrap_or(0))
 }
