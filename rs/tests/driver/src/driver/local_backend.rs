@@ -238,18 +238,36 @@ impl LocalBackend {
                  networking without host capabilities",
             );
         }
-        // Identity-map the caller's uid/gid into the new user namespace, so it
-        // keeps its usual identity (files, `/dev/kvm` and `/dev/net/tun` are
-        // opened exactly as before) while being the namespace owner. `setgroups`
-        // must be denied before an unprivileged process may write `gid_map`; that
-        // is fine here because nothing in the process tree calls `setgroups`
-        // (`dnsmasq`, the only program that would, stays unprivileged and so
-        // skips its privilege-drop entirely — see `start_ra_daemon`).
+        // Map the caller's uid/gid into the new user namespace so it keeps its
+        // usual identity (files, `/dev/kvm` and `/dev/net/tun` are opened exactly
+        // as before) while being the namespace owner. The mapping is an identity
+        // one, with a single exception: if the caller is (fake-)root we map it to
+        // a *non-zero* inner uid/gid instead of `0`.
+        //
+        // The reason: the backend relies on `dnsmasq` staying unprivileged so it
+        // skips its privilege-drop path (see `start_ra_daemon`). That path is
+        // gated purely on `getuid() == 0`, and when taken it fails in this
+        // namespace — `setgroups` is denied (below) and the default `dip` gid is
+        // unmapped. This normally holds because the action runs as an ordinary
+        // user, but under an RBE sandbox that runs actions as uid 0 in its own
+        // user namespace (e.g. Namespace's `namespace_action_isolation=sandboxed`)
+        // an identity map would make the driver root here too and trip that path.
+        // Presenting a non-zero uid keeps `dnsmasq` (and any other root-sensitive
+        // child) out of it regardless of the outer uid. On-disk ownership,
+        // `/dev/kvm` and `/dev/net/tun` are still accessed as the mapping's
+        // *outer* uid, so nothing else changes.
+        //
+        // `setgroups` must be denied before an unprivileged process may write
+        // `gid_map`; that is fine here because nothing in the process tree needs
+        // `setgroups` to succeed. A single-line self-map is always permitted, with
+        // or without `CAP_SETUID`/`CAP_SETGID` in the parent user namespace.
+        let inner_uid = if uid == 0 { 1 } else { uid };
+        let inner_gid = if gid == 0 { 1 } else { gid };
         std::fs::write("/proc/self/setgroups", "deny")
             .context("denying setgroups for the private user namespace")?;
-        std::fs::write("/proc/self/uid_map", format!("{uid} {uid} 1"))
+        std::fs::write("/proc/self/uid_map", format!("{inner_uid} {uid} 1"))
             .context("writing uid_map for the private user namespace")?;
-        std::fs::write("/proc/self/gid_map", format!("{gid} {gid} 1"))
+        std::fs::write("/proc/self/gid_map", format!("{inner_gid} {gid} 1"))
             .context("writing gid_map for the private user namespace")?;
         // Raise the networking capabilities into the ambient set so the
         // unprivileged `ip`/`dnsmasq`/QEMU children inherit them across `exec`.
@@ -635,12 +653,13 @@ impl LocalBackend {
         // (`enp2s0`). `--port=0` disables DNS. `dnsmasq` daemonizes (writing its
         // pid-file) and is signalled via it in teardown.
         //
-        // `dnsmasq` runs unprivileged (the driver keeps
-        // its real, non-root uid — see `ensure_administrable_netns`), so it skips
+        // `dnsmasq` runs unprivileged: `ensure_administrable_netns` guarantees a
+        // non-zero uid inside the driver's user namespace (identity-mapped, or
+        // remapped away from `0` when the caller is fake-root), so `dnsmasq` skips
         // its privilege-drop path entirely, which is what we want. That path is
-        // taken only when started as root and would otherwise `setgroups(2)` —
-        // denied in the driver's user namespace — and drop to a user/group id
-        // that is unmapped there.
+        // gated on `getuid() == 0` and would otherwise `setgroups(2)` — denied in
+        // the driver's user namespace — and drop to a user/group id that is
+        // unmapped there.
         let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
         let dnsmasq_script = format!(
             "exec {dnsmasq_path:?} \
