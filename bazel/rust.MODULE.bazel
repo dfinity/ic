@@ -1536,7 +1536,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde_with",
-    version = "^1.14.0",
+    version = "^3.21.0",
 )
 crate.spec(
     package = "serde_yaml",
