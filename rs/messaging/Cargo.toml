@@ -60,7 +60,7 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 lazy_static = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 messaging-test = { path = "../rust_canisters/messaging_test" }
 messaging-test-utils = { path = "../rust_canisters/messaging_test/utils" }
 mockall = { workspace = true }

@@ -401,6 +401,18 @@ message SnapshotVisibility {
   }
 }
 
+message StatusVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message StatusVisibility {
+  oneof status_visibility {
+    int32 controllers = 1;
+    int32 public = 2;
+    StatusVisibilityAllowedViewers allowed_viewers = 3;
+  }
+}
+
 message CanisterLogRecord {
   uint64 idx = 1;
   uint64 timestamp_nanos = 2;
@@ -434,7 +446,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 69
+// Next ID: 70
 message CanisterStateBits {
   reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
 
@@ -526,4 +538,6 @@ message CanisterStateBits {
   map<string, string> environment_variables = 55;
   // Snapshot visibility for the canister.
   SnapshotVisibility snapshot_visibility = 64;
+  // Status visibility for the canister.
+  StatusVisibility status_visibility = 69;
 }
