@@ -11,7 +11,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hpke = { version = "0.12", default-features = false, features = [ "p384", "alloc" ] }
+hpke = { version = "0.13", default-features = false, features = [ "p384", "alloc" ] }
 
 [dev-dependencies]
 hex = { workspace = true }

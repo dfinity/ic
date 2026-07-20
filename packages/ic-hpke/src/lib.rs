@@ -36,7 +36,8 @@
 //! # Example (Authenticated Encryption)
 //!
 //! ```
-//! let mut rng = rand::rngs::OsRng;
+//! use rand::TryRngCore;
+//! let mut rng = rand::rngs::OsRng.unwrap_err();
 //!
 //! let a_sk = ic_hpke::PrivateKey::generate(&mut rng);
 //! let a_pk = a_sk.public_key();
@@ -65,7 +66,8 @@
 //! # Example (Non-Authenticated Encryption)
 //!
 //! ```
-//! let mut rng = rand::rngs::OsRng;
+//! use rand::TryRngCore;
+//! let mut rng = rand::rngs::OsRng.unwrap_err();
 //!
 //! // perform key generation:
 //! let sk = ic_hpke::PrivateKey::generate(&mut rng);
