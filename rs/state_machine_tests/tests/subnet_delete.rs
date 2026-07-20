@@ -47,8 +47,11 @@
 //!     output queue.
 //! 8.  Release US3's reply. As the S -> C stream is now full, its response cannot
 //!     be inducted and stays in US3's output queue.
-//! 9.  Delete C, unhalt T, check UT's global data is still empty, and wait for
-//!     all 10 calls from US to complete.
+//! 9.  Delete C, unhalt T, check UT's global data is still empty (T must not pull
+//!     messages from the deleted C's stream), and wait for all 10 calls from US to
+//!     complete. (Unlike the system test, T observes the post-deletion registry
+//!     version synchronously — applied in Step 9a — so there is no separate wait
+//!     for it.)
 //! 10. Assert at least one call from US was rejected with DestinationInvalid
 //!     (call did not reach the stream: no route after deletion) and at least one
 //!     with CanisterReject (call reached the stream, so its callback was still
@@ -605,11 +608,18 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     s.reload_registry();
     t.reload_registry();
 
-    // Step 9b: Unhalt subnet T and verify that it does not pull the messages from
-    // the deleted subnet C: UT's global data must stay empty.
+    // Step 9b: Unhalt subnet T by resuming round execution on it.
+    //
+    // Step 9c: No analog here. The system test waits for T to observe the registry
+    // version at which C was deleted; in this test `reload_registry()` in Step 9a
+    // applied that version to T synchronously, so T already sees C as deleted by
+    // the time it runs.
     for _ in 0..5 {
         t.execute_round();
     }
+
+    // Step 9d: Verify T does not pull the messages from the deleted subnet C:
+    // UT's global data must stay empty.
     let global_data = t
         .query(
             ut,
@@ -626,7 +636,7 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
         WasmResult::Reject(reject) => panic!("unexpected reject querying UT: {reject}"),
     }
 
-    // Step 9c: Drive S until all 10 calls from US complete. The calls still in
+    // Step 9e: Drive S until all 10 calls from US complete. The calls still in
     // US's output queue are rejected with DestinationInvalid (no route to C),
     // while the calls already in the S -> C stream (whose callback is still
     // open) get an immediate synthetic CanisterReject once C disappears from
