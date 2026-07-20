@@ -15,8 +15,7 @@ use crate::{InputQueueType, OutputRequest, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange, SubnetAvailableMemory,
-    SubnetAvailableMemoryError,
+    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
 };
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
@@ -682,18 +681,17 @@ impl CanisterState {
             .is_low_wasm_memory_hook_condition_satisfied(self.wasm_memory_usage())
     }
 
-    /// Adds a canister change to canister history and returns the change
-    /// of subnet available execution memory due to updating canister history.
+    /// Adds a canister change to canister history and returns the resulting
+    /// change of the canister's allocated execution memory (i.e. the amount by
+    /// which the subnet available execution memory needs to be updated to
+    /// account for the additional canister history).
     ///
     /// The returned change is *not* applied to the subnet available execution
-    /// memory; the caller is responsible for applying it. Prefer
-    /// [`Self::add_canister_change`], which applies the change and fails if the
-    /// subnet does not have enough available execution memory. This unchecked
-    /// variant should only be used where the application to the subnet available
-    /// execution memory is deferred (e.g. accumulated across multiple steps of
-    /// `install_code`).
+    /// memory; the caller is responsible for accounting for it (e.g. by passing
+    /// it to `cycles_and_memory_usage_checks_and_updates`, or accumulating it
+    /// across multiple steps of `install_code`).
     #[must_use]
-    pub fn add_canister_change_unchecked(
+    pub fn add_canister_change(
         &mut self,
         timestamp_nanos: Time,
         change_origin: CanisterChangeOrigin,
@@ -709,41 +707,6 @@ impl CanisterState {
         } else {
             let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
             SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
-        }
-    }
-
-    /// Adds a canister change to canister history and decrements the subnet
-    /// available execution memory accordingly.
-    ///
-    /// Fails with [`SubnetAvailableMemoryError::InsufficientMemory`] if the
-    /// subnet does not have enough available execution memory to account for the
-    /// additional canister history.
-    /// Note: the canister history entry is recorded before charging subnet memory.
-    /// On `Err`, the `CanisterState` is already mutated; callers must roll back
-    /// (e.g. operate on a clone or restore a snapshot) before propagating the error.
-    pub fn add_canister_change(
-        &mut self,
-        subnet_available_memory: &mut SubnetAvailableMemory,
-        timestamp_nanos: Time,
-        change_origin: CanisterChangeOrigin,
-        change_details: CanisterChangeDetails,
-    ) -> Result<(), SubnetAvailableMemoryError> {
-        match self.add_canister_change_unchecked(timestamp_nanos, change_origin, change_details) {
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
-                subnet_available_memory.try_decrement(
-                    allocated_bytes,
-                    NumBytes::new(0),
-                    NumBytes::new(0),
-                )
-            }
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
-                subnet_available_memory.increment(
-                    deallocated_bytes,
-                    NumBytes::new(0),
-                    NumBytes::new(0),
-                );
-                Ok(())
-            }
         }
     }
 }

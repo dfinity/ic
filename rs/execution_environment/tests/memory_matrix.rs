@@ -401,23 +401,35 @@ where
     // the newly reserved cycles during the operation under test.
     let newly_reserved_cycles = reserved_balance(&test);
     // We also derive the freezing limit in cycles after running the operation under test.
-    let idle_cycles_burned_per_day =
-        test.idle_cycles_burned_per_day_for_memory_usage(canister_id, final_memory_usage);
+    // Unlike storage reservation, the freezing threshold *does* account for the
+    // canister history recorded by the operation, so use the memory usage
+    // including canister history here (for `OtherManagement`, `final_memory_usage`
+    // excludes it).
+    let final_memory_usage_including_history = test.canister_state(canister_id).memory_usage();
+    let idle_cycles_burned_per_day = test.idle_cycles_burned_per_day_for_memory_usage(
+        canister_id,
+        final_memory_usage_including_history,
+    );
     let freezing_limit_cycles =
         idle_cycles_burned_per_day * (run_params.freezing_threshold.get() / (24 * 3600));
 
     // Checks after running the operation.
     // Cycles are reserved if and only if new bytes are allocated
     // (this is a property of this test suite, not a general protocol property).
+    // Storage cycles are now also reserved for the canister history recorded by
+    // the operation, so use the allocated bytes including canister history here.
     assert_eq!(
         newly_reserved_cycles.get() > 0,
-        newly_allocated_bytes.get() > 0
+        newly_allocated_bytes_including_history.get() > 0
     );
     if err.is_none() {
         // The newly reserved cycles correspond to the newly allocated bytes
-        // at the subnet memory saturation before running the operation under test.
-        let expected_reserved_cycles = test
-            .expected_storage_reservation_cycles(&subnet_memory_saturation, newly_allocated_bytes);
+        // (including canister history) at the subnet memory saturation before
+        // running the operation under test.
+        let expected_reserved_cycles = test.expected_storage_reservation_cycles(
+            &subnet_memory_saturation,
+            newly_allocated_bytes_including_history,
+        );
         assert_eq!(newly_reserved_cycles, expected_reserved_cycles);
         // The memory usage changed as expected.
         match scenario_params.memory_usage_change {

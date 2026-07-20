@@ -182,7 +182,7 @@ impl InstallCodeHelper {
         let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
         let available_execution_memory_change =
             self.canister
-                .add_canister_change_unchecked(timestamp_nanos, origin, details);
+                .add_canister_change(timestamp_nanos, origin, details);
         match available_execution_memory_change {
             SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
                 self.allocated_bytes += allocated_bytes;

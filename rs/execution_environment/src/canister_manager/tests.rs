@@ -2314,12 +2314,15 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
     let mut test = ExecutionTestBuilder::new().build();
 
     // Give the new canister a relatively small number of cycles so it doesn't have
-    // enough to be installed.
+    // enough to be installed. Use a zero freezing threshold so that the creation
+    // itself succeeds (recording the `canister_creation` history entry does not
+    // require the canister to be solvent) and only the installation fails.
     let canister_id = test
         .create_canister_with_settings(
             Cycles::new(100),
             CanisterSettingsArgsBuilder::new()
                 .with_log_memory_limit(0)
+                .with_freezing_threshold(0)
                 .build(),
         )
         .unwrap();
@@ -3063,6 +3066,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let time = state.time();
+    let subnet_cycles_config = state.get_own_subnet_cycles_config();
     let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
     canister_manager
         .uninstall_code(
@@ -3071,6 +3075,8 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             &mut round_limits,
             None,
             time,
+            subnet_cycles_config,
+            &ResourceSaturation::default(),
         )
         .unwrap();
 
@@ -3175,6 +3181,10 @@ fn creating_canisters_always_works_if_limit_is_set_to_zero() {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
                 .with_log_memory_limit(0)
+                // Zero freezing threshold so a canister created with only the
+                // creation fee is still solvent enough to account for its
+                // `canister_creation` history entry.
+                .with_freezing_threshold(0)
                 .build(),
         ),
         sender_canister_version: None,
@@ -3704,9 +3714,11 @@ fn frozen_canister_reveal_top_up() {
         "Canister {canister_id} is out of cycles: please top up the canister with at least"
     )));
 
-    // Blackhole the canister.
-    test.canister_update_controller(canister_id, vec![])
-        .unwrap();
+    // A frozen canister can no longer be blackholed (removing its controllers
+    // records a `controllers_change` canister history entry, which the frozen
+    // canister cannot account for), so switch to a non-controller sender to
+    // exercise the same non-controller error path.
+    test.set_user_id(user_test_id(42));
 
     // Sending an ingress message to a frozen canister fails without revealing
     // top up balance to non-controllers.
@@ -5042,115 +5054,6 @@ fn uninstall_code_fails_if_subnet_cannot_account_for_canister_history() {
             .get_canister_history()
             .get_total_num_changes(),
         total_num_changes_before
-    );
-}
-
-#[test]
-#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn uninstall_code_by_governance_clears_history_when_subnet_memory_exhausted() {
-    use crate::util::GOVERNANCE_CANISTER_ID;
-
-    let canister_manager = CanisterManagerBuilder::default().build();
-    let mut state = ReplicatedStateBuilder::new()
-        .with_canister(
-            CanisterStateBuilder::new()
-                .with_canister_id(canister_test_id(0))
-                // Give the canister a random wasm so that it has an execution state.
-                .with_wasm(vec![1, 2, 3])
-                .build(),
-        )
-        .build();
-
-    // Give the canister a non-empty canister history so that we can observe it
-    // being dropped on uninstall.
-    let time = state.time();
-    state
-        .canister_state_make_mut(&canister_test_id(0))
-        .unwrap()
-        .system_state
-        .add_canister_change(
-            time,
-            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
-            CanisterChangeDetails::CanisterCodeUninstall,
-        );
-    let canister = state.canister_state(&canister_test_id(0)).unwrap();
-
-    // Uninstalling first frees the canister's execution state and Wasm chunk
-    // store (but keeps its canister log and canister history) and then records a
-    // `CanisterCodeUninstall` change in the canister history, which must be
-    // accounted for in the subnet available execution memory.
-    let history_before = canister.canister_history_memory_usage();
-    assert_ne!(history_before.get(), 0);
-    let total_num_changes_before = canister
-        .system_state
-        .get_canister_history()
-        .get_total_num_changes();
-    let memory_allocated_before = canister.memory_allocated_bytes();
-    // The canister has no memory allocation, so the memory freed and credited
-    // back to the subnet available execution memory by the uninstall is exactly
-    // the memory usage of its execution state and Wasm chunk store.
-    let freed = canister.execution_memory_usage().get() as i64
-        + canister.wasm_chunk_store_memory_usage().get() as i64;
-    // A single `CanisterCodeUninstall` change (with no controllers) occupies
-    // `size_of::<CanisterChange>()` bytes.
-    let uninstall_change_bytes = size_of::<CanisterChange>() as i64;
-    // The memory freed by the uninstall does not cover a canister history entry,
-    // so accounting for the `CanisterCodeUninstall` change requires additional
-    // subnet available execution memory.
-    assert!(uninstall_change_bytes > freed);
-
-    // Set the subnet available execution memory one byte too low to account for
-    // the canister history entry, even after the freed memory is credited back.
-    let subnet_available_memory_before = uninstall_change_bytes - freed - 1;
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: SubnetAvailableMemory::new_for_testing(
-            subnet_available_memory_before,
-            i64::MAX / 2,
-            i64::MAX / 2,
-        ),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
-
-    // The NNS governance canister can uninstall the canister even though the
-    // subnet cannot account for the additional canister history entry.
-    let canister = state.canister_state_make_mut(&canister_test_id(0)).unwrap();
-    canister_manager
-        .uninstall_code(
-            canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
-            canister,
-            &mut round_limits,
-            None,
-            time,
-        )
-        .unwrap();
-
-    let canister = state.canister_state(&canister_test_id(0)).unwrap();
-    // The code was uninstalled and the canister history was dropped (rather than
-    // retaining a `CanisterCodeUninstall` change, which would have required subnet
-    // available execution memory).
-    assert_eq!(canister.execution_state, None);
-    assert_eq!(canister.canister_history_memory_usage().get(), 0);
-    // The `CanisterCodeUninstall` change was still recorded (bumping the total
-    // number of changes) before the canister history was dropped.
-    assert_eq!(
-        canister
-            .system_state
-            .get_canister_history()
-            .get_total_num_changes(),
-        total_num_changes_before + 1
-    );
-
-    // The subnet available execution memory was credited with all the memory
-    // freed by the uninstall, including the dropped canister history: it changed
-    // by exactly the decrease in the canister's allocated memory.
-    let memory_allocated_after = canister.memory_allocated_bytes();
-    assert_eq!(
-        round_limits.subnet_available_memory.get_execution_memory(),
-        subnet_available_memory_before + memory_allocated_before.get() as i64
-            - memory_allocated_after.get() as i64
     );
 }
 
@@ -7882,6 +7785,9 @@ fn create_canister_with_cycles_sender_in_whitelist() {
             Some(123),
             CanisterSettingsBuilder::new()
                 .with_log_memory_limit(NumBytes::new(0))
+                // Zero freezing threshold so the canister does not need to be
+                // solvent to account for its `canister_creation` history entry.
+                .with_freezing_threshold(0.into())
                 .build(),
             None,
             &mut state,
@@ -7923,6 +7829,9 @@ fn create_canister_with_specified_id(
         Some(123),
         CanisterSettingsBuilder::new()
             .with_log_memory_limit(NumBytes::new(0))
+            // Zero freezing threshold so the canister does not need to be solvent
+            // to account for its `canister_creation` history entry.
+            .with_freezing_threshold(0.into())
             .build(),
         Some(specified_id),
         &mut state,
@@ -8128,6 +8037,10 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
         settings: Some(
             CanisterSettingsArgsBuilder::new()
                 .with_log_memory_limit(0)
+                // Zero freezing threshold: the canister is created with only the
+                // creation fee and must still be solvent enough to account for its
+                // `canister_creation` history entry.
+                .with_freezing_threshold(0)
                 .build(),
         ),
         sender_canister_version: None,
@@ -8149,6 +8062,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     let settings = CanisterSettingsArgsBuilder::new()
         .with_compute_allocation(0)
         .with_log_memory_limit(0)
+        .with_freezing_threshold(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -8172,6 +8086,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     let settings = CanisterSettingsArgsBuilder::new()
         .with_compute_allocation(10)
         .with_log_memory_limit(0)
+        .with_freezing_threshold(0)
         .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
@@ -8526,15 +8441,19 @@ fn create_canister_can_set_reserved_cycles_limit() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(CAPACITY)
         .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(0)
+        // Keep the subnet below its storage-reservation threshold: creation now
+        // reserves storage cycles for the `canister_creation` history entry, which
+        // would otherwise exceed the reserved cycles limit of 1 set below.
+        .with_subnet_memory_threshold(CAPACITY)
         .build();
 
     let uc = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    // Since we are not setting the memory allocation and the memory usage of an
-    // empty canister is zero, setting the reserved cycles limit should succeed.
+    // Since we are not setting the memory allocation and the subnet is below its
+    // storage-reservation threshold, no storage cycles are reserved and setting
+    // the reserved cycles limit should succeed.
     let settings = CanisterSettingsArgsBuilder::new()
         .with_reserved_cycles_limit(1)
         .with_log_memory_limit(0)

@@ -2650,6 +2650,11 @@ impl ExecutionEnvironment {
         time: Time,
         current_round: ExecutionRound,
     ) -> ExecuteSubnetMessageResult {
+        let subnet_cycles_config = state.get_own_subnet_cycles_config();
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
         self.execute_mgmt_operation_on_canister(
             canister_id,
             |canister, _msg, round_limits, _consumed_cycles| {
@@ -2659,6 +2664,8 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_admins,
                     time,
+                    subnet_cycles_config,
+                    &resource_saturation,
                 )
             },
             state,

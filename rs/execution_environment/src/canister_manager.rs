@@ -24,7 +24,7 @@ use ic_cycles_account_manager::{
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::SubnetAvailableMemoryError;
+use ic_interfaces::execution_environment::SubnetAvailableExecutionMemoryChange;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -627,6 +627,7 @@ impl CanisterManager {
                 new_canister_memory_usage,
                 canister.memory_usage(),
                 &subnet_memory_saturation,
+                None,
             )?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
             let limit = requested_limit.get() as usize;
@@ -691,7 +692,7 @@ impl CanisterManager {
             round_limits,
             &settings,
             sender,
-            subnet_memory_saturation,
+            subnet_memory_saturation.clone(),
             subnet_cycles_config,
             Some(metrics),
         )?;
@@ -713,30 +714,52 @@ impl CanisterManager {
                     .map(|environment_variables| environment_variables.hash());
 
                 if new_environment_variables_hash.is_some() || new_controllers.is_some() {
-                    canister
-                        .add_canister_change(
-                            &mut round_limits.subnet_available_memory,
-                            timestamp_nanos,
-                            origin,
-                            CanisterChangeDetails::settings_change(
-                                new_controllers,
-                                new_environment_variables_hash,
-                            ),
-                        )
-                        .map_err(subnet_available_memory_error_to_canister_manager_error)?;
+                    let memory_usage = canister.memory_usage();
+                    let canister_history_change = canister.add_canister_change(
+                        timestamp_nanos,
+                        origin,
+                        CanisterChangeDetails::settings_change(
+                            new_controllers,
+                            new_environment_variables_hash,
+                        ),
+                    );
+                    self.cycles_and_memory_usage_checks_and_updates(
+                        subnet_cycles_config,
+                        canister,
+                        sender,
+                        NumInstructions::new(0),
+                        round_limits,
+                        memory_usage,
+                        memory_usage,
+                        &subnet_memory_saturation,
+                        Some(canister_history_change),
+                    )?;
                 }
             }
             FlagStatus::Disabled => {
         */
         if let Some(new_controllers) = new_controllers {
-            canister
-                .add_canister_change(
-                    &mut round_limits.subnet_available_memory,
-                    timestamp_nanos,
-                    origin,
-                    CanisterChangeDetails::controllers_change(new_controllers),
-                )
-                .map_err(subnet_available_memory_error_to_canister_manager_error)?;
+            // The controllers change is the only memory change past the settings
+            // validation above, so the old and new memory usage (excluding the
+            // change itself) are equal; the change is accounted for via the
+            // `canister_history_change` argument.
+            let memory_usage = canister.memory_usage();
+            let canister_history_change = canister.add_canister_change(
+                timestamp_nanos,
+                origin,
+                CanisterChangeDetails::controllers_change(new_controllers),
+            );
+            self.cycles_and_memory_usage_checks_and_updates(
+                subnet_cycles_config,
+                canister,
+                sender,
+                NumInstructions::new(0),
+                round_limits,
+                memory_usage,
+                memory_usage,
+                &subnet_memory_saturation,
+                Some(canister_history_change),
+            )?;
         }
         /*
             }
@@ -964,6 +987,7 @@ impl CanisterManager {
     /// Uninstalls code from a canister.
     ///
     /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn uninstall_code(
         &self,
         origin: CanisterChangeOrigin,
@@ -971,6 +995,8 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_admins: Option<BTreeSet<PrincipalId>>,
         time: Time,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -981,41 +1007,39 @@ impl CanisterManager {
             validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
         }
 
+        let old_memory_usage = canister.memory_usage();
+
+        // Do not update the subnet available memory here; it is updated (together
+        // with the `CanisterCodeUninstall` canister history change recorded below)
+        // by `cycles_and_memory_usage_checks_and_updates`.
         let rejects = uninstall_canister(
             &self.log,
             canister,
-            Some(round_limits),
+            None,
             time,
             Arc::clone(&self.fd_factory),
         );
 
-        let canister_history_memory_usage_before = canister.canister_history_memory_usage();
-        if let Err(err) = canister.add_canister_change(
-            &mut round_limits.subnet_available_memory,
+        // Memory usage after dropping the execution state etc., but before the
+        // `CanisterCodeUninstall` canister history change, which is accounted for
+        // separately via `canister_history_change`.
+        let new_memory_usage = canister.memory_usage();
+        let canister_history_change = canister.add_canister_change(
             time,
             origin,
             CanisterChangeDetails::CanisterCodeUninstall,
-        ) {
-            // The NNS governance canister can forcefully uninstall the code of any
-            // canister and must be able to do so even if the subnet cannot account
-            // for the additional canister history entry. In that case drop the
-            // canister history (as is done when a canister is uninstalled after
-            // running out of cycles) so that the uninstall still succeeds.
-            if sender == GOVERNANCE_CANISTER_ID.get() {
-                canister.system_state.clear_canister_history();
-                // Return the memory of the dropped canister history to the subnet
-                // available execution memory. The failed `CanisterCodeUninstall`
-                // change was not accounted for, so only the pre-existing canister
-                // history that had been accounted for is returned.
-                round_limits.subnet_available_memory.increment(
-                    canister_history_memory_usage_before,
-                    NumBytes::new(0),
-                    NumBytes::new(0),
-                );
-            } else {
-                return Err(subnet_available_memory_error_to_canister_manager_error(err));
-            }
-        }
+        );
+        self.cycles_and_memory_usage_checks_and_updates(
+            subnet_cycles_config,
+            canister,
+            sender,
+            NumInstructions::new(0),
+            round_limits,
+            new_memory_usage,
+            old_memory_usage,
+            resource_saturation,
+            Some(canister_history_change),
+        )?;
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
@@ -1550,7 +1574,7 @@ impl CanisterManager {
             round_limits,
             &settings,
             sender,
-            subnet_memory_saturation,
+            subnet_memory_saturation.clone(),
             state.get_own_subnet_cycles_config(),
             None,
         ) {
@@ -1567,14 +1591,28 @@ impl CanisterManager {
         let environment_variables_hash = settings
             .environment_variables()
             .map(|env_vars| env_vars.hash());
-        if let Err(err) = new_canister.add_canister_change(
-            &mut round_limits.subnet_available_memory,
+        // Memory usage after settings validation, but before the
+        // `canister_creation` canister history change, which is accounted for via
+        // `canister_history_change`.
+        let new_memory_usage = new_canister.memory_usage();
+        let canister_history_change = new_canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
+        );
+        if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
+            state.get_own_subnet_cycles_config(),
+            &mut new_canister,
+            sender,
+            NumInstructions::new(0),
+            round_limits,
+            new_memory_usage,
+            new_memory_usage,
+            &subnet_memory_saturation,
+            Some(canister_history_change),
         ) {
             *round_limits = round_limits_snapshot;
-            return Err(subnet_available_memory_error_to_canister_manager_error(err));
+            return Err(err);
         }
 
         if specified_id.is_none() {
@@ -1798,6 +1836,7 @@ impl CanisterManager {
             new_memory_usage,
             memory_usage,
             resource_saturation,
+            None,
         )?;
 
         let hash = validated_chunk.hash().to_vec();
@@ -1844,6 +1883,7 @@ impl CanisterManager {
             new_memory_usage,
             memory_usage,
             resource_saturation,
+            None,
         )?;
 
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
@@ -1893,16 +1933,29 @@ impl CanisterManager {
         new_memory_usage: NumBytes,
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
+        canister_history_change: Option<SubnetAvailableExecutionMemoryChange>,
     ) -> Result<(), CanisterManagerError> {
+        // Account for any canister history recorded by the operation (e.g. a
+        // `CanisterCodeUninstall` or `canister_creation` change) in the new
+        // execution memory used, so that the subnet available execution memory,
+        // freezing threshold, and storage reservation below all take it into
+        // account.
+        let new_memory_usage = match canister_history_change {
+            Some(SubnetAvailableExecutionMemoryChange::Allocated(bytes)) => {
+                new_memory_usage.saturating_add(&bytes)
+            }
+            Some(SubnetAvailableExecutionMemoryChange::Deallocated(bytes)) => {
+                new_memory_usage.saturating_sub(&bytes)
+            }
+            None => new_memory_usage,
+        };
+
         // Update subnet available memory:
         // - return deallocated bytes back to subnet available memory;
         // - deduct allocated bytes from subnet available memory.
-        let old_memory_allocated_bytes = canister
-            .memory_allocation()
-            .allocated_bytes(old_memory_usage);
-        let new_memory_allocated_bytes = canister
-            .memory_allocation()
-            .allocated_bytes(new_memory_usage);
+        let memory_allocation = canister.memory_allocation();
+        let old_memory_allocated_bytes = memory_allocation.allocated_bytes(old_memory_usage);
+        let new_memory_allocated_bytes = memory_allocation.allocated_bytes(new_memory_usage);
         let allocated_bytes =
             new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
         let deallocated_bytes =
@@ -1927,7 +1980,8 @@ impl CanisterManager {
                 },
             )?;
 
-        // Check that the canister is not frozen due to its new memory usage.
+        // Check that the canister is not frozen due to its new memory usage
+        // (accounting for canister history).
         let reveal_top_up = canister.controllers().contains(&sender);
         if let Err(err) = self
             .cycles_account_manager
@@ -2085,6 +2139,7 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
+            None,
         )?;
         round_limits.instructions -= as_round_instructions(instructions);
 
@@ -2109,18 +2164,29 @@ impl CanisterManager {
             let rejects = uninstall_canister(
                 &self.log,
                 canister,
-                None, /* we don't pass RoundLimits since we update them separately */
+                None, /* subnet available memory is updated below */
                 time,
                 Arc::clone(&self.fd_factory),
             );
-            canister
-                .add_canister_change(
-                    &mut round_limits.subnet_available_memory,
-                    time,
-                    origin,
-                    CanisterChangeDetails::CanisterCodeUninstall,
-                )
-                .map_err(subnet_available_memory_error_to_canister_manager_error)?;
+            // Memory usage after uninstalling, before the `CanisterCodeUninstall`
+            // canister history change (accounted for via `canister_history_change`).
+            let memory_usage = canister.memory_usage();
+            let canister_history_change = canister.add_canister_change(
+                time,
+                origin,
+                CanisterChangeDetails::CanisterCodeUninstall,
+            );
+            self.cycles_and_memory_usage_checks_and_updates(
+                subnet_cycles_config,
+                canister,
+                sender,
+                NumInstructions::new(0),
+                round_limits,
+                memory_usage,
+                memory_usage,
+                resource_saturation,
+                Some(canister_history_change),
+            )?;
             rejects
         } else {
             vec![]
@@ -2438,6 +2504,31 @@ impl CanisterManager {
             }
         }
 
+        // The canister ID from which the snapshot was loaded in case
+        // it is different from the target canister ID.
+        let from_canister_id = if snapshot_canister_id == canister_id {
+            None
+        } else {
+            Some(snapshot_canister_id)
+        };
+
+        // Increment canister version and record the `load_snapshot` canister
+        // history change; its memory is accounted for below via the
+        // `canister_history_change` argument (`new_memory_usage` was captured
+        // before the change).
+        new_canister.system_state.bump_canister_version();
+        let canister_history_change = new_canister.add_canister_change(
+            time,
+            origin,
+            CanisterChangeDetails::load_snapshot(
+                snapshot.canister_version(),
+                snapshot_id,
+                snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                snapshot.source(),
+                from_canister_id,
+            ),
+        );
+
         // Compute cycles for instructions spent for memory overhead when loading a snapshot of the canister.
         let instructions_for_snapshot_size: NumInstructions =
             self.config.canister_snapshot_baseline_instructions
@@ -2451,33 +2542,9 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
+            Some(canister_history_change),
         )?;
         round_limits.instructions -= as_round_instructions(instructions_for_snapshot_size);
-
-        // The canister ID from which the snapshot was loaded in case
-        // it is different from the target canister ID.
-        let from_canister_id = if snapshot_canister_id == canister_id {
-            None
-        } else {
-            Some(snapshot_canister_id)
-        };
-
-        // Increment canister version.
-        new_canister.system_state.bump_canister_version();
-        new_canister
-            .add_canister_change(
-                &mut round_limits.subnet_available_memory,
-                time,
-                origin,
-                CanisterChangeDetails::load_snapshot(
-                    snapshot.canister_version(),
-                    snapshot_id,
-                    snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
-                    snapshot.source(),
-                    from_canister_id,
-                ),
-            )
-            .map_err(subnet_available_memory_error_to_canister_manager_error)?;
 
         let heap_delta = new_canister.heap_delta();
 
@@ -2553,6 +2620,7 @@ impl CanisterManager {
             new_memory_usage,
             memory_usage,
             resource_saturation,
+            None,
         )?;
 
         canister.canister_snapshots.remove(delete_snapshot_id);
@@ -2782,6 +2850,7 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
+            None,
         )?;
         round_limits.instructions -= as_round_instructions(instructions);
 
@@ -2952,6 +3021,7 @@ impl CanisterManager {
                     new_memory_usage,
                     memory_usage,
                     resource_saturation,
+                    None,
                 )?;
 
                 if let Err(()) = canister
@@ -3046,7 +3116,7 @@ impl CanisterManager {
         canister
             .system_state
             .rename_canister(new_id, to_version, to_total_num_changes);
-        let available_execution_memory_change = canister.add_canister_change_unchecked(
+        let available_execution_memory_change = canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::rename_canister(
@@ -3097,24 +3167,6 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
         });
     }
     Ok(size)
-}
-
-/// Maps a `SubnetAvailableMemoryError` (returned when the subnet does not have
-/// enough available execution memory to account for additional canister history)
-/// to the corresponding `CanisterManagerError`.
-fn subnet_available_memory_error_to_canister_manager_error(
-    err: SubnetAvailableMemoryError,
-) -> CanisterManagerError {
-    match err {
-        SubnetAvailableMemoryError::InsufficientMemory {
-            execution_requested,
-            available_execution,
-            ..
-        } => CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-            requested: execution_requested,
-            available: NumBytes::new(available_execution.max(0) as u64),
-        },
-    }
 }
 
 /// Uninstalls a canister.
