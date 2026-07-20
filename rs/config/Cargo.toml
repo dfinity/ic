@@ -13,7 +13,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
 ic-types-cycles = { path = "../types/cycles" }
 ic-types = { path = "../types/types" }
-json5 = "0.4.1"
+json5 = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }
 

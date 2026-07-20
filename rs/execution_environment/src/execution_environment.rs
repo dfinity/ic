@@ -532,8 +532,9 @@ impl ExecutionEnvironment {
             self.subnet_memory_capacity(state.resource_limits()).get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
-            self.config
-                .guaranteed_response_message_memory_capacity
+            state
+                .metadata
+                .guaranteed_response_message_memory_capacity()
                 .get() as i64
                 - memory_taken.guaranteed_response_messages().get() as i64,
             self.config
@@ -572,8 +573,9 @@ impl ExecutionEnvironment {
         &self,
         state: &ReplicatedState,
     ) -> i64 {
-        self.config
-            .guaranteed_response_message_memory_capacity
+        state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
             .get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
     }
@@ -664,7 +666,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -1873,7 +1875,6 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 canister,
                                                 args,
-                                                self.config.log_memory_store_feature,
                                                 msg,
                                                 &self.cycles_account_manager,
                                                 subnet_cycles_config,
@@ -2705,7 +2706,7 @@ impl ExecutionEnvironment {
             None => {
                 let err = UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 );
                 ExecuteSubnetMessageResult::Finished {
                     response: Err(err),
@@ -2997,7 +2998,7 @@ impl ExecutionEnvironment {
             return ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
+                    format!("Canister {} not found.", canister_id),
                 )),
                 refund: msg.take_cycles(),
             };
@@ -3473,8 +3474,7 @@ impl ExecutionEnvironment {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory =
-            full_subnet_memory_capacity(&self.config, state.resource_limits());
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config, &state);
         let execution_parameters = self.execution_parameters(
             canister_state,
             instruction_limits,
@@ -4859,13 +4859,17 @@ impl CompilationCostHandling {
 /// Returns the subnet's configured memory capacity (ignoring current usage).
 pub(crate) fn full_subnet_memory_capacity(
     config: &ExecutionConfig,
-    resource_limits: ResourceLimits,
+    state: &ReplicatedState,
 ) -> SubnetAvailableMemory {
     SubnetAvailableMemory::new_scaled(
-        resource_limits
+        state
+            .resource_limits()
             .maximum_state_size_or(config.subnet_memory_capacity)
             .get() as i64,
-        config.guaranteed_response_message_memory_capacity.get() as i64,
+        state
+            .metadata
+            .guaranteed_response_message_memory_capacity()
+            .get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
         NonZeroU64::new(1).expect("scaling_factor must be non zero"),
     )
@@ -4879,7 +4883,7 @@ fn get_canister(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }
@@ -4896,7 +4900,7 @@ fn canister_make_mut(
         Some(canister) => Ok(canister),
         None => Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} not found.", &canister_id),
+            format!("Canister {} not found.", canister_id),
         )),
     }
 }

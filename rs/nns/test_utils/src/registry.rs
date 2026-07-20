@@ -407,7 +407,7 @@ pub fn new_node_keys_and_node_id() -> (ValidNodePublicKeys, NodeId) {
     let npks = generate_node_keys_once(&config, None).unwrap_or_else(|_| {
         panic!(
             "Generation of new node keys with CryptoConfig {:?} failed",
-            &config
+            config
         )
     });
     let node_id = npks.node_id();

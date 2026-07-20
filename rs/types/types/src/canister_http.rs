@@ -1080,7 +1080,9 @@ impl CountBytes for CanisterHttpResponseDivergence {
 pub struct CanisterHttpPaymentReceipt {
     /// The amount of cycles, out of the per-replica allowance, that the replica
     /// has spent. The cycles to refund to the caller are derived downstream as
-    /// `per_replica_allowance - spent`.
+    /// `per_replica_allowance - spent`. On free subnets it may exceed the (zero)
+    /// allowance, since it is only used for cost accounting, but it may never
+    /// exceed [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
     pub spent: Cycles,
 }
 
@@ -1088,6 +1090,53 @@ impl CountBytes for CanisterHttpPaymentReceipt {
     fn count_bytes(&self) -> usize {
         let Self { spent } = self;
         size_of_val(spent)
+    }
+}
+
+/// The maximum cycles a single replica may report having spent on an HTTP
+/// outcall when the subnet uses a [`CanisterCyclesCostSchedule::Free`] schedule.
+///
+/// Free subnets charge nothing, so the reported spend (used only for cost
+/// accounting) is not bounded by the per-replica allowance. To keep it from
+/// being arbitrarily large, it is instead bounded by this constant, which is
+/// above the largest per-replica cost the pay-as-you-go tracker can ever compute
+/// for a single outcall.
+///
+/// That maximum cost (see the fee formula in `ic-https-outcalls-pricing`) is
+/// reached by a full 2 MB response, downloaded over the 60 s cap, transformed
+/// with the 5 B-instruction query limit, then gossiped as another 2 MB response
+/// to every node of the subnet:
+///
+/// ```text
+///     50 cycles/byte * 2_000_000 B                       =        100_000_000  (download)
+///   + 300 cycles/ms  * 60_000 ms                         =         18_000_000  (latency)
+///   + 1/13 cycle/instr * 5_000_000_000 instr             =        384_615_384  (transform)
+///   + 50 cycles/byte/node * 2_000_000 B * N nodes        =    100_000_000 * N  (gossip)
+///                                                        ≈ 5 * 10^8 + 10^8 * N cycles
+/// ```
+///
+/// At 10^12 (1 trillion) this bound is not reached for subnets up to ~10_000 nodes. Because
+/// the producer ([`CanisterHttpPaymentReceipt`] creation) and the validators enforce
+/// this same bound, honest shares are never rejected for any choice of the constant;
+/// a too-tight value would only under-report the spend metric, never break validation.
+///
+pub const MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET: Cycles = Cycles::new(1_000_000_000_000);
+
+/// Returns the maximum cycles a single replica may report having `spent` on an
+/// HTTP outcall, given the subnet's `cost_schedule` and the request's
+/// `per_replica_allowance`.
+///
+/// On a [`CanisterCyclesCostSchedule::Normal`] schedule this is the
+/// `per_replica_allowance` (a replica may never spend more than it was granted).
+/// On a [`CanisterCyclesCostSchedule::Free`] schedule nothing is charged, so the
+/// spend is instead bounded by [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+pub fn max_http_outcall_spend(
+    cost_schedule: CanisterCyclesCostSchedule,
+    per_replica_allowance: Cycles,
+) -> Cycles {
+    match cost_schedule {
+        CanisterCyclesCostSchedule::Free => MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
+        CanisterCyclesCostSchedule::Normal => per_replica_allowance,
     }
 }
 
