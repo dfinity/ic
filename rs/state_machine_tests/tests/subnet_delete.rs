@@ -30,9 +30,9 @@
 //! 3.  From UC fire a bounded-wait call to UT that would set UT's global data to
 //!     a fixed blob. The call is fire-and-forget (UC replies to its ingress
 //!     immediately) and remains stuck in the C -> T stream. Also from UC fire two
-//!     bounded-wait calls to US2 and US3 on S. Each callee loops (`canister_status`
-//!     calls) holding its reply back until its global data is set. Both calls are
-//!     fire-and-forget.
+//!     bounded-wait calls to US2 and US3 on S. Each callee loops (making
+//!     `canister_status` calls) holding its reply back until its global data is
+//!     set. Both calls are fire-and-forget.
 //! 4.  Halt C.
 //! 5.  Release US2's reply (set its global data). Its response is destined for UC
 //!     on the halted subnet C; C does not consume it and, since the S -> C stream
@@ -99,7 +99,10 @@ const PAYLOAD_SIZE: u32 = 2 * 1000 * 1000;
 /// particular the two responses towards `C`, which are produced early yet must
 /// survive until `C` is deleted), so that nothing times out prematurely; it is
 /// still smaller than the post-deletion round budget, so a regression that fails
-/// to reject/drop in-flight messages surfaces as a timeout rather than a hang.
+/// to reject/drop in-flight messages lets them time out within that budget: the
+/// calls complete (via a timeout reject) and the failure surfaces as a mismatched
+/// reject code in the Step 10 assertions, rather than as the (bounded)
+/// completion-wait loop exhausting its rounds with calls still pending.
 const CALL_TIMEOUT_SECS: u32 = 120;
 const FIXED_BLOB: &[u8] = b"cloud-engine-test-fixed-blob";
 /// Blobs used by the response-dropping scenario. A looping canister on `S` holds
@@ -225,8 +228,8 @@ fn fire_looping_call(
 }
 
 /// Releases a looping canister's held-back reply by setting its global data to
-/// `RESPONSE_TRIGGER_BLOB` (a fire-and-forget ingress; the canister's loop then
-/// replies on its next iteration).
+/// `RESPONSE_TRIGGER_BLOB` (fire-and-forget; the canister's loop then replies on
+/// its next iteration).
 fn release_looping_reply(sm: &StateMachine, canister: CanisterId, user_id: PrincipalId) {
     let payload = wasm()
         .set_global_data(RESPONSE_TRIGGER_BLOB)
@@ -399,8 +402,9 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     drop(c_state);
 
     // Also fire two more fire-and-forget bounded-wait calls from UC to US2
-    // and US3 on the surviving subnet S. Each callee loops (`canister_status`
-    // calls) holding its reply back until its global data is set (Steps 5, 8).
+    // and US3 on the surviving subnet S. Each callee loops (making
+    // `canister_status` calls) holding its reply back until its global data is
+    // set (Steps 5, 8).
     // Both requests are placed in the C -> S stream while C is still running, so
     // S can induct them (and start the loops) before C is deleted. Their eventual
     // replies are *responses* destined for UC on the deleted subnet C.
@@ -410,10 +414,11 @@ fn xnet_messages_rejected_after_subnet_deletion_impl(deleted_subnet_type: Subnet
     // Step 4: Halt subnet C by not executing any more rounds on it.
 
     // Step 5: Release US2's reply by setting its global data, and drive S until
-    // the resulting response reaches the S -> C stream. C is halted, so it does
-    // not consume the response; and the S -> C stream is still empty (Step 6 has
-    // not run yet), so the response is inducted into it. Driving S here also
-    // inducts the two C -> S requests (from Step 3) and starts US2/US3 looping.
+    // the resulting response reaches the S -> C stream. This is the first time S
+    // runs since Step 3, so the drive inducts the two C -> S requests and starts
+    // US2's and US3's loops, letting US2 observe its global data and reply. C is
+    // halted, so it does not consume the response; and the S -> C stream is still
+    // empty (Step 6 has not run yet), so the response is inducted into it.
     release_looping_reply(&s, us2, user_id);
     let mut response_in_stream = false;
     for _ in 0..50 {
