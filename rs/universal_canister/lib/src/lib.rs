@@ -847,9 +847,9 @@ impl PayloadBuilder {
         self
     }
 
-    /// Loops indefinitely — each iteration performing a `canister_status`
-    /// inter-canister call to the executing canister itself — until the
-    /// canister's global data equals `trigger`, and then replies with `reply`.
+    /// Loops indefinitely — each iteration performing a management-canister
+    /// `canister_status` call for the executing canister — until the canister's
+    /// global data equals `trigger`, and then replies with `reply`.
     ///
     /// Because each loop iteration is an inter-canister call, the reply to the
     /// caller is delayed across message boundaries until some other message
