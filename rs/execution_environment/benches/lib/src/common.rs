@@ -7,7 +7,7 @@ use ic_config::execution_environment::{
     CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, SUBNET_CALLBACK_SOFT_LIMIT,
     SUBNET_MEMORY_RESERVATION,
 };
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, SubnetConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
@@ -79,7 +79,9 @@ pub fn deterministic_tracker_overhead(n_wasm_pages: u64) -> u64 {
         .deterministic_memory_tracker
         == FlagStatus::Enabled
     {
-        n_wasm_pages * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
+        n_wasm_pages
+            * (WASM_PAGE_SIZE / ic_sys::PAGE_SIZE as u64)
+            * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
     } else {
         0
     }

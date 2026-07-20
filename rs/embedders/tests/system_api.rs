@@ -1,7 +1,6 @@
 use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
-    embedders::Config as EmbeddersConfig,
-    subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+    embedders::Config as EmbeddersConfig, subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
 };
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerSubnetConfig};
 use ic_embedders::wasmtime_embedder::system_api::{
@@ -1571,7 +1570,6 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -1638,7 +1636,6 @@ fn push_output_request_respects_memory_limits() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -1735,7 +1732,6 @@ fn push_output_request_oversized_request_memory_limits() {
         &system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),
@@ -2151,7 +2147,6 @@ fn get_system_api_for_best_effort_response(
         system_state,
         cycles_account_manager,
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters.compute_allocation,
         execution_parameters.canister_guaranteed_callback_quota,
         Default::default(),

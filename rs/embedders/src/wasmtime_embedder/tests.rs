@@ -72,7 +72,6 @@ fn test_wasmtime_system_api() {
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         std::sync::Arc::new(NetworkTopology::default()),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),
