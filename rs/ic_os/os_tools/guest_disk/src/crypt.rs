@@ -57,7 +57,6 @@ pub struct SevMetadata {
 }
 
 impl KeyslotMetadata {
-    /// Creates a new token associating `keyslot` with `sev_metadata`.
     pub fn new_sev(keyslot: u32, sev_metadata: SevMetadata) -> Self {
         Self {
             token_type: IC_KEY_TOKEN_TYPE.to_string(),
@@ -143,7 +142,9 @@ fn obtain_crypt_device_handle_with_detached_header(
         .context("Failed to initialize cryptographic device with detached header")
 }
 
-/// Opens and activates a cryptographic device using the provided passphrase.
+/// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
+/// using the provided name and encryption key.
+/// Returns the crypt device and the activated keyslot.
 pub fn activate_crypt_device(
     device_path: &Path,
     header_location: LuksHeaderLocation,
@@ -271,10 +272,10 @@ pub fn open_luks2_device(
 
 /// Checks if the provided encryption key can activate the cryptographic device at the given path.
 /// Does not activate the device.
-pub fn check_encryption_key(
+pub fn check_passphrase(
     device_path: &Path,
     header_location: LuksHeaderLocation,
-    encryption_key: &[u8],
+    passphrase: &[u8],
 ) -> Result<()> {
     // This method simply checks if the key works, we don't care about LUKS parameters
     let mut crypt_device = open_luks2_device(device_path, header_location, false)
@@ -282,7 +283,7 @@ pub fn check_encryption_key(
 
     crypt_device
         .activate_handle()
-        .activate_by_passphrase(None, None, encryption_key, CryptActivate::empty())
+        .activate_by_passphrase(None, None, passphrase, CryptActivate::empty())
         .context("Failed to activate device")?;
 
     Ok(())

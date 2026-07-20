@@ -18,9 +18,9 @@ use anyhow::{Result, anyhow};
 use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
-    KeyslotMetadata, LuksHeaderLocation, activate_crypt_device,
-    backup_luks_header_to_file, check_encryption_key, deactivate_crypt_device, format_crypt_device,
-    open_luks2_device, read_keyslot_metadata, remove_assigned_tokens, write_keyslot_metadata,
+    KeyslotMetadata, LuksHeaderLocation, activate_crypt_device, backup_luks_header_to_file,
+    check_passphrase, deactivate_crypt_device, format_crypt_device, open_luks2_device,
+    read_keyslot_metadata, remove_assigned_tokens, write_keyslot_metadata,
 };
 use guest_disk::sev::{SevDiskEncryption, can_open_store};
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -31,12 +31,12 @@ use libcryptsetup_rs::{
     CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, TokenInput,
 };
 use prometheus::Registry;
+use serde_json::json;
 use sev::Generation;
 use sev::firmware::host::TcbVersion;
 use sev::parser::ByteParser;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev_guest_testing::MockSevGuestFirmwareBuilder;
-use serde_json::json;
 use std::fs;
 use std::fs::{File, OpenOptions, Permissions};
 use std::io::{Read, Write};
@@ -176,14 +176,12 @@ impl<'a> PartitionView<'a> {
 
     fn has_detached_luks2_header(&self) -> bool {
         match &self.detached_header_path {
-            Some(header_path) => {
-                open_luks2_device(
-                    &self.device_path,
-                    LuksHeaderLocation::Detached(header_path),
-                    false,
-                )
-                .is_ok()
-            }
+            Some(header_path) => open_luks2_device(
+                &self.device_path,
+                LuksHeaderLocation::Detached(header_path),
+                false,
+            )
+            .is_ok(),
             None => false,
         }
     }
@@ -907,14 +905,14 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     fixture.store_partition().deactivate();
     fixture.backup_store_header();
 
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Attached,
         PREVIOUS_KEY,
     )
     .expect("previous key should unlock the store partition");
 
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Attached,
         DEPRECATED_KEY,
@@ -935,7 +933,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
 
     // Check that the SEV key unlocks the device, the previous key unlocks the device, and the
     // deprecated key is removed.
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&fixture.store_header_path()),
         PREVIOUS_KEY,
@@ -943,7 +941,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     .expect("previous key should unlock the store partition");
 
     // The attached header is wiped during open() when a detached header is available.
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Attached,
         PREVIOUS_KEY,
@@ -952,7 +950,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
 
     let sev_key = fixture.derive_sev_key(Partition::Store);
 
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&fixture.store_header_path()),
         &sev_key,
@@ -960,14 +958,14 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     .expect("SEV key should unlock the store partition");
 
     // The attached header has been wiped, so no key should unlock it.
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Attached,
         &sev_key,
     )
     .expect_err("attached Store header should have been wiped during open()");
 
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&fixture.store_header_path()),
         DEPRECATED_KEY,
@@ -1779,48 +1777,50 @@ fn test_sev_firmware_upgrade_rotates_keyslot_metadata() {
     for partition in [Partition::Store, Partition::Var] {
         let mut fixture = TestFixture::new_sev();
 
-        let initial_tcb = TcbVersion::new(None, 1, 0, 0, 0);
-        let initial_tcb_u64 =
-            u64::from_le_bytes(initial_tcb.to_bytes_with(Generation::Milan).unwrap());
-        fixture.set_launch_tcb(initial_tcb);
+        let tcb1 = TcbVersion::new(None, 1, 1, 1, 1);
+        let tcb1_u64 = u64::from_le_bytes(tcb1.to_bytes_with(Generation::Milan).unwrap());
+        fixture.set_launch_tcb(tcb1);
         fixture.partition(partition).format().unwrap();
 
-        let initial_stored_tcb = fixture.partition(partition).read_keyslot_metadata()[0]
-            .sev_metadata
-            .tcb_version;
-        assert_eq!(initial_stored_tcb, initial_tcb_u64);
+        let keyslot_metadata = fixture.partition(partition).read_keyslot_metadata();
+        // There is one keyslot with the initial TCB version.
+        assert_eq!(keyslot_metadata.len(), 1);
+        assert_eq!(keyslot_metadata[0].sev_metadata.tcb_version, tcb1_u64);
 
         fixture.partition(partition).open().unwrap();
-        fixture.partition(partition).write_payload(b"data before upgrade");
+        fixture
+            .partition(partition)
+            .write_payload(b"data before upgrade");
         fixture.partition(partition).deactivate();
 
         // Firmware upgrade: TCB changes, measurement stays the same → key unchanged.
-        let upgraded_tcb = TcbVersion::new(None, 2, 0, 0, 0);
-        fixture.firmware_upgrade_to(upgraded_tcb);
+        let tcb2 = TcbVersion::new(None, 2, 2, 2, 2);
+        let tcb2_u64 = u64::from_le_bytes(tcb2.to_bytes_with(Generation::Milan).unwrap());
+        fixture.firmware_upgrade_to(tcb2);
 
         fixture
             .partition(partition)
             .open()
             .expect("open after firmware upgrade should succeed");
-        fixture.partition(partition).assert_payload(b"data before upgrade");
+        fixture
+            .partition(partition)
+            .assert_payload(b"data before upgrade");
         fixture.partition(partition).deactivate();
 
-        let upgraded_stored_tcb = fixture.partition(partition).read_keyslot_metadata()[0]
-            .sev_metadata
-            .tcb_version;
-        assert_ne!(upgraded_stored_tcb, initial_stored_tcb);
+        let keyslot_metadata_after_upgrade = fixture.partition(partition).read_keyslot_metadata();
+        // There is one keyslot with the upgraded TCB version.
+        assert_eq!(keyslot_metadata_after_upgrade.len(), 1);
+        assert_eq!(
+            keyslot_metadata_after_upgrade[0].sev_metadata.tcb_version,
+            tcb2_u64
+        );
 
-        // Re-open: should succeed with the rotated TCB (no candidate enumeration needed).
+        // Re-open: should succeed with the rotated TCB.
         fixture
             .partition(partition)
             .open()
             .expect("re-open after TCB rotation should succeed");
         fixture.partition(partition).deactivate();
-
-        let final_stored_tcb = fixture.partition(partition).read_keyslot_metadata()[0]
-            .sev_metadata
-            .tcb_version;
-        assert_eq!(final_stored_tcb, upgraded_stored_tcb);
     }
 }
 
@@ -1832,8 +1832,7 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
     let guestos_b_measurement = [0xBB_u8; 48];
 
     let initial_tcb = TcbVersion::new(None, 1, 0, 0, 0);
-    let initial_tcb_u64 =
-        u64::from_le_bytes(initial_tcb.to_bytes_with(Generation::Milan).unwrap());
+    let initial_tcb_u64 = u64::from_le_bytes(initial_tcb.to_bytes_with(Generation::Milan).unwrap());
     let upgraded_tcb = TcbVersion::new(None, 2, 0, 0, 0);
     let upgraded_tcb_u64 =
         u64::from_le_bytes(upgraded_tcb.to_bytes_with(Generation::Milan).unwrap());
@@ -1845,7 +1844,9 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
     fixture.set_launch_tcb(initial_tcb);
     fixture.store_partition().format().unwrap();
     fixture.store_partition().open().unwrap();
-    fixture.store_partition().write_payload(b"firmware-then-guestos-upgrade");
+    fixture
+        .store_partition()
+        .write_payload(b"firmware-then-guestos-upgrade");
     fixture.store_partition().deactivate();
 
     // 2. Firmware upgrade (TCB 1→2). Same GuestOS, same measurement.
@@ -1862,8 +1863,7 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
     let after_fw_metadata = fixture.store_partition().read_keyslot_metadata();
     assert_eq!(after_fw_metadata.len(), 1);
     assert_eq!(
-        after_fw_metadata[0].sev_metadata.tcb_version,
-        upgraded_tcb_u64,
+        after_fw_metadata[0].sev_metadata.tcb_version, upgraded_tcb_u64,
         "firmware upgrade should rotate TCB"
     );
 
@@ -1908,7 +1908,7 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
 
     // Both keys unlock: A (kept for rollback) and B (current).
     let store_header_path = fixture.store_header_path();
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&store_header_path),
         &guestos_a_key,
@@ -1916,7 +1916,7 @@ fn test_firmware_upgrade_then_guestos_upgrade() {
     .expect("GuestOS-A key should still unlock (kept for rollback)");
 
     let guestos_b_key = fixture.derive_sev_key(Partition::Store);
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&fixture.store_header_path()),
         &guestos_b_key,
@@ -1932,8 +1932,7 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
     let guestos_b_measurement = [0xBB_u8; 48];
 
     let initial_tcb = TcbVersion::new(None, 1, 0, 0, 0);
-    let initial_tcb_u64 =
-        u64::from_le_bytes(initial_tcb.to_bytes_with(Generation::Milan).unwrap());
+    let initial_tcb_u64 = u64::from_le_bytes(initial_tcb.to_bytes_with(Generation::Milan).unwrap());
     let upgraded_tcb = TcbVersion::new(None, 2, 0, 0, 0);
     let upgraded_tcb_u64 =
         u64::from_le_bytes(upgraded_tcb.to_bytes_with(Generation::Milan).unwrap());
@@ -1947,7 +1946,9 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
     fixture.set_launch_tcb(initial_tcb);
     fixture.store_partition().format().unwrap();
     fixture.store_partition().open().unwrap();
-    fixture.store_partition().write_payload(b"guestos-fw-rollback");
+    fixture
+        .store_partition()
+        .write_payload(b"guestos-fw-rollback");
     fixture.store_partition().deactivate();
 
     // Snapshot GuestOS-A's detached header (frozen on its var partition).
@@ -1975,7 +1976,9 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
         .store_partition()
         .open()
         .expect("GuestOS-B should open after firmware upgrade");
-    fixture.store_partition().assert_payload(b"guestos-fw-rollback");
+    fixture
+        .store_partition()
+        .assert_payload(b"guestos-fw-rollback");
     fixture.store_partition().deactivate();
 
     // 4. Rollback to GuestOS-A: switch boot alternative.
@@ -1987,8 +1990,7 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
 
     // Restore GuestOS-A's frozen header (still at TCB=1 from step 1).
     let header_path = fixture.store_header_path();
-    fs::copy(&guestos_a_header, &header_path)
-        .expect("Failed to restore GuestOS-A detached header");
+    fs::copy(&guestos_a_header, &header_path).expect("Failed to restore GuestOS-A detached header");
 
     let pre_rollback_metadata = fixture.store_partition().read_keyslot_metadata();
     assert_eq!(pre_rollback_metadata.len(), 1);
@@ -2005,7 +2007,9 @@ fn test_guestos_upgrade_then_firmware_upgrade_then_rollback() {
         .store_partition()
         .open()
         .expect("GuestOS-A should open after rollback using candidate enumeration");
-    fixture.store_partition().assert_payload(b"guestos-fw-rollback");
+    fixture
+        .store_partition()
+        .assert_payload(b"guestos-fw-rollback");
     fixture.store_partition().deactivate();
 
     // The token should now be rotated to the upgraded TCB.
@@ -2059,7 +2063,9 @@ fn test_guestos_upgrade_migrates_store_without_existing_sev_metadata() {
         None,
     )
     .expect("Failed to activate Store with previous key");
-    fixture.store_partition().write_payload(b"migration payload");
+    fixture
+        .store_partition()
+        .write_payload(b"migration payload");
     fixture.store_partition().deactivate();
     fixture.backup_store_header();
 
@@ -2069,7 +2075,9 @@ fn test_guestos_upgrade_migrates_store_without_existing_sev_metadata() {
         .open()
         .expect("GuestOS upgrade migration should succeed");
 
-    fixture.store_partition().assert_payload(b"migration payload");
+    fixture
+        .store_partition()
+        .assert_payload(b"migration payload");
     assert!(!fixture.previous_key_path().exists());
 
     let metadata = fixture.store_partition().read_keyslot_metadata();
@@ -2085,7 +2093,7 @@ fn test_guestos_upgrade_migrates_store_without_existing_sev_metadata() {
 
     // The previous key should no longer unlock.
     let store_header_path = fixture.store_header_path();
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&store_header_path),
         PREVIOUS_KEY,
@@ -2094,7 +2102,7 @@ fn test_guestos_upgrade_migrates_store_without_existing_sev_metadata() {
 
     // The new SEV key should unlock.
     let sev_key = fixture.derive_sev_key(Partition::Store);
-    check_encryption_key(
+    check_passphrase(
         fixture.store_device_path(),
         LuksHeaderLocation::Detached(&fixture.store_header_path()),
         &sev_key,

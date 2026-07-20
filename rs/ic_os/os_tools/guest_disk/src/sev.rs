@@ -1,5 +1,5 @@
 use crate::crypt::{
-    activate_crypt_device, check_encryption_key, deactivate_crypt_device, destroy_keyslots_and_assigned_tokens, destroy_keyslots_except,
+    activate_crypt_device, check_passphrase, deactivate_crypt_device, destroy_keyslots_and_assigned_tokens, destroy_keyslots_except,
     format_crypt_device, has_attached_luks_header, open_luks2_device,
     read_keyslot_metadata, wipe_attached_luks_header, write_keyslot_metadata, KeyslotMetadata,
     LuksHeaderLocation, SevMetadata,
@@ -489,7 +489,7 @@ pub fn can_open_store(
     // Keep key selection consistent with open() above.
     if previous_key_path.exists()
         && let Ok(key) = std::fs::read(previous_key_path)
-        && check_encryption_key(
+        && check_passphrase(
             device_path,
             LuksHeaderLocation::Detached(store_luks_header_path),
             &key,
@@ -522,7 +522,7 @@ pub fn can_open_store(
             continue;
         };
 
-        if check_encryption_key(
+        if check_passphrase(
             device_path,
             LuksHeaderLocation::Detached(store_luks_header_path),
             derived_key.as_bytes(),
