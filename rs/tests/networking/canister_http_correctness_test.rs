@@ -2769,6 +2769,7 @@ fn test_flexible_http_request_not_enabled_on_normal_subnet(env: TestEnv) {
     let request = FlexibleRemoteHttpRequest {
         request: FlexibleCanisterHttpRequestArgs {
             url: format!("https://[{webserver_ipv6}]/ascii/hello"),
+            max_response_bytes: None,
             headers: BoundedHttpHeaders::new(vec![]),
             body: None,
             method: HttpMethod::GET,
