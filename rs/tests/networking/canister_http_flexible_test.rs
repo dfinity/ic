@@ -158,14 +158,17 @@ fn get_args(url: String) -> FlexibleCanisterHttpRequestArgs {
     }
 }
 
-/// Sends a flexible outcall through the proxy canister and returns either the
-/// decoded [`FlexibleHttpRequestResult`] (on a handled outcall) or the
-/// synchronous rejection (on a validation failure).
+/// Sends a flexible outcall through the proxy canister. The outer `Result` is
+/// `Err` on a (retryable) transport failure of the proxy call itself; the inner
+/// `Result` is the outcall outcome — the decoded [`FlexibleHttpRequestResult`]
+/// on a handled outcall, or the synchronous rejection on a validation failure.
 async fn send_flexible(
     proxy: &Canister<'_>,
     args: FlexibleCanisterHttpRequestArgs,
     cycles: u64,
-) -> Result<FlexibleHttpRequestResult, (RejectionCode, String)> {
+) -> Result<Result<FlexibleHttpRequestResult, (RejectionCode, String)>> {
+    // A failure here is a transport-level error talking to the proxy canister,
+    // not an outcall outcome; return it so the retry loop can absorb blips.
     let res = proxy
         .update_(
             "send_flexible_request",
@@ -176,12 +179,12 @@ async fn send_flexible(
             },
         )
         .await
-        .expect("Update call to proxy canister failed");
+        .map_err(|err| anyhow::anyhow!("update call to proxy canister failed: {err}"))?;
 
-    res.map(|bytes| {
+    Ok(res.map(|bytes| {
         Decode!(&bytes, FlexibleHttpRequestResult)
             .expect("Failed to decode FlexibleHttpRequestResult")
-    })
+    }))
 }
 
 /// Runs `assert_result` against the outcome of the flexible outcall built by
@@ -204,7 +207,7 @@ where
             RETRY_BACKOFF,
             || async {
                 let args = make_args(&env);
-                let result = send_flexible(&proxy, args, CYCLES).await;
+                let result = send_flexible(&proxy, args, CYCLES).await?;
                 assert_result(result)
             }
         )
@@ -1368,7 +1371,7 @@ fn test_fault_tolerance(env: TestEnv) {
                     max_responses: SUBNET_NODES,
                 });
                 // Attaching cycles should be possible, even of free subnets
-                let result = send_flexible(&proxy, args, 1000).await;
+                let result = send_flexible(&proxy, args, 1000).await?;
                 // At most the surviving nodes (n - 1) can respond.
                 let payloads = expect_ok(result, 2, (SUBNET_NODES - 1) as usize)?;
                 expect_all_status(&payloads, 200)?;
