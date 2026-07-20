@@ -27,8 +27,9 @@ use ic_replicated_state::page_map::{
 };
 use ic_replicated_state::{CanisterState, NumWasmPages, PageMap, ReplicatedState};
 use ic_state_layout::{
-    CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
-    ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile, error::LayoutError,
+    CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, CheckpointStatus,
+    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
+    error::LayoutError,
 };
 use ic_types::{CanisterId, Height, SnapshotId, malicious_flags::MaliciousFlags};
 use ic_utils::thread::parallel_map;
@@ -164,6 +165,19 @@ pub(crate) enum TipRequest {
     Wait { sender: Sender<()> },
 }
 
+enum ManifestRequest {
+    /// Compute the manifest, concurrently with `ValidateReplicatedStateAndFinalize`
+    /// on the tip thread. The resulting `BundledManifest` is sent to
+    /// `manifest_sender`.
+    ComputeManifest {
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
+        base_manifest_info: Option<BaseManifestInfo>,
+        manifest_sender: Sender<crate::BundledManifest>,
+    },
+    /// Wait for `ComputeManifest` to complete, then notify back via sender.
+    Wait { sender: Sender<()> },
+}
+
 fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
     metrics
         .checkpoint_metrics
@@ -200,7 +214,7 @@ pub(crate) fn spawn_tip_thread(
     // they are only released once the preceding `TipToCheckpointAndSwitch` has
     // finished serializing Wasms and protos.
     #[allow(clippy::disallowed_methods)]
-    let (manifest_thread_sender, manifest_receiver) = unbounded::<TipRequest>();
+    let (manifest_thread_sender, manifest_receiver) = unbounded::<ManifestRequest>();
     {
         // Own thread pool, to run concurrently with the tip thread's checkpoint work.
         let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
@@ -213,7 +227,7 @@ pub(crate) fn spawn_tip_thread(
                 let mut rehash_divergence = false;
                 while let Ok(req) = manifest_receiver.recv() {
                     match req {
-                        TipRequest::ComputeManifest {
+                        ManifestRequest::ComputeManifest {
                             checkpoint_layout,
                             base_manifest_info,
                             manifest_sender,
@@ -233,10 +247,9 @@ pub(crate) fn spawn_tip_thread(
 
                         // Flush barrier (see `flush_tip_channel`): forwarded by the tip thread so a
                         // flush also waits for in-flight manifest work — including rehash — to drain.
-                        TipRequest::Wait { sender } => {
+                        ManifestRequest::Wait { sender } => {
                             let _ = sender.send(());
                         }
-                        _ => unreachable!("manifest thread only handles ComputeManifest and Wait"),
                     }
                 }
             })
@@ -482,18 +495,26 @@ pub(crate) fn spawn_tip_thread(
                             // `ComputeManifest`) so the flush also waits for any post-publish rehash to
                             // complete; the manifest thread replies to `sender`.
                             manifest_thread_sender
-                                .send(TipRequest::Wait { sender })
+                                .send(ManifestRequest::Wait { sender })
                                 .expect("manifest thread dropped the receiver");
                         }
 
-                        TipRequest::ComputeManifest { .. } => {
+                        TipRequest::ComputeManifest {
+                            checkpoint_layout,
+                            base_manifest_info,
+                            manifest_sender,
+                        } => {
                             // Forward to the dedicated manifest thread. Routing this through the tip
                             // channel (where it is enqueued before `ValidateReplicatedStateAndFinalize`)
                             // guarantees that the preceding `TipToCheckpointAndSwitch` has fully serialized
                             // the checkpoint's Wasms and protos before the manifest computation walks the
                             // checkpoint directory.
                             manifest_thread_sender
-                                .send(req)
+                                .send(ManifestRequest::ComputeManifest {
+                                    checkpoint_layout,
+                                    base_manifest_info,
+                                    manifest_sender,
+                                })
                                 .expect("manifest thread dropped the receiver");
                         }
                         TipRequest::WaitForManifest {
@@ -1668,6 +1689,17 @@ fn publish_bundled_manifest(
     height: Height,
     bundled_manifest: crate::BundledManifest,
 ) {
+    if !matches!(
+        state_layout.checkpoint_status(height),
+        Ok(CheckpointStatus::Verified),
+    ) {
+        fatal!(
+            log,
+            "Trying to publish manifest for unverified checkpoint @{}",
+            height
+        );
+    }
+
     let mut states = states.write();
     if let Some(metadata) = states.states_metadata.get_mut(&height) {
         metadata.bundled_manifest = Some(bundled_manifest);
