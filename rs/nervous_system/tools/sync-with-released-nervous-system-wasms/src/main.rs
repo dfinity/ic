@@ -12,7 +12,7 @@ use ic_nns_constants::{
     NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
-use reqwest::{Client, Response};
+use reqwest::Client;
 use serde::Deserialize;
 use sha2::Digest;
 use std::env;
@@ -218,7 +218,7 @@ impl Tag {
             return Ok(None);
         }
 
-        let release: Release = decode_json_response(&release_url, res).await?;
+        let release: Release = decode_json_response(res, &release_url).await?;
 
         if release.tag_name != self.name {
             return Err(anyhow!(
@@ -260,7 +260,7 @@ struct ReleaseAsset {
 impl ReleaseAsset {
     // Returns the sha256 hash of the asset content.
     async fn sha256(&self) -> Result<String> {
-        let response = fetch(&self.browser_download_url).await?;
+        let response = fetch_github_url(&self.browser_download_url).await?;
         let asset_bytes = response.bytes().await?;
 
         Ok(module_hash_hex(sha2::Sha256::digest(&asset_bytes).to_vec()))
@@ -268,7 +268,7 @@ impl ReleaseAsset {
 
     // Returns the textual content of the asset.
     async fn text(&self) -> Result<String> {
-        let response = fetch(&self.browser_download_url).await?;
+        let response = fetch_github_url(&self.browser_download_url).await?;
 
         Ok(response.text().await?)
     }
@@ -314,8 +314,8 @@ async fn get_mainnet_canister_release(
         let tags_url = format!(
             "{GITHUB_API}/repos/{canister_repository}/tags?per_page={tags_per_page}&page={page}"
         );
-        let response = fetch(&tags_url).await?;
-        let tags: Vec<Tag> = decode_json_response(&tags_url, response).await?;
+        let response = fetch_github_url(&tags_url).await?;
+        let tags: Vec<Tag> = decode_json_response(response, &tags_url).await?;
 
         for tag in &tags {
             if let Some(ref tag_name_prefix) = canister_tag_name_prefix
@@ -620,11 +620,9 @@ fn update_mainnet_canisters_bzl_file(
     Ok(())
 }
 
-// Shared request plumbing and diagnostic-only helpers below. `fetch` is the common way to issue an
-// authenticated GET against the GitHub API (or a release asset's download URL); the diagnostic
-// helpers do not change any behavior, they just make GitHub API request failures (which otherwise
-// surface as an opaque error, e.g. "expected value at line 1 column 1") diagnosable from the CI
-// logs by attaching the HTTP status and (truncated) response body to the returned error.
+// Shared request plumbing and diagnostic-only helpers below. `convert_response_to_result` and
+// `decode_json_response` provide more diagnostics than the Reqwest library when there is a
+// failure.
 
 /// Maximum number of response-body bytes to include in an error/log message. The GitHub API can
 /// return large HTML error pages (e.g., during an outage); truncating keeps logs readable while
@@ -633,7 +631,13 @@ const MAX_LOGGED_BODY_LEN: usize = 2000;
 
 /// Diagnostic-only: returns `response` unchanged if its status is a success. Otherwise, reads the
 /// body and returns an error containing the status and the (possibly truncated) response body.
-async fn ensure_success(url: &str, response: Response) -> Result<Response> {
+///
+/// `url` is not used unless `response`'s status is not success; it is only there to add to the
+/// diagnostics in that case.
+async fn convert_response_to_result(
+    response: reqwest::Response,
+    url: &str,
+) -> Result<reqwest::Response> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);
@@ -649,22 +653,26 @@ async fn ensure_success(url: &str, response: Response) -> Result<Response> {
     ))
 }
 
-/// Sends an authenticated GET request to `url` and returns the response after checking (via
-/// [`ensure_success`]) that its status is a success.
-async fn fetch(url: &str) -> Result<Response> {
+/// Sends an authenticated GET request to `url` (a GitHub API or release-asset-download URL) and
+/// returns the response after checking (via [`convert_response_to_result`]) that its status is a
+/// success.
+async fn fetch_github_url(url: &str) -> Result<reqwest::Response> {
     let (client, token) = github_api_client_and_token()?;
     let response = client.get(url).bearer_auth(&token).send().await?;
-    ensure_success(url, response).await
+    convert_response_to_result(response, url).await
 }
 
-/// Diagnostic-only: like [`Response::json`], but on failure (either a non-success status, or a
-/// body that fails to decode as JSON), the returned error includes the status and the (possibly
-/// truncated) response body.
+/// Diagnostic-only: like [`reqwest::Response::json`], but on failure (either a non-success
+/// status, or a body that fails to decode as JSON), the returned error includes the status and
+/// the (possibly abridged) response body.
+///
+/// `url` is not used unless decoding fails; it is only there to add to the diagnostics in that
+/// case.
 async fn decode_json_response<T: serde::de::DeserializeOwned>(
+    response: reqwest::Response,
     url: &str,
-    response: Response,
 ) -> Result<T> {
-    let response = ensure_success(url, response).await?;
+    let response = convert_response_to_result(response, url).await?;
     let body = response
         .text()
         .await
