@@ -723,7 +723,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_connect_timeout() {
-        // Test that adapter hits connect timeout when connecting to unreachable host.
+        // Test that adapter hits connect timeout when connecting to a host that
+        // accepts no new connections (simulates an unreachable host).
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
             http_connect_timeout_secs: 1,
@@ -733,12 +734,19 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         };
 
-        let _url = start_server(CERT_INIT.get_or_init(generate_certs));
+        // Connect to a loopback listener whose accept queue is saturated, so
+        // the connect hangs until the adapter's timeout fires. This exercises
+        // the connect-timeout path using only loopback, so the test does not
+        // require network egress. `_saturated` must stay alive for the duration
+        // of the test to keep the address unconnectable.
+        let _saturated = ic_test_utilities_net::saturated_loopback_listener().await;
+        let addr = _saturated.addr();
+
         let mut client = spawn_grpc_server(server_config);
 
-        // Non routable address that causes a connect timeout.
+        // Connecting to the saturated listener hangs and triggers the connect timeout.
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: "https://10.255.255.1".to_string(),
+            url: format!("https://{addr}"),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
