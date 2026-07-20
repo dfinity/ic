@@ -1255,13 +1255,6 @@ crate.spec(
     package = "proptest-derive",
     version = "^0.5.0",
 )
-
-# why are both needed?
-crate.spec(
-    package = "prost",
-    package_alias = "prost_0_12",
-    version = "^0.12.2",
-)
 crate.spec(
     package = "prost",
     version = "^0.14.3",
