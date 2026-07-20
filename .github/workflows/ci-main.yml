@@ -649,6 +649,7 @@ jobs:
               - "**/*.lock"
               - "ci/scripts/rust-lint.sh"
               - "ci/container/TAG"
+              - ".github/**"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
           steps.filter.outputs.cargo == 'true' ||
@@ -662,7 +663,8 @@ jobs:
         env:
           # on dind_small cargo sometimes runs out of files (when building and linting). This trades
           # some performance for reliability.
-          CARGO_BUILD_JOBS: 8
+          # (at the time of writing, nproc returns 64 on dind_small where this job runs)
+          CARGO_BUILD_JOBS: 32
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
