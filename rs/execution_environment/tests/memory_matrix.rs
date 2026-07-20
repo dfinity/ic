@@ -176,7 +176,12 @@ struct RunResult {
     /// `None` if the operation under test succeeded.
     err: Option<UserError>,
     /// The number of additional allocated bytes after running the operation under test.
+    /// Excludes canister history memory usage (which does not reserve storage cycles).
     allocated_bytes: NumBytes,
+    /// The number of additional bytes charged against the subnet available execution
+    /// memory (including canister history memory usage) after running the operation
+    /// under test.
+    subnet_allocated_bytes: NumBytes,
     /// The number of additional reserved cycles after running the operation under test.
     reserved_cycles: Cycles,
     /// The minimum amount of initial cycles before running the operation under test.
@@ -365,6 +370,19 @@ where
         .memory_allocation()
         .allocated_bytes(final_memory_usage);
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
+    // `newly_allocated_bytes` deliberately excludes canister history memory usage
+    // (see `final_memory_usage` above) so that the cycles-reservation and
+    // memory-usage-change assertions below stay meaningful: management methods do
+    // not reserve storage cycles for the canister history they record. However,
+    // recording canister history *does* decrement the subnet available execution
+    // memory, so compute separately the bytes actually charged against the subnet
+    // available memory (including canister history) for `test_subnet_memory_capacity`.
+    let final_allocated_bytes_including_history = test
+        .canister_state(canister_id)
+        .memory_allocation()
+        .allocated_bytes(test.canister_state(canister_id).memory_usage());
+    let newly_allocated_bytes_including_history =
+        final_allocated_bytes_including_history.saturating_sub(&initial_allocated_bytes);
     // Note. The cycles prepayment in `install_code` and `load_canister_snapshot` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
     // The cycles prepayment for response callback execution is charged during setup
@@ -555,6 +573,7 @@ where
     RunResult {
         err,
         allocated_bytes: newly_allocated_bytes,
+        subnet_allocated_bytes: newly_allocated_bytes_including_history,
         reserved_cycles: newly_reserved_cycles,
         minimum_initial_cycles,
     }
@@ -785,7 +804,7 @@ where
             test_subnet_memory_capacity(
                 &scenario_params,
                 default_run_params.clone(),
-                res.allocated_bytes,
+                res.subnet_allocated_bytes,
             );
 
             if res.allocated_bytes > NumBytes::from(0) {

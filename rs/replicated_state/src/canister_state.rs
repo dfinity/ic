@@ -15,7 +15,8 @@ use crate::{InputQueueType, OutputRequest, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
+    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange, SubnetAvailableMemory,
+    SubnetAvailableMemoryError,
 };
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
@@ -683,8 +684,16 @@ impl CanisterState {
 
     /// Adds a canister change to canister history and returns the change
     /// of subnet available execution memory due to updating canister history.
+    ///
+    /// The returned change is *not* applied to the subnet available execution
+    /// memory; the caller is responsible for applying it. Prefer
+    /// [`Self::add_canister_change`], which applies the change and fails if the
+    /// subnet does not have enough available execution memory. This unchecked
+    /// variant should only be used where the application to the subnet available
+    /// execution memory is deferred (e.g. accumulated across multiple steps of
+    /// `install_code`).
     #[must_use]
-    pub fn add_canister_change(
+    pub fn add_canister_change_unchecked(
         &mut self,
         timestamp_nanos: Time,
         change_origin: CanisterChangeOrigin,
@@ -700,6 +709,41 @@ impl CanisterState {
         } else {
             let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
             SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
+        }
+    }
+
+    /// Adds a canister change to canister history and decrements the subnet
+    /// available execution memory accordingly.
+    ///
+    /// Fails with [`SubnetAvailableMemoryError::InsufficientMemory`] if the
+    /// subnet does not have enough available execution memory to account for the
+    /// additional canister history. Callers operate on a clone of the
+    /// `CanisterState` that is only committed to the replicated state when the
+    /// operation succeeds, so the canister change recorded in the clone is
+    /// discarded when the caller propagates the error.
+    pub fn add_canister_change(
+        &mut self,
+        subnet_available_memory: &mut SubnetAvailableMemory,
+        timestamp_nanos: Time,
+        change_origin: CanisterChangeOrigin,
+        change_details: CanisterChangeDetails,
+    ) -> Result<(), SubnetAvailableMemoryError> {
+        match self.add_canister_change_unchecked(timestamp_nanos, change_origin, change_details) {
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
+                subnet_available_memory.try_decrement(
+                    allocated_bytes,
+                    NumBytes::new(0),
+                    NumBytes::new(0),
+                )
+            }
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
+                subnet_available_memory.increment(
+                    deallocated_bytes,
+                    NumBytes::new(0),
+                    NumBytes::new(0),
+                );
+                Ok(())
+            }
         }
     }
 }

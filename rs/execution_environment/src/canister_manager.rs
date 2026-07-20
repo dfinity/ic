@@ -24,6 +24,7 @@ use ic_cycles_account_manager::{
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_interfaces::execution_environment::SubnetAvailableMemoryError;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -712,30 +713,30 @@ impl CanisterManager {
                     .map(|environment_variables| environment_variables.hash());
 
                 if new_environment_variables_hash.is_some() || new_controllers.is_some() {
-                    let available_execution_memory_change = canister.add_canister_change(
-                        timestamp_nanos,
-                        origin,
-                        CanisterChangeDetails::settings_change(
-                            new_controllers,
-                            new_environment_variables_hash,
-                        ),
-                    );
-                    round_limits
-                        .subnet_available_memory
-                        .update_execution_memory_unchecked(available_execution_memory_change);
+                    canister
+                        .add_canister_change(
+                            &mut round_limits.subnet_available_memory,
+                            timestamp_nanos,
+                            origin,
+                            CanisterChangeDetails::settings_change(
+                                new_controllers,
+                                new_environment_variables_hash,
+                            ),
+                        )
+                        .map_err(subnet_available_memory_error_to_canister_manager_error)?;
                 }
             }
             FlagStatus::Disabled => {
         */
         if let Some(new_controllers) = new_controllers {
-            let available_execution_memory_change = canister.add_canister_change(
-                timestamp_nanos,
-                origin,
-                CanisterChangeDetails::controllers_change(new_controllers),
-            );
-            round_limits
-                .subnet_available_memory
-                .update_execution_memory_unchecked(available_execution_memory_change);
+            canister
+                .add_canister_change(
+                    &mut round_limits.subnet_available_memory,
+                    timestamp_nanos,
+                    origin,
+                    CanisterChangeDetails::controllers_change(new_controllers),
+                )
+                .map_err(subnet_available_memory_error_to_canister_manager_error)?;
         }
         /*
             }
@@ -988,14 +989,33 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        let available_execution_memory_change = canister.add_canister_change(
+        let canister_history_memory_usage_before = canister.canister_history_memory_usage();
+        if let Err(err) = canister.add_canister_change(
+            &mut round_limits.subnet_available_memory,
             time,
             origin,
             CanisterChangeDetails::CanisterCodeUninstall,
-        );
-        round_limits
-            .subnet_available_memory
-            .update_execution_memory_unchecked(available_execution_memory_change);
+        ) {
+            // The NNS governance canister can forcefully uninstall the code of any
+            // canister and must be able to do so even if the subnet cannot account
+            // for the additional canister history entry. In that case drop the
+            // canister history (as is done when a canister is uninstalled after
+            // running out of cycles) so that the uninstall still succeeds.
+            if sender == GOVERNANCE_CANISTER_ID.get() {
+                canister.system_state.clear_canister_history();
+                // Return the memory of the dropped canister history to the subnet
+                // available execution memory. The failed `CanisterCodeUninstall`
+                // change was not accounted for, so only the pre-existing canister
+                // history that had been accounted for is returned.
+                round_limits.subnet_available_memory.increment(
+                    canister_history_memory_usage_before,
+                    NumBytes::new(0),
+                    NumBytes::new(0),
+                );
+            } else {
+                return Err(subnet_available_memory_error_to_canister_manager_error(err));
+            }
+        }
 
         Ok(CanisterManagerResponse {
             canister_id: canister.canister_id(),
@@ -1547,14 +1567,15 @@ impl CanisterManager {
         let environment_variables_hash = settings
             .environment_variables()
             .map(|env_vars| env_vars.hash());
-        let available_execution_memory_change = new_canister.add_canister_change(
+        if let Err(err) = new_canister.add_canister_change(
+            &mut round_limits.subnet_available_memory,
             state.time(),
             origin,
             CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
-        );
-        round_limits
-            .subnet_available_memory
-            .update_execution_memory_unchecked(available_execution_memory_change);
+        ) {
+            *round_limits = round_limits_snapshot;
+            return Err(subnet_available_memory_error_to_canister_manager_error(err));
+        }
 
         if specified_id.is_none() {
             state.metadata.commit_new_canister_id(new_canister_id);
@@ -2092,14 +2113,14 @@ impl CanisterManager {
                 time,
                 Arc::clone(&self.fd_factory),
             );
-            let available_execution_memory_change = canister.add_canister_change(
-                time,
-                origin,
-                CanisterChangeDetails::CanisterCodeUninstall,
-            );
-            round_limits
-                .subnet_available_memory
-                .update_execution_memory_unchecked(available_execution_memory_change);
+            canister
+                .add_canister_change(
+                    &mut round_limits.subnet_available_memory,
+                    time,
+                    origin,
+                    CanisterChangeDetails::CanisterCodeUninstall,
+                )
+                .map_err(subnet_available_memory_error_to_canister_manager_error)?;
             rejects
         } else {
             vec![]
@@ -2443,20 +2464,20 @@ impl CanisterManager {
 
         // Increment canister version.
         new_canister.system_state.bump_canister_version();
-        let available_execution_memory_change = new_canister.add_canister_change(
-            time,
-            origin,
-            CanisterChangeDetails::load_snapshot(
-                snapshot.canister_version(),
-                snapshot_id,
-                snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
-                snapshot.source(),
-                from_canister_id,
-            ),
-        );
-        round_limits
-            .subnet_available_memory
-            .update_execution_memory_unchecked(available_execution_memory_change);
+        new_canister
+            .add_canister_change(
+                &mut round_limits.subnet_available_memory,
+                time,
+                origin,
+                CanisterChangeDetails::load_snapshot(
+                    snapshot.canister_version(),
+                    snapshot_id,
+                    snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                    snapshot.source(),
+                    from_canister_id,
+                ),
+            )
+            .map_err(subnet_available_memory_error_to_canister_manager_error)?;
 
         let heap_delta = new_canister.heap_delta();
 
@@ -3025,7 +3046,7 @@ impl CanisterManager {
         canister
             .system_state
             .rename_canister(new_id, to_version, to_total_num_changes);
-        let available_execution_memory_change = canister.add_canister_change(
+        let available_execution_memory_change = canister.add_canister_change_unchecked(
             state.time(),
             origin,
             CanisterChangeDetails::rename_canister(
@@ -3076,6 +3097,24 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
         });
     }
     Ok(size)
+}
+
+/// Maps a `SubnetAvailableMemoryError` (returned when the subnet does not have
+/// enough available execution memory to account for additional canister history)
+/// to the corresponding `CanisterManagerError`.
+fn subnet_available_memory_error_to_canister_manager_error(
+    err: SubnetAvailableMemoryError,
+) -> CanisterManagerError {
+    match err {
+        SubnetAvailableMemoryError::InsufficientMemory {
+            execution_requested,
+            available_execution,
+            ..
+        } => CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+            requested: execution_requested,
+            available: NumBytes::new(available_execution.max(0) as u64),
+        },
+    }
 }
 
 /// Uninstalls a canister.
