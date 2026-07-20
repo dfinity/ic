@@ -109,7 +109,10 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_too_many_rejects_response_over_node_limit))
                 .add_test(systest!(test_too_many_rejects_transform_over_node_limit))
                 .add_test(systest!(test_too_many_rejects_composite_transform))
-                .add_test(systest!(test_responses_too_large)),
+                .add_test(systest!(test_responses_too_large))
+                // Caller-supplied per-node response size cap.
+                .add_test(systest!(test_custom_max_response_bytes_exceeded))
+                .add_test(systest!(test_custom_max_response_bytes_within_limits)),
         )
         // Fault tolerance kills a node, so it must run sequentially AFTER the
         // parallel suite.
@@ -166,6 +169,7 @@ fn webserver_base(env: &TestEnv) -> String {
 fn get_args(url: String) -> FlexibleCanisterHttpRequestArgs {
     FlexibleCanisterHttpRequestArgs {
         url,
+        max_response_bytes: None,
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
@@ -1336,6 +1340,70 @@ fn test_too_many_rejects_composite_transform(env: TestEnv) {
                 "CanisterError",
                 "Composite query cannot be used as transform",
             )?;
+            Ok(())
+        },
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Custom `max_response_bytes` (per-node response size cap)
+// ---------------------------------------------------------------------------
+
+/// A caller-supplied `max_response_bytes` caps each node's response size. A
+/// response larger than a small custom cap is rejected by the adapter on every
+/// node, yielding `too_many_rejects` — proving the caller's cap (not just the
+/// 2 MB default) is plumbed through per node.
+fn test_custom_max_response_bytes_exceeded(env: TestEnv) {
+    const MAX_RESPONSE_BYTES: u64 = 1_000;
+    run_flexible_test(
+        env,
+        "a response over a small custom max_response_bytes yields too_many_rejects",
+        |env| {
+            let mut args = get_args(format!("{}/bytes/2000", webserver_base(env)));
+            args.max_response_bytes = Some(MAX_RESPONSE_BYTES);
+            args
+        },
+        |result| {
+            let err = expect_global_error(
+                result,
+                &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
+                "Too many rejects",
+            )?;
+            expect_all_node_errors(
+                &err,
+                MIN_REJECT_DETAILS,
+                "SysFatal",
+                &format!("Http body exceeds size limit of {MAX_RESPONSE_BYTES} bytes"),
+            )?;
+            Ok(())
+        },
+    );
+}
+
+/// A response that fits within a caller-supplied `max_response_bytes` (but that
+/// would be rejected under a smaller cap) succeeds normally.
+fn test_custom_max_response_bytes_within_limits(env: TestEnv) {
+    const BODY_SIZE: usize = 50_000;
+    run_flexible_test(
+        env,
+        "a response within a custom max_response_bytes succeeds",
+        |env| {
+            let mut args = get_args(format!("{}/bytes/{BODY_SIZE}", webserver_base(env)));
+            // Comfortably above the response size, but well below the 2 MB max.
+            args.max_response_bytes = Some(100_000);
+            args
+        },
+        |result| {
+            let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
+            expect_all_status(&payloads, 200)?;
+            for payload in &payloads {
+                if payload.body.len() != BODY_SIZE {
+                    bail!(
+                        "expected a {BODY_SIZE}-byte body, got {} bytes",
+                        payload.body.len()
+                    );
+                }
+            }
             Ok(())
         },
     );

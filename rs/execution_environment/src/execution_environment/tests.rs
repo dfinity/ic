@@ -3528,6 +3528,7 @@ fn execute_canister_http_request_non_replicated_refund_status() {
 fn flexible_http_request_args(caller_canister: CanisterId) -> FlexibleCanisterHttpRequestArgs {
     FlexibleCanisterHttpRequestArgs {
         url: "https://example.com".to_string(),
+        max_response_bytes: None,
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,
