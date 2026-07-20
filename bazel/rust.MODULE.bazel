@@ -1309,6 +1309,7 @@ crate.spec(
 crate.spec(
     package = "rand_chacha",
     version = "^0.3.1",
+    default_features = False,
 )
 crate.spec(
     package = "rand_distr",
