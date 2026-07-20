@@ -556,7 +556,6 @@ impl CanisterHttpRequestContext {
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
-        subnet_size: NumberOfNodes,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
@@ -635,7 +634,7 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
-            subnet_size,
+            subnet_size: NumberOfNodes::from(node_ids.len() as u32),
             cost_schedule: Some(cost_schedule),
         })
     }
@@ -646,7 +645,6 @@ impl CanisterHttpRequestContext {
         args: FlexibleCanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
-        subnet_size: NumberOfNodes,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
@@ -744,7 +742,7 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
-            subnet_size,
+            subnet_size: NumberOfNodes::from(n),
             cost_schedule: Some(cost_schedule),
         })
     }
@@ -2006,7 +2004,6 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
-            NumberOfNodes::from(node_ids.len() as u32),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )
@@ -2025,7 +2022,6 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
-            NumberOfNodes::from(node_ids.len() as u32),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )

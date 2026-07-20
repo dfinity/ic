@@ -83,8 +83,8 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, SystemMethod, WasmMethod};
 use ic_types::{
-    CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, NumberOfNodes, RegistryVersion,
-    ReplicaVersion, SubnetId, Time,
+    CanisterId, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion, ReplicaVersion,
+    SubnetId, Time,
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, ECDSAOutcalls, Instructions,
@@ -1262,7 +1262,6 @@ impl ExecutionEnvironment {
                                     args,
                                     &registry_settings.node_ids,
                                     registry_settings.registry_version,
-                                    NumberOfNodes::from(registry_settings.subnet_size as u32),
                                     state.get_own_cost_schedule(),
                                     rng,
                                 ) {
@@ -1308,7 +1307,6 @@ impl ExecutionEnvironment {
                                     args,
                                     &registry_settings.node_ids,
                                     registry_settings.registry_version,
-                                    NumberOfNodes::from(registry_settings.subnet_size as u32),
                                     state.get_own_cost_schedule(),
                                     rng,
                                 ) {
