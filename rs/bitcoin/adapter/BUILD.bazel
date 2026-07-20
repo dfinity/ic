@@ -104,12 +104,12 @@ rust_test(
         "test_data/first_2500_testnet_headers.json",
     ],
     crate = ":adapter",
-    tags = ["requires-network"],
     deps = [
         # Keep sorted.
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/replica_types",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/net",
         "@crate_index//:tempfile",
     ],
 )

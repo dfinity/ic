@@ -12,8 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = { workspace = true }
-bech32 = "0.9.0"
-bs58 = "0.5.0"
+bech32 = { workspace = true }
+bs58 = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 canlog = { path = "../../../../packages/canlog" }
@@ -31,7 +31,7 @@ ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
 ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
@@ -43,7 +43,7 @@ minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-traits = { workspace = true }
 ripemd = "0.1.1"
-scopeguard = "1.1.0"
+scopeguard = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
@@ -64,7 +64,7 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types-cycles = { path = "../../../types/cycles" }
 ic-types = { path = "../../../types/types" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }

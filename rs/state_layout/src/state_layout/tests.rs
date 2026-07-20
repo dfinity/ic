@@ -60,6 +60,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
         snapshot_visibility: Default::default(),
+        status_visibility: Default::default(),
         log_memory_limit: NumBytes::from(0),
         canister_log: CanisterLog::default_aggregate(),
         next_canister_log_record_idx: 0,

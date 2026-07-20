@@ -178,6 +178,30 @@ pub(crate) fn spawn_tip_thread(
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     #[allow(clippy::disallowed_methods)]
     let (tip_sender, tip_receiver) = unbounded();
+
+    // Background best-effort `syncfs` helper. The tip thread pings it (non-blocking)
+    // after completing large numbers of writes (all protos; or `reset_tip`), so the
+    // kernel starts flushing that dirty data early instead of leaving it all for
+    // the blocking `syncfs` in `finalize_and_remove_unverified_marker`. This is
+    // purely an optimization, so its errors are non-fatal.
+    let (syncfs_sender, syncfs_receiver) = bounded::<()>(1);
+    {
+        let state_layout = state_layout.clone();
+        let metrics = metrics.clone();
+        let log = log.clone();
+        std::thread::Builder::new()
+            .name("TipSyncfs".to_string())
+            .spawn(move || {
+                while syncfs_receiver.recv().is_ok() {
+                    let _timer = request_timer(&metrics, "background_syncfs");
+                    if let Err(err) = state_layout.syncfs() {
+                        warn!(log, "Background syncfs failed: {}", err);
+                    }
+                }
+            })
+            .expect("failed to spawn TipSyncfs thread");
+    }
+
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
     let mut tip_state = TipState::default();
     // Height(0) doesn't need manifest
@@ -243,6 +267,8 @@ pub(crate) fn spawn_tip_thread(
                                     fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
                                 });
                             }
+                            // Start flushing the freshly written Wasm binaries.
+                            let _ = syncfs_sender.try_send(());
                             let tip_to_checkpoint_result = {
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_and_switch");
@@ -293,6 +319,9 @@ pub(crate) fn spawn_tip_thread(
                                 }
                             };
                             tip_state.latest_checkpoint_state.has_protos = Some(height);
+                            // Start flushing the freshly-written protos in the background so they're mostly
+                            // persisted by the time `finalize` calls its blocking `syncfs`.
+                            let _ = syncfs_sender.try_send(());
                         }
 
                         TipRequest::FlushPageMapDelta {
@@ -373,6 +402,10 @@ pub(crate) fn spawn_tip_thread(
                                     }
                                 },
                             );
+                            // Start flushing any freshly written overlays (and any snapshot hardlinks from
+                            // `flush_unflushed_checkpoint_ops` above) so they don't accumulate for a later
+                            // blocking flush.
+                            let _ = syncfs_sender.try_send(());
                         }
 
                         TipRequest::ResetTipAndMerge {
@@ -399,8 +432,11 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 });
                             drop(timer);
+                            // Start flushing `reset_tip`'s up to 1M hardlinks now, so it runs concurrently
+                            // with `merge` below rather than piling onto a later blocking flush.
+                            let _ = syncfs_sender.try_send(());
 
-                            let _timer = request_timer(&metrics, "merge");
+                            let timer = request_timer(&metrics, "merge");
                             merge(
                                 &mut tip_handler,
                                 &pagemaptypes,
@@ -410,6 +446,9 @@ pub(crate) fn spawn_tip_thread(
                                 &lsmt_config,
                                 &metrics,
                             );
+                            drop(timer);
+                            // And flush the freshly merged/rewritten overlay files.
+                            let _ = syncfs_sender.try_send(());
                         }
 
                         TipRequest::Wait { sender } => {
@@ -1285,6 +1324,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
+            status_visibility: canister_state.system_state.status_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
             next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
