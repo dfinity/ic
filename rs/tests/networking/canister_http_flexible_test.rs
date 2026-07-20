@@ -36,7 +36,7 @@ use ic_management_canister_types_private::{
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF},
+    test_env_api::{HasPublicApiUrl, HasVm, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
@@ -44,8 +44,8 @@ use proxy_canister::FlexibleRemoteHttpRequest;
 use slog::info;
 
 /// The cycles attached to each flexible outcall. On a free subnet nothing is
-/// charged, but the caller must still be able to attach the payment.
-const CYCLES: u64 = 500_000_000_000;
+/// charged.
+const CYCLES: u64 = 0;
 
 /// The application subnet has 4 nodes (see `setup`). With the default
 /// replication (`replication: None`) the committee is all `n` nodes,
@@ -76,6 +76,10 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_redirects_are_not_followed))
                 .add_test(systest!(test_redirect_zero_no_content))
                 .add_test(systest!(test_nondeterministic_responses))
+                .add_test(systest!(test_single_request_nondeterministic))
+                .add_test(systest!(test_min_responses_fit_max_would_exceed))
+                .add_test(systest!(test_single_large_response_ok))
+                .add_test(systest!(test_fire_and_forget))
                 // Transform behavior.
                 .add_test(systest!(test_transform_appends_context))
                 .add_test(systest!(test_transform_sets_status_and_headers))
@@ -91,14 +95,19 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_reject_invalid_transform_principal))
                 .add_test(systest!(test_reject_header_name_too_long))
                 .add_test(systest!(test_reject_header_value_too_long))
+                .add_test(systest!(test_reject_request_too_large))
                 // Runtime errors and adapter-level per-node failures.
                 .add_test(systest!(test_too_many_rejects_connection_refused))
                 .add_test(systest!(test_too_many_rejects_invalid_domain))
+                .add_test(systest!(test_too_many_rejects_non_https))
                 .add_test(systest!(test_too_many_rejects_response_over_node_limit))
                 .add_test(systest!(test_too_many_rejects_transform_over_node_limit))
                 .add_test(systest!(test_too_many_rejects_composite_transform))
                 .add_test(systest!(test_responses_too_large)),
         )
+        // Fault tolerance kills a node, so it must run sequentially AFTER the
+        // parallel suite.
+        .add_test(systest!(test_fault_tolerance))
         .execute_from_args()?;
 
     Ok(())
@@ -120,6 +129,16 @@ fn app_runtime(env: &TestEnv) -> Runtime {
 fn proxy_canister<'a>(env: &TestEnv, runtime: &'a Runtime) -> Canister<'a> {
     let principal_id = get_proxy_canister_id(env);
     Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
+/// The principal of the proxy canister (the sender of the outcalls), used as the
+/// valid transform principal.
+fn proxy_principal(env: &TestEnv) -> Principal {
+    get_proxy_canister_id(env).0
+}
+
+fn webserver_base(env: &TestEnv) -> String {
+    format!("https://[{}]", get_universal_vm_address(env))
 }
 
 /// Base flexible request arguments: a `GET` with no headers, body, transform, or
@@ -156,7 +175,7 @@ async fn send_flexible(
         .expect("Update call to proxy canister failed");
 
     res.map(|bytes| {
-        candid::Decode!(&bytes, FlexibleHttpRequestResult)
+        Decode!(&bytes, FlexibleHttpRequestResult)
             .expect("Failed to decode FlexibleHttpRequestResult")
     })
 }
@@ -190,10 +209,13 @@ where
     });
 }
 
-/// The principal of the proxy canister (the sender of the outcalls), used as the
-/// valid transform principal.
-fn proxy_principal(env: &TestEnv) -> Principal {
-    get_proxy_canister_id(env).0
+/// Returns the value of the (case-insensitive) response header `name`, if present.
+fn header_value<'a>(payload: &'a CanisterHttpResponsePayload, name: &str) -> Option<&'a str> {
+    payload
+        .headers
+        .iter()
+        .find(|header| header.name.eq_ignore_ascii_case(name))
+        .map(|header| header.value.as_str())
 }
 
 /// Asserts the result is `Ok` with a payload count in `[min, max]` and returns
@@ -225,6 +247,42 @@ fn expect_all_status(payloads: &[CanisterHttpResponsePayload], status: u128) -> 
                 "expected status {status} for every payload, got {}",
                 payload.status
             );
+        }
+    }
+    Ok(())
+}
+
+/// Asserts every payload body equals `expected`.
+fn expect_all_bodies(payloads: &[CanisterHttpResponsePayload], expected: &[u8]) -> Result<()> {
+    for payload in payloads {
+        if payload.body.as_slice() != expected {
+            bail!(
+                "expected body {:?}, got {:?}",
+                String::from_utf8_lossy(expected),
+                String::from_utf8_lossy(&payload.body)
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Asserts every payload body (interpreted as UTF-8) contains `needle`.
+fn expect_all_bodies_contain(payloads: &[CanisterHttpResponsePayload], needle: &str) -> Result<()> {
+    for payload in payloads {
+        let body = String::from_utf8_lossy(&payload.body);
+        if !body.contains(needle) {
+            bail!("expected body to contain '{needle}', got {body:?}");
+        }
+    }
+    Ok(())
+}
+
+/// Asserts every payload has no response headers (e.g. after a header-stripping
+/// transform).
+fn expect_all_headers_empty(payloads: &[CanisterHttpResponsePayload]) -> Result<()> {
+    for payload in payloads {
+        if !payload.headers.is_empty() {
+            bail!("expected no headers, got {:?}", payload.headers);
         }
     }
     Ok(())
@@ -279,26 +337,26 @@ fn expect_global_error(
     }
 }
 
-/// Asserts every node in a runtime error carries an error whose message contains
-/// `expected_substring`.
-fn expect_all_node_errors_contain(
+/// Asserts every node in a runtime error carries an error with the given `code`
+/// and a message containing `message_substring`.
+fn expect_all_node_errors(
     err: &FlexibleHttpRequestErr,
-    expected_substring: &str,
+    code: &str,
+    message_substring: &str,
 ) -> Result<()> {
     if err.node_details.is_empty() {
         bail!("expected per-node error details");
     }
     for detail in &err.node_details {
         match &detail.error {
-            Some(node_error) if node_error.message.contains(expected_substring) => {}
-            other => bail!("node error {other:?} does not contain '{expected_substring}'"),
+            Some(node_error)
+                if node_error.code == code && node_error.message.contains(message_substring) => {}
+            other => bail!(
+                "node error {other:?} does not match code '{code}' / message '{message_substring}'"
+            ),
         }
     }
     Ok(())
-}
-
-fn webserver_base(env: &TestEnv) -> String {
-    format!("https://[{}]", get_universal_vm_address(env))
 }
 
 // ---------------------------------------------------------------------------
@@ -316,14 +374,7 @@ fn test_default_replication(env: TestEnv) {
         move |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 200)?;
-            for payload in &payloads {
-                if payload.body != b"hello_world".to_vec() {
-                    bail!(
-                        "unexpected body: {:?}",
-                        String::from_utf8_lossy(&payload.body)
-                    );
-                }
-            }
+            expect_all_bodies(&payloads, b"hello_world")?;
             info!(
                 logger,
                 "default replication returned {} payloads",
@@ -351,9 +402,7 @@ fn test_single_request(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 1, 1)?;
             expect_all_status(&payloads, 200)?;
-            if payloads[0].body != b"single".to_vec() {
-                bail!("unexpected body");
-            }
+            expect_all_bodies(&payloads, b"single")?;
             Ok(())
         },
     );
@@ -376,6 +425,7 @@ fn test_all_nodes(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, SUBNET_NODES as usize, SUBNET_NODES as usize)?;
             expect_all_status(&payloads, 200)?;
+            expect_all_bodies(&payloads, b"all")?;
             Ok(())
         },
     );
@@ -398,6 +448,7 @@ fn test_partial_responses(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 2, 3)?;
             expect_all_status(&payloads, 200)?;
+            expect_all_bodies(&payloads, b"partial")?;
             Ok(())
         },
     );
@@ -417,6 +468,9 @@ fn test_post_with_body(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 200)?;
+            // The endpoint echoes the request method and body as JSON.
+            expect_all_bodies_contain(&payloads, "\"method\":\"POST\"")?;
+            expect_all_bodies_contain(&payloads, "flexible-body")?;
             Ok(())
         },
     );
@@ -442,17 +496,9 @@ fn test_transform_appends_context(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 200)?;
-            for payload in &payloads {
-                if payload.body != b"base-ctx".to_vec() {
-                    bail!(
-                        "expected transformed body 'base-ctx', got {:?}",
-                        String::from_utf8_lossy(&payload.body)
-                    );
-                }
-                if !payload.headers.is_empty() {
-                    bail!("expected transform to strip headers");
-                }
-            }
+            // The transform appends the context to the body and strips headers.
+            expect_all_bodies(&payloads, b"base-ctx")?;
+            expect_all_headers_empty(&payloads)?;
             Ok(())
         },
     );
@@ -486,6 +532,7 @@ fn test_put_with_deterministic_replication(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, SUBNET_NODES as usize, SUBNET_NODES as usize)?;
             expect_all_status(&payloads, 200)?;
+            expect_all_bodies_contain(&payloads, "\"method\":\"PUT\"")?;
             Ok(())
         },
     );
@@ -500,6 +547,13 @@ fn test_redirects_are_not_followed(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 303)?;
+            // The redirect target is returned in the location header, not followed.
+            for payload in &payloads {
+                match header_value(payload, "location") {
+                    Some(location) if location.contains("relative-redirect") => {}
+                    other => bail!("expected a redirect location header, got {other:?}"),
+                }
+            }
             Ok(())
         },
     );
@@ -523,6 +577,138 @@ fn test_nondeterministic_responses(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 2, SUBNET_NODES as usize)?;
             expect_all_status(&payloads, 200)?;
+            // Bodies may differ across payloads, but each is a numeric string.
+            for payload in &payloads {
+                if payload.body.is_empty() || !payload.body.iter().all(|b| b.is_ascii_digit()) {
+                    bail!(
+                        "expected a numeric random body, got {:?}",
+                        String::from_utf8_lossy(&payload.body)
+                    );
+                }
+            }
+            Ok(())
+        },
+    );
+}
+
+/// A single-node request to a non-deterministic endpoint succeeds: with one
+/// response there is nothing to reconcile. (The flexible replacement for the
+/// legacy non-replicated mode.)
+fn test_single_request_nondeterministic(env: TestEnv) {
+    run_flexible_test(
+        env,
+        "a single-node request to a non-deterministic endpoint succeeds",
+        |env| {
+            let mut args = get_args(format!("{}/random", webserver_base(env)));
+            args.replication = Some(ReplicationCounts {
+                total_requests: 1,
+                min_responses: 1,
+                max_responses: 1,
+            });
+            args
+        },
+        |result| {
+            let payloads = expect_ok(result, 1, 1)?;
+            expect_all_status(&payloads, 200)?;
+            if payloads[0].body.is_empty() || !payloads[0].body.iter().all(|b| b.is_ascii_digit()) {
+                bail!(
+                    "expected a numeric random body, got {:?}",
+                    String::from_utf8_lossy(&payloads[0].body)
+                );
+            }
+            Ok(())
+        },
+    );
+}
+
+/// The response count is capped by the block payload limit: `min_responses`
+/// responses fit within the ~2 MiB `MAX_CANISTER_HTTP_PAYLOAD_SIZE`, but
+/// `max_responses` of them would exceed it, so the outcall succeeds with exactly
+/// `min_responses` responses.
+fn test_min_responses_fit_max_would_exceed(env: TestEnv) {
+    // Each node returns a 1 MB body: 2 just fit within the ~2 MiB
+    // (2_097_152 B) payload limit (2.0 MB), but 3 would exceed it (3.0 MB).
+    const BODY_SIZE: usize = 1_000_000;
+    run_flexible_test(
+        env,
+        "response count is capped at min_responses by the payload limit",
+        |env| {
+            let mut args = get_args(format!("{}/bytes/{BODY_SIZE}", webserver_base(env)));
+            args.replication = Some(ReplicationCounts {
+                total_requests: SUBNET_NODES,
+                min_responses: 2,
+                max_responses: SUBNET_NODES,
+            });
+            args
+        },
+        |result| {
+            // Exactly min_responses (2) come back, even though max_responses (4)
+            // was requested.
+            let payloads = expect_ok(result, 2, 2)?;
+            expect_all_status(&payloads, 200)?;
+            for payload in &payloads {
+                if payload.body.len() != BODY_SIZE {
+                    bail!(
+                        "expected a {BODY_SIZE}-byte body, got {} bytes",
+                        payload.body.len()
+                    );
+                }
+            }
+            Ok(())
+        },
+    );
+}
+
+/// A "fire-and-forget" outcall (`min_responses = max_responses = 0`) dispatches
+/// the request but requires no responses, so it succeeds immediately with an
+/// empty result.
+fn test_fire_and_forget(env: TestEnv) {
+    run_flexible_test(
+        env,
+        "min = max = 0 fire-and-forget returns an empty result",
+        |env| {
+            let mut args = get_args(format!("{}/ascii/ignored", webserver_base(env)));
+            args.replication = Some(ReplicationCounts {
+                total_requests: 1,
+                min_responses: 0,
+                max_responses: 0,
+            });
+            args
+        },
+        |result| {
+            // No responses are collected or returned.
+            expect_ok(result, 0, 0)?;
+            Ok(())
+        },
+    );
+}
+
+/// A single response just under the 2 MB per-node limit succeeds. This is the
+/// positive counterpart to `test_too_many_rejects_response_over_node_limit`,
+/// where a response over the limit is rejected.
+fn test_single_large_response_ok(env: TestEnv) {
+    const BODY_SIZE: usize = 1_900_000;
+    run_flexible_test(
+        env,
+        "a single response just under the 2 MB per-node limit succeeds",
+        |env| {
+            let mut args = get_args(format!("{}/bytes/{BODY_SIZE}", webserver_base(env)));
+            args.replication = Some(ReplicationCounts {
+                total_requests: 1,
+                min_responses: 1,
+                max_responses: 1,
+            });
+            args
+        },
+        |result| {
+            let payloads = expect_ok(result, 1, 1)?;
+            expect_all_status(&payloads, 200)?;
+            if payloads[0].body.len() != BODY_SIZE {
+                bail!(
+                    "expected a {BODY_SIZE}-byte body, got {} bytes",
+                    payloads[0].body.len()
+                );
+            }
             Ok(())
         },
     );
@@ -546,6 +732,7 @@ fn test_intermediate_range(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 2, 4)?;
             expect_all_status(&payloads, 200)?;
+            expect_all_bodies(&payloads, b"range")?;
             Ok(())
         },
     );
@@ -573,6 +760,8 @@ fn test_head_method(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 200)?;
+            // A HEAD response carries no body.
+            expect_all_bodies(&payloads, b"")?;
             Ok(())
         },
     );
@@ -603,6 +792,7 @@ fn test_delete_with_deterministic_replication(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 2, 2)?;
             expect_all_status(&payloads, 200)?;
+            expect_all_bodies_contain(&payloads, "\"method\":\"DELETE\"")?;
             Ok(())
         },
     );
@@ -633,6 +823,7 @@ fn test_patch_with_deterministic_replication(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 2, 2)?;
             expect_all_status(&payloads, 200)?;
+            expect_all_bodies_contain(&payloads, "\"method\":\"PATCH\"")?;
             Ok(())
         },
     );
@@ -647,6 +838,8 @@ fn test_redirect_zero_no_content(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 204)?;
+            // 204 No Content carries no body.
+            expect_all_bodies(&payloads, b"")?;
             Ok(())
         },
     );
@@ -671,11 +864,20 @@ fn test_transform_sets_status_and_headers(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, DEFAULT_MIN_RESPONSES, DEFAULT_MAX_RESPONSES)?;
             expect_all_status(&payloads, 202)?;
+            // The transform replaces the body with the context and sets a fixed
+            // pair of headers (the caller is the management canister).
+            expect_all_bodies(&payloads, b"transform_context")?;
             for payload in &payloads {
-                if payload.body != b"transform_context".to_vec() {
+                if header_value(payload, "hello") != Some("bonjour") {
                     bail!(
-                        "expected transformed body 'transform_context', got {:?}",
-                        String::from_utf8_lossy(&payload.body)
+                        "expected header hello=bonjour, got {:?}",
+                        header_value(payload, "hello")
+                    );
+                }
+                if header_value(payload, "caller") != Some("aaaaa-aa") {
+                    bail!(
+                        "expected header caller=aaaaa-aa, got {:?}",
+                        header_value(payload, "caller")
                     );
                 }
             }
@@ -709,14 +911,9 @@ fn test_deterministic_transform_normalizes(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, SUBNET_NODES as usize, SUBNET_NODES as usize)?;
             expect_all_status(&payloads, 200)?;
-            for payload in &payloads {
-                if payload.body != b"deterministic".to_vec() {
-                    bail!(
-                        "expected normalized body 'deterministic', got {:?}",
-                        String::from_utf8_lossy(&payload.body)
-                    );
-                }
-            }
+            // Every node is normalized to the same body with no headers.
+            expect_all_bodies(&payloads, b"deterministic")?;
+            expect_all_headers_empty(&payloads)?;
             Ok(())
         },
     );
@@ -916,6 +1113,22 @@ fn test_reject_header_value_too_long(env: TestEnv) {
     );
 }
 
+/// A request whose headers plus body exceed the 2 MB request-size limit
+/// (`MAX_CANISTER_HTTP_REQUEST_BYTES`) is rejected.
+fn test_reject_request_too_large(env: TestEnv) {
+    run_flexible_test(
+        env,
+        "a request exceeding the 2 MB size limit is rejected",
+        |env| {
+            let mut args = get_args(format!("{}/ascii/x", webserver_base(env)));
+            // One byte over the 2_000_000-byte limit (no headers).
+            args.body = Some(vec![0u8; 2_000_001]);
+            args
+        },
+        |result| expect_rejection(result, "exceeds 2000000"),
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Runtime errors and adapter-level per-node failures
 // ---------------------------------------------------------------------------
@@ -937,13 +1150,9 @@ fn test_too_many_rejects_connection_refused(env: TestEnv) {
                 &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 "Too many rejects",
             )?;
-            // Every reject carries per-node details with an error.
-            if err.node_details.is_empty() {
-                bail!("expected per-node reject details");
-            }
-            if err.node_details.iter().any(|d| d.error.is_none()) {
-                bail!("expected an error for every rejecting node");
-            }
+            // Every node reports a transient connection failure whose message
+            // carries the refused connection.
+            expect_all_node_errors(&err, "SysTransient", "Connection refused")?;
             Ok(())
         },
     );
@@ -957,11 +1166,32 @@ fn test_too_many_rejects_invalid_domain(env: TestEnv) {
         "an invalid domain yields too_many_rejects",
         |_env| get_args("https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com".to_string()),
         |result| {
-            expect_global_error(
+            let err = expect_global_error(
                 result,
                 &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 "Too many rejects",
             )?;
+            // DNS resolution fails on every node during connection setup.
+            expect_all_node_errors(&err, "SysTransient", "Connecting to")?;
+            Ok(())
+        },
+    );
+}
+
+/// The adapter enforces HTTPS: a non-`https` url is rejected on every node, so
+/// the outcall reports `too_many_rejects`.
+fn test_too_many_rejects_non_https(env: TestEnv) {
+    run_flexible_test(
+        env,
+        "a non-https url is rejected on every node",
+        |env| get_args(format!("http://[{}]", get_universal_vm_address(env))),
+        |result| {
+            let err = expect_global_error(
+                result,
+                &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
+                "Too many rejects",
+            )?;
+            expect_all_node_errors(&err, "SysFatal", "Url need to specify https scheme")?;
             Ok(())
         },
     );
@@ -977,11 +1207,13 @@ fn test_responses_too_large(env: TestEnv) {
         "oversized aggregated responses yield responses_too_large",
         |env| get_args(format!("{}/bytes/1000000", webserver_base(env))),
         |result| {
-            expect_global_error(
+            let err = expect_global_error(
                 result,
                 &FlexibleHttpGlobalError::ResponsesTooLarge(candid::Reserved),
                 "Responses too large",
             )?;
+            // Each node returned an OK response; the details report their sizes.
+            expect_all_node_errors(&err, "ok", "bytes")?;
             Ok(())
         },
     );
@@ -1001,7 +1233,11 @@ fn test_too_many_rejects_response_over_node_limit(env: TestEnv) {
                 &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 "Too many rejects",
             )?;
-            expect_all_node_errors_contain(&err, "exceeds size limit")?;
+            expect_all_node_errors(
+                &err,
+                "SysFatal",
+                "Http body exceeds size limit of 2000000 bytes",
+            )?;
             Ok(())
         },
     );
@@ -1031,7 +1267,11 @@ fn test_too_many_rejects_transform_over_node_limit(env: TestEnv) {
                 &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 "Too many rejects",
             )?;
-            expect_all_node_errors_contain(&err, "Transformed http response exceeds limit")?;
+            expect_all_node_errors(
+                &err,
+                "SysFatal",
+                "Transformed http response exceeds limit: 2000000",
+            )?;
             Ok(())
         },
     );
@@ -1055,12 +1295,77 @@ fn test_too_many_rejects_composite_transform(env: TestEnv) {
             args
         },
         |result| {
-            expect_global_error(
+            let err = expect_global_error(
                 result,
                 &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 "Too many rejects",
             )?;
+            // The transform query is rejected on every node.
+            expect_all_node_errors(
+                &err,
+                "CanisterError",
+                "Composite query cannot be used as transform",
+            )?;
             Ok(())
         },
     );
+}
+
+// ---------------------------------------------------------------------------
+// Fault tolerance (destructive: runs sequentially after the parallel suite)
+// ---------------------------------------------------------------------------
+
+/// A flexible outcall with `min_responses < total_requests` still succeeds when
+/// one of the committee's nodes is down — the defining reliability property of
+/// flexible outcalls. This test kills (and later restarts) a node, so it is
+/// registered as a trailing sequential test rather than in the parallel suite.
+fn test_fault_tolerance(env: TestEnv) {
+    let logger = env.logger();
+
+    let mut nodes = get_node_snapshots(&env);
+    let killed_node = nodes.next().expect("no application nodes");
+    let healthy_node = nodes.next().expect("need at least two application nodes");
+
+    // The proxy canister lives on the subnet, so reach it through a node that
+    // stays up.
+    let runtime = get_runtime_from_node(&healthy_node);
+    let proxy = proxy_canister(&env, &runtime);
+
+    info!(logger, "Killing one application node.");
+    killed_node.vm().kill();
+    killed_node
+        .await_status_is_unavailable()
+        .expect("the killed node did not become unavailable");
+    info!(
+        logger,
+        "Node is down; a flexible outcall requiring fewer responses than nodes must still succeed."
+    );
+
+    block_on(async {
+        ic_system_test_driver::retry_with_msg_async!(
+            "flexible outcall succeeds with a node down".to_string(),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let mut args = get_args(format!("{}/ascii/tolerate", webserver_base(&env)));
+                // Target all nodes but require only 2 responses: the surviving
+                // nodes are enough to meet min_responses.
+                args.replication = Some(ReplicationCounts {
+                    total_requests: SUBNET_NODES,
+                    min_responses: 2,
+                    max_responses: SUBNET_NODES,
+                });
+                // Attaching cycles should be possible, even of free subnets
+                let result = send_flexible(&proxy, args, 1000).await;
+                // At most the surviving nodes (n - 1) can respond.
+                let payloads = expect_ok(result, 2, (SUBNET_NODES - 1) as usize)?;
+                expect_all_status(&payloads, 200)?;
+                expect_all_bodies(&payloads, b"tolerate")?;
+                Ok(())
+            }
+        )
+        .await
+        .expect("the flexible outcall did not succeed while a node was down");
+    });
 }
