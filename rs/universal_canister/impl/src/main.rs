@@ -553,7 +553,14 @@ fn eval(ops_bytes: OpsBytes) {
                         canister_id: Principal::from_slice(&api::id()),
                     })
                     .unwrap();
-                    api::call_new(&[], b"canister_status", callback, env, callback, env);
+                    api::call_new(
+                        Principal::management_canister().as_slice(),
+                        b"canister_status",
+                        callback,
+                        env,
+                        callback,
+                        env,
+                    );
                     api::call_data_append(&arg);
                     let err_code = api::call_perform();
                     if err_code != 0 {
