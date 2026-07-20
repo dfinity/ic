@@ -1,4 +1,5 @@
 ansible>=12.2.0
+ansible-core>=2.20.7
 cbor>=1.0.0
 cbor2>=5.9.0
 configargparse
