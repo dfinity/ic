@@ -3679,7 +3679,9 @@ dependencies = [
  "quinn-udp",
  "quote",
  "rand 0.8.6",
+ "rand 0.9.4",
  "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "rand_distr",
  "rand_pcg",
  "ratatui",
@@ -5443,9 +5445,9 @@ dependencies = [
 
 [[package]]
 name = "hpke"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4917627a14198c3603282c5158b815ad5534795451d3c074b53cf3cee0960b11"
+checksum = "f65d16b699dd1a1fa2d851c970b0c971b388eeeb40f744252b8de48860980c8f"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -5455,7 +5457,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "p384",
- "rand_core 0.6.4",
+ "rand_core 0.9.3",
  "sha2 0.10.9",
  "subtle",
  "zeroize",

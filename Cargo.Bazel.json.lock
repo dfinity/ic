@@ -1,5 +1,5 @@
 {
-  "checksum": "3cb688e553e7acd4cd7e101f7542c4610fc82d71509193f63e325613c3c17a5e",
+  "checksum": "52fa5f4e480c85ab1c92bc61c3df62f84281c392d154b324bd1a4da5b9a3a411",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20945,7 +20945,7 @@
               "target": "hmac"
             },
             {
-              "id": "hpke 0.12.0",
+              "id": "hpke 0.13.0",
               "target": "hpke"
             },
             {
@@ -21477,8 +21477,18 @@
               "target": "rand"
             },
             {
+              "id": "rand 0.9.4",
+              "target": "rand",
+              "alias": "rand_0_9"
+            },
+            {
               "id": "rand_chacha 0.3.1",
               "target": "rand_chacha"
+            },
+            {
+              "id": "rand_chacha 0.9.0",
+              "target": "rand_chacha",
+              "alias": "rand_chacha_0_9"
             },
             {
               "id": "rand_distr 0.4.3",
@@ -31887,14 +31897,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hpke 0.12.0": {
+    "hpke 0.13.0": {
       "name": "hpke",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "package_url": "https://github.com/rozbb/rust-hpke",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hpke/0.12.0/download",
-          "sha256": "4917627a14198c3603282c5158b815ad5534795451d3c074b53cf3cee0960b11"
+          "url": "https://static.crates.io/crates/hpke/0.13.0/download",
+          "sha256": "f65d16b699dd1a1fa2d851c970b0c971b388eeeb40f744252b8de48860980c8f"
         }
       },
       "targets": [
@@ -31958,7 +31968,7 @@
               "target": "p384"
             },
             {
-              "id": "rand_core 0.6.4",
+              "id": "rand_core 0.9.3",
               "target": "rand_core"
             },
             {
@@ -31977,7 +31987,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.12.0"
+        "version": "0.13.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -98027,7 +98037,7 @@
     "hickory-resolver 0.26.1",
     "hkdf 0.12.4",
     "hmac 0.12.1",
-    "hpke 0.12.0",
+    "hpke 0.13.0",
     "http 1.3.1",
     "http-body 1.0.1",
     "http-body-util 0.1.3",
@@ -98163,7 +98173,9 @@
     "quinn-udp 0.5.5",
     "quote 1.0.42",
     "rand 0.8.6",
+    "rand 0.9.4",
     "rand_chacha 0.3.1",
+    "rand_chacha 0.9.0",
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratatui 0.29.0",
