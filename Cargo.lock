@@ -23689,6 +23689,7 @@ dependencies = [
  "ic-nervous-system-agent",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-string",
  "ic-nns-common",
  "ic-nns-constants",
  "reqwest",
