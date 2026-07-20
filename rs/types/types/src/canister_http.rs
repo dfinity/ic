@@ -1994,7 +1994,7 @@ mod tests {
     }
 
     /// Generates a context from `args` and `node_ids`, filling in dummy values
-    /// for the time, request, registry version, subnet size, cost schedule, and
+    /// for the time, request, registry version, cost schedule, and
     /// rng.
     fn generate_context(
         node_ids: &BTreeSet<NodeId>,
@@ -2006,14 +2006,14 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
-            NumberOfNodes::from(13),
+            NumberOfNodes::from(node_ids.len() as u32),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )
     }
 
     /// Generates a context from flexible `args` and `node_ids`, filling in dummy
-    /// values for the time, request, registry version, subnet size, cost
+    /// values for the time, request, registry version, cost
     /// schedule, and rng.
     fn generate_flexible_context(
         node_ids: &BTreeSet<NodeId>,
@@ -2025,7 +2025,7 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
-            NumberOfNodes::from(13),
+            NumberOfNodes::from(node_ids.len() as u32),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )
