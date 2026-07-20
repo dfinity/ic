@@ -501,6 +501,13 @@ async fn run_scenario(
         "Step 9a: Deleting subnet C ({})",
         c_subnet.subnet_id
     );
+    // Baseline for the cumulative "silently dropped response" counter, captured
+    // before the deletion that triggers the drop. This counter carries over
+    // between matrix entries (shared IC and sender subnet S), so Step 11 asserts
+    // an increase relative to this baseline rather than an absolute threshold.
+    let dropped_responses_before = read_dropped_response_count(&s_node)
+        .await
+        .expect("failed to read the dropped response counter before deletion");
     let topo_before_delete = env.topology_snapshot();
     let delete_arg = DeleteSubnetPayload {
         subnet_id: c_subnet.subnet_id.get().into(),
@@ -640,16 +647,18 @@ async fn run_scenario(
         logger,
         "Step 11: Verifying via metrics that the queued response towards C was dropped"
     );
-    let dropped_responses = wait_for_dropped_response_count(&s_node, logger).await;
-    assert!(
-        dropped_responses >= 1,
-        "Expected at least one silently dropped response towards C (deleted subnet \
-         type: {deleted_subnet_type:?}), got {dropped_responses}"
-    );
+    // Assert the cumulative counter grew by at least 1 relative to the baseline
+    // captured before deletion (Step 9a): a bare `>= 1` check would spuriously
+    // pass in the second matrix entry off the first entry's leftover count.
+    let dropped_responses =
+        wait_for_dropped_response_count_at_least(&s_node, dropped_responses_before + 1, logger)
+            .await;
     slog::info!(
         logger,
-        "Step 11 done: {} response(s) towards C dropped as no_route (canister_not_found)",
+        "Step 11 done: {} response(s) towards C dropped as no_route (canister_not_found) \
+         (was {} before deletion)",
         dropped_responses,
+        dropped_responses_before,
     );
 
     slog::info!(
@@ -739,42 +748,58 @@ async fn wait_for_stream_gauge_at_least(
     .unwrap_or_else(|e| panic!("{metric} towards {remote} did not reach {at_least}: {e}"));
 }
 
-/// Waits until the stream builder on `node` has silently dropped at least one
-/// response towards a canister with no known route, i.e. until
-/// `mr_routed_message_count{type="response",status="canister_not_found"}` is at
-/// least 1, and returns the observed count.
-async fn wait_for_dropped_response_count(node: &IcNodeSnapshot, logger: &slog::Logger) -> u64 {
+/// Reads the current value of the cumulative "silently dropped response" counter
+/// on `node`, i.e. the sum of
+/// `mr_routed_message_count{type="response",status="canister_not_found"}` across
+/// all destination-subnet labels. Returns 0 if the counter is not present yet.
+///
+/// This counter is cumulative and, because all matrix entries share the same IC
+/// and the same sender subnet S, it carries over between scenario runs. Callers
+/// must therefore compare against a baseline captured before the deletion rather
+/// than against an absolute threshold.
+async fn read_dropped_response_count(node: &IcNodeSnapshot) -> anyhow::Result<u64> {
+    let map = MetricsFetcher::new(
+        std::iter::once(node.clone()),
+        vec!["mr_routed_message_count".to_string()],
+    )
+    .fetch::<u64>()
+    .await
+    .map_err(|e| anyhow::anyhow!("failed to fetch mr_routed_message_count: {e}"))?;
+    Ok(map
+        .iter()
+        .filter(|(key, _)| {
+            key.contains("type=\"response\"") && key.contains("status=\"canister_not_found\"")
+        })
+        .filter_map(|(_, values)| values.first().copied())
+        .sum())
+}
+
+/// Waits until the "silently dropped response" counter on `node` reaches at least
+/// `at_least`, and returns the observed count. See [`read_dropped_response_count`]
+/// for why callers pass a baseline-relative target rather than an absolute one.
+async fn wait_for_dropped_response_count_at_least(
+    node: &IcNodeSnapshot,
+    at_least: u64,
+    logger: &slog::Logger,
+) -> u64 {
     retry_with_msg_async!(
-        "waiting for a silently dropped response (mr_routed_message_count \
-         type=response status=canister_not_found)"
-            .to_string(),
+        format!(
+            "waiting for the silently dropped response counter (mr_routed_message_count \
+             type=response status=canister_not_found) to reach {at_least}"
+        ),
         logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            let map = MetricsFetcher::new(
-                std::iter::once(node.clone()),
-                vec!["mr_routed_message_count".to_string()],
-            )
-            .fetch::<u64>()
-            .await
-            .map_err(|e| anyhow::anyhow!("failed to fetch mr_routed_message_count: {e}"))?;
-            let dropped: u64 = map
-                .iter()
-                .filter(|(key, _)| {
-                    key.contains("type=\"response\"")
-                        && key.contains("status=\"canister_not_found\"")
-                })
-                .filter_map(|(_, values)| values.first().copied())
-                .sum();
-            if dropped < 1 {
-                bail!("no dropped response observed yet");
+            let dropped = read_dropped_response_count(node).await?;
+            if dropped < at_least {
+                bail!("dropped response counter is {dropped} (target {at_least})");
             }
             Ok(dropped)
         }
     )
     .await
-    .unwrap_or_else(|e| panic!("no silently dropped response observed via metrics: {e}"))
+    .unwrap_or_else(|e| panic!("silently dropped response counter did not reach {at_least}: {e}"))
 }
 
 async fn set_subnet_halted(
