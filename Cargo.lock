@@ -13126,6 +13126,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ic-base-types",
+ "ic-crypto-sha2",
  "ic-interfaces-registry",
  "ic-limits",
  "ic-management-canister-types-private",
