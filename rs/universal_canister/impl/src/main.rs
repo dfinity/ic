@@ -536,8 +536,8 @@ fn eval(ops_bytes: OpsBytes) {
                     api::reply_data_append(&reply_data);
                     api::reply();
                 } else {
-                    // The condition does not hold yet: make an inter-canister
-                    // `canister_status` call to this canister itself, and re-run
+                    // The condition does not hold yet: make a management-canister
+                    // `canister_status` call for this canister itself, and re-run
                     // this same op from both its reply and reject callbacks. This
                     // forms a loop across message boundaries that only ends once
                     // some other message sets the global data to `trigger`,
