@@ -816,8 +816,9 @@ impl RosettaRequestHandler {
         let mut parameters: Vec<(String, rusqlite::types::Value)> = Vec::new();
 
         parameters.push((
-            // `as i64` bit-reinterprets the u64; block indices are well within
-            // the i64 range, so this is lossless in practice.
+            // `start_idx` derives from the request's `i64` `max_block` field via
+            // `try_into()`, which rejects negatives, so the value is non-negative
+            // and fits in `i64`; the cast back to `i64` is lossless.
             ":max_block_idx".to_string(),
             rusqlite::types::Value::from(start_idx as i64),
         ));
@@ -858,8 +859,9 @@ impl RosettaRequestHandler {
 
         command.push_str("LIMIT :limit ");
         parameters.push((
-            // `as i64` bit-reinterprets the u64; the limit is well within the
-            // i64 range, so this is lossless in practice.
+            // `limit` derives from the request's `i64` `limit` field via
+            // `try_into()`, which rejects negatives, so the value is non-negative
+            // and fits in `i64`; the cast back to `i64` is lossless.
             ":limit".to_string(),
             rusqlite::types::Value::from(limit as i64),
         ));
