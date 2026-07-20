@@ -1,5 +1,5 @@
 {
-  "checksum": "22446b7b142461d94c2d08c9fe4db5d2d9047c00777054093d2d528ed771a456",
+  "checksum": "ce534aad127b279a1575c452409474bc703e3b3e72ed7046e632711c8ae91554",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -6378,14 +6378,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "backon 0.4.1": {
+    "backon 1.6.0": {
       "name": "backon",
-      "version": "0.4.1",
-      "package_url": null,
+      "version": "1.6.0",
+      "package_url": "https://github.com/Xuanwo/backon",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/backon/0.4.1/download",
-          "sha256": "0c1a6197b2120bb2185a267f6515038558b019e92b832bb0320e96d66268dcf9"
+          "url": "https://static.crates.io/crates/backon/1.6.0/download",
+          "sha256": "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
         }
       },
       "targets": [
@@ -6407,29 +6407,74 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "gloo-timers-sleep",
+            "std",
+            "std-blocking-sleep",
+            "tokio-sleep"
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              "tokio"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "tokio"
+            ],
+            "wasm32-unknown-unknown": [
+              "gloo-timers"
+            ],
+            "x86_64-apple-darwin": [
+              "tokio"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "tokio"
+            ]
+          }
+        },
         "deps": {
           "common": [
             {
-              "id": "fastrand 1.9.0",
+              "id": "fastrand 2.3.0",
               "target": "fastrand"
-            },
-            {
-              "id": "futures-core 0.3.31",
-              "target": "futures_core"
-            },
-            {
-              "id": "pin-project 1.1.2",
-              "target": "pin_project"
-            },
-            {
-              "id": "tokio 1.50.0",
-              "target": "tokio"
             }
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "tokio 1.50.0",
+                "target": "tokio"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "tokio 1.50.0",
+                "target": "tokio"
+              }
+            ],
+            "wasm32-unknown-unknown": [
+              {
+                "id": "gloo-timers 0.3.0",
+                "target": "gloo_timers"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "tokio 1.50.0",
+                "target": "tokio"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "tokio 1.50.0",
+                "target": "tokio"
+              }
+            ]
+          }
         },
-        "edition": "2021",
-        "version": "0.4.1"
+        "edition": "2024",
+        "version": "1.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -21014,11 +21059,7 @@
               "target": "axum_server"
             },
             {
-              "id": "backoff 0.4.0",
-              "target": "backoff"
-            },
-            {
-              "id": "backon 0.4.1",
+              "id": "backon 1.6.0",
               "target": "backon"
             },
             {
@@ -26270,56 +26311,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "fastrand 1.9.0": {
-      "name": "fastrand",
-      "version": "1.9.0",
-      "package_url": "https://github.com/smol-rs/fastrand",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fastrand/1.9.0/download",
-          "sha256": "e51093e27b0797c359783294ca4f0a911c270184cb10f85783b118614a1501be"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fastrand",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fastrand",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
-              {
-                "id": "instant 0.1.12",
-                "target": "instant"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "1.9.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "fastrand 2.3.0": {
       "name": "fastrand",
       "version": "2.3.0",
@@ -29705,6 +29696,75 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "gloo-timers 0.3.0": {
+      "name": "gloo-timers",
+      "version": "0.3.0",
+      "package_url": "https://github.com/rustwasm/gloo/tree/master/crates/timers",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gloo-timers/0.3.0/download",
+          "sha256": "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gloo_timers",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gloo_timers",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "futures",
+            "futures-channel",
+            "futures-core"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-channel 0.3.31",
+              "target": "futures_channel"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "js-sys 0.3.103",
+              "target": "js_sys"
+            },
+            {
+              "id": "wasm-bindgen 0.2.126",
+              "target": "wasm_bindgen"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
     },
     "goldenfile 1.8.0": {
       "name": "goldenfile",
@@ -98503,8 +98563,7 @@
     "axum 0.8.9",
     "axum-extra 0.10.1",
     "axum-server 0.7.3",
-    "backoff 0.4.0",
-    "backon 0.4.1",
+    "backon 1.6.0",
     "base32 0.4.0",
     "base64 0.13.1",
     "bech32 0.9.1",

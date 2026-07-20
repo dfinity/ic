@@ -1090,6 +1090,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "backon"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
+dependencies = [
+ "fastrand",
+ "gloo-timers",
+ "tokio",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1984,7 +1995,7 @@ dependencies = [
 name = "canister-test"
 version = "0.9.0"
 dependencies = [
- "backoff",
+ "backon",
  "candid",
  "cargo_metadata",
  "dfn_candid",
@@ -5146,6 +5157,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
+name = "gloo-timers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "goldenfile"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6331,7 +6354,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "axum",
- "backoff",
+ "backon",
  "bytes",
  "criterion",
  "futures",
@@ -6985,7 +7008,7 @@ dependencies = [
 name = "ic-canister-client"
 version = "0.9.0"
 dependencies = [
- "backoff",
+ "backon",
  "futures-util",
  "hex",
  "http-body-util",
@@ -7931,7 +7954,7 @@ name = "ic-consensus-manager"
 version = "0.9.0"
 dependencies = [
  "axum",
- "backoff",
+ "backon",
  "bytes",
  "futures",
  "ic-base-types",
@@ -19230,7 +19253,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "attestation",
- "backoff",
+ "backon",
  "candid",
  "clap",
  "config_tool",
@@ -19883,7 +19906,7 @@ dependencies = [
 name = "pocket-ic"
 version = "15.0.0"
 dependencies = [
- "backoff",
+ "backon",
  "base64 0.13.1",
  "bitcoin",
  "candid",
@@ -19951,7 +19974,7 @@ dependencies = [
  "axum",
  "axum-extra 0.10.3",
  "axum-server 0.7.3",
- "backoff",
+ "backon",
  "base64 0.13.1",
  "bitcoin-dogecoin",
  "bytes",
@@ -22317,7 +22340,7 @@ name = "sdk-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "backoff",
+ "backon",
  "candid",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
