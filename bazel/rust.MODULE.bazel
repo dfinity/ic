@@ -143,12 +143,13 @@ crate.spec(
     version = "^0.7.3",
 )
 crate.spec(
-    package = "backoff",
-    version = "^0.4.0",
-)
-crate.spec(
+    default_features = False,
+    features = [
+        "std",
+        "std-blocking-sleep",
+    ],
     package = "backon",
-    version = "^0.4.1",
+    version = "^1.6.0",
 )
 crate.spec(
     package = "base32",
