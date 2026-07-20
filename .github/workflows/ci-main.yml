@@ -659,6 +659,10 @@ jobs:
           startsWith(env.BRANCH_NAME, 'hotfix-') ||
           startsWith(env.BRANCH_NAME, 'public-hotfix-')
         shell: bash
+        env:
+          # on dind_small cargo sometimes runs out of files (when building and linting). This trades
+          # some performance for reliability.
+          CARGO_BUILD_JOBS: 8
         run: |
           set -eExuo pipefail
           export CARGO_TERM_COLOR=always # ensure output has colors
