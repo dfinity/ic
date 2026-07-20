@@ -3572,8 +3572,9 @@ fn execute_flexible_canister_http_request() {
         let http_request_context = canister_http_request_contexts
             .get(&CallbackId::from(0))
             .unwrap();
-        // The flexible endpoint always uses pay-as-you-go pricing and flexible
-        // replication.
+        // With the `flexible_http_requests` feature flag enabled, the flexible
+        // endpoint uses pay-as-you-go pricing on every subnet (free or paying)
+        // and flexible replication.
         assert_eq!(
             http_request_context.pricing_version,
             PricingVersion::PayAsYouGo
@@ -3614,6 +3615,61 @@ fn execute_flexible_canister_http_request() {
                 .is_empty()
         );
     }
+}
+
+#[test]
+fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
+    // On a free subnet, flexible outcalls are available by default (without the
+    // `flexible_http_requests` feature flag) and fall back to legacy pricing,
+    // where pricing is moot because a free subnet charges nothing.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        // The feature flag is deliberately left disabled: the free-subnet path
+        // does not depend on it.
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    // The request is routed through legacy pricing with flexible replication.
+    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert!(
+        matches!(
+            http_request_context.replication,
+            Replication::Flexible { .. }
+        ),
+        "expected flexible replication, got {:?}",
+        http_request_context.replication
+    );
+
+    // Legacy pricing on a free subnet charges nothing: the full payment is
+    // retained (to be refunded when the response is delivered) and nothing is
+    // marked refundable through the pay-as-you-go mechanism.
+    assert_eq!(http_request_context.request.payment, payment);
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        Cycles::new(0)
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        Cycles::new(0)
+    );
 }
 
 #[test]
@@ -3707,8 +3763,9 @@ fn execute_flexible_canister_http_request_insufficient_payment() {
 
 #[test]
 fn execute_flexible_canister_http_request_disabled() {
-    // The flexible HTTP outcalls feature is gated behind a feature flag that is
-    // disabled by default.
+    // On a paying subnet, flexible outcalls under pay-as-you-go pricing are
+    // gated behind the `flexible_http_requests` feature flag, which is disabled
+    // by default.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
@@ -3725,7 +3782,8 @@ fn execute_flexible_canister_http_request_disabled() {
     test.execute_all();
 
     // No context is added and the request is rejected specifically because the
-    // feature flag is disabled (as opposed to any other rejection reason).
+    // feature is not available on this subnet (as opposed to any other
+    // rejection reason).
     let canister_http_request_contexts = &test
         .state()
         .metadata

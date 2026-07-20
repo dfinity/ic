@@ -1240,56 +1240,74 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FlexibleHttpRequest) => match self.config.flexible_http_requests {
-                FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
-                    response: Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    )),
-                    refund: msg.take_cycles(),
-                },
-                FlagStatus::Enabled => match &msg {
-                    CanisterCall::Request(request) => {
-                        match FlexibleCanisterHttpRequestArgs::decode(payload) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(args) => {
-                                match CanisterHttpRequestContext::generate_from_flexible_args(
-                                    state.time(),
-                                    request.as_ref(),
-                                    args,
-                                    &registry_settings.node_ids,
-                                    registry_settings.registry_version,
-                                    rng,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(canister_http_request_context) => match self
-                                        .try_add_http_context_to_replicated_state(
-                                            canister_http_request_context,
-                                            &mut state,
-                                            request.as_ref(),
-                                            since,
-                                        ) {
+            Ok(Ic00Method::FlexibleHttpRequest) => {
+                // Flexible HTTP outcalls are priced with the pay-as-you-go
+                // pricing model. That model is gated behind the
+                // `flexible_http_requests` feature flag and, once enabled,
+                // applies to every subnet. Until then, flexible outcalls are
+                // still offered on free subnets, where pricing is moot, by
+                // falling back to the legacy (charge-everything-up-front)
+                // pricing. On paying subnets they remain unavailable until the
+                // flag is enabled.
+                let pricing_version = match self.config.flexible_http_requests {
+                    FlagStatus::Enabled => Some(PricingVersion::PayAsYouGo),
+                    FlagStatus::Disabled => match state.get_own_cost_schedule() {
+                        CanisterCyclesCostSchedule::Free => Some(PricingVersion::Legacy),
+                        CanisterCyclesCostSchedule::Normal => None,
+                    },
+                };
+                match pricing_version {
+                    None => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    Some(pricing_version) => match &msg {
+                        CanisterCall::Request(request) => {
+                            match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(args) => {
+                                    match CanisterHttpRequestContext::generate_from_flexible_args(
+                                        state.time(),
+                                        request.as_ref(),
+                                        args,
+                                        &registry_settings.node_ids,
+                                        registry_settings.registry_version,
+                                        rng,
+                                        pricing_version,
+                                    ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
+                                            response: Err(err.into()),
                                             refund: msg.take_cycles(),
                                         },
-                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
-                                    },
+                                        Ok(canister_http_request_context) => match self
+                                            .try_add_http_context_to_replicated_state(
+                                                canister_http_request_context,
+                                                &mut state,
+                                                request.as_ref(),
+                                                since,
+                                            ) {
+                                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: msg.take_cycles(),
+                                            },
+                                            Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                        },
+                                    }
                                 }
                             }
                         }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
-                    }
-                },
-            },
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                        }
+                    },
+                }
+            }
 
             Ok(Ic00Method::HttpRequest) => match state.subnet_features().http_requests {
                 true => match &msg {
