@@ -80,6 +80,7 @@ impl SevDiskEncryption {
             if let Err(e) = open_luks2_device(
                 device_path,
                 LuksHeaderLocation::Detached(&self.store_luks_header_path),
+                false,
             ) {
                 warn!(
                     "Refusing to wipe attached LUKS2 header on {}: detached header {} \
@@ -189,7 +190,7 @@ impl SevDiskEncryption {
         .context("Failed to derive new SEV key for previous-key migration")?;
 
         info!("Found previous key for store partition, will use it to unlock the partition");
-        let mut crypt_device = activate_crypt_device(
+        let (mut crypt_device, previous_keyslot) = activate_crypt_device(
             device_path,
             LuksHeaderLocation::Detached(&self.store_luks_header_path),
             crypt_name,
@@ -200,6 +201,19 @@ impl SevDiskEncryption {
         )
         .context("Failed to unlock store partition with previous key")?;
 
+        // If the keyslot the previous key unlocked carries SEV metadata (i.e. it is a real SEV
+        // keyslot from the previous GuestOS), keep it alongside the new key below. This preserves
+        // the "2 keys after a GuestOS upgrade (no firmware upgrade)" behavior and supports
+        // rollback to the previous GuestOS. A legacy raw previous key has no metadata token and
+        // is migrated away (kept list = new only).
+        let previous_sev_metadata: Option<SevMetadata> = read_keyslot_metadata(&mut crypt_device)
+            .context("Failed to read keyslot metadata before key rotation")?
+            .into_iter()
+            .find(|metadata| {
+                metadata.keyslot().map(|k| k == previous_keyslot).unwrap_or(false)
+            })
+            .map(|metadata| metadata.sev_metadata);
+
         info!("Adding new SEV key to store partition");
         let new_keyslot = crypt_device
             .keyslot_handle()
@@ -207,15 +221,16 @@ impl SevDiskEncryption {
             .context("Failed to add new key to store partition")?;
 
         // Write token metadata for the new key slot before destroying old keyslots, so
-        // destroy_keyslots_except can identify the keyslot to keep by its metadata.
-        let metadata = KeyslotMetadata::new_sev(new_keyslot, sev_metadata.clone());
-        write_keyslot_metadata(&mut crypt_device, &metadata)
+        // destroy_keyslots_except can identify the keyslots to keep by their metadata.
+        let new_metadata = KeyslotMetadata::new_sev(new_keyslot, sev_metadata.clone());
+        write_keyslot_metadata(&mut crypt_device, &new_metadata)
             .context("Failed to write token metadata after previous key setup")?;
 
         info!("Removing old key slots from store partition");
-        if let Err(err) =
-            destroy_keyslots_except(&mut crypt_device, std::slice::from_ref(sev_metadata))
-        {
+        // Keep the new keyslot plus, if present, the previous GuestOS's keyslot.
+        let mut metadata_to_keep = vec![sev_metadata.clone()];
+        metadata_to_keep.extend(previous_sev_metadata);
+        if let Err(err) = destroy_keyslots_except(&mut crypt_device, &metadata_to_keep) {
             debug_assert!(false, "Failed to destroy key slots: {err:?}");
             warn!("Failed to destroy key slots: {err:?}");
         }
@@ -503,7 +518,7 @@ pub fn can_open_store(
             Key::DiskEncryptionKey { device_path },
             token.sev_metadata.tcb_version,
         ) else {
-            warn!("Failed to derive key from SEV measurement: {err:?}");
+            warn!("Failed to derive key from SEV measurement");
             continue;
         };
 

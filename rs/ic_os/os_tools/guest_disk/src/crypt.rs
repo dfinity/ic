@@ -152,7 +152,7 @@ pub fn activate_crypt_device(
     flags: CryptActivate,
     verify_luks_params: bool,
     metrics_registry: Option<&Registry>,
-) -> Result<CryptDevice> {
+) -> Result<(CryptDevice, u32)> {
     let mut crypt_device = open_luks2_device(device_path, header_location, verify_luks_params)?;
 
     let active_keyslot = crypt_device
@@ -170,7 +170,7 @@ pub fn activate_crypt_device(
         }
     }
 
-    Ok(crypt_device)
+    Ok((crypt_device, active_keyslot))
 }
 
 /// Deactivates the cryptographic device with the given name.
@@ -350,7 +350,7 @@ pub fn has_attached_luks_header(device_path: &Path) -> Result<bool> {
 /// carries a legacy attached header (from an older GuestOS that wrote both), we wipe it so that
 /// only the detached header remains going forward.
 pub fn wipe_attached_luks_header(device_path: &Path) -> Result<()> {
-    let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached)
+    let mut crypt_device = open_luks2_device(device_path, LuksHeaderLocation::Attached, false)
         .context("Failed to open LUKS device to determine header size")?;
     // `get_data_offset` returns the offset in 512-byte sectors; convert to bytes.
     let data_offset_sectors = crypt_device.status_handle().get_data_offset();
