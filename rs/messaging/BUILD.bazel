@@ -110,6 +110,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/protobuf",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
+        "//rs/registry/resource_limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",

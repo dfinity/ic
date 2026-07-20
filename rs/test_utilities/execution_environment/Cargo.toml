@@ -34,7 +34,7 @@ ic-types-cycles = { path = "../../types/cycles" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-wasm-types = { path = "../../types/wasm_types" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 num-traits = { workspace = true }
 prometheus = { workspace = true }
 slog = { workspace = true }

@@ -141,7 +141,7 @@ rust_ic_test(
         "IC_ICP_TEST_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/test_utils/icp_test_ledger:icp_test_ledger_canister.wasm.gz)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
-    tags = ["cpu:4"],
+    exec_properties = {"cpu": "4"},
     deps = [
         # Keep sorted.
         ":ic-icp-index",

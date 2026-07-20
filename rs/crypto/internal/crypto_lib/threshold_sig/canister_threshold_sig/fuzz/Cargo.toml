@@ -12,7 +12,7 @@ cargo-fuzz = true
 
 [dependencies]
 hex = { workspace = true }
-libfuzzer-sys = "0.4"
+libfuzzer-sys = { workspace = true }
 num-bigint = { workspace = true }
 subtle = { workspace = true }
 

@@ -2,6 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -158,6 +159,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -203,6 +208,7 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
     pub snapshot_visibility: SnapshotVisibility,
+    pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub next_canister_log_record_idx: u64,
@@ -702,6 +708,11 @@ impl StateLayout {
     /// Returns the the raw root path for state
     pub fn raw_path(&self) -> &Path {
         &self.root
+    }
+
+    /// `syncfs` the filesystem holding the state.
+    pub fn syncfs(&self) -> std::io::Result<()> {
+        syncfs(&self.root)
     }
 
     /// Returns the path to the temporary directory.
@@ -2853,6 +2864,26 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Synchronizes the filesystem containing the given path.
+///
+/// On Linux, this uses `syncfs` to synchronize the entire filesystem. On other
+/// platforms it falls back to `File::sync_all()`.
+fn syncfs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let f = std::fs::File::open(&path)?;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        if unsafe { libc::syncfs(f.as_raw_fd()) } == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        f.sync_all()?;
+    }
+    Ok(())
 }
 
 fn dir_list_recursive(

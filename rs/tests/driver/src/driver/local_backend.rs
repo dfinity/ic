@@ -76,10 +76,9 @@ static REGISTRY: Mutex<Option<Arc<LocalBackend>>> = Mutex::new(None);
 /// (reboot) — both under `working_dir`, so any process (setup task or a forked
 /// task subprocess) can control a VM regardless of which one started it. QEMU is
 /// reparented to an init-like ancestor (PID 1 of the test action's execution
-/// environment, e.g. bazel's sandbox or the RBE container) when its launcher
-/// exits and is stopped explicitly in [`delete_group`](Self::delete_group);
-/// anything that outlives the driver is killed when that environment is torn
-/// down.
+/// environment, i.e. bazel's `linux-sandbox`) when its launcher exits and is
+/// stopped explicitly in [`delete_group`](Self::delete_group); anything that
+/// outlives the driver is killed when that environment is torn down.
 pub struct LocalBackend {
     /// Working dir; see [`from_test_env`](Self::from_test_env).
     active_local_backend: ActiveLocalBackend,
@@ -178,69 +177,21 @@ impl LocalBackend {
         Ok(backend)
     }
 
-    /// Build a [`Command`] that runs a short shell `script` with `CAP_NET_ADMIN`
-    /// (and `CAP_NET_RAW`/`CAP_NET_BIND_SERVICE`) available to the program(s) it
-    /// `exec`s.
-    ///
-    /// These are the *only* privileged operations the backend needs: creating the
-    /// per-group bridge and TAP devices, and letting the group's `dnsmasq` bind
-    /// UDP port 67 for DHCPv4.
-    ///
-    /// - Unprivileged (the normal dev-container case): the caps come from the
-    ///   [`NET_ADMIN_LAUNCHER`] binary, a file-capability-endowed `capsh`
-    ///   provisioned in the container image (see `ci/container/Dockerfile`).
-    ///   `capsh` raises the caps into its inheritable+ambient sets and `exec`s
-    ///   `/bin/sh -c <script>`; ambient caps survive the `exec`, so the script's
-    ///   commands run with them even though the shell is not capability-endowed.
-    /// - Root (e.g. the `bazel-test-rbe` RBE cluster): `capsh` is both unnecessary
-    ///   and harmful. A root process already holds these caps — in the nested
-    ///   user namespace the RBE executor runs the action in, root owns the
-    ///   namespace and thus its full capability set — and its children inherit
-    ///   them. Meanwhile `capsh`'s *file* capabilities are not honored across that
-    ///   namespace boundary, so its inheritable-set step fails with `EPERM`
-    ///   (`Unable to set inheritable capabilities`). So run `/bin/sh -c <script>`
-    ///   directly; `ip`/`dnsmasq` inherit root's caps.
-    ///
-    ///   Root's caps only count over a *network namespace owned by its user
-    ///   namespace*, which is not a given (the RBE executor leaves the action in
-    ///   a netns owned by an ancestor userns);
-    ///   [`ensure_administrable_netns`](Self::ensure_administrable_netns) runs
-    ///   at driver startup to guarantee it by the time any `net_admin` script
-    ///   runs.
-    ///
-    /// `script` must only interpolate sanitized, shell-safe tokens (interface
-    /// names and IPv6 prefixes are restricted to `[0-9a-f:.-]`).
-    fn net_admin(script: &str) -> Command {
-        if running_as_root() {
-            let mut cmd = Command::new("/bin/sh");
-            cmd.arg("-c").arg(script);
-            return cmd;
-        }
-        let net_admin_launcher = get_dependency_path_from_env("NET_ADMIN_LAUNCHER_PATH");
-        let mut cmd = Command::new(net_admin_launcher);
-        cmd.arg("--inh=cap_net_admin,cap_net_raw,cap_net_bind_service")
-            .arg("--addamb=cap_net_admin")
-            .arg("--addamb=cap_net_raw")
-            .arg("--addamb=cap_net_bind_service")
-            .arg("--")
+    /// Run a short shell `script` via `/bin/sh -c` to completion, returning an
+    /// error if it cannot be spawned or exits non-zero (`what` describes the
+    /// operation, for error context).
+    fn run_shell(script: &str, what: &str) -> Result<()> {
+        let output = Command::new("/bin/sh")
             .arg("-c")
-            .arg(script);
-        cmd
-    }
-
-    /// Run a [`net_admin`] `script` to completion, returning an error if the
-    /// launcher is missing or the script exits non-zero. `what` describes the
-    /// operation for error context.
-    fn run_net_admin(script: &str, what: &str) -> Result<()> {
-        let output = Self::net_admin(script)
+            .arg(script)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .output()
-            .with_context(|| format!("running net-admin launcher for {what}"))?;
+            .with_context(|| format!("running shell script for {what}"))?;
         if !output.status.success() {
             bail!(
-                "net-admin operation '{what}' failed with status {}: {}",
+                "shell operation '{what}' failed with status {}: {}",
                 output.status,
                 String::from_utf8_lossy(&output.stderr).trim()
             );
@@ -248,83 +199,163 @@ impl LocalBackend {
         Ok(())
     }
 
-    /// Ensure the driver can administer its network namespace, moving the
-    /// process into a freshly unshared, self-owned one when it cannot.
+    /// Put the driver into a network namespace it fully owns and arrange for its
+    /// `ip`/`dnsmasq` operations to run with `CAP_NET_ADMIN`/`CAP_NET_RAW`/
+    /// `CAP_NET_BIND_SERVICE` over that namespace — without any *host* capability
     ///
-    /// Under bazel's `linux-sandbox` (the dev-container / internal-CI case)
-    /// this is a no-op: the sandbox already runs the test in a network
-    /// namespace owned by its user namespace, which the [`net_admin`] launcher
-    /// can administer. On an RBE cluster (e.g. `bazel-test-rbe`) there is no
-    /// bazel sandbox: the executor runs the action as root inside a nested
-    /// user namespace but leaves it in a network namespace owned by an
-    /// *ancestor* user namespace (the action container's). Capabilities are
-    /// relative to the user namespace that owns a resource, so root's
-    /// `CAP_NET_ADMIN` does not apply to that netns and every RTNETLINK
-    /// operation fails with `Operation not permitted` — even when the action
-    /// container itself is privileged. In that case `unshare(CLONE_NEWNET)`
-    /// (permitted: root holds `CAP_SYS_ADMIN` in its own userns) moves the
-    /// process into a fresh netns owned by that userns, over which it holds
-    /// full `CAP_NET_ADMIN` — recreating exactly what `linux-sandbox` gives
-    /// the unprivileged case. The backend needs no external connectivity (the
-    /// bridge, TAPs and the driver's `lo` addresses are namespace-internal;
-    /// that is also why the `_local` targets do not carry `requires-network`,
-    /// see `rs/tests/system_tests.bzl`), so an isolated netns loses nothing.
+    /// `unshare(CLONE_NEWUSER | CLONE_NEWNET)` creates a private user namespace,
+    /// in which the caller holds a full capability set (it is the namespace's
+    /// creator), plus a network namespace owned by it — so every RTNETLINK
+    /// operation on the new netns succeeds.
+    /// We keep the caller's uid/gid unchanged (an *identity* mapping) so
+    /// files, `/dev/kvm` and `/dev/net/tun` are accessed exactly as before, then
+    /// raise the three networking capabilities into the process's *ambient* set
+    /// via [`raise_ambient_net_caps`](Self::raise_ambient_net_caps) so they
+    /// survive `execve` into the unprivileged `ip`/`dnsmasq`/QEMU children.
     ///
-    /// Must run in the root (parent) driver process before the tokio runtime
-    /// and the task subprocesses are spawned: `unshare` moves only the calling
-    /// thread, while threads and processes created *afterwards* inherit its
-    /// namespace. Calling this early therefore puts the entire process tree —
-    /// task subprocesses, QEMU, `dnsmasq` — into the same netns.
-    pub fn ensure_administrable_netns(logger: &Logger) -> Result<()> {
-        // Unprivileged: the linux-sandbox netns is administrable via the
-        // capability launcher, and without CAP_SYS_ADMIN over the current
-        // userns an unshare would not be permitted anyway.
-        if !running_as_root() {
-            return Ok(());
-        }
-        // Root with effective CAP_NET_ADMIN over the current netns (e.g. a
-        // plain root shell, or a second call in an already-unshared process):
-        // keep the namespace, preserving the previous behavior.
-        if Self::probe_netlink().is_ok() {
-            return Ok(());
-        }
-        info!(
-            logger,
-            "Running as root but without CAP_NET_ADMIN over the current network \
-             namespace (RTNETLINK operations are denied); unsharing a self-owned one"
-        );
-        // SAFETY: `unshare(CLONE_NEWNET)` only moves the calling thread into a
-        // new network namespace; it touches no user-space state.
-        if unsafe { libc::unshare(libc::CLONE_NEWNET) } != 0 {
+    /// The backend needs no external connectivity (the bridge, TAPs and the
+    /// driver's `lo` addresses are namespace-internal; that is also why the
+    /// `_local` targets do not carry `requires-network`, see
+    /// `rs/tests/system_tests.bzl`), so an isolated netns loses nothing.
+    ///
+    /// # IMPORTANT: Must run single-threaded, before the tokio runtime and task subprocesses
+    ///
+    /// `unshare(CLONE_NEWUSER)` requires a single-threaded process, so this must
+    /// run before any thread is spawned — in particular before the group's
+    /// async (threaded) logger is built. Running it before the tokio runtime and the task
+    /// subprocesses also puts the whole process tree — task subprocesses, QEMU,
+    /// `dnsmasq` — into the same namespaces and lets them inherit the ambient
+    /// capabilities (`unshare`/`fork`/`exec` all preserve both).
+    pub fn ensure_administrable_netns() -> Result<()> {
+        let uid = nix::unistd::geteuid().as_raw();
+        let gid = nix::unistd::getegid().as_raw();
+        // SAFETY: `unshare` only affects the calling (single) thread/process; it
+        // touches no user-space state.
+        if unsafe { libc::unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET) } != 0 {
             return Err(anyhow!(std::io::Error::last_os_error())).context(
-                "unshare(CLONE_NEWNET) failed; the local backend needs either \
-                 CAP_NET_ADMIN over its network namespace or the ability to \
-                 unshare a new one",
+                "unshare(CLONE_NEWUSER | CLONE_NEWNET) failed; the local backend needs \
+                 to create a private user+network namespace to administer its \
+                 networking without host capabilities",
             );
         }
-        // A fresh netns starts with `lo` down; the driver's per-group
+        // Identity-map the caller's uid/gid into the new user namespace, so it
+        // keeps its usual identity (files, `/dev/kvm` and `/dev/net/tun` are
+        // opened exactly as before) while being the namespace owner. `setgroups`
+        // must be denied before an unprivileged process may write `gid_map`; that
+        // is fine here because nothing in the process tree calls `setgroups`
+        // (`dnsmasq`, the only program that would, stays unprivileged and so
+        // skips its privilege-drop entirely — see `start_ra_daemon`).
+        std::fs::write("/proc/self/setgroups", "deny")
+            .context("denying setgroups for the private user namespace")?;
+        std::fs::write("/proc/self/uid_map", format!("{uid} {uid} 1"))
+            .context("writing uid_map for the private user namespace")?;
+        std::fs::write("/proc/self/gid_map", format!("{gid} {gid} 1"))
+            .context("writing gid_map for the private user namespace")?;
+        // Raise the networking capabilities into the ambient set so the
+        // unprivileged `ip`/`dnsmasq`/QEMU children inherit them across `exec`.
+        Self::raise_ambient_net_caps()?;
+        // A freshly unshared netns starts with `lo` down; the driver's per-group
         // management/logs/files addresses (and any `127.0.0.1`/`::1` traffic)
-        // live on `lo`, so bring it up.
-        Self::run_net_admin("ip link set dev lo up", "bring up lo in unshared netns")?;
-        // Fail fast, with a clear message, if even the fresh netns cannot be
-        // administered (e.g. a seccomp filter denying netlink altogether).
-        Self::probe_netlink()
-            .context("cannot administer even a freshly unshared network namespace")?;
+        // live on `lo`, so bring it up. This is also the first operation that
+        // needs `CAP_NET_ADMIN`, so it fails fast (with the `ip` error) if the
+        // ambient capabilities did not take effect.
+        Self::run_shell("ip link set dev lo up", "bring up lo in the owned netns")?;
         Ok(())
     }
 
-    /// Probe whether the process can administer its current network namespace
-    /// by creating (and immediately deleting) a short-lived bridge. A bridge —
-    /// the very link type [`create_group`](Self::create_group) needs — makes
-    /// the probe's verdict match the real operations. The name is derived from
-    /// the pid, so concurrent groups (distinct driver processes) cannot
-    /// collide, and stays within `IFNAMSIZ - 1` = 15 chars.
-    fn probe_netlink() -> Result<()> {
-        let probe = format!("prb-{}", std::process::id());
-        Self::run_net_admin(
-            &format!("ip link add name {probe} type bridge && ip link del dev {probe}"),
-            "probe netlink administrability",
-        )
+    /// Raise `CAP_NET_ADMIN`, `CAP_NET_RAW` and `CAP_NET_BIND_SERVICE` into the
+    /// process's inheritable *and* ambient capability sets, so they survive
+    /// `execve` and are granted to the unprivileged child programs (`ip`,
+    /// `dnsmasq`, QEMU) the backend spawns. Called right after the process
+    /// becomes the owner of a fresh user namespace (see
+    /// [`ensure_administrable_netns`](Self::ensure_administrable_netns)), where it
+    /// holds these capabilities in its permitted set. Mirrors what the `capsh`
+    /// launcher used to do (`--inh=... --addamb=...`).
+    fn raise_ambient_net_caps() -> Result<()> {
+        // Capability bit numbers (see <linux/capability.h>); all are < 32 so they
+        // live in the first of the two 32-bit capability words.
+        const CAP_NET_BIND_SERVICE: u32 = 10;
+        const CAP_NET_ADMIN: u32 = 12;
+        const CAP_NET_RAW: u32 = 13;
+        const CAPS: [u32; 3] = [CAP_NET_BIND_SERVICE, CAP_NET_ADMIN, CAP_NET_RAW];
+        // _LINUX_CAPABILITY_VERSION_3 (64-bit caps, two data words).
+        const CAP_VERSION_3: u32 = 0x2008_0522;
+
+        // The libc crate does not expose the capability get/set structs, so
+        // declare them here to match the kernel's stable `capget(2)`/`capset(2)`
+        // ABI for `_LINUX_CAPABILITY_VERSION_3`: a header plus an array of two
+        // 32-bit data words (covering capabilities 0..63).
+        #[repr(C)]
+        struct CapHeader {
+            version: u32,
+            pid: libc::c_int,
+        }
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct CapData {
+            effective: u32,
+            permitted: u32,
+            inheritable: u32,
+        }
+
+        // Add the caps to the inheritable set. They are already in the permitted
+        // set (this process created the user namespace), which the ambient-raise
+        // below requires. Read the current sets first so permitted/effective are
+        // preserved.
+        let mut header = CapHeader {
+            version: CAP_VERSION_3,
+            pid: 0,
+        };
+        let mut data = [CapData {
+            effective: 0,
+            permitted: 0,
+            inheritable: 0,
+        }; 2];
+        // SAFETY: `capget` fills `data` (2 words) for the current process (pid 0);
+        // the pointers are valid for the duration of the call.
+        if unsafe {
+            libc::syscall(
+                libc::SYS_capget,
+                &mut header as *mut CapHeader,
+                data.as_mut_ptr(),
+            )
+        } != 0
+        {
+            return Err(anyhow!(std::io::Error::last_os_error())).context("capget");
+        }
+        for cap in CAPS {
+            data[0].inheritable |= 1_u32 << cap;
+        }
+        // SAFETY: `capset` writes the 2-word `data` back for the current process.
+        if unsafe {
+            libc::syscall(
+                libc::SYS_capset,
+                &mut header as *mut CapHeader,
+                data.as_ptr(),
+            )
+        } != 0
+        {
+            return Err(anyhow!(std::io::Error::last_os_error()))
+                .context("capset (raising inheritable networking capabilities)");
+        }
+        for cap in CAPS {
+            // SAFETY: `prctl(PR_CAP_AMBIENT, ...)` only mutates this process's
+            // ambient capability set.
+            let rc = unsafe {
+                libc::prctl(
+                    libc::PR_CAP_AMBIENT,
+                    libc::PR_CAP_AMBIENT_RAISE as libc::c_ulong,
+                    cap as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                )
+            };
+            if rc != 0 {
+                return Err(anyhow!(std::io::Error::last_os_error()))
+                    .context("prctl(PR_CAP_AMBIENT_RAISE) for a networking capability");
+            }
+        }
+        Ok(())
     }
 
     /// Build a handle over `active_local_backend.working_dir`. There is no daemon
@@ -488,10 +519,6 @@ impl LocalBackend {
 
     /// Create the per-group Linux bridge that hosts the group's `/64`.
     ///
-    /// We manage the network ourselves via the narrow [`net_admin`] launcher
-    /// (rather than a privileged system-wide bridge): a bridge holds the group's
-    /// `/64` and per-VM TAPs are attached to it in [`start_vm`].
-    ///
     /// IC GuestOS nodes statically configure their global IPv6: the test driver
     /// hands each node a fixed address plus the `<prefix>::1` gateway (which
     /// lives on the bridge), so they need neither RA nor SLAAC. We still run a
@@ -550,7 +577,7 @@ impl LocalBackend {
              ip -6 addr replace {files}/128 dev lo && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
-        Self::run_net_admin(&create_script, "create group bridge")?;
+        Self::run_shell(&create_script, "create group bridge")?;
 
         // Start the RA daemon. Non-IC-node VMs (e.g. universal VMs) SLAAC their
         // global address from it; IC GuestOS nodes use a static config instead.
@@ -598,14 +625,22 @@ impl LocalBackend {
         );
 
         // `dnsmasq` needs `CAP_NET_RAW`/`CAP_NET_ADMIN` to open the ICMPv6 raw
-        // socket and send RAs, so it runs through the capability launcher.
+        // socket and send RAs, and `CAP_NET_BIND_SERVICE` to bind UDP port 67 for
+        // DHCPv4; it inherits them from the ambient capability set the driver set
+        // up (see `ensure_administrable_netns`).
         // `--ra-param=<bridge>,10,1800` sends an RA every 10s with a 1800s router
         // lifetime; `--dhcp-range=<prefix>,ra-only` advertises the autonomous
         // prefix for SLAAC without stateful leases. The second `--dhcp-range`
         // enables stateful DHCPv4 on the IPv4 `/24` for the guest's second NIC
         // (`enp2s0`). `--port=0` disables DNS. `dnsmasq` daemonizes (writing its
         // pid-file) and is signalled via it in teardown.
-        let user = current_username();
+        //
+        // `dnsmasq` runs unprivileged (the driver keeps
+        // its real, non-root uid — see `ensure_administrable_netns`), so it skips
+        // its privilege-drop path entirely, which is what we want. That path is
+        // taken only when started as root and would otherwise `setgroups(2)` —
+        // denied in the driver's user namespace — and drop to a user/group id
+        // that is unmapped there.
         let dnsmasq_path = get_dependency_path_from_env("ENV_DEPS__DNSMASQ_PATH");
         let dnsmasq_script = format!(
             "exec {dnsmasq_path:?} \
@@ -613,7 +648,6 @@ impl LocalBackend {
                  --pid-file={pid} \
                  --dhcp-leasefile={lease} \
                  --log-facility={log} \
-                 --user={user} \
                  --port=0 \
                  --bind-interfaces \
                  --interface={bridge} \
@@ -626,7 +660,7 @@ impl LocalBackend {
             lease = lease_path.display(),
             log = log_path.display(),
         );
-        Self::run_net_admin(&dnsmasq_script, "start dnsmasq RA daemon")?;
+        Self::run_shell(&dnsmasq_script, "start dnsmasq RA daemon")?;
 
         Ok(())
     }
@@ -672,8 +706,8 @@ impl LocalBackend {
     /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
     /// daemonized and reparented to an init-like ancestor (PID 1 of the test
     /// action's execution environment), so no process holds a handle on it. The
-    /// teardown of that environment (bazel sandbox or RBE container) remains
-    /// the final safety net.
+    /// teardown of that environment (bazel's `linux-sandbox`) remains the final
+    /// safety net.
     fn stop_qemu(&self, pid_path: &Path) {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return;
@@ -761,7 +795,7 @@ impl LocalBackend {
              ip -6 addr del {files}/128 dev lo 2>/dev/null; \
              true"
         );
-        let _ = Self::run_net_admin(&delete_script, "delete group bridge");
+        let _ = Self::run_shell(&delete_script, "delete group bridge");
 
         Ok(())
     }
@@ -1001,12 +1035,13 @@ impl LocalBackend {
         let console_log = vm_dir.join("console.log");
         let uuid = vm_uuid(group_name, vm_name);
 
-        // Create the per-VM TAP, attach it to the group bridge, and bring it up
-        // via the [`net_admin`] launcher. `user <current>` tags the TAP as ours,
-        // letting the unprivileged QEMU (which runs as the same user) open it via
-        // `-netdev tap,ifname=...,script=no,downscript=no` without needing root
-        // to create a device. Recreating it fresh (delete first) keeps this
-        // idempotent across a re-used VM (e.g. `vm().kill()` + `vm().start()`).
+        // Create the per-VM TAP, attach it to the group bridge, and bring it up.
+        // `user <current>` tags the TAP as owned by the driver's (unprivileged)
+        // user, letting QEMU — which runs as that same user — open it via
+        // `-netdev tap,ifname=...,script=no,downscript=no` by owner match, so
+        // QEMU itself needs no capability. Recreating it fresh (delete first)
+        // keeps this idempotent across a re-used VM (e.g. `vm().kill()` +
+        // `vm().start()`).
         let tap = Self::tap_name(group_name, vm_name);
         let bridge = Self::bridge_name(group_name);
         let user = current_username();
@@ -1016,7 +1051,7 @@ impl LocalBackend {
              ip link set dev {tap} master {bridge} && \
              ip link set dev {tap} up"
         );
-        Self::run_net_admin(&tap_script, "create VM tap")?;
+        Self::run_shell(&tap_script, "create VM tap")?;
 
         // If the VM requested IPv4, create a second TAP on the same bridge for
         // the guest's `enp2s0`, which obtains an address via DHCPv4 from the
@@ -1030,7 +1065,7 @@ impl LocalBackend {
                  ip link set dev {tap_ipv4} master {bridge} && \
                  ip link set dev {tap_ipv4} up"
             );
-            Self::run_net_admin(&tap_ipv4_script, "create VM ipv4 tap")?;
+            Self::run_shell(&tap_ipv4_script, "create VM ipv4 tap")?;
         }
 
         // Give the VM a writable copy of the OVMF variable store on first boot
@@ -1401,21 +1436,10 @@ fn sanitize_name(s: &str) -> String {
         .collect()
 }
 
-/// Whether the driver process is running as root (effective uid 0).
-///
-/// The `bazel-test-rbe` RBE cluster may run `_local` test actions as root.
-///
-/// When this returns true, the local backend adjusts its networking strategy:
-/// it bypasses the file-capability `capsh` launcher in [`net_admin`] and may
-/// `unshare(CLONE_NEWNET)` in [`ensure_administrable_netns`] so RTNETLINK
-/// operations are permitted.
-fn running_as_root() -> bool {
-    nix::unistd::geteuid().as_raw() == 0
-}
-
-/// The current user's login name, used to tag TAP device ownership so an
-/// unprivileged QEMU may open them. Falls back to the `USER` environment
-/// variable and finally to `ubuntu` (the container's default user).
+/// The current user's login name, used to tag TAP device ownership so the
+/// unprivileged QEMU (which runs as the same user) may open them. Falls back to
+/// the `USER` environment variable and finally to `ubuntu` (the container's
+/// default user).
 fn current_username() -> String {
     std::env::var("USER").unwrap_or_else(|_| "ubuntu".to_string())
 }

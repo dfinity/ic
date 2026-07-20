@@ -253,6 +253,11 @@ pub struct ExecutionStateBits {
     pub next_scheduled_method: ::core::option::Option<i32>,
     #[prost(bool, tag = "8")]
     pub is_wasm64: bool,
+    /// The round time at which this code was installed/upgraded or restored from a
+    /// snapshot, in nanoseconds since the Unix epoch. Absent for execution states
+    /// persisted before this field was introduced.
+    #[prost(uint64, optional, tag = "9")]
+    pub last_install_timestamp_nanos: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StopCanisterContext {
@@ -618,6 +623,28 @@ pub mod snapshot_visibility {
         AllowedViewers(super::SnapshotVisibilityAllowedViewers),
     }
 }
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StatusVisibilityAllowedViewers {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StatusVisibility {
+    #[prost(oneof = "status_visibility::StatusVisibility", tags = "1, 2, 3")]
+    pub status_visibility: ::core::option::Option<status_visibility::StatusVisibility>,
+}
+/// Nested message and enum types in `StatusVisibility`.
+pub mod status_visibility {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum StatusVisibility {
+        #[prost(int32, tag = "1")]
+        Controllers(i32),
+        #[prost(int32, tag = "2")]
+        Public(i32),
+        #[prost(message, tag = "3")]
+        AllowedViewers(super::StatusVisibilityAllowedViewers),
+    }
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterLogRecord {
     #[prost(uint64, tag = "1")]
@@ -645,7 +672,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 69
+/// Next ID: 70
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "4")]
@@ -780,6 +807,9 @@ pub struct CanisterStateBits {
     /// Snapshot visibility for the canister.
     #[prost(message, optional, tag = "64")]
     pub snapshot_visibility: ::core::option::Option<SnapshotVisibility>,
+    /// Status visibility for the canister.
+    #[prost(message, optional, tag = "69")]
+    pub status_visibility: ::core::option::Option<StatusVisibility>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

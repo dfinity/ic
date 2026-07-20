@@ -31,6 +31,8 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
+use ic_replicated_state::metadata_state::SubnetTopology;
+use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::fake::FakeContentSigner;
 use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -59,7 +61,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
-use ic_types_cycles::Cycles;
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use rand::Rng;
 use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use std::{
@@ -1151,6 +1153,55 @@ fn validate_payload_fails_for_spent_exceeding_allowance_fully_replicated() {
 }
 
 #[test]
+fn validate_payload_accepts_spent_exceeding_allowance_on_free_subnet() {
+    let num_nodes = 4;
+    let callback_id = CallbackId::from(99);
+
+    let (response, metadata) = test_response_and_metadata(callback_id.get());
+    let mut proof = response_and_metadata_to_proof(&response, &metadata);
+    for node in 0..num_nodes as u64 {
+        add_signer_with_excess_spent_to_proof(&mut proof, node_test_id(node));
+    }
+
+    test_config_with_http_feature(true, num_nodes, |mut payload_builder, _| {
+        // Pin the validating replica's own subnet to a `Free` cost schedule, so
+        // the spend limit becomes `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET` rather
+        // than the (zero) per-replica allowance.
+        inject_request_contexts_with_cost_schedule(
+            &mut payload_builder,
+            vec![(callback_id, request_context(Replication::FullyReplicated))],
+            Some(CanisterCyclesCostSchedule::Free),
+        );
+        let validation_result = payload_builder.validate_payload(
+            Height::from(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(CanisterHttpPayload {
+                responses: vec![proof],
+                ..Default::default()
+            }),
+            &[],
+        );
+        // The receipt's spend exceeds the (zero) allowance, so on the default
+        // (`Normal`) schedule this same payload is rejected (see
+        // `validate_payload_fails_for_spent_exceeding_allowance_fully_replicated`).
+        // On a free subnet it must NOT be rejected as overspending. (The payload
+        // still fails later, unrelated signature verification of the fake shares,
+        // but must never fail with `SpentExceedsLimit`.)
+        assert!(
+            !matches!(
+                validation_result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::SpentExceedsLimit { .. },
+                    ),
+                ))
+            ),
+            "free-subnet payload wrongly rejected for overspending: {validation_result:?}"
+        );
+    });
+}
+
+#[test]
 fn validate_payload_fails_for_spent_exceeding_allowance_divergence() {
     let callback_id = CallbackId::from(99);
 
@@ -1761,13 +1812,13 @@ fn assert_payload_rejected_for_excess_spent(
             validation_result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::SpentExceedsAllowance {
+                    InvalidCanisterHttpPayloadReason::SpentExceedsLimit {
                         spent,
-                        per_replica_allowance,
+                        limit,
                     },
                 ),
             )) if spent == receipt_exceeding_allowance().spent
-                && per_replica_allowance == Cycles::new(0)
+                && limit == Cycles::new(0)
         );
     });
 }
@@ -4668,6 +4719,18 @@ pub(crate) fn inject_request_contexts(
     payload_builder: &mut CanisterHttpPayloadBuilderImpl,
     contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
 ) {
+    inject_request_contexts_with_cost_schedule(payload_builder, contexts, None);
+}
+
+/// Like [`inject_request_contexts`], but also pins the validating replica's own
+/// subnet cost schedule. When `cost_schedule` is `Some`, the state's own subnet
+/// topology is set to it, so `get_own_cost_schedule()` returns that value during
+/// validation; when `None`, the default (`Normal`) is left in place.
+pub(crate) fn inject_request_contexts_with_cost_schedule(
+    payload_builder: &mut CanisterHttpPayloadBuilderImpl,
+    contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
+) {
     let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
     for (cb, ctx) in contexts {
         init_state
@@ -4675,6 +4738,20 @@ pub(crate) fn inject_request_contexts(
             .subnet_call_context_manager
             .canister_http_request_contexts
             .insert(cb, ctx);
+    }
+    if let Some(cost_schedule) = cost_schedule {
+        let own_subnet_id = init_state.metadata.own_subnet_id;
+        init_state
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology.subnets_mut().insert(
+                    own_subnet_id,
+                    SubnetTopology {
+                        cost_schedule,
+                        ..Default::default()
+                    },
+                );
+            });
     }
     let state_manager = Arc::new(RefMockStateManager::default());
     state_manager

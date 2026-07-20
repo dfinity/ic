@@ -661,7 +661,11 @@ mod tests {
     const VERIFIED_APP_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_4;
     const CLOUD_ENGINE_NODE_ID: NodeId = ic_test_utilities_types::ids::NODE_5;
     const API_BN_ID: NodeId = ic_test_utilities_types::ids::NODE_6;
-    const API_BN_DOMAIN: &str = "domain.invalid";
+    // An IPv6 loopback literal. `hickory`'s `lookup_ip` short-circuits IP literals and returns
+    // them without contacting any nameserver, so the CloudEngine code path resolves this offline
+    // (making the test hermetic) and then tries to connect to `[::1]:443`, where nothing is
+    // listening, yielding a fast connection-refused error inside the sandbox.
+    const API_BN_DOMAIN: &str = "::1";
 
     // Get a free port on this host to which we can connect transport to.
     fn get_free_localhost_socket_addr() -> SocketAddr {
@@ -1263,10 +1267,14 @@ mod tests {
         )
         .await;
 
-        // Since the API BN is configured with a domain that does not resolve, we expect the
-        // connection to fail with a name resolution error, which indicates that we indeed tried to
-        // connect to the API BN instead of an NNS node.
-        assert_matches!(response, Err(err) if format!("{err:?}").contains("NoRecordsFound"));
+        // The API BN is configured with a loopback domain (`::1`) where nothing is listening on
+        // port 443 (the port hard-coded for API BNs). We therefore expect the connection to be
+        // refused. This indicates that we indeed tried to connect to the API BN (on port 443)
+        // instead of an NNS node (which would have connected to the mocked node's endpoint).
+        assert_matches!(
+            response,
+            Err(err) if format!("{err:?}").contains("Could not connect to node [::1]:443")
+        );
     }
 
     #[tokio::test]

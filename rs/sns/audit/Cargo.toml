@@ -17,8 +17,8 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-colored = "2.0.0"
-csv = "1.1"
+colored = { workspace = true }
+csv = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
@@ -28,10 +28,10 @@ ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../swap" }
-rgb = "0.8.37"
-rust_decimal = "1.36.0"
+rgb = { workspace = true }
+rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-textplots = { version = "0.8" }
+textplots = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

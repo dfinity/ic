@@ -80,7 +80,6 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) max_environment_variables: usize,
     pub(crate) max_environment_variable_name_length: usize,
     pub(crate) max_environment_variable_value_length: usize,
-    pub(crate) log_memory_store_feature: FlagStatus,
 }
 
 impl CanisterMgrConfig {
@@ -105,7 +104,6 @@ impl CanisterMgrConfig {
         max_environment_variables: usize,
         max_environment_variable_name_length: usize,
         max_environment_variable_value_length: usize,
-        log_memory_store_feature: FlagStatus,
     ) -> Self {
         Self {
             default_provisional_cycles_balance,
@@ -127,7 +125,6 @@ impl CanisterMgrConfig {
             max_environment_variables,
             max_environment_variable_name_length,
             max_environment_variable_value_length,
-            log_memory_store_feature,
         }
     }
 }
@@ -501,6 +498,9 @@ pub(crate) enum CanisterManagerError {
         caller: PrincipalId,
         method_name: String,
     },
+    CanisterStatusAccessDenied {
+        caller: PrincipalId,
+    },
     FetchCanisterLogsNotEnoughCycles {
         sent: Cycles,
         required: Cycles,
@@ -760,6 +760,11 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Execute this call from a principal with snapshot read access."
                     .to_string(),
                 doc_link: doc_ref("invalid-controller"),
+            },
+            CanisterManagerError::CanisterStatusAccessDenied { .. } => ErrorHelp::UserError {
+                suggestion: "Execute this call from a principal with canister status read access."
+                    .to_string(),
+                doc_link: "".to_string(),
             },
             CanisterManagerError::FetchCanisterLogsAccessDenied { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or \
@@ -1200,6 +1205,15 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!("Caller {caller} is not allowed to call {method_name}"),
+            ),
+            CanisterStatusAccessDenied { caller } => Self::new(
+                // `CanisterStatusAccessDenied` is a dedicated error code that is
+                // mapped to the same reject code (`CanisterError`) as the
+                // `CanisterInvalidController` error code that governed access to
+                // `canister_status` before the status visibility feature was
+                // introduced.
+                ErrorCode::CanisterStatusAccessDenied,
+                format!("Caller {caller} is not allowed to read the canister status"),
             ),
             CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,

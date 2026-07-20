@@ -15,7 +15,7 @@ ic-canonical-state-tree-hash-test-utils = { path = "../../../canonical_state/tre
 ic-crypto-tree-hash = { path = ".." }
 ic-crypto-tree-hash-fuzz-check-witness-equality-utils = { path = "check_witness_equality_utils" }
 ic-protobuf = { path = "../../../protobuf" }
-libfuzzer-sys = "0.4"
+libfuzzer-sys = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 

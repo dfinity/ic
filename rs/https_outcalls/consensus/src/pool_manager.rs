@@ -483,11 +483,13 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["validate_shares"])
             .start_timer();
 
-        let active_contexts = &self
-            .latest_state()
+        let state = self.latest_state();
+        let active_contexts = &state
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
+        // TODO: Use cost schedule from the context instead, once it exists.
+        let cost_schedule = state.get_own_cost_schedule();
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -504,14 +506,16 @@ impl CanisterHttpPoolManagerImpl {
             .filter_map(|artifact| {
                 let share = &artifact.share;
 
+                // Reject shares from different replica versions
+                if !is_current_protocol_version(share.content.replica_version()) {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                }
+
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(share.content.replica_version()) {
-                        true => Some(CanisterHttpChangeAction::HandleInvalid(
-                            share.clone(),
-                            "Redundant share".into(),
-                        )),
-                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
-                    };
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Redundant share".into(),
+                    ));
                 }
 
                 let Some(context) = active_contexts.get(&share.content.id()) else {
@@ -519,11 +523,21 @@ impl CanisterHttpPoolManagerImpl {
                 };
 
                 // Invalidate shares whose claimed spent cycles exceed what a
-                // single replica is allowed to consume.
-                if share.content.spent() > context.refund_status.per_replica_allowance {
+                // single replica is allowed to consume. Free subnets charge
+                // nothing, so their spend (used only for cost accounting) may
+                // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                let spend_limit = max_http_outcall_spend(
+                    cost_schedule,
+                    context.refund_status.per_replica_allowance,
+                );
+                if share.content.spent() > spend_limit {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
-                        "Spent cycles are greater than replica allowance".to_string(),
+                        format!(
+                            "Spent cycles {} exceed the per-replica spend limit {}",
+                            share.content.spent(),
+                            spend_limit,
+                        ),
                     ));
                 }
 
@@ -700,7 +714,11 @@ pub mod test {
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
+    use ic_replicated_state::metadata_state::SubnetTopology;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
+    use ic_replicated_state::metadata_state::testing::{
+        NetworkTopologyTesting, SystemMetadataTesting,
+    };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::CountBytes;
@@ -981,6 +999,110 @@ pub mod test {
 
                 let changes = pool_manager.validate_shares(&canister_http_pool);
 
+                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+            })
+        });
+    }
+
+    #[test]
+    fn test_removal_of_wrong_version_share_without_existing_validated_share() {
+        // A share signed under a different replica version must be removed from
+        // the unvalidated pool even when no share for the same (signer,
+        // callback) is present in the validated pool yet.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+
+                // A context must be present so that `next_callback_id` is 1 and
+                // the share for callback 0 is considered (id < next_callback_id).
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                // A share from a committee member with a valid signature that
+                // would otherwise be validated, but which carries an outdated
+                // replica version.
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::from_str("outdated_version").unwrap(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                };
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Note: the validated pool is intentionally left empty, so the
+                // (signer, callback) slot is free.
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share is dropped silently (removed, not marked invalid).
+                assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
         });
@@ -3207,7 +3329,125 @@ pub mod test {
                 assert_matches!(
                     &changes[0],
                     CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Spent cycles are greater than replica allowance"
+                        if reason == "Spent cycles 200 exceed the per-replica spend limit 100"
+                );
+            })
+        });
+    }
+
+    #[test]
+    fn test_spent_greater_than_replica_allowance_is_valid_on_free_subnet() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+
+                // A free subnet grants a zero per-replica allowance (nothing is
+                // charged), yet the reported spend is still accumulated for cost
+                // accounting and may exceed that allowance.
+                let request = CanisterHttpRequestContext {
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(0),
+                        per_replica_allowance: Cycles::new(0),
+                        refunded_cycles: Cycles::new(0),
+                        refunding_nodes: BTreeSet::new(),
+                    },
+                    ..test_request_context(
+                        Replication::FullyReplicated,
+                        PricingVersion::Legacy,
+                        None,
+                    )
+                };
+
+                // Put the validating replica's own subnet on a `Free` cost
+                // schedule so `get_own_cost_schedule()` returns `Free`, raising
+                // the spend limit to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+                let mut state =
+                    state_with_pending_http_calls(BTreeMap::from([(CallbackId::from(0), request)]));
+                let own_subnet_id = state.metadata.own_subnet_id;
+                state.metadata.modify_network_topology(|network_topology| {
+                    network_topology.subnets_mut().insert(
+                        own_subnet_id,
+                        SubnetTopology {
+                            cost_schedule: CanisterCyclesCostSchedule::Free,
+                            ..Default::default()
+                        },
+                    );
+                });
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(Height::from(1), Arc::new(state)));
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Build a per-replica receipt share whose spent claim exceeds the
+                // (zero) per-replica allowance but stays below the free-subnet
+                // maximum. On a `Normal` schedule this would be rejected as
+                // overspending (see the test above); on a `Free` schedule it must
+                // not be.
+                let receipt_share = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::default(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt {
+                        spent: Cycles::new(200),
+                    },
+                };
+                let signature = crypto
+                    .sign(
+                        &receipt_share,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+                let share = Signed {
+                    content: receipt_share,
+                    signature,
+                };
+
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share must not be invalidated for overspending.
+                assert_eq!(changes.len(), 1);
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated(_),
+                    "free-subnet share was wrongly rejected: {:?}",
+                    changes[0]
                 );
             })
         });
