@@ -1,5 +1,5 @@
 {
-  "checksum": "ce534aad127b279a1575c452409474bc703e3b3e72ed7046e632711c8ae91554",
+  "checksum": "8a3d7ef6da26d7dfd4b16144813599eb5c196373b3aa8c3c9ce5fdd998cd6417",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -6409,29 +6409,10 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "gloo-timers-sleep",
             "std",
-            "std-blocking-sleep",
-            "tokio-sleep"
+            "std-blocking-sleep"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "tokio"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "tokio"
-            ],
-            "wasm32-unknown-unknown": [
-              "gloo-timers"
-            ],
-            "x86_64-apple-darwin": [
-              "tokio"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "tokio"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -6440,38 +6421,7 @@
               "target": "fastrand"
             }
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "tokio 1.50.0",
-                "target": "tokio"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "tokio 1.50.0",
-                "target": "tokio"
-              }
-            ],
-            "wasm32-unknown-unknown": [
-              {
-                "id": "gloo-timers 0.3.0",
-                "target": "gloo_timers"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "tokio 1.50.0",
-                "target": "tokio"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "tokio 1.50.0",
-                "target": "tokio"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2024",
         "version": "1.6.0"
@@ -29696,75 +29646,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "gloo-timers 0.3.0": {
-      "name": "gloo-timers",
-      "version": "0.3.0",
-      "package_url": "https://github.com/rustwasm/gloo/tree/master/crates/timers",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/gloo-timers/0.3.0/download",
-          "sha256": "bbb143cf96099802033e0d4f4963b19fd2e0b728bcf076cd9cf7f6634f092994"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "gloo_timers",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "gloo_timers",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "futures",
-            "futures-channel",
-            "futures-core"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-core 0.3.31",
-              "target": "futures_core"
-            },
-            {
-              "id": "js-sys 0.3.103",
-              "target": "js_sys"
-            },
-            {
-              "id": "wasm-bindgen 0.2.126",
-              "target": "wasm_bindgen"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.3.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "goldenfile 1.8.0": {
       "name": "goldenfile",
