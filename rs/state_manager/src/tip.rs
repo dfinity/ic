@@ -256,7 +256,7 @@ pub(crate) fn spawn_tip_thread(
             .expect("failed to spawn TipManifest thread");
     }
 
-            // Background best-effort `syncfs` helper. The tip thread pings it (non-blocking)
+    // Background best-effort `syncfs` helper. The tip thread pings it (non-blocking)
     // after completing large numbers of writes (all protos; or `reset_tip`), so the
     // kernel starts flushing that dirty data early instead of leaving it all for
     // the blocking `syncfs` in `finalize_and_remove_unverified_marker`. This is
