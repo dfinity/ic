@@ -2781,10 +2781,14 @@ fn test_flexible_http_request_not_enabled_on_normal_subnet(env: TestEnv) {
     let result = block_on(submit_flexible_outcall(&handlers, request));
 
     match result {
-        Err((_reject_code, message)) => assert!(
-            message.contains("This API is not enabled on this subnet"),
-            "unexpected rejection message: '{message}'"
-        ),
+        Err((reject_code, message)) => {
+            // A `CanisterContractViolation` (5xx) surfaces as `CanisterError`.
+            assert_matches!(reject_code, RejectionCode::CanisterError);
+            assert!(
+                message.contains("This API is not enabled on this subnet"),
+                "unexpected rejection message: '{message}'"
+            );
+        }
         Ok(bytes) => panic!(
             "expected the flexible outcall to be rejected on a normal subnet, \
              got a {}-byte reply",

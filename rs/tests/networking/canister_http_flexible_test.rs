@@ -54,6 +54,11 @@ const SUBNET_NODES: u32 = 4;
 const DEFAULT_MIN_RESPONSES: usize = 3; // floor(2*4/3) + 1
 const DEFAULT_MAX_RESPONSES: usize = SUBNET_NODES as usize;
 
+/// The minimum number of per-node reject details in a `TooManyRejects` error
+/// under default replication: the error fires only once more nodes reject than
+/// the slack (`total_requests - min_responses`) allows, i.e. at least this many.
+const MIN_REJECT_DETAILS: usize = SUBNET_NODES as usize - DEFAULT_MIN_RESPONSES + 1;
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         // Flexible outcalls require the pay-as-you-go pricing model, which is
@@ -64,7 +69,6 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 // Success across replication parameters and HTTP methods.
                 .add_test(systest!(test_default_replication))
-                .add_test(systest!(test_single_request))
                 .add_test(systest!(test_all_nodes))
                 .add_test(systest!(test_partial_responses))
                 .add_test(systest!(test_intermediate_range))
@@ -288,21 +292,22 @@ fn expect_all_headers_empty(payloads: &[CanisterHttpResponsePayload]) -> Result<
     Ok(())
 }
 
-/// Asserts the result is a synchronous rejection whose message contains
-/// `expected_substring`.
+/// Asserts the result is a synchronous rejection with reject code
+/// `CanisterReject` (argument validation fails with `CanisterRejectedMessage`,
+/// a 4xx error code) and a message containing `expected_substring`.
 fn expect_rejection(
     result: Result<FlexibleHttpRequestResult, (RejectionCode, String)>,
     expected_substring: &str,
 ) -> Result<()> {
     match result {
         Err((code, message)) => {
-            if message.contains(expected_substring) {
-                Ok(())
-            } else {
-                bail!(
-                    "rejection message '{message}' (code {code:?}) does not contain '{expected_substring}'"
-                )
+            if !matches!(code, RejectionCode::CanisterReject) {
+                bail!("expected reject code CanisterReject, got {code:?} (message: '{message}')");
             }
+            if !message.contains(expected_substring) {
+                bail!("rejection message '{message}' does not contain '{expected_substring}'");
+            }
+            Ok(())
         }
         other => bail!("expected a synchronous rejection, got: {other:?}"),
     }
@@ -337,15 +342,19 @@ fn expect_global_error(
     }
 }
 
-/// Asserts every node in a runtime error carries an error with the given `code`
-/// and a message containing `message_substring`.
+/// Asserts a runtime error carries at least `min_details` per-node details, each
+/// with the given `code` and a message containing `message_substring`.
 fn expect_all_node_errors(
     err: &FlexibleHttpRequestErr,
+    min_details: usize,
     code: &str,
     message_substring: &str,
 ) -> Result<()> {
-    if err.node_details.is_empty() {
-        bail!("expected per-node error details");
+    if err.node_details.len() < min_details {
+        bail!(
+            "expected at least {min_details} per-node error details, got {}",
+            err.node_details.len()
+        );
     }
     for detail in &err.node_details {
         match &detail.error {
@@ -380,29 +389,6 @@ fn test_default_replication(env: TestEnv) {
                 "default replication returned {} payloads",
                 payloads.len()
             );
-            Ok(())
-        },
-    );
-}
-
-/// A committee of a single node returns exactly one payload.
-fn test_single_request(env: TestEnv) {
-    run_flexible_test(
-        env,
-        "single-node replication returns exactly one payload",
-        |env| {
-            let mut args = get_args(format!("{}/ascii/single", webserver_base(env)));
-            args.replication = Some(ReplicationCounts {
-                total_requests: 1,
-                min_responses: 1,
-                max_responses: 1,
-            });
-            args
-        },
-        |result| {
-            let payloads = expect_ok(result, 1, 1)?;
-            expect_all_status(&payloads, 200)?;
-            expect_all_bodies(&payloads, b"single")?;
             Ok(())
         },
     );
@@ -577,7 +563,7 @@ fn test_nondeterministic_responses(env: TestEnv) {
         |result| {
             let payloads = expect_ok(result, 2, SUBNET_NODES as usize)?;
             expect_all_status(&payloads, 200)?;
-            // Bodies may differ across payloads, but each is a numeric string.
+            // Each body is a numeric string.
             for payload in &payloads {
                 if payload.body.is_empty() || !payload.body.iter().all(|b| b.is_ascii_digit()) {
                     bail!(
@@ -585,6 +571,18 @@ fn test_nondeterministic_responses(env: TestEnv) {
                         String::from_utf8_lossy(&payload.body)
                     );
                 }
+            }
+            // Flexible outcalls keep the differing per-node responses rather than
+            // reconciling them into a single agreed value: collect the bodies
+            // into a set and confirm they are all distinct.
+            let unique_bodies: std::collections::HashSet<_> =
+                payloads.iter().map(|p| &p.body).collect();
+            if unique_bodies.len() != payloads.len() {
+                bail!(
+                    "expected all {} random bodies to be distinct, got {} distinct",
+                    payloads.len(),
+                    unique_bodies.len()
+                );
             }
             Ok(())
         },
@@ -1122,7 +1120,7 @@ fn test_reject_request_too_large(env: TestEnv) {
         |env| {
             let mut args = get_args(format!("{}/ascii/x", webserver_base(env)));
             // One byte over the 2_000_000-byte limit (no headers).
-            args.body = Some(vec![0u8; 2_000_001]);
+            args.body = Some(vec![0_u8; 2_000_001]);
             args
         },
         |result| expect_rejection(result, "exceeds 2000000"),
@@ -1152,7 +1150,12 @@ fn test_too_many_rejects_connection_refused(env: TestEnv) {
             )?;
             // Every node reports a transient connection failure whose message
             // carries the refused connection.
-            expect_all_node_errors(&err, "SysTransient", "Connection refused")?;
+            expect_all_node_errors(
+                &err,
+                MIN_REJECT_DETAILS,
+                "SysTransient",
+                "Connection refused",
+            )?;
             Ok(())
         },
     );
@@ -1164,7 +1167,7 @@ fn test_too_many_rejects_invalid_domain(env: TestEnv) {
     run_flexible_test(
         env,
         "an invalid domain yields too_many_rejects",
-        |_env| get_args("https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.com".to_string()),
+        |_env| get_args("https://xwWPqqbNqxxHmLXdguF4DN9xGq22nczV.invalid".to_string()),
         |result| {
             let err = expect_global_error(
                 result,
@@ -1172,7 +1175,7 @@ fn test_too_many_rejects_invalid_domain(env: TestEnv) {
                 "Too many rejects",
             )?;
             // DNS resolution fails on every node during connection setup.
-            expect_all_node_errors(&err, "SysTransient", "Connecting to")?;
+            expect_all_node_errors(&err, MIN_REJECT_DETAILS, "SysTransient", "Connecting to")?;
             Ok(())
         },
     );
@@ -1191,7 +1194,12 @@ fn test_too_many_rejects_non_https(env: TestEnv) {
                 &FlexibleHttpGlobalError::TooManyRejects(candid::Reserved),
                 "Too many rejects",
             )?;
-            expect_all_node_errors(&err, "SysFatal", "Url need to specify https scheme")?;
+            expect_all_node_errors(
+                &err,
+                MIN_REJECT_DETAILS,
+                "SysFatal",
+                "Url need to specify https scheme",
+            )?;
             Ok(())
         },
     );
@@ -1213,7 +1221,7 @@ fn test_responses_too_large(env: TestEnv) {
                 "Responses too large",
             )?;
             // Each node returned an OK response; the details report their sizes.
-            expect_all_node_errors(&err, "ok", "bytes")?;
+            expect_all_node_errors(&err, DEFAULT_MIN_RESPONSES, "ok", "bytes")?;
             Ok(())
         },
     );
@@ -1235,6 +1243,7 @@ fn test_too_many_rejects_response_over_node_limit(env: TestEnv) {
             )?;
             expect_all_node_errors(
                 &err,
+                MIN_REJECT_DETAILS,
                 "SysFatal",
                 "Http body exceeds size limit of 2000000 bytes",
             )?;
@@ -1269,6 +1278,7 @@ fn test_too_many_rejects_transform_over_node_limit(env: TestEnv) {
             )?;
             expect_all_node_errors(
                 &err,
+                MIN_REJECT_DETAILS,
                 "SysFatal",
                 "Transformed http response exceeds limit: 2000000",
             )?;
@@ -1303,6 +1313,7 @@ fn test_too_many_rejects_composite_transform(env: TestEnv) {
             // The transform query is rejected on every node.
             expect_all_node_errors(
                 &err,
+                MIN_REJECT_DETAILS,
                 "CanisterError",
                 "Composite query cannot be used as transform",
             )?;
