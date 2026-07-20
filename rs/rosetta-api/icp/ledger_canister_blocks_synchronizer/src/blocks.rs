@@ -1400,7 +1400,7 @@ impl Blocks {
             .connection
             .call::<_, _, BlockStoreError>(move |connection| {
         if range.end > range.start
-            && database_access::contains_block(connection, &range.start).unwrap_or(false)
+            && database_access::contains_block(connection, &range.start)?
         {
             let mut stmt = connection.prepare_cached(r#"SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp FROM blocks WHERE block_idx >= :start AND block_idx < :end"#).map_err(|e| BlockStoreError::Other(e.to_string()))?;
             database_access::read_hashed_blocks(
