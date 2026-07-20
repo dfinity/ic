@@ -3046,21 +3046,21 @@ impl CanisterManager {
         canister
             .system_state
             .rename_canister(new_id, to_version, to_total_num_changes);
-        let available_execution_memory_change = canister.add_canister_change_unchecked(
-            state.time(),
-            origin,
-            CanisterChangeDetails::rename_canister(
-                old_id.into(),
-                old_total_num_changes,
-                new_id.into(),
-                to_version,
-                to_total_num_changes,
-                requested_by,
-            ),
-        );
-        round_limits
-            .subnet_available_memory
-            .update_execution_memory_unchecked(available_execution_memory_change);
+        canister
+            .add_canister_change(
+                &mut round_limits.subnet_available_memory,
+                state.time(),
+                origin,
+                CanisterChangeDetails::rename_canister(
+                    old_id.into(),
+                    old_total_num_changes,
+                    new_id.into(),
+                    to_version,
+                    to_total_num_changes,
+                    requested_by,
+                ),
+            )
+            .map_err(subnet_available_memory_error_to_canister_manager_error)?;
 
         if let Some(execution_state) = canister.execution_state.as_mut() {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();

@@ -3156,6 +3156,16 @@ impl ExecutionEnvironment {
             Some(canister) => canister,
         };
 
+        // Keep a pristine handle to the original canister so we can restore it if
+        // the rename fails. Cloning the `Arc` is O(1); the `Arc::make_mut` below
+        // then copies the inner `CanisterState` on write, so all mutations land on
+        // `canister` while `saved_canister` keeps the original (with `old_id`)
+        // untouched. Snapshot the round limits as well, mirroring
+        // `execute_mgmt_operation_on_canister`, so a failed rename does not leak
+        // subnet available memory.
+        let saved_canister = Arc::clone(&canister);
+        let saved_round_limits = round_limits.clone();
+
         let result = self
             .canister_manager
             .rename_canister(
@@ -3173,9 +3183,20 @@ impl ExecutionEnvironment {
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
 
-        // Put canister back with the new id.
-        state.put_canister_state(canister);
-        result
+        match result {
+            Ok(blob) => {
+                // Rename succeeded: commit the renamed canister (under `new_id`).
+                state.put_canister_state(canister);
+                Ok(blob)
+            }
+            Err(err) => {
+                // Rename failed: restore the original canister (under `old_id`) and
+                // the original round limits, leaving the state unchanged.
+                *round_limits = saved_round_limits;
+                state.put_canister_state(saved_canister);
+                Err(err)
+            }
+        }
     }
 
     fn read_canister_snapshot_metadata(
