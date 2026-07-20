@@ -12,7 +12,7 @@ fn rustfmt_file(path: impl AsRef<Path>) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Formats all Rust files at the specified path.
+/// Formats all Rust files at the specified path..
 ///
 /// If the path is a with .rs suffix, the function formats this file.  If the
 /// path is a directory, this function formats all Rust files under this
