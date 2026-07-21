@@ -2420,7 +2420,9 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // The legacy computation additionally sums the per-use-case entries that a
     // deleted canister contributes to the map (already covered by the deleted
     // canisters scalar), hence the double counting:
-    // 84 + 100 (instructions) + 50 (memory) + 40 (canister creation) = 274.
+    // 10 (deleted canisters) + 20 (HTTP outcalls) + 30 (ECDSA outcalls)
+    // + 7 (Schnorr outcalls) + 8 (VetKd) + 9 (dropped messages)
+    // + 100 (instructions) + 50 (memory) + 40 (canister creation) = 274.
     assert_eq!(
         subnet_metrics.consumed_cycles_total_v27(),
         NominalCycles::new(274)
