@@ -533,7 +533,7 @@ impl Orchestrator {
             // increases by a factor of 1.75, maxing out at two hours.
             // e.g. (roughly) 1, 1.75, 3, 5.25, 9.5, 16.5, 28.75, 50.25, 88, 120, 120
             //
-            // Additionally, there's a random +=50% range added to each delay, for jitter.
+            // Additionally, some (random) jitter is added.
             let max_interval = Duration::from_secs(2 * 60 * 60);
             let backoff_builder = ExponentialBuilder::new()
                 .with_min_delay(Duration::from_secs(60))
