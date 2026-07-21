@@ -183,6 +183,9 @@ Locality: Use space to indicate how closely things are related to one another.
 
 When a heading has multiple items, put a blank line after it.
 
+When a statement spans >= 3 lines, separate it on both sides with a blank line,
+unless there is a brace on the adjacent line.
+
 
 ## Abstraction
 
@@ -202,6 +205,14 @@ Spinning out (i.e. turning a chunk of code that does some meaningful unit of
 work into its own function or method) is good.
 
 When a return condition is detected, return quickly.
+
+When possible,
+```
+let Some(widget) = widget else {
+    return ...
+};
+```
+Of course, if `?` works, use that instead of this.
 
 When calling a function, if an argument is just a literal, comment what it
 signifies.
