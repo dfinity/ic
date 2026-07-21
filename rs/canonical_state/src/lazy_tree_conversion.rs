@@ -1137,20 +1137,12 @@ fn subnets_as_tree<'a>(
                         blob(move || {
                             // Starting with `V28`, the reported total also
                             // includes the cycles consumed by all non-deleted
-                            // canisters. Only compute this (linear) sum when it
-                            // is actually needed.
+                            // canisters. `total_consumed_cycles` is
+                            // `O(|hot canisters|)` thanks to the precomputed
+                            // cold-pool aggregate; only compute it when needed.
                             let consumed_cycles_by_canisters =
                                 if certification_version >= CertificationVersion::V28 {
-                                    canisters.all_iter().fold(
-                                        NominalCycles::zero(),
-                                        |total, (_, canister)| {
-                                            total
-                                                + canister
-                                                    .system_state
-                                                    .canister_metrics()
-                                                    .consumed_cycles()
-                                        },
-                                    )
+                                    canisters.total_consumed_cycles()
                                 } else {
                                     NominalCycles::zero()
                                 };
