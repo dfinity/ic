@@ -620,7 +620,7 @@ fn get_standard_engine_replica_version_record<T: RegistryClient + ?Sized>(
 fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) -> f64 {
     let mut hasher = Sha256::new_with_context(&DomainSeparationContext::new("upgrade priority"));
     hasher.write(new_replica_version_id.as_bytes());
-    hasher.write(subnet_id.get().to_string().as_bytes());
+    hasher.write(subnet_id.to_string().as_bytes());
     let digest = hasher.finish();
 
     let first_8_bytes = <[u8; 8]>::try_from(&digest[0..8]).unwrap();
