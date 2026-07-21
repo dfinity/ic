@@ -16,7 +16,8 @@ Always be MEANINGFUL.
 Lead with the lede.
 
 
-Consistency is king.
+Consistency is king. When nearby code and far away code follow different
+patterns, follow the nearby code.
 
 
 Data is gold. Diagnostics are diamonds.

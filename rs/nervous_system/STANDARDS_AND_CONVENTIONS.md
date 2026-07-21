@@ -9,7 +9,8 @@ programming languages.
 
 These rules require judgement. This does NOT imply that anything goes!
 Intelligence is a FEATURE! Thanks to AI, it is now possible for machines to help
-us enforce these rules. It will be a bit messy, but no rules is far worse.
+us enforce such rules. It will be a bit messy, but no rules of this kind is
+worse.
 
 Even if we say that X is "good", that does NOT mean over-do X!
 
@@ -60,7 +61,8 @@ Lead with the lede.
 
 (All general principles of good communication apply.)
 
-Consistency is king.
+Consistency is king. When nearby code and far away code follow different
+patterns, follow the nearby code.
 
 (Control access on a "need to know" basis. E.g. minimize bazel visibility.)
 
