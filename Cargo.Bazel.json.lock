@@ -1,5 +1,5 @@
 {
-  "checksum": "22446b7b142461d94c2d08c9fe4db5d2d9047c00777054093d2d528ed771a456",
+  "checksum": "3f1c03f7013747094f3bcb861bf190bd2c2593eb9799689ed59728f433757a9b",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -293,7 +293,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -364,7 +364,7 @@
               "target": "http"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -784,7 +784,7 @@
               "target": "language_tags"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -800,7 +800,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -911,11 +911,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -971,7 +971,7 @@
               "target": "futures_core"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -983,7 +983,7 @@
               "target": "prometheus"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -1849,7 +1849,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -2436,14 +2436,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "anyhow 1.0.100": {
+    "anyhow 1.0.104": {
       "name": "anyhow",
-      "version": "1.0.100",
+      "version": "1.0.104",
       "package_url": "https://github.com/dtolnay/anyhow",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/anyhow/1.0.100/download",
-          "sha256": "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
+          "url": "https://static.crates.io/crates/anyhow/1.0.104/download",
+          "sha256": "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
         }
       },
       "targets": [
@@ -2487,14 +2487,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.0.100"
+        "edition": "2021",
+        "version": "1.0.104"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -3049,7 +3049,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -3061,7 +3061,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -3362,7 +3362,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -3435,11 +3435,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -3495,11 +3495,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -3555,11 +3555,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -4016,7 +4016,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -4032,7 +4032,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             }
           ],
@@ -4294,11 +4294,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -4462,11 +4462,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -4563,11 +4563,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -4694,7 +4694,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -4866,7 +4866,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -5951,11 +5951,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -6012,11 +6012,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -7262,11 +7262,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -7278,7 +7278,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -7399,11 +7399,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -7415,7 +7415,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -7523,7 +7523,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -7535,11 +7535,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -7551,7 +7551,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -7705,7 +7705,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -7770,7 +7770,7 @@
         "deps": {
           "common": [
             {
-              "id": "bs58 0.5.0",
+              "id": "bs58 0.5.1",
               "target": "bs58"
             },
             {
@@ -8620,11 +8620,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -9213,11 +9213,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -9478,14 +9478,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "bs58 0.5.0": {
+    "bs58 0.5.1": {
       "name": "bs58",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "package_url": "https://github.com/Nullus157/bs58-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bs58/0.5.0/download",
-          "sha256": "f5353f36341f7451062466f0b755b96ac3a9547e4d7f6b70d603fc721a7d7896"
+          "url": "https://static.crates.io/crates/bs58/0.5.1/download",
+          "sha256": "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
         }
       },
       "targets": [
@@ -9527,7 +9527,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -9812,7 +9812,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -9982,7 +9982,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -10014,7 +10014,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -10429,7 +10429,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -10484,11 +10484,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -11077,7 +11077,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -11136,11 +11136,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -11307,7 +11307,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -11375,7 +11375,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -11394,14 +11394,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.31": {
+    "candid 0.10.32": {
       "name": "candid",
-      "version": "0.10.31",
+      "version": "0.10.32",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.31/download",
-          "sha256": "1347fd6b24f5ad23e4ab16d49551a03d396410dcb086e8f969c21efdf4b1dbd8"
+          "url": "https://static.crates.io/crates/candid/0.10.32/download",
+          "sha256": "b649560badafa98cdf260958393f317c013b5aa819dba26f21cc3e26cae41dae"
         }
       },
       "targets": [
@@ -11437,7 +11437,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -11498,7 +11498,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "candid_derive 0.10.31",
+              "id": "candid_derive 0.10.32",
               "target": "candid_derive"
             },
             {
@@ -11533,7 +11533,7 @@
             ]
           }
         },
-        "version": "0.10.31"
+        "version": "0.10.32"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11541,14 +11541,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_derive 0.10.31": {
+    "candid_derive 0.10.32": {
       "name": "candid_derive",
-      "version": "0.10.31",
+      "version": "0.10.32",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_derive/0.10.31/download",
-          "sha256": "ad381629d2d2940899c3a784ccd4fe59e255b5714e7520f016f839f07d2236e7"
+          "url": "https://static.crates.io/crates/candid_derive/0.10.32/download",
+          "sha256": "8f94f9df97dd04077b5a30e82dfb5a5f2eae1a6e8c9d6a98fd24351c8a333464"
         }
       },
       "targets": [
@@ -11581,18 +11581,18 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.31"
+        "version": "0.10.32"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11644,11 +11644,11 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -11719,14 +11719,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_parser 0.2.4": {
+    "candid_parser 0.4.0": {
       "name": "candid_parser",
-      "version": "0.2.4",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_parser/0.2.4/download",
-          "sha256": "75daa0ef508c92f38dd0eaaaae7d13f317b68ab73c875068257348574a6bcce2"
+          "url": "https://static.crates.io/crates/candid_parser/0.4.0/download",
+          "sha256": "2e35c12ed409a6c02c6e204db49926c75ceeb622a4a994b828cdd3dea7dfec59"
         }
       },
       "targets": [
@@ -11763,15 +11763,15 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
-              "id": "candid_parser 0.2.4",
+              "id": "candid_parser 0.4.0",
               "target": "build_script_build"
             },
             {
@@ -11822,7 +11822,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.4"
+        "version": "0.4.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -11888,7 +11888,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -11900,7 +11900,7 @@
               "target": "ic0"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -11972,11 +11972,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -13477,11 +13477,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -13675,7 +13675,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -14164,7 +14164,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -14224,7 +14224,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -14350,7 +14350,7 @@
               "target": "libc"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -15654,7 +15654,7 @@
               "target": "libm"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -16019,7 +16019,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -16488,7 +16488,7 @@
               "target": "rayon"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -17534,11 +17534,11 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -18010,11 +18010,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -18148,69 +18148,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling 0.13.4": {
-      "name": "darling",
-      "version": "0.13.4",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling/0.13.4/download",
-          "sha256": "a01d95850c592940db9b8194bc39f4bc0e89dee5c4265e4b1807c34a9aba453c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.13.4",
-              "target": "darling_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "darling_macro 0.13.4",
-              "target": "darling_macro"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.13.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "darling 0.20.11": {
       "name": "darling",
       "version": "0.20.11",
@@ -18267,69 +18204,6 @@
           "selects": {}
         },
         "version": "0.20.11"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "darling 0.21.3": {
-      "name": "darling",
-      "version": "0.21.3",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling/0.21.3/download",
-          "sha256": "9cdf337090841a411e2a7f3deb9187445851f91b309c0c0a29e05f74a00a48c0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.21.3",
-              "target": "darling_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "darling_macro 0.21.3",
-              "target": "darling_macro"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.21.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -18400,80 +18274,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling_core 0.13.4": {
-      "name": "darling_core",
-      "version": "0.13.4",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_core/0.13.4/download",
-          "sha256": "859d65a907b6852c9361e3185c862aae7fafd2887876799fa55f5f99dc40d610"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "strsim",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "ident_case 1.0.1",
-              "target": "ident_case"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "strsim 0.10.0",
-              "target": "strsim"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.13.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "darling_core 0.20.11": {
       "name": "darling_core",
       "version": "0.20.11",
@@ -18525,7 +18325,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -18533,7 +18333,7 @@
               "target": "strsim"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -18541,80 +18341,6 @@
         },
         "edition": "2021",
         "version": "0.20.11"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "darling_core 0.21.3": {
-      "name": "darling_core",
-      "version": "0.21.3",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_core/0.21.3/download",
-          "sha256": "1247195ecd7e3c85f83c8d2a366e4210d588e802133e1e355180a9870b517ea4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "strsim",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "ident_case 1.0.1",
-              "target": "ident_case"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "strsim 0.11.1",
-              "target": "strsim"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.21.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -18669,7 +18395,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -18677,7 +18403,7 @@
               "target": "strsim"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -18685,61 +18411,6 @@
         },
         "edition": "2021",
         "version": "0.23.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "darling_macro 0.13.4": {
-      "name": "darling_macro",
-      "version": "0.13.4",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_macro/0.13.4/download",
-          "sha256": "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "darling_macro",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_macro",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.13.4",
-              "target": "darling_core"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.13.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -18783,11 +18454,11 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -18795,61 +18466,6 @@
         },
         "edition": "2021",
         "version": "0.20.11"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "darling_macro 0.21.3": {
-      "name": "darling_macro",
-      "version": "0.21.3",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_macro/0.21.3/download",
-          "sha256": "d38308df82d1080de0afee5d069fa14b0326a88c14f15c5ccda35b4a6c414c81"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "darling_macro",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_macro",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.21.3",
-              "target": "darling_core"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.21.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -18893,11 +18509,11 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -19219,7 +18835,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -19702,11 +19318,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -19818,7 +19434,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -19881,11 +19497,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -19936,11 +19552,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -20057,11 +19673,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -20119,7 +19735,7 @@
               "target": "derive_builder_core"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -20206,7 +19822,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -20337,11 +19953,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -20420,7 +20036,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -20962,7 +20578,7 @@
               "target": "aide"
             },
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -21060,7 +20676,7 @@
               "alias": "bitcoin_dogecoin"
             },
             {
-              "id": "bs58 0.5.0",
+              "id": "bs58 0.5.1",
               "target": "bs58"
             },
             {
@@ -21096,7 +20712,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -21502,7 +21118,7 @@
               "target": "ic_vetkeys"
             },
             {
-              "id": "ic-wasm 0.9.11",
+              "id": "ic-wasm 0.10.0",
               "target": "ic_wasm"
             },
             {
@@ -21853,7 +21469,7 @@
               "target": "quinn_udp"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -21899,7 +21515,7 @@
               "target": "rcgen"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -22040,7 +21656,7 @@
               "target": "serde_regex"
             },
             {
-              "id": "serde_with 1.14.0",
+              "id": "serde_with 3.21.0",
               "target": "serde_with"
             },
             {
@@ -22136,7 +21752,7 @@
               "target": "subtle"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -22176,7 +21792,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -22348,7 +21964,7 @@
               "target": "walkdir"
             },
             {
-              "id": "walrus 0.23.3",
+              "id": "walrus 0.26.4",
               "target": "walrus"
             },
             {
@@ -22822,11 +22438,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -23654,7 +23270,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -24044,7 +23660,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             }
           ],
@@ -24195,7 +23811,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -24259,11 +23875,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -24403,11 +24019,11 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             }
           ],
@@ -24461,11 +24077,11 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             }
           ],
@@ -24539,7 +24155,7 @@
               "target": "humantime"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             }
           ],
@@ -24638,11 +24254,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -25071,7 +24687,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -25168,7 +24784,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -25771,7 +25387,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -25847,7 +25463,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -25879,7 +25495,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -26075,51 +25691,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "fallible-iterator 0.2.0": {
-      "name": "fallible-iterator",
-      "version": "0.2.0",
-      "package_url": "https://github.com/sfackler/rust-fallible-iterator",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/fallible-iterator/0.2.0/download",
-          "sha256": "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "fallible_iterator",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "fallible_iterator",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "fallible-iterator 0.3.0": {
       "name": "fallible-iterator",
       "version": "0.3.0",
@@ -26152,7 +25723,8 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default"
+            "default",
+            "std"
           ],
           "selects": {}
         },
@@ -26251,11 +25823,11 @@
               "target": "bit_set"
             },
             {
-              "id": "regex-automata 0.4.13",
+              "id": "regex-automata 0.4.16",
               "target": "regex_automata"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             }
           ],
@@ -27376,11 +26948,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -28377,11 +27949,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -29486,76 +29058,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "gimli 0.26.2": {
-      "name": "gimli",
-      "version": "0.26.2",
-      "package_url": "https://github.com/gimli-rs/gimli",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/gimli/0.26.2/download",
-          "sha256": "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "gimli",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "gimli",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "endian-reader",
-            "fallible-iterator",
-            "indexmap",
-            "read",
-            "read-core",
-            "stable_deref_trait",
-            "std",
-            "write"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "fallible-iterator 0.2.0",
-              "target": "fallible_iterator"
-            },
-            {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
-            },
-            {
-              "id": "stable_deref_trait 1.2.0",
-              "target": "stable_deref_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.26.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "gimli 0.27.3": {
       "name": "gimli",
       "version": "0.27.3",
@@ -29594,6 +29096,75 @@
         },
         "edition": "2018",
         "version": "0.27.3"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "gimli 0.32.3": {
+      "name": "gimli",
+      "version": "0.32.3",
+      "package_url": "https://github.com/gimli-rs/gimli",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/gimli/0.32.3/download",
+          "sha256": "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gimli",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "gimli",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "endian-reader",
+            "fallible-iterator",
+            "read",
+            "read-all",
+            "read-core",
+            "std",
+            "write"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "fallible-iterator 0.3.0",
+              "target": "fallible_iterator"
+            },
+            {
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "stable_deref_trait 1.2.0",
+              "target": "stable_deref_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.32.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -30261,7 +29832,7 @@
               "target": "derive_builder"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -30281,7 +29852,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -30360,7 +29931,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -30476,8 +30047,7 @@
             "allocator-api2",
             "default",
             "inline-more",
-            "raw",
-            "serde"
+            "raw"
           ],
           "selects": {}
         },
@@ -30490,10 +30060,6 @@
             {
               "id": "allocator-api2 0.2.21",
               "target": "allocator_api2"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -30544,8 +30110,7 @@
             "default-hasher",
             "equivalent",
             "inline-more",
-            "raw-entry",
-            "serde"
+            "raw-entry"
           ],
           "selects": {}
         },
@@ -30562,10 +30127,6 @@
             {
               "id": "foldhash 0.1.4",
               "target": "foldhash"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -30616,7 +30177,8 @@
             "default-hasher",
             "equivalent",
             "inline-more",
-            "raw-entry"
+            "raw-entry",
+            "serde"
           ],
           "selects": {}
         },
@@ -30633,6 +30195,10 @@
             {
               "id": "foldhash 0.2.0",
               "target": "foldhash"
+            },
+            {
+              "id": "serde_core 1.0.228",
+              "target": "serde_core"
             }
           ],
           "selects": {}
@@ -31680,7 +31246,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -31818,7 +31384,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -31952,7 +31518,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -32428,7 +31994,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -32462,7 +32028,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -33324,7 +32890,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -33416,7 +32982,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -33970,7 +33536,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -34082,7 +33648,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -34198,7 +33764,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -34310,7 +33876,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -34412,7 +33978,7 @@
               "target": "ahash"
             },
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -34444,7 +34010,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -34564,7 +34130,7 @@
               "target": "rcgen"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -34600,7 +34166,7 @@
               "target": "serde_json"
             },
             {
-              "id": "serde_with 3.16.0",
+              "id": "serde_with 3.21.0",
               "target": "serde_with"
             },
             {
@@ -34640,7 +34206,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -34772,7 +34338,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -34780,7 +34346,7 @@
               "target": "axum"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -34856,7 +34422,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -34932,7 +34498,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35038,7 +34604,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35054,7 +34620,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -35112,7 +34678,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35152,7 +34718,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -35199,7 +34765,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35262,7 +34828,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35298,7 +34864,7 @@
               "target": "slotmap"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -35354,7 +34920,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35378,7 +34944,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -35517,7 +35083,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35529,11 +35095,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -35580,7 +35146,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35592,11 +35158,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -35643,7 +35209,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -35663,7 +35229,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -35806,7 +35372,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36010,7 +35576,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -36030,7 +35596,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36078,7 +35644,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -36154,7 +35720,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -36162,7 +35728,7 @@
               "target": "axum"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36218,7 +35784,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -36294,7 +35860,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36306,7 +35872,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -36362,7 +35928,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -36370,7 +35936,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36462,7 +36028,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36556,7 +36122,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -36685,7 +36251,7 @@
               "target": "ahash"
             },
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -36705,7 +36271,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -36797,7 +36363,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -36829,7 +36395,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -36947,7 +36513,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37029,7 +36595,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37132,7 +36698,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -37179,7 +36745,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37234,7 +36800,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37289,7 +36855,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37437,7 +37003,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37477,7 +37043,7 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -37731,7 +37297,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37790,7 +37356,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37822,7 +37388,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -37878,7 +37444,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -37910,7 +37476,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -37966,7 +37532,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -38006,7 +37572,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -38076,7 +37642,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -38116,7 +37682,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -38262,11 +37828,11 @@
               "target": "aes_gcm"
             },
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -38366,14 +37932,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-wasm 0.9.11": {
+    "ic-wasm 0.10.0": {
       "name": "ic-wasm",
-      "version": "0.9.11",
+      "version": "0.10.0",
       "package_url": "https://github.com/dfinity/ic-wasm",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-wasm/0.9.11/download",
-          "sha256": "04a4c6c1f1f7a2126be36fe51cdbc1c8991214f231811dca7ec1971d15cb6f91"
+          "url": "https://static.crates.io/crates/ic-wasm/0.10.0/download",
+          "sha256": "44ab14c3676c8881fc1a8bad7a2c19cc6f7511584008f777c12cd42a70f380ab"
         }
       },
       "targets": [
@@ -38417,15 +37983,15 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
-              "id": "candid_parser 0.2.4",
+              "id": "candid_parser 0.4.0",
               "target": "candid_parser"
             },
             {
@@ -38437,7 +38003,7 @@
               "target": "libflate"
             },
             {
-              "id": "parse-display 0.10.0",
+              "id": "parse-display 0.11.0",
               "target": "parse_display"
             },
             {
@@ -38453,22 +38019,22 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.68",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
-              "id": "walrus 0.22.0",
+              "id": "walrus 0.26.4",
               "target": "walrus"
             },
             {
-              "id": "wasmparser 0.223.1",
+              "id": "wasmparser 0.253.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.11"
+        "version": "0.10.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -38508,7 +38074,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -38774,11 +38340,11 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -38845,11 +38411,11 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.31",
+              "id": "candid 0.10.32",
               "target": "candid"
             },
             {
@@ -39506,11 +39072,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -39525,14 +39091,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "id-arena 2.2.1": {
+    "id-arena 2.3.0": {
       "name": "id-arena",
-      "version": "2.2.1",
+      "version": "2.3.0",
       "package_url": "https://github.com/fitzgen/id-arena",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/id-arena/2.2.1/download",
-          "sha256": "25a2bc672d1148e28034f176e01fffebb08b35768468cc954630da77a1449005"
+          "url": "https://static.crates.io/crates/id-arena/2.3.0/download",
+          "sha256": "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
         }
       },
       "targets": [
@@ -39561,8 +39127,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "2.2.1"
+        "edition": "2021",
+        "version": "2.3.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -40066,7 +39632,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -40515,7 +40081,7 @@
               "target": "itoa"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -40843,11 +40409,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -41029,7 +40595,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -41657,7 +41223,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             }
           ],
@@ -42146,7 +41712,7 @@
               "target": "jni_sys"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -42233,7 +41799,7 @@
               "target": "jni_sys"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -42241,7 +41807,7 @@
               "target": "simd_cesu8"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -42345,7 +41911,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -42353,7 +41919,7 @@
               "target": "simd_cesu8"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -42508,11 +42074,11 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -42910,11 +42476,11 @@
               "target": "referencing"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             },
             {
@@ -43255,7 +42821,7 @@
               "target": "petgraph"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -43368,7 +42934,7 @@
               "target": "pico_args"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -43460,11 +43026,11 @@
               "target": "petgraph"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             },
             {
@@ -43558,25 +43124,25 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ]
@@ -43650,25 +43216,25 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "regex 1.12.2",
+                "id": "regex 1.13.1",
                 "target": "regex"
               }
             ]
@@ -44136,7 +43702,7 @@
               "target": "libcryptsetup_rs_sys"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -46266,14 +45832,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "log 0.4.28": {
+    "log 0.4.33": {
       "name": "log",
-      "version": "0.4.28",
+      "version": "0.4.33",
       "package_url": "https://github.com/rust-lang/log",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/log/0.4.28/download",
-          "sha256": "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
+          "url": "https://static.crates.io/crates/log/0.4.33/download",
+          "sha256": "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
         }
       },
       "targets": [
@@ -46302,7 +45868,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.28"
+        "version": "0.4.33"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -46526,7 +46092,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -46534,7 +46100,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -46598,15 +46164,15 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -46666,7 +46232,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -47420,7 +46986,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -47554,7 +47120,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex-automata 0.4.13",
+              "id": "regex-automata 0.4.16",
               "target": "regex_automata"
             }
           ],
@@ -47738,7 +47304,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -47803,7 +47369,7 @@
               "target": "ipnetwork"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -47815,7 +47381,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -48425,7 +47991,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -48453,7 +48019,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -48772,7 +48338,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -48987,7 +48553,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             }
           ],
@@ -49084,13 +48650,13 @@
           "selects": {
             "aarch64-apple-darwin": [
               {
-                "id": "log 0.4.28",
+                "id": "log 0.4.33",
                 "target": "log"
               }
             ],
             "aarch64-unknown-linux-gnu": [
               {
-                "id": "log 0.4.28",
+                "id": "log 0.4.33",
                 "target": "log"
               }
             ],
@@ -49125,13 +48691,13 @@
             ],
             "x86_64-apple-darwin": [
               {
-                "id": "log 0.4.28",
+                "id": "log 0.4.33",
                 "target": "log"
               }
             ],
             "x86_64-unknown-linux-gnu": [
               {
-                "id": "log 0.4.28",
+                "id": "log 0.4.33",
                 "target": "log"
               }
             ]
@@ -49375,11 +48941,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -49462,11 +49028,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -49570,7 +49136,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -49578,7 +49144,7 @@
               "target": "rand"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -49820,7 +49386,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -49993,11 +49559,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -50097,7 +49663,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             }
           ],
@@ -50161,7 +49727,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -52319,11 +51885,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -53269,7 +52835,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -53498,11 +53064,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -53916,7 +53482,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -54006,7 +53572,7 @@
               "target": "prost"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -54592,7 +54158,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -55199,7 +54765,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -55577,14 +55143,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "parse-display 0.10.0": {
+    "parse-display 0.11.0": {
       "name": "parse-display",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "package_url": "https://github.com/frozenlib/parse-display",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/parse-display/0.10.0/download",
-          "sha256": "287d8d3ebdce117b8539f59411e4ed9ec226e0a4153c7f55495c6070d68e6f72"
+          "url": "https://static.crates.io/crates/parse-display/0.11.0/download",
+          "sha256": "e78deb158fb1d73b29efb4b7e9b9860b78059c670de06bd28df8d0b458ded0eb"
         }
       },
       "targets": [
@@ -55618,27 +55184,27 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
+        "edition": "2024",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "parse-display-derive 0.10.0",
+              "id": "parse-display-derive 0.11.0",
               "target": "parse_display_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.10.0"
+        "version": "0.11.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55647,14 +55213,14 @@
       ],
       "license_file": null
     },
-    "parse-display-derive 0.10.0": {
+    "parse-display-derive 0.11.0": {
       "name": "parse-display-derive",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "package_url": "https://github.com/frozenlib/parse-display",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/parse-display-derive/0.10.0/download",
-          "sha256": "7fc048687be30d79502dea2f623d052f3a074012c6eac41726b7ab17213616b1"
+          "url": "https://static.crates.io/crates/parse-display-derive/0.11.0/download",
+          "sha256": "8e95a50d1084dab562913062c4c34bb204b68fc6ec38a1395909ff5aaaf4f10a"
         }
       },
       "targets": [
@@ -55676,6 +55242,13 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -55683,15 +55256,15 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             },
             {
@@ -55699,14 +55272,14 @@
               "target": "structmeta"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.10.0"
+        "edition": "2024",
+        "version": "0.11.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55990,7 +55563,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -56281,7 +55854,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             }
           ],
@@ -56511,11 +56084,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -57071,11 +56644,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -57319,11 +56892,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -58430,7 +58003,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -58466,7 +58039,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -58664,7 +58237,7 @@
               "target": "predicates_core"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             }
           ],
@@ -59068,7 +58641,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -59483,7 +59056,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -59584,7 +59157,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             }
           ],
@@ -59656,7 +59229,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             }
           ],
@@ -59715,11 +59288,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -60390,7 +59963,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -60473,7 +60046,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             }
           ],
@@ -60566,7 +60139,7 @@
               "target": "rand_xorshift"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             },
             {
@@ -60630,11 +60203,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -60762,7 +60335,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -60794,11 +60367,11 @@
               "target": "pulldown_cmark_to_cmark"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -60849,7 +60422,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -60861,11 +60434,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -61379,7 +60952,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -61434,11 +61007,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -61688,7 +61261,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -61753,11 +61326,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -62082,7 +61655,7 @@
               "target": "env_logger"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -62185,7 +61758,7 @@
               "target": "rustls"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -62310,7 +61883,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -62428,14 +62001,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quote 1.0.42": {
+    "quote 1.0.47": {
       "name": "quote",
-      "version": "1.0.42",
+      "version": "1.0.47",
       "package_url": "https://github.com/dtolnay/quote",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quote/1.0.42/download",
-          "sha256": "a338cc41d27e6cc6dce6cefc13a0729dfbb81c262b1f519331575dd80ef3067f"
+          "url": "https://static.crates.io/crates/quote/1.0.47/download",
+          "sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
         }
       },
       "targets": [
@@ -62483,14 +62056,14 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.0.42"
+        "edition": "2021",
+        "version": "1.0.47"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -64079,7 +63652,7 @@
               "target": "libredox"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -64210,11 +63783,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -64364,7 +63937,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -64391,14 +63964,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regex 1.12.2": {
+    "regex 1.13.1": {
       "name": "regex",
-      "version": "1.12.2",
+      "version": "1.13.1",
       "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex/1.12.2/download",
-          "sha256": "843bc0191f75f3e22651ae5f1e72939ab2f72a4bc30fa80a066bd66edefc24d4"
+          "url": "https://static.crates.io/crates/regex/1.13.1/download",
+          "sha256": "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d"
         }
       },
       "targets": [
@@ -64453,18 +64026,18 @@
               "target": "memchr"
             },
             {
-              "id": "regex-automata 0.4.13",
+              "id": "regex-automata 0.4.16",
               "target": "regex_automata"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.12.2"
+        "version": "1.13.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -64557,14 +64130,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "regex-automata 0.4.13": {
+    "regex-automata 0.4.16": {
       "name": "regex-automata",
-      "version": "0.4.13",
+      "version": "0.4.16",
       "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex-automata/0.4.13/download",
-          "sha256": "5276caf25ac86c8d810222b3dbb938e512c55c6831a10f3e6ed1c93b84041f1c"
+          "url": "https://static.crates.io/crates/regex-automata/0.4.16/download",
+          "sha256": "8fcfdb36bda0c880c5931cdc7a2bcdc8ba4556847b9d912bca70bc94708711ad"
         }
       },
       "targets": [
@@ -64647,14 +64220,14 @@
               "target": "memchr"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.13"
+        "version": "0.4.16"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -64711,11 +64284,11 @@
               "target": "nohash"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
-              "id": "regex-syntax 0.8.5",
+              "id": "regex-syntax 0.8.11",
               "target": "regex_syntax"
             }
           ],
@@ -64882,14 +64455,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "regex-syntax 0.8.5": {
+    "regex-syntax 0.8.11": {
       "name": "regex-syntax",
-      "version": "0.8.5",
-      "package_url": "https://github.com/rust-lang/regex/tree/master/regex-syntax",
+      "version": "0.8.11",
+      "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex-syntax/0.8.5/download",
-          "sha256": "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
+          "url": "https://static.crates.io/crates/regex-syntax/0.8.11/download",
+          "sha256": "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
         }
       },
       "targets": [
@@ -64927,7 +64500,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.5"
+        "version": "0.8.11"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -65240,7 +64813,7 @@
                 "target": "ipnet"
               },
               {
-                "id": "log 0.4.28",
+                "id": "log 0.4.33",
                 "target": "log"
               },
               {
@@ -65569,7 +65142,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "log 0.4.28",
+                "id": "log 0.4.33",
                 "target": "log"
               },
               {
@@ -65842,7 +65415,7 @@
               "target": "nix"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -65850,7 +65423,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -66490,7 +66063,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -66545,11 +66118,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -66709,7 +66282,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -67066,11 +66639,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -67082,7 +66655,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -67469,7 +67042,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -68193,7 +67766,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -68299,7 +67872,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -68429,7 +68002,7 @@
               "target": "brotli_decompressor"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -68567,7 +68140,7 @@
               "target": "http"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -68587,7 +68160,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -68967,7 +68540,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -69082,7 +68655,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -69834,7 +69407,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -70160,7 +69733,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -70168,7 +69741,7 @@
               "target": "serde_derive_internals"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -70969,11 +70542,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -71261,7 +70834,7 @@
               "target": "fxhash"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -71784,11 +71357,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -71840,11 +71413,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -72057,7 +71630,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -72105,7 +71678,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -72161,11 +71734,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -72295,79 +71868,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_with 1.14.0": {
+    "serde_with 3.21.0": {
       "name": "serde_with",
-      "version": "1.14.0",
-      "package_url": "https://github.com/jonasbb/serde_with",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with/1.14.0/download",
-          "sha256": "678b5a069e50bf00ecd22d0cd8ddf7c236f68581b03db652061ed5eb13a312ff"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_with",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "macros",
-            "serde_with_macros"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_with_macros 1.5.2",
-              "target": "serde_with_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "1.14.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "serde_with 3.16.0": {
-      "name": "serde_with",
-      "version": "3.16.0",
+      "version": "3.21.0",
       "package_url": "https://github.com/jonasbb/serde_with/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_with/3.16.0/download",
-          "sha256": "10574371d41b0d9b2cff89418eda27da52bcaff2cc8741db26382a77c29131f1"
+          "url": "https://static.crates.io/crates/serde_with/3.21.0/download",
+          "sha256": "76a5c54c7310e7b8b9577c286d7e399ddd876c3e12b3ed917a8aabc4b96e9e8c"
         }
       },
       "targets": [
@@ -72411,13 +71919,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_with_macros 3.16.0",
+              "id": "serde_with_macros 3.21.0",
               "target": "serde_with_macros"
             }
           ],
           "selects": {}
         },
-        "version": "3.16.0"
+        "version": "3.21.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -72426,14 +71934,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_with_macros 1.5.2": {
+    "serde_with_macros 3.21.0": {
       "name": "serde_with_macros",
-      "version": "1.5.2",
+      "version": "3.21.0",
       "package_url": "https://github.com/jonasbb/serde_with/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_with_macros/1.5.2/download",
-          "sha256": "e182d6ec6f05393cc0e5ed1bf81ad6db3a8feedf8ee515ecdd369809bcce8082"
+          "url": "https://static.crates.io/crates/serde_with_macros/3.21.0/download",
+          "sha256": "84d57bc0c8b9a17920c178daa6bb924850d54a9c97ab45194bb8c17ad66bb660"
         }
       },
       "targets": [
@@ -72458,7 +71966,7 @@
         "deps": {
           "common": [
             {
-              "id": "darling 0.13.4",
+              "id": "darling 0.23.0",
               "target": "darling"
             },
             {
@@ -72466,78 +71974,18 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.5.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "serde_with_macros 3.16.0": {
-      "name": "serde_with_macros",
-      "version": "3.16.0",
-      "package_url": "https://github.com/jonasbb/serde_with/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with_macros/3.16.0/download",
-          "sha256": "08a72d8216842fdd57820dc78d840bef99248e35fb2554ff923319e60f2d686b"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "serde_with_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling 0.21.3",
-              "target": "darling"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.16.0"
+        "version": "3.21.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -74237,7 +73685,7 @@
               "target": "colored"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -74663,11 +74111,11 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -74871,7 +74319,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -75209,11 +74657,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -75377,11 +74825,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -75637,7 +75085,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -76416,7 +75864,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             }
           ],
@@ -76431,44 +75879,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "strsim 0.10.0": {
-      "name": "strsim",
-      "version": "0.10.0",
-      "package_url": "https://github.com/dguo/strsim-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/strsim/0.10.0/download",
-          "sha256": "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "strsim",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "strsim",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.10.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "strsim 0.11.1": {
       "name": "strsim",
@@ -76544,11 +75954,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -76609,11 +76019,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -76674,11 +76084,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -76730,11 +76140,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -77014,11 +76424,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -77082,11 +76492,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -77150,11 +76560,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -77218,11 +76628,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -77269,7 +76679,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -77585,7 +76995,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -77620,14 +77030,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "syn 2.0.110": {
+    "syn 2.0.119": {
       "name": "syn",
-      "version": "2.0.110",
+      "version": "2.0.119",
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/syn/2.0.110/download",
-          "sha256": "a99801b5bd34ede4cf3fc688c5919368fea4e4814a4664359503e6015b280aea"
+          "url": "https://static.crates.io/crates/syn/2.0.119/download",
+          "sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
         }
       },
       "targets": [
@@ -77684,7 +77094,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -77695,7 +77105,74 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.110"
+        "version": "2.0.119"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "syn 3.0.2": {
+      "name": "syn",
+      "version": "3.0.2",
+      "package_url": "https://github.com/dtolnay/syn",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/syn/3.0.2/download",
+          "sha256": "a207d6d6a2b7fc470b80443726053f18a2481b7e1eee970597051596567987a3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "syn",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "syn",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "clone-impls",
+            "default",
+            "derive",
+            "parsing",
+            "printing",
+            "proc-macro"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.106",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.47",
+              "target": "quote"
+            },
+            {
+              "id": "unicode-ident 1.0.22",
+              "target": "unicode_ident"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.0.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77839,11 +77316,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -78450,7 +77927,7 @@
               "target": "libsystemd_sys"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -78661,11 +78138,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -79005,7 +78482,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -79127,7 +78604,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -79658,7 +79135,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -79666,7 +79143,7 @@
               "target": "structmeta"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -79866,14 +79343,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.18": {
+    "thiserror 2.0.19": {
       "name": "thiserror",
-      "version": "2.0.18",
+      "version": "2.0.19",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.18/download",
-          "sha256": "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
+          "url": "https://static.crates.io/crates/thiserror/2.0.19/download",
+          "sha256": "09a43598840e33d5b0331f38c5e30d13bb11c11210a4b58f0d9b18a5a5eefcd9"
         }
       },
       "targets": [
@@ -79917,7 +79394,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "build_script_build"
             }
           ],
@@ -79927,13 +79404,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.18",
+              "id": "thiserror-impl 2.0.19",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.18"
+        "version": "2.0.19"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -79989,11 +79466,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -80009,14 +79486,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.18": {
+    "thiserror-impl 2.0.19": {
       "name": "thiserror-impl",
-      "version": "2.0.18",
+      "version": "2.0.19",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.18/download",
-          "sha256": "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.19/download",
+          "sha256": "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
         }
       },
       "targets": [
@@ -80045,18 +79522,18 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 3.0.2",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.18"
+        "version": "2.0.19"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -81064,11 +80541,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -81324,11 +80801,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -81994,7 +81471,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -82062,7 +81539,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -82130,7 +81607,7 @@
               "target": "futures_util"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -82765,11 +82242,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -82895,11 +82372,11 @@
               "target": "prost_types"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -83840,7 +83317,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -83910,7 +83387,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -84037,11 +83514,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -84267,7 +83744,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -84673,7 +84150,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex-automata 0.4.13",
+              "id": "regex-automata 0.4.16",
               "target": "regex_automata"
             },
             {
@@ -85231,7 +84708,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -85325,7 +84802,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -85337,7 +84814,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -85415,7 +84892,7 @@
               "target": "httparse"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -85427,7 +84904,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             }
           ],
@@ -85739,7 +85216,7 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -87493,7 +86970,7 @@
               "target": "ordered_float"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -87822,14 +87299,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "walrus 0.22.0": {
+    "walrus 0.26.4": {
       "name": "walrus",
-      "version": "0.22.0",
+      "version": "0.26.4",
       "package_url": "https://github.com/rustwasm/walrus",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/walrus/0.22.0/download",
-          "sha256": "d68aa3c7b80be75c8458fc087453e5a31a226cfffede2e9b932393b2ea1c624a"
+          "url": "https://static.crates.io/crates/walrus/0.26.4/download",
+          "sha256": "3bfa49767bb3a9e1afb02aa95bbcbde8d82f2db4ca377afae94d688f14f62378"
         }
       },
       "targets": [
@@ -87854,15 +87331,15 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "gimli 0.26.2",
+              "id": "gimli 0.32.3",
               "target": "gimli"
             },
             {
-              "id": "id-arena 2.2.1",
+              "id": "id-arena 2.3.0",
               "target": "id_arena"
             },
             {
@@ -87870,31 +87347,31 @@
               "target": "leb128"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
-              "id": "wasm-encoder 0.212.0",
+              "id": "wasm-encoder 0.245.1",
               "target": "wasm_encoder"
             },
             {
-              "id": "wasmparser 0.212.0",
+              "id": "wasmparser 0.245.1",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "walrus-macro 0.22.0",
+              "id": "walrus-macro 0.26.0",
               "target": "walrus_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.22.0"
+        "version": "0.26.4"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -87903,95 +87380,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "walrus 0.23.3": {
-      "name": "walrus",
-      "version": "0.23.3",
-      "package_url": "https://github.com/rustwasm/walrus",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/walrus/0.23.3/download",
-          "sha256": "6481311b98508f4bc2d0abbfa5d42172e7a54b4b24d8f15e28b0dc650be0c59f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "walrus",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "walrus",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.100",
-              "target": "anyhow"
-            },
-            {
-              "id": "gimli 0.26.2",
-              "target": "gimli"
-            },
-            {
-              "id": "id-arena 2.2.1",
-              "target": "id_arena"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "log 0.4.28",
-              "target": "log"
-            },
-            {
-              "id": "wasm-encoder 0.214.0",
-              "target": "wasm_encoder"
-            },
-            {
-              "id": "wasmparser 0.214.0",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "walrus-macro 0.22.0",
-              "target": "walrus_macro"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.23.3"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "walrus-macro 0.22.0": {
+    "walrus-macro 0.26.0": {
       "name": "walrus-macro",
-      "version": "0.22.0",
+      "version": "0.26.0",
       "package_url": "https://github.com/rustwasm/walrus/tree/crates/macro",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/walrus-macro/0.22.0/download",
-          "sha256": "439ad39ff894c43c9649fa724cdde9a6fc50b855d517ef071a93e5df82fe51d3"
+          "url": "https://static.crates.io/crates/walrus-macro/0.26.0/download",
+          "sha256": "1a9b0525d7ea6e5f906aca581a172e5c91b4c595290dfa8ad4a2bc9ffef33b44"
         }
       },
       "targets": [
@@ -88024,18 +87420,18 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.22.0"
+        "edition": "2021",
+        "version": "0.26.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -88160,7 +87556,7 @@
               "target": "hyper"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -88583,7 +87979,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
@@ -88643,11 +88039,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -88743,100 +88139,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-encoder 0.212.0": {
-      "name": "wasm-encoder",
-      "version": "0.212.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.212.0/download",
-          "sha256": "501940df4418b8929eb6d52f1aade1fdd15a5b86c92453cb696e3c906bd3fc33"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasm_encoder",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.212.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "wasm-encoder 0.214.0": {
-      "name": "wasm-encoder",
-      "version": "0.214.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.214.0/download",
-          "sha256": "ff694f02a8d7a50b6922b197ae03883fbf18cdb2ae9fbee7b6148456f5f44041"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasm_encoder",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.214.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "wasm-encoder 0.244.0": {
       "name": "wasm-encoder",
       "version": "0.244.0",
@@ -88889,6 +88191,62 @@
         },
         "edition": "2021",
         "version": "0.244.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "wasm-encoder 0.245.1": {
+      "name": "wasm-encoder",
+      "version": "0.245.1",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasm-encoder/0.245.1/download",
+          "sha256": "3f9dca005e69bf015e45577e415b9af8c67e8ee3c0e38b5b0add5aa92581ed5c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasm_encoder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasm_encoder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "leb128fmt 0.1.0",
+              "target": "leb128fmt"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.245.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -89051,7 +88409,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -89117,7 +88475,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -89213,262 +88571,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasmparser 0.212.0": {
-      "name": "wasmparser",
-      "version": "0.212.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.212.0/download",
-          "sha256": "8d28bc49ba1e5c5b61ffa7a2eace10820443c4b7d1c0b144109261d14570fdf8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "serde",
-            "std",
-            "validate"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.8.11",
-              "target": "ahash"
-            },
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "hashbrown 0.14.5",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "semver 1.0.27",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.212.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "wasmparser 0.214.0": {
-      "name": "wasmparser",
-      "version": "0.214.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.214.0/download",
-          "sha256": "5309c1090e3e84dad0d382f42064e9933fdaedb87e468cc239f0eabea73ddcb6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "serde",
-            "std",
-            "validate"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.8.11",
-              "target": "ahash"
-            },
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "hashbrown 0.14.5",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "semver 1.0.27",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.214.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "wasmparser 0.223.1": {
-      "name": "wasmparser",
-      "version": "0.223.1",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.223.1/download",
-          "sha256": "664b980991ed9a8c834eb528a8979ab1109edcf52dc05dd5751e2cc3fb31035d"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "component-model",
-            "default",
-            "features",
-            "hash-collections",
-            "serde",
-            "simd",
-            "std",
-            "validate"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "hashbrown 0.15.2",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 2.14.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "semver 1.0.27",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
-              "id": "wasmparser 0.223.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.223.1"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "wasmparser 0.244.0": {
       "name": "wasmparser",
       "version": "0.244.0",
@@ -89532,6 +88634,83 @@
         },
         "edition": "2021",
         "version": "0.244.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "wasmparser 0.245.1": {
+      "name": "wasmparser",
+      "version": "0.245.1",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.245.1/download",
+          "sha256": "4f08c9adee0428b7bddf3890fc27e015ac4b761cc608c822667102b8bfd6995e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "features",
+            "hash-collections",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.16.1",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.27",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.245.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -89694,6 +88873,83 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "wasmparser 0.253.0": {
+      "name": "wasmparser",
+      "version": "0.253.0",
+      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/wasmparser/0.253.0/download",
+          "sha256": "19db11f87d2486580e1e8b6f494c54df7e0566b87d0b599db843c24019667339"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "component-model",
+            "default",
+            "features",
+            "hash-collections",
+            "serde",
+            "simd",
+            "std",
+            "validate"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hashbrown 0.17.0",
+              "target": "hashbrown"
+            },
+            {
+              "id": "indexmap 2.14.0",
+              "target": "indexmap"
+            },
+            {
+              "id": "semver 1.0.27",
+              "target": "semver"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.253.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "wasmprinter 0.251.0": {
       "name": "wasmprinter",
       "version": "0.251.0",
@@ -89734,7 +88990,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -89831,7 +89087,7 @@
               "target": "libc"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -90070,7 +89326,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -90098,7 +89354,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -90381,7 +89637,7 @@
               "target": "itertools"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -90401,7 +89657,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -90806,7 +90062,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -90880,11 +90136,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -92115,11 +91371,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -92171,11 +91427,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -95668,7 +94924,7 @@
         "deps": {
           "common": [
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -95878,7 +95134,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -95946,7 +95202,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -95962,7 +95218,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -96058,7 +95314,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -96070,11 +95326,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -96154,7 +95410,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
@@ -96166,7 +95422,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -96256,11 +95512,11 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.100",
+              "id": "anyhow 1.0.104",
               "target": "anyhow"
             },
             {
-              "id": "id-arena 2.2.1",
+              "id": "id-arena 2.3.0",
               "target": "id_arena"
             },
             {
@@ -96268,7 +95524,7 @@
               "target": "indexmap"
             },
             {
-              "id": "log 0.4.28",
+              "id": "log 0.4.33",
               "target": "log"
             },
             {
@@ -96367,7 +95623,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "regex 1.12.2",
+              "id": "regex 1.13.1",
               "target": "regex"
             },
             {
@@ -96858,7 +96114,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.18",
+              "id": "thiserror 2.0.19",
               "target": "thiserror"
             },
             {
@@ -97290,11 +96546,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -97406,11 +96662,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -97517,11 +96773,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             },
             {
@@ -97633,11 +96889,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -97756,11 +97012,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.42",
+              "id": "quote 1.0.47",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.110",
+              "id": "syn 2.0.119",
               "target": "syn"
             }
           ],
@@ -98161,7 +97417,7 @@
   },
   "binary_crates": [
     "ic-gateway 0.2.0",
-    "ic-wasm 0.9.11",
+    "ic-wasm 0.10.0",
     "metrics-proxy 0.1.0"
   ],
   "workspace_members": {
@@ -98488,7 +97744,7 @@
     "addr 0.15.6",
     "aes-gcm 0.10.3",
     "aide 0.14.2",
-    "anyhow 1.0.100",
+    "anyhow 1.0.104",
     "arbitrary 1.4.2",
     "arc-swap 1.7.1",
     "argon2 0.4.1",
@@ -98514,7 +97770,7 @@
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoin-dogecoin 0.32.7-doge.0",
-    "bs58 0.5.0",
+    "bs58 0.5.1",
     "build-info 0.0.27",
     "build-info-build 0.0.27",
     "by_address 1.1.0",
@@ -98523,7 +97779,7 @@
     "bytes 1.11.1",
     "cached 0.49.2",
     "canbench-rs 0.6.0",
-    "candid 0.10.31",
+    "candid 0.10.32",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.2.48",
@@ -98627,7 +97883,7 @@
     "ic-utils 0.49.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-vetkeys 0.7.0",
-    "ic-wasm 0.9.11",
+    "ic-wasm 0.10.0",
     "ic-xrc-types 1.2.0",
     "ic0 1.1.0",
     "ic_bls12_381 0.10.1",
@@ -98718,7 +97974,7 @@
     "quickcheck 1.0.3",
     "quinn 0.11.11",
     "quinn-udp 0.5.5",
-    "quote 1.0.42",
+    "quote 1.0.47",
     "rand 0.8.6",
     "rand 0.9.4",
     "rand_chacha 0.3.1",
@@ -98729,7 +97985,7 @@
     "ratelimit 0.9.1",
     "rayon 1.10.0",
     "rcgen 0.13.1",
-    "regex 1.12.2",
+    "regex 1.13.1",
     "regex-lite 0.1.8",
     "reqwest 0.13.4",
     "rexpect 0.6.2",
@@ -98767,7 +98023,7 @@
     "serde_cbor 0.11.2",
     "serde_json 1.0.145",
     "serde_regex 1.1.0",
-    "serde_with 1.14.0",
+    "serde_with 3.21.0",
     "serde_yaml 0.9.34+deprecated",
     "sev 7.1.0",
     "sha2 0.10.9",
@@ -98792,7 +98048,7 @@
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
-    "syn 2.0.110",
+    "syn 2.0.119",
     "sys-mount 3.0.1",
     "syscalls 0.6.18",
     "sysinfo 0.37.2",
@@ -98803,7 +98059,7 @@
     "tempfile 3.23.0",
     "test-strategy 0.3.1",
     "textplots 0.8.4",
-    "thiserror 2.0.18",
+    "thiserror 2.0.19",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.7.0",
@@ -98846,7 +98102,7 @@
     "virt 0.4.2",
     "vsock 0.4.0",
     "walkdir 2.5.0",
-    "walrus 0.23.3",
+    "walrus 0.26.4",
     "warp 0.3.7",
     "wasm-encoder 0.251.0",
     "wasm-smith 0.251.0",

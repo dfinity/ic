@@ -881,7 +881,7 @@ serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_regex = "1.1.0"
-serde_with = "1.14.0"
+serde_with = "3.21.0"
 serde_yaml = "0.9.33"
 sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
@@ -965,7 +965,7 @@ url = { version = "2.5.3", features = ["serde"] }
 uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
-walrus = "0.23.3"
+walrus = "0.26.4"
 wasm-encoder = { version = "0.251.0", features = ["wasmparser"] }
 wasmparser = "0.251.0"
 wasmprinter = "0.251.0"
@@ -986,4 +986,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.9.11"
+version = "^0.10.0"

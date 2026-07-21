@@ -80,6 +80,7 @@ jobs:
       release-build: ${{ steps.config.outputs.release-build }}
       diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+      skip_buf_checks: ${{ steps.config.outputs.skip_buf_checks }}
     steps:
       - name: Infer build config
         id: config
