@@ -1021,6 +1021,74 @@ mod tests {
         assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
     }
 
+    // This wouldn't occur in practice, so this test is "just" for completeness.
+    #[test]
+    fn replica_version_id_with_illegal_characters_is_an_error() {
+        // Step 1: Prepare the world. A SubnetRecord whose replica_version_id
+        // contains a character that ReplicaVersion::try_from rejects.
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(1)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "G@RBAGE".to_string(),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry.get_replica_version(subnet_id(1), RegistryVersion::from(2));
+
+        // Step 3: Verify result(s).
+        assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
+    }
+
+    // This wouldn't occur in practice, so this test is "just" for completeness.
+    #[test]
+    fn resolved_standard_engine_replica_version_id_with_illegal_characters_is_an_error() {
+        // Step 1: Prepare the world. An engine subnet with a blank
+        // replica_version_id, resolving (via
+        // StandardEngineReplicaVersionRecord) to a new_replica_version_id
+        // that ReplicaVersion::try_from rejects.
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(1)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "".to_string(),
+                    subnet_type: SubnetType::CloudEngine as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_standard_engine_replica_version_record_key(),
+                RegistryVersion::from(2),
+                Some(StandardEngineReplicaVersionRecord {
+                    new_replica_version_id: "G@RBAGE".to_string(),
+                    old_replica_version_id: "old".to_string(),
+                    // Guarantees priority <= this, so new_replica_version_id
+                    // (the illegal one) is the one that gets resolved.
+                    deployment_progress: 1.0,
+                }),
+            )
+            .unwrap();
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry.get_replica_version(subnet_id(1), RegistryVersion::from(2));
+
+        // Step 3: Verify result(s).
+        assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
+    }
+
     #[test]
     fn can_get_is_halted_from_subnet() {
         let subnet_id = subnet_id(4);
