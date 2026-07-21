@@ -534,6 +534,31 @@ fn validate_url_length(url: &str) -> Result<(), CanisterHttpRequestContextError>
     Ok(())
 }
 
+/// Validate the requested `max_response_bytes` and convert it to [`NumBytes`].
+///
+/// A value exceeding [`MAX_CANISTER_HTTP_RESPONSE_BYTES`] is rejected; `None`
+/// (i.e. no limit specified by the caller) is passed through unchanged.
+fn validate_max_response_bytes(
+    max_response_bytes: Option<u64>,
+) -> Result<Option<NumBytes>, CanisterHttpRequestContextError> {
+    match max_response_bytes {
+        Some(max_response_bytes) => {
+            if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
+                Err(CanisterHttpRequestContextError::MaxResponseBytes(
+                    InvalidMaxResponseBytes {
+                        min: 0,
+                        max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
+                        given: max_response_bytes,
+                    },
+                ))
+            } else {
+                Ok(Some(NumBytes::from(max_response_bytes)))
+            }
+        }
+        None => Ok(None),
+    }
+}
+
 impl CanisterHttpRequestContext {
     /// Calculate the size of all unbounded struct elements.
     pub fn variable_parts_size(&self) -> NumBytes {
@@ -565,22 +590,7 @@ impl CanisterHttpRequestContext {
             return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
         }
 
-        let max_response_bytes = match args.max_response_bytes {
-            Some(max_response_bytes) => {
-                if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
-                    Err(CanisterHttpRequestContextError::MaxResponseBytes(
-                        InvalidMaxResponseBytes {
-                            min: 0,
-                            max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
-                            given: max_response_bytes,
-                        },
-                    ))
-                } else {
-                    Ok(Some(NumBytes::from(max_response_bytes)))
-                }
-            }
-            None => Ok(None),
-        }?;
+        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
 
         // Allow PUT, DELETE, and PATCH only in non-replicated mode to avoid
         // confusing race conditions that may occur.
@@ -651,6 +661,7 @@ impl CanisterHttpRequestContext {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
         validate_http_headers_and_body(args.headers.get(), args.body.as_ref().unwrap_or(&vec![]))?;
+        let max_response_bytes = validate_max_response_bytes(args.max_response_bytes)?;
 
         let n = node_ids.len() as u32;
         let (total_requests, min_responses, max_responses) = match args.replication {
@@ -726,7 +737,7 @@ impl CanisterHttpRequestContext {
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
             url: args.url,
-            max_response_bytes: None,
+            max_response_bytes,
             headers: args.headers.get().iter().cloned().map(Into::into).collect(),
             body: args.body,
             http_method: args.method.into(),
@@ -1649,6 +1660,7 @@ mod tests {
         }];
         let args = FlexibleCanisterHttpRequestArgs {
             url: "https://example.com".to_string(),
+            max_response_bytes: None,
             headers: BoundedHttpHeaders::new(headers),
             body: None,
             method: HttpMethod::GET,
@@ -1801,7 +1813,7 @@ mod tests {
     }
 
     #[test]
-    fn flexible_max_response_bytes_is_none() {
+    fn flexible_max_response_bytes_defaults_to_none() {
         let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
         let args = dummy_flexible_args(Some(ReplicationCounts {
             total_requests: 2,
@@ -1817,6 +1829,45 @@ mod tests {
                 max_response_bytes: None,
                 ..
             })
+        );
+    }
+
+    #[test]
+    fn flexible_accepts_max_response_bytes_at_limit() {
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let mut args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 2,
+            min_responses: 1,
+            max_responses: 2,
+        }));
+        args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES);
+
+        let ctx = generate_flexible_context(&node_ids, args);
+
+        assert_matches!(
+            ctx,
+            Ok(CanisterHttpRequestContext {
+                max_response_bytes: Some(bytes),
+                ..
+            }) if bytes == NumBytes::from(MAX_CANISTER_HTTP_RESPONSE_BYTES)
+        );
+    }
+
+    #[test]
+    fn flexible_rejects_max_response_bytes_too_large() {
+        let node_ids = BTreeSet::from([node_test_id(1), node_test_id(2), node_test_id(3)]);
+        let mut args = dummy_flexible_args(Some(ReplicationCounts {
+            total_requests: 2,
+            min_responses: 1,
+            max_responses: 2,
+        }));
+        args.max_response_bytes = Some(MAX_CANISTER_HTTP_RESPONSE_BYTES + 1);
+
+        let result = generate_flexible_context(&node_ids, args);
+
+        assert_matches!(
+            result,
+            Err(CanisterHttpRequestContextError::MaxResponseBytes(_))
         );
     }
 
@@ -1985,6 +2036,7 @@ mod tests {
     ) -> FlexibleCanisterHttpRequestArgs {
         FlexibleCanisterHttpRequestArgs {
             url: "https://example.com".to_string(),
+            max_response_bytes: None,
             headers: BoundedHttpHeaders::new(vec![]),
             body: None,
             method: HttpMethod::GET,
