@@ -2387,12 +2387,20 @@ fn stream_responses_tracking() {
 #[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
     let mut consumed_cycles_by_use_case = BTreeMap::new();
+    // Use cases already covered by the scalar metrics below; these must not be
+    // added to the total again (otherwise the cycles consumed by deleted
+    // canisters would be double counted).
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(5));
     consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(12));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(30));
     consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
     consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
     consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
+    // Subnet-level use cases not covered by any scalar metric; these are added
+    // to the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(7));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(9));
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
@@ -2402,9 +2410,20 @@ fn consumed_cycles_total_calculates_the_right_amount() {
         ..Default::default()
     };
 
+    // 10 (deleted canisters) + 20 (HTTP outcalls) + 30 (ECDSA outcalls)
+    // + 7 (Schnorr outcalls) + 8 (VetKd) + 9 (dropped messages).
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::new(250)
+        NominalCycles::new(84)
+    );
+
+    // The legacy computation additionally sums the per-use-case entries that a
+    // deleted canister contributes to the map (already covered by the deleted
+    // canisters scalar), hence the double counting:
+    // 84 + 100 (instructions) + 50 (memory) + 40 (canister creation).
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total_v27(),
+        NominalCycles::new(274)
     );
 }
 
