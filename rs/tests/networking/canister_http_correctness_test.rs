@@ -2731,6 +2731,7 @@ fn expected_cycle_cost(
         request.into(),
         &BTreeSet::from([PrincipalId::new_node_test_id(0).into()]),
         RegistryVersion::from(1),
+        CanisterCyclesCostSchedule::Normal,
         &mut rand::thread_rng(),
     )
     .unwrap();
