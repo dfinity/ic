@@ -214,7 +214,12 @@ List all defects in invalid data.
 
 When expecting an error, be specific.
 
-Put tests in separate `*_tests.rs` or `tests.rs` files.
+Separate tests:
+```
+#[cfg(test)]
+#[path = "widget_tests.rs"]
+mod tests;
+```
 
 Do not assert EXACT wording of error messages. Instead, look for key words and
 phrases.
