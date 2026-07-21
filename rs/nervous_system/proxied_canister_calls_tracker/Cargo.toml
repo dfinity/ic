@@ -11,6 +11,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 
 [dev-dependencies]
-maplit = "1.0.2"
+maplit = { workspace = true }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }

@@ -10,7 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 attestation = { path = "../ic_os/sev/attestation" }
-backoff = { workspace = true }
+backon = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 config_tool = { path = "../ic_os/config/tool" }
@@ -57,7 +57,7 @@ ic-registry-replicator = { path = "./registry_replicator" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 idna = { workspace = true }
-indoc = "1.0.9"
+indoc = { workspace = true }
 mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }

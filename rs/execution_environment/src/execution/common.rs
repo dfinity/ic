@@ -376,6 +376,32 @@ pub(crate) fn validate_snapshot_visibility(
     Ok(())
 }
 
+/// Validates that the `caller` is allowed to read the status of the `canister`
+/// according to its canister status visibility settings.
+///
+/// Subnet admins always retain access; otherwise access is governed by the
+/// status visibility setting, which grants access to the controllers plus any
+/// additional allowed viewers (or everyone, if the status is public).
+pub(crate) fn validate_status_visibility(
+    canister: &CanisterState,
+    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    caller: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    // Subnet admins always retain access to the canister status.
+    if let Some(subnet_admins) = &subnet_admins
+        && subnet_admins.contains(caller)
+    {
+        return Ok(());
+    }
+    // Otherwise, access is governed by the status visibility setting.
+    if crate::canister_settings::VisibilitySettings::from(canister.status_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Ok(());
+    }
+    Err(CanisterManagerError::CanisterStatusAccessDenied { caller: *caller })
+}
+
 pub(crate) fn validate_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,

@@ -8,11 +8,11 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
-leb128 = "0.2.4"
+leb128 = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-maplit = "1.0.2"
+maplit = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 test-strategy = "0.4.0"

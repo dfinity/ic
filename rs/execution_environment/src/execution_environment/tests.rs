@@ -3057,7 +3057,7 @@ fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins(
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -3077,10 +3077,7 @@ fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
-        err.code()
-    );
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -3531,6 +3528,7 @@ fn execute_canister_http_request_non_replicated_refund_status() {
 fn flexible_http_request_args(caller_canister: CanisterId) -> FlexibleCanisterHttpRequestArgs {
     FlexibleCanisterHttpRequestArgs {
         url: "https://example.com".to_string(),
+        max_response_bytes: None,
         headers: BoundedHttpHeaders::new(vec![]),
         body: None,
         method: HttpMethod::GET,

@@ -85,6 +85,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                     FlexibleRemoteHttpRequest {
                         request: FlexibleCanisterHttpRequestArgs {
                             url: url.clone(),
+                            max_response_bytes: None,
                             headers: BoundedHttpHeaders::new(vec![]),
                             body: None,
                             transform: Some(TransformContext {

@@ -20,7 +20,7 @@ ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for
 ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-management-canister-types = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
@@ -42,7 +42,7 @@ yansi = "0.5.0"
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 futures = { workspace = true }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 serde_bytes = { workspace = true }
