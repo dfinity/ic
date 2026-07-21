@@ -5162,6 +5162,9 @@ fn last_install_timestamp_tracks_code_deployment_and_uninstall() {
 fn canister_creation_timestamp_is_set_at_creation_and_stable() {
     let mut test = ExecutionTestBuilder::new().build();
 
+    // Advance the time so the recorded creation timestamp is distinct from the
+    // default, making the assertion below meaningful.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
     let creation_time = test.state().time();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
 
