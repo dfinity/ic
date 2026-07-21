@@ -4,52 +4,67 @@ on:
   # pull_request_target needs to be used so that we can use the SLACK_API_TOKEN secret for forked PRs
   # however, pull_request_target cannot be used with a checkout step, which why we need to curl the team-channels.json file
   pull_request_target:
-    types: [review_requested]
+    types: [review_requested] # fires once for each reviewer
 
 jobs:
   notify-slack:
     name: Notify Slack
     runs-on: ubuntu-latest
     steps:
-      # Sanitize PR title for Slack (<, >, &)
-      - name: Sanitize PR title
-        if: github.event.pull_request.head.repo.full_name == github.repository # only for internal PRs
-        id: sanitize
+      - name: Resolve channel and build message
+        id: prep
         env:
+          # All the inputs we don't control are passed through the env
+          # (instead of GHA interpolation) to avoid any injection
           RAW_TITLE: ${{ github.event.pull_request.title }}
+          REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          ESCAPED_TITLE=$(echo "$RAW_TITLE" \
-            | sed 's/&/\&amp;/g' \
-            | sed 's/</\&lt;/g' \
-            | sed 's/>/\&gt;/g')
-          echo "safe_title=$ESCAPED_TITLE" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
 
-      - name: Get requested team reviewers
-        id: get-reviewers
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            return "requested_team" in context.payload ? context.payload.requested_team.name : ""
+          # Clean up the PR title:
+          #  * for internal PRs, do some markdown escaping and collapse into a single
+          #     line (to avoid issues when writing to GITHUB_OUTPUT)
+          #  * for external PRs, ignore title entirely and write an alert
+          if [ "$HEAD_REPO" = "$REPO" ]; then
+            ALERT=""
+            SAFE_TITLE=$(printf '%s' "$RAW_TITLE" \
+              | tr '\r\n' '  ' \
+              | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
+          else
+            ALERT=":alert: EXTERNAL PR, review extra carefully! :alert: "
+            SAFE_TITLE=""
+          fi
 
-      - name: Lookup Slack channel
-        id: lookup
-        if: steps.get-reviewers.outputs.result != '""'
-        run: |
-          TEAM=${{ steps.get-reviewers.outputs.result }}
-          curl -sSL https://raw.githubusercontent.com/dfinity/ic/master/.github/workflows/team-channels.json -o team-channels.json
-          CHANNEL=$(jq -r --arg team "$TEAM" '.[$team]' team-channels.json)
-          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
-          echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
-        env:
-          MESSAGE: ":github: ${{ case(github.event.pull_request.head.repo.full_name != github.repository, ':alert: EXTERNAL PR, review extra carefully! :alert: ', '') }}`${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title || '' }}>"
+          MESSAGE=":github: ${ALERT}\`${REPO}\` <${PR_URL}|${SAFE_TITLE}>"
+
+          # Figure out the team that was requested for review
+          TEAM_NAME=$(jq -r '.requested_team.name // empty' "$GITHUB_EVENT_PATH")
+
+          # the channel; if the TEAM_NAME is not set or if the lookup gives no channel,
+          # this stays empty. The next step (slack notification) runs iff the channel is non-empty.
+          CHANNEL=""
+          if [ -n "$TEAM_NAME" ]; then
+            curl -sSL https://raw.githubusercontent.com/dfinity/ic/master/.github/workflows/team-channels.json -o team-channels.json
+            CHANNEL=$(jq -r --arg team "$TEAM_NAME" '.[$team] // empty' team-channels.json)
+          fi
+
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          # we wrap the message in HEREDOC to make sure it's treated as a single variable, regardless
+          # of what unexpected characters may appear in it
+          # https://github.com/orgs/community/discussions/116619#discussioncomment-8994849
+          {
+            echo "message<<__SLACK_MSG_EOF__"
+            echo "$MESSAGE"
+            echo "__SLACK_MSG_EOF__"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Post to a Slack channel
-        if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
-        id: slack
+        if: steps.prep.outputs.channel != ''
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
-          channel-id: ${{ steps.lookup.outputs.channel }}
-          slack-message: "${{ steps.lookup.outputs.message }}"
+          channel-id: ${{ steps.prep.outputs.channel }}
+          slack-message: ${{ steps.prep.outputs.message }}
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
