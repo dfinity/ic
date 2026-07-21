@@ -35,6 +35,7 @@ use ic_types::{
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, Refund, Request, Response, StreamMessage},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
+use ic_types_cycles::NominalCycles;
 use std::convert::{AsRef, TryFrom, TryInto};
 use std::iter::once;
 use std::sync::Arc;
@@ -483,6 +484,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                     &state.metadata.own_subnet_info.node_public_keys,
                     inverted_routing_table.clone(),
                     &state.metadata.subnet_metrics,
+                    state.canister_states(),
                     certification_version,
                 )
             })
@@ -598,6 +600,7 @@ macro_rules! message_expander {
                 CertificationVersion::V25 => $expand::<{ CertificationVersion::V25 as u32 }>,
                 CertificationVersion::V26 => $expand::<{ CertificationVersion::V26 as u32 }>,
                 CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
+                CertificationVersion::V28 => $expand::<{ CertificationVersion::V28 as u32 }>,
             }
         }
     };
@@ -1010,6 +1013,7 @@ fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
         CertificationVersion::V25 => expand_canister::<{ CertificationVersion::V25 as u32 }>,
         CertificationVersion::V26 => expand_canister::<{ CertificationVersion::V26 as u32 }>,
         CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
+        CertificationVersion::V28 => expand_canister::<{ CertificationVersion::V28 as u32 }>,
     }
 }
 
@@ -1104,6 +1108,7 @@ fn subnets_as_tree<'a>(
     own_subnet_node_public_keys: &'a BTreeMap<NodeId, Vec<u8>>,
     inverted_routing_table: Arc<BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>>,
     metrics: &'a SubnetMetrics,
+    canisters: &'a CanisterStates,
     certification_version: CertificationVersion,
 ) -> LazyTree<'a> {
     fork(MapTransformFork {
@@ -1129,7 +1134,32 @@ fn subnets_as_tree<'a>(
                     .with_tree_if(
                         subnet_id == &own_subnet_id,
                         "metrics",
-                        blob(move || encode_subnet_metrics(metrics, certification_version)),
+                        blob(move || {
+                            // Starting with `V28`, the reported total also
+                            // includes the cycles consumed by all non-deleted
+                            // canisters. Only compute this (linear) sum when it
+                            // is actually needed.
+                            let consumed_cycles_by_canisters =
+                                if certification_version >= CertificationVersion::V28 {
+                                    canisters.all_iter().fold(
+                                        NominalCycles::zero(),
+                                        |total, (_, canister)| {
+                                            total
+                                                + canister
+                                                    .system_state
+                                                    .canister_metrics()
+                                                    .consumed_cycles()
+                                        },
+                                    )
+                                } else {
+                                    NominalCycles::zero()
+                                };
+                            encode_subnet_metrics(
+                                metrics,
+                                consumed_cycles_by_canisters,
+                                certification_version,
+                            )
+                        }),
                     )
                     .with_tree_if(
                         certification_version >= CertificationVersion::V25,
