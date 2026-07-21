@@ -22,7 +22,7 @@ archive_override(
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.97.0"],
+    versions = ["1.97.1"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -264,10 +264,6 @@ crate.spec(
 crate.spec(
     package = "cc",
     version = "=1.2.48",
-)
-crate.spec(
-    package = "cddl",
-    version = "^0.9.4",
 )
 crate.spec(
     package = "cfg-if",
@@ -630,7 +626,7 @@ crate.spec(
         "alloc",
     ],
     package = "hpke",
-    version = "^0.12",
+    version = "^0.13",
 )
 crate.spec(
     package = "humantime",
@@ -1259,13 +1255,6 @@ crate.spec(
     package = "proptest-derive",
     version = "^0.5.0",
 )
-
-# why are both needed?
-crate.spec(
-    package = "prost",
-    package_alias = "prost_0_12",
-    version = "^0.12.2",
-)
 crate.spec(
     package = "prost",
     version = "^0.14.3",
@@ -1318,8 +1307,23 @@ crate.spec(
     version = "^0.8.6",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "os_rng",
+    ],
+    package = "rand",
+    package_alias = "rand_0_9",
+    version = "^0.9.3",
+)
+crate.spec(
     package = "rand_chacha",
     version = "^0.3.1",
+)
+crate.spec(
+    default_features = False,
+    package = "rand_chacha",
+    package_alias = "rand_chacha_0_9",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "rand_distr",
@@ -1547,7 +1551,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde_with",
-    version = "^1.14.0",
+    version = "^3.21.0",
 )
 crate.spec(
     package = "serde_yaml",
@@ -1979,7 +1983,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^45.0.0",
+    version = "^46.0.1",
 )
 crate.spec(
     package = "wast",

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-futures = "0.3.31"
+futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
