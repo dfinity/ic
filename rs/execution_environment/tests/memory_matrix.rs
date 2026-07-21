@@ -175,13 +175,15 @@ struct RunResult {
     /// Error when running the operation under test.
     /// `None` if the operation under test succeeded.
     err: Option<UserError>,
-    /// The number of additional allocated bytes after running the operation under test.
-    /// Excludes canister history memory usage (which does not reserve storage cycles).
+    /// The number of additional allocated bytes after running the operation under
+    /// test, including any canister history recorded by the operation (which is
+    /// accounted for like any other canister memory).
     allocated_bytes: NumBytes,
-    /// The number of additional bytes charged against the subnet available execution
-    /// memory (including canister history memory usage) after running the operation
-    /// under test.
-    subnet_allocated_bytes: NumBytes,
+    /// The number of additional allocated bytes after running the operation under
+    /// test, *excluding* the canister history recorded by the operation itself.
+    /// Used to decide whether the operation makes a "real" allocation (and thus
+    /// whether the reserved-cycles-limit and freezing-threshold sub-tests apply).
+    allocated_bytes_without_history: NumBytes,
     /// The number of additional reserved cycles after running the operation under test.
     reserved_cycles: Cycles,
     /// The minimum amount of initial cycles before running the operation under test.
@@ -356,33 +358,33 @@ where
     let final_history_memory_usage = test
         .canister_state(canister_id)
         .canister_history_memory_usage();
-    let final_memory_usage = match scenario_params.scenario {
-        // Canister history memory usage is not properly accounted by most management canister methods.
-        Scenario::OtherManagement => {
-            test.canister_state(canister_id).memory_usage() - final_history_memory_usage
-                + initial_history_memory_usage
-        }
-        _ => test.canister_state(canister_id).memory_usage(),
-    };
-    // We cannot use `CanisterState::memory_allocated_bytes` here because of canister history memory usage.
-    let final_allocated_bytes = test
-        .canister_state(canister_id)
-        .memory_allocation()
-        .allocated_bytes(final_memory_usage);
+    // Primary quantities: the canister's actual memory usage and allocated bytes
+    // after the operation, *including* any canister history it recorded. Canister
+    // history is accounted for like any other canister memory (it decrements the
+    // subnet available execution memory, reserves storage cycles, and counts
+    // towards the freezing threshold), so these drive all the cycles-and-memory
+    // accounting checks below.
+    let final_memory_usage = test.canister_state(canister_id).memory_usage();
+    let final_allocated_bytes = test.canister_state(canister_id).memory_allocated_bytes();
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
-    // `newly_allocated_bytes` deliberately excludes canister history memory usage
-    // (see `final_memory_usage` above) so that the cycles-reservation and
-    // memory-usage-change assertions below stay meaningful: management methods do
-    // not reserve storage cycles for the canister history they record. However,
-    // recording canister history *does* decrement the subnet available execution
-    // memory, so compute separately the bytes actually charged against the subnet
-    // available memory (including canister history) for `test_subnet_memory_capacity`.
-    let final_allocated_bytes_including_history = test
+    // Secondary quantities used only for the scenario-classification assertions
+    // (memory usage change, allocated bytes, crossed memory allocation): the memory
+    // usage *excluding* the canister history recorded by the operation itself. This
+    // lets e.g. `take_snapshot_and_uninstall` be classified as
+    // `MemoryUsageChange::None` even though it records a `CanisterCodeUninstall`
+    // history entry.
+    let final_memory_usage_without_history = match scenario_params.scenario {
+        Scenario::OtherManagement => {
+            final_memory_usage - final_history_memory_usage + initial_history_memory_usage
+        }
+        _ => final_memory_usage,
+    };
+    let final_allocated_bytes_without_history = test
         .canister_state(canister_id)
         .memory_allocation()
-        .allocated_bytes(test.canister_state(canister_id).memory_usage());
-    let newly_allocated_bytes_including_history =
-        final_allocated_bytes_including_history.saturating_sub(&initial_allocated_bytes);
+        .allocated_bytes(final_memory_usage_without_history);
+    let newly_allocated_bytes_without_history =
+        final_allocated_bytes_without_history.saturating_sub(&initial_allocated_bytes);
     // Note. The cycles prepayment in `install_code` and `load_canister_snapshot` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
     // The cycles prepayment for response callback execution is charged during setup
@@ -401,43 +403,38 @@ where
     // the newly reserved cycles during the operation under test.
     let newly_reserved_cycles = reserved_balance(&test);
     // We also derive the freezing limit in cycles after running the operation under test.
-    // Unlike storage reservation, the freezing threshold *does* account for the
-    // canister history recorded by the operation, so use the memory usage
-    // including canister history here (for `OtherManagement`, `final_memory_usage`
-    // excludes it).
-    let final_memory_usage_including_history = test.canister_state(canister_id).memory_usage();
-    let idle_cycles_burned_per_day = test.idle_cycles_burned_per_day_for_memory_usage(
-        canister_id,
-        final_memory_usage_including_history,
-    );
+    let idle_cycles_burned_per_day =
+        test.idle_cycles_burned_per_day_for_memory_usage(canister_id, final_memory_usage);
     let freezing_limit_cycles =
         idle_cycles_burned_per_day * (run_params.freezing_threshold.get() / (24 * 3600));
 
     // Checks after running the operation.
     // Cycles are reserved if and only if new bytes are allocated
     // (this is a property of this test suite, not a general protocol property).
-    // Storage cycles are now also reserved for the canister history recorded by
-    // the operation, so use the allocated bytes including canister history here.
     assert_eq!(
         newly_reserved_cycles.get() > 0,
-        newly_allocated_bytes_including_history.get() > 0
+        newly_allocated_bytes.get() > 0
     );
     if err.is_none() {
         // The newly reserved cycles correspond to the newly allocated bytes
-        // (including canister history) at the subnet memory saturation before
-        // running the operation under test.
-        let expected_reserved_cycles = test.expected_storage_reservation_cycles(
-            &subnet_memory_saturation,
-            newly_allocated_bytes_including_history,
-        );
+        // at the subnet memory saturation before running the operation under test.
+        let expected_reserved_cycles = test
+            .expected_storage_reservation_cycles(&subnet_memory_saturation, newly_allocated_bytes);
         assert_eq!(newly_reserved_cycles, expected_reserved_cycles);
-        // The memory usage changed as expected.
+        // The memory usage changed as expected (excluding the canister history
+        // recorded by the operation itself).
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert_lt!(initial_memory_usage, final_memory_usage),
-            MemoryUsageChange::None => assert_eq!(initial_memory_usage, final_memory_usage),
-            MemoryUsageChange::Decrease => assert_gt!(initial_memory_usage, final_memory_usage),
+            MemoryUsageChange::Increase => {
+                assert_lt!(initial_memory_usage, final_memory_usage_without_history)
+            }
+            MemoryUsageChange::None => {
+                assert_eq!(initial_memory_usage, final_memory_usage_without_history)
+            }
+            MemoryUsageChange::Decrease => {
+                assert_gt!(initial_memory_usage, final_memory_usage_without_history)
+            }
         };
-        if newly_allocated_bytes.get() > 0 {
+        if newly_allocated_bytes_without_history.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
             // Exception: `IncreaseLogAndMemoryAllocation` with `MemoryAllocation::Large`
@@ -461,17 +458,23 @@ where
         }
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
-                assert_le!(initial_allocated_bytes, final_allocated_bytes);
+                assert_le!(
+                    initial_allocated_bytes,
+                    final_allocated_bytes_without_history
+                );
                 match scenario_params.scenario {
                     // New bytes are always allocated because memory allocation increases.
                     Scenario::IncreaseLogAndMemoryAllocation => {
-                        assert_lt!(initial_allocated_bytes, final_allocated_bytes)
+                        assert_lt!(
+                            initial_allocated_bytes,
+                            final_allocated_bytes_without_history
+                        )
                     }
                     _ => {
                         // New bytes are *allocated* if and only if the memory usage is not covered
                         // by memory allocation, i.e., if memory allocation is "large".
                         assert_eq!(
-                            newly_allocated_bytes.get() > 0,
+                            newly_allocated_bytes_without_history.get() > 0,
                             !matches!(run_params.memory_allocation, MemoryAllocation::Large)
                         )
                     }
@@ -481,21 +484,36 @@ where
             // only change if memory allocation changes.
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert_lt!(initial_allocated_bytes, final_allocated_bytes)
+                    assert_lt!(
+                        initial_allocated_bytes,
+                        final_allocated_bytes_without_history
+                    )
                 }
                 Scenario::DecreaseMemoryAllocation => {
                     // If memory usage exceeds memory allocation, then
                     // no bytes are deallocated when memory allocation decreases.
                     if initial_memory_usage.get() > memory_allocation {
-                        assert_eq!(initial_allocated_bytes, final_allocated_bytes);
+                        assert_eq!(
+                            initial_allocated_bytes,
+                            final_allocated_bytes_without_history
+                        );
                     } else {
-                        assert_gt!(initial_allocated_bytes, final_allocated_bytes);
+                        assert_gt!(
+                            initial_allocated_bytes,
+                            final_allocated_bytes_without_history
+                        );
                     }
                 }
-                _ => assert_eq!(initial_allocated_bytes, final_allocated_bytes),
+                _ => assert_eq!(
+                    initial_allocated_bytes,
+                    final_allocated_bytes_without_history
+                ),
             },
             MemoryUsageChange::Decrease => {
-                assert_ge!(initial_allocated_bytes, final_allocated_bytes)
+                assert_ge!(
+                    initial_allocated_bytes,
+                    final_allocated_bytes_without_history
+                )
             }
         };
         // Ensure that memory allocation is "crossed" if applicable.
@@ -585,7 +603,7 @@ where
     RunResult {
         err,
         allocated_bytes: newly_allocated_bytes,
-        subnet_allocated_bytes: newly_allocated_bytes_including_history,
+        allocated_bytes_without_history: newly_allocated_bytes_without_history,
         reserved_cycles: newly_reserved_cycles,
         minimum_initial_cycles,
     }
@@ -816,10 +834,10 @@ where
             test_subnet_memory_capacity(
                 &scenario_params,
                 default_run_params.clone(),
-                res.subnet_allocated_bytes,
+                res.allocated_bytes,
             );
 
-            if res.allocated_bytes > NumBytes::from(0) {
+            if res.allocated_bytes_without_history > NumBytes::from(0) {
                 test_reserved_cycles_limit(
                     &scenario_params,
                     default_run_params.clone(),

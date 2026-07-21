@@ -294,8 +294,7 @@ fn out_of_cycles_uninstall_succeeds_without_subnet_available_memory() {
     let mut test = SchedulerTestBuilder::new()
         .with_subnet_memory_capacity(0)
         .build();
-    // A canister with a minimal (header-only, i.e., no functions or exports)
-    // Wasm module installed and barely any cycles.
+    // A canister with an execution state installed and barely any cycles.
     let canister = test.create_canister_with(
         Cycles::new(100),
         ComputeAllocation::zero(),

@@ -714,6 +714,10 @@ impl CanisterManager {
                     .map(|environment_variables| environment_variables.hash());
 
                 if new_environment_variables_hash.is_some() || new_controllers.is_some() {
+                    // The settings change is the only memory change past the
+                    // settings validation above, so the old and new memory usage
+                    // (excluding the change itself) are equal; the change is
+                    // accounted for via the `canister_history_change` argument.
                     let memory_usage = canister.memory_usage();
                     let canister_history_change = canister.add_canister_change(
                         timestamp_nanos,
@@ -1009,20 +1013,14 @@ impl CanisterManager {
 
         let old_memory_usage = canister.memory_usage();
 
-        // Do not update the subnet available memory here; it is updated (together
-        // with the `CanisterCodeUninstall` canister history change recorded below)
-        // by `cycles_and_memory_usage_checks_and_updates`.
-        let rejects = uninstall_canister(
-            &self.log,
-            canister,
-            None,
-            time,
-            Arc::clone(&self.fd_factory),
-        );
+        // The subnet available memory is updated (together with the
+        // `CanisterCodeUninstall` canister history change recorded below) by
+        // `cycles_and_memory_usage_checks_and_updates`.
+        let rejects = uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
 
         // Memory usage after dropping the execution state etc., but before the
         // `CanisterCodeUninstall` canister history change, which is accounted for
-        // separately via `canister_history_change`.
+        // via the `canister_history_change` argument.
         let new_memory_usage = canister.memory_usage();
         let canister_history_change = canister.add_canister_change(
             time,
@@ -1593,7 +1591,7 @@ impl CanisterManager {
             .map(|env_vars| env_vars.hash());
         // Memory usage after settings validation, but before the
         // `canister_creation` canister history change, which is accounted for via
-        // `canister_history_change`.
+        // the `canister_history_change` argument.
         let new_memory_usage = new_canister.memory_usage();
         let canister_history_change = new_canister.add_canister_change(
             state.time(),
@@ -1935,11 +1933,9 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
         canister_history_change: Option<SubnetAvailableExecutionMemoryChange>,
     ) -> Result<(), CanisterManagerError> {
-        // Account for any canister history recorded by the operation (e.g. a
-        // `CanisterCodeUninstall` or `canister_creation` change) in the new
-        // execution memory used, so that the subnet available execution memory,
-        // freezing threshold, and storage reservation below all take it into
-        // account.
+        // Fold the canister history recorded by the operation into the new memory
+        // used, so that the subnet available execution memory, freezing threshold,
+        // and storage reservation below all take it into account.
         let new_memory_usage = match canister_history_change {
             Some(SubnetAvailableExecutionMemoryChange::Allocated(bytes)) => {
                 new_memory_usage.saturating_add(&bytes)
@@ -1980,8 +1976,7 @@ impl CanisterManager {
                 },
             )?;
 
-        // Check that the canister is not frozen due to its new memory usage
-        // (accounting for canister history).
+        // Check that the canister is not frozen due to its new memory usage.
         let reveal_top_up = canister.controllers().contains(&sender);
         if let Err(err) = self
             .cycles_account_manager
@@ -2161,15 +2156,14 @@ impl CanisterManager {
             .push(snapshot_id, Arc::new(new_snapshot));
 
         let deleted_call_context_responses = if uninstall_code {
-            let rejects = uninstall_canister(
-                &self.log,
-                canister,
-                None, /* subnet available memory is updated below */
-                time,
-                Arc::clone(&self.fd_factory),
-            );
+            // The subnet available memory is updated (together with the
+            // `CanisterCodeUninstall` canister history change recorded below) by
+            // `cycles_and_memory_usage_checks_and_updates`.
+            let rejects =
+                uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
             // Memory usage after uninstalling, before the `CanisterCodeUninstall`
-            // canister history change (accounted for via `canister_history_change`).
+            // canister history change, which is accounted for via the
+            // `canister_history_change` argument.
             let memory_usage = canister.memory_usage();
             let canister_history_change = canister.add_canister_change(
                 time,
@@ -3179,7 +3173,6 @@ fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterMan
 pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,
-    round_limits: Option<&mut RoundLimits>,
     time: Time,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Vec<Response> {
@@ -3204,15 +3197,6 @@ pub fn uninstall_canister(
 
     let new_allocated_bytes = canister.memory_allocated_bytes();
     debug_assert_le!(new_allocated_bytes, old_allocated_bytes);
-
-    if let Some(round_limits) = round_limits {
-        let deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);
-        round_limits.subnet_available_memory.increment(
-            deallocated_bytes,
-            NumBytes::from(0),
-            NumBytes::from(0),
-        );
-    }
 
     let canister_id = canister.canister_id();
 
