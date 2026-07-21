@@ -5,7 +5,6 @@ use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
 use ic_cketh_minter::deposit::scrape_logs;
-use ic_cketh_minter::deposit_erc20::register_deposit_address;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
@@ -135,7 +134,7 @@ fn emit_preupgrade_events() {
 
     let now = Timestamp::from_nanos(ic_cdk::api::time());
     let deposit_addresses = read_state(|s| {
-        s.deposit_addresses
+        s.automatic_deposits
             .iter_live(now)
             .map(
                 |(registered_at, account, address)| DepositAddressRegistration {
@@ -186,9 +185,11 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<String, DepositErc20Error
         owner: caller,
         subaccount,
     };
-    let (public_key, chain_code) = state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    // Ensure the minter's ECDSA public key has been fetched and cached in the
+    // state so that the (synchronous) registration below can derive the address.
+    state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| register_deposit_address(s, &public_key, &chain_code, now, account))
+    mutate_state(|s| s.register_deposit_address(now, account)).map(|address| address.to_string())
 }
 
 #[query]

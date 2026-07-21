@@ -24,10 +24,10 @@ fn should_derive_and_store_deposit_address() {
     let result = register_deposit_address(&mut state, &pk, &cc, now, account());
 
     let expected = deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account());
-    assert_eq!(result, Ok(expected.to_string()));
-    assert_eq!(state.deposit_addresses.len(), 1);
+    assert_eq!(result, Ok(expected));
+    assert_eq!(state.automatic_deposits.len(), 1);
     assert_eq!(
-        state.deposit_addresses.get(now, &account()),
+        state.automatic_deposits.get(now, &account()),
         Some(&expected)
     );
 }
@@ -43,5 +43,5 @@ fn should_return_same_address_without_growing_registry_on_reregistration() {
 
     assert!(first.is_ok());
     assert_eq!(first, second);
-    assert_eq!(state.deposit_addresses.len(), 1);
+    assert_eq!(state.automatic_deposits.len(), 1);
 }

@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::endpoints::CandidBlockTag;
+use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -10,9 +10,10 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
-use crate::timed_sized_map::TimedSizedMap;
+use crate::timed_sized_map::Timestamp;
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
@@ -23,12 +24,11 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
-use std::num::NonZeroUsize;
-use std::time::Duration;
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
 pub mod audit;
+pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
 pub mod transactions;
@@ -39,13 +39,6 @@ mod tests;
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
 }
-
-/// Time window during which a registered ckERC20 deposit address is kept armed.
-pub const DEPOSIT_ADDRESS_SCAN_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
-
-/// Maximum number of concurrently armed ckERC20 deposit addresses.
-// TODO: placeholder capacity to tune once deposit detection lands.
-pub const MAX_ACTIVE_DEPOSIT_ADDRESSES: NonZeroUsize = NonZeroUsize::new(100_000).unwrap();
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MintedEvent {
@@ -112,9 +105,9 @@ pub struct State {
     /// - value: ckERC20 token symbol
     pub ckerc20_tokens: DedupMultiKeyMap<Principal, Address, CkTokenSymbol>,
 
-    /// ckERC20 deposit addresses registered via `deposit_erc20`,
-    /// mapping each IC account to its derived Ethereum deposit address.
-    pub deposit_addresses: TimedSizedMap<Account, Address>,
+    /// ckERC20 deposit addresses registered via `deposit_erc20`, individually
+    /// derived for each user and watched for incoming deposits.
+    pub automatic_deposits: AutomaticDeposits,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -584,7 +577,7 @@ impl State {
             other.ledger_suite_orchestrator_id
         );
         ensure_eq!(self.ckerc20_tokens, other.ckerc20_tokens);
-        ensure_eq!(self.deposit_addresses, other.deposit_addresses);
+        ensure_eq!(self.automatic_deposits, other.automatic_deposits);
 
         self.eth_transactions
             .is_equivalent_to(&other.eth_transactions)
@@ -602,6 +595,47 @@ impl State {
 
     pub const fn evm_rpc_id(&self) -> Principal {
         self.evm_rpc_id
+    }
+
+    pub fn public_key_and_chain_code(&self) -> Option<(PublicKey, [u8; 32])> {
+        self.ecdsa_public_key.as_ref().map(|response| {
+            let public_key =
+                PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
+                    ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
+                });
+            let chain_code =
+                <[u8; 32]>::try_from(response.chain_code.as_slice()).unwrap_or_else(|_| {
+                    ic_cdk::trap(format!(
+                        "BUG: expected a chain code of length 32, got {}",
+                        response.chain_code.len()
+                    ))
+                });
+            (public_key, chain_code)
+        })
+    }
+
+    /// Derive the ckERC20 deposit address for `account` from the minter's master
+    /// threshold-ECDSA public key and add it to the watchlist of automatic deposits.
+    ///
+    /// Fails with [`DepositErc20Error::TemporarilyUnavailable`] if the minter's
+    /// public key has not been fetched yet.
+    pub fn register_deposit_address(
+        &mut self,
+        now: Timestamp,
+        account: Account,
+    ) -> Result<Address, DepositErc20Error> {
+        let (master_public_key, chain_code) =
+            self.public_key_and_chain_code()
+                .ok_or(DepositErc20Error::TemporarilyUnavailable(
+                    "Minter's ECDSA public key not yet initialized".to_string(),
+                ))?;
+        crate::deposit_erc20::register_deposit_address(
+            self,
+            &master_public_key,
+            &chain_code,
+            now,
+            account,
+        )
     }
 }
 

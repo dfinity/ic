@@ -1043,10 +1043,7 @@ fn state_equivalence() {
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
         evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
-        deposit_addresses: crate::timed_sized_map::TimedSizedMap::new(
-            crate::state::DEPOSIT_ADDRESS_SCAN_WINDOW,
-            crate::state::MAX_ACTIVE_DEPOSIT_ADDRESSES,
-        ),
+        automatic_deposits: crate::state::automatic_deposits::AutomaticDeposits::default(),
     };
 
     assert_eq!(
@@ -1879,11 +1876,11 @@ mod deposit_addresses_snapshot {
             )
             .unwrap();
         }
-        assert_eq!(original.deposit_addresses.len(), 2);
+        assert_eq!(original.automatic_deposits.len(), 2);
 
         let snapshot = EventType::RegisteredDepositAddresses(
             original
-                .deposit_addresses
+                .automatic_deposits
                 .iter_live(Timestamp::from_nanos(3))
                 .map(
                     |(registered_at, account, address)| DepositAddressRegistration {
@@ -1899,7 +1896,7 @@ mod deposit_addresses_snapshot {
         let mut replayed = initial_state();
         apply_state_transition(&mut replayed, &snapshot);
 
-        assert_eq!(replayed.deposit_addresses, original.deposit_addresses);
+        assert_eq!(replayed.automatic_deposits, original.automatic_deposits);
         assert_eq!(replayed.is_equivalent_to(&original), Ok(()));
     }
 }
