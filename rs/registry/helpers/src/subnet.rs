@@ -167,7 +167,7 @@ pub trait SubnetRegistry {
     /// [StandardEngineReplicaVersionRecord]. Non-blank `replica_version_id`
     /// means the same thing as in the non-CloudEngine case.
     ///
-    /// Err is returned in various cases, but call out a couple in particular,
+    /// Err is returned in various cases, but we call out a few in particular,
     /// because the error type is unintuitive: DecodeError is returned in the
     /// following cases:
     ///
@@ -175,6 +175,11 @@ pub trait SubnetRegistry {
     ///    StandardEngineReplicaVersionRecord.
     ///
     /// 2. Non-CloudEngine with blank replica_version_id.
+    ///
+    /// 3. Replica version ID string cannot be converted to a ReplicaVersion
+    ///    object. This means that the string contains some illegal characters.
+    ///    In particular, only latin letters, digits, dot, dash, and underscore
+    ///    are allowed (as of July 2026).
     ///
     /// In practice, such data problems are prevented from happening elsewhere
     /// (specifically, Registry's invariants checks), but we mention them here
@@ -437,10 +442,29 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             return Ok(None);
         };
 
-        // Engines may opt out of the standard deployment by setting their own
-        // replica_version_id; if they have, that is authoritative.
+        let str_to_result = |replica_version_id: &str,
+                             case: &str|
+         -> Result<Option<ReplicaVersion>, RegistryClientError> {
+            let ok = ReplicaVersion::try_from(replica_version_id)
+                // This wouldn't happen in practice (because of validation that
+                // happens elsewhere), but we handle it here anyway, because
+                // bugs.
+                .map_err(|err| DecodeError {
+                    error: format!(
+                        "get_replica_version({subnet_id}): {case}: '{replica_version_id}' is not a valid \
+                        ReplicaVersion: {err}"
+                    ),
+                })?;
+
+            Ok(Some(ok))
+        };
+
+        // Specified directly in SubnetRecord.
         if !subnet_record.replica_version_id.is_empty() {
-            return Ok(ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref()).ok());
+            return str_to_result(
+                &subnet_record.replica_version_id,
+                "specified directly in SubnetRecord",
+            );
         }
 
         // Only engines are allowed to have a blank replica_version_id (i.e.
@@ -480,7 +504,10 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
 
         // At this point, resolved_replica_version_id should be a git commit ID
         // in the ic repo. This just converts it from a raw string.
-        Ok(ReplicaVersion::try_from(resolved_replica_version_id.as_ref()).ok())
+        str_to_result(
+            &resolved_replica_version_id,
+            "using standard engine replica version",
+        )
     }
 
     fn get_replica_version_record(
