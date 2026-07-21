@@ -68,6 +68,13 @@ Data is gold. Diagnostics are diamonds.
 
 Boring code is good.
 
+((
+Do not sweep problems under the rug.
+
+> Errors should never pass silently.
+> --Zen of Python
+))
+
 
 ((
 ## Glossary
@@ -228,6 +235,20 @@ from very nearby code. In particular, do `.collect::<Vec<Widget>>()`, not bare
 Do not be afraid to use the `return` keyword.
 
 Do not be afraid to use semicolons.
+
+((
+Do not name parameters of generics with just one letter. Instead,
+```
+fn f<HASHER>(hasher: HASHER)
+where
+    HASHER: Hasher
+{ ... }
+```
+
+Do not "inline" bounds between `<...>`. Instead, use `where` (or the `formatter:
+impl Formatter` shorthand if you do not need to give the type a name, and it
+only needs one trait). See the previous example.
+))
 
 
 ## Comments

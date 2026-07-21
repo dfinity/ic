@@ -23,7 +23,6 @@ Data is gold. Diagnostics are diamonds.
 
 Boring code is good.
 
-
 ## Naming
 
 Use real words. Use the dictionary or encyclopedia as evidence. This includes
@@ -152,7 +151,6 @@ from very nearby code. In particular, do `.collect::<Vec<Widget>>()`, not bare
 Do not be afraid to use the `return` keyword.
 
 Do not be afraid to use semicolons.
-
 
 ## Comments
 
