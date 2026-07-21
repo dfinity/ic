@@ -581,6 +581,7 @@ impl CanisterHttpRequestContext {
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
@@ -643,10 +644,8 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
-            // TODO: populate with the actual subnet size this request is processed at.
-            subnet_size: NumberOfNodes::from(0),
-            // TODO: populate with the actual cost schedule this request is processed at.
-            cost_schedule: None,
+            subnet_size: NumberOfNodes::from(node_ids.len() as u32),
+            cost_schedule: Some(cost_schedule),
         })
     }
 
@@ -656,6 +655,7 @@ impl CanisterHttpRequestContext {
         args: FlexibleCanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
+        cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
@@ -753,10 +753,8 @@ impl CanisterHttpRequestContext {
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
             registry_version,
-            // TODO: populate with the actual subnet size this request is processed at.
-            subnet_size: NumberOfNodes::from(0),
-            // TODO: populate with the actual cost schedule this request is processed at.
-            cost_schedule: None,
+            subnet_size: NumberOfNodes::from(n),
+            cost_schedule: Some(cost_schedule),
         })
     }
 }
@@ -2046,7 +2044,8 @@ mod tests {
     }
 
     /// Generates a context from `args` and `node_ids`, filling in dummy values
-    /// for the time, request, registry version, and rng.
+    /// for the time, request, registry version, cost schedule, and
+    /// rng.
     fn generate_context(
         node_ids: &BTreeSet<NodeId>,
         args: CanisterHttpRequestArgs,
@@ -2057,12 +2056,14 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
+            CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )
     }
 
     /// Generates a context from flexible `args` and `node_ids`, filling in dummy
-    /// values for the time, request, registry version, and rng.
+    /// values for the time, request, registry version, cost
+    /// schedule, and rng.
     fn generate_flexible_context(
         node_ids: &BTreeSet<NodeId>,
         args: FlexibleCanisterHttpRequestArgs,
@@ -2073,6 +2074,7 @@ mod tests {
             args,
             node_ids,
             RegistryVersion::from(1),
+            CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
         )
     }
