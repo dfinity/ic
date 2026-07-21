@@ -9,8 +9,6 @@ on:
       - rc--*
       - ic-mainnet-revisions
       - ic-nervous-system-wasms
-    tags:
-      - release-*
     workflows:
       - Schedule Daily
       - Schedule RC
