@@ -241,3 +241,8 @@ assert_eq!(get_widget_ids(&registry), vec![widget_id]);
 
 // etc...
 ```
+
+
+## Grandfathering
+
+Making legacy code comply with these rules is its own separate effort.

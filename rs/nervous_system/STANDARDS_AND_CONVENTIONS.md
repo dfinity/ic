@@ -362,12 +362,14 @@ assert_eq!(get_widget_ids(&registry), vec![widget_id]);
 (Use `lazy_static!` for "constants" when you cannot define a `const` due to
 limitations in `const` initialization. Do NOT define a 0-argument `fn` for this!)
 
-(Define your own application-specific asserts to maximize meaningfulness and
+((
+Define your own application-specific asserts to maximize meaningfulness and
 reduce tedious reading:
 ```
 #[track_caller]
 fn assert_${property}(observed, expected) { ... }
-```)
+```
+))
 
 
 ((
@@ -382,12 +384,16 @@ leave the thread unresolved.
 ))
 
 
-((
 ## Grandfathering
 
-This has been adopted without making existing code compliant. Legacy code will
-be fixed in a parallel effort. Therefore, there will be an interstitial period
-where legacy code is not compliant. Ditto for when we add rules: the rules can
-be added quickly without first fixing existing legacy code, but there needs to
-be a commitment to actually fix legacy code when rules are added.
+Making legacy code comply with these rules is its own separate effort.
+
+((
+This has been adopted without making existing code compliant. After adopting
+this, there will be a campaign to make legacy code compliant. Therefore, there
+will be an interstitial period where legacy code is not compliant.
+
+Ditto for when new rules are added in the future: they will be added with
+requiring that legacy be code be fixed first, but there needs to be a commitment
+to actually fix legacy code before adding such rules.
 ))
