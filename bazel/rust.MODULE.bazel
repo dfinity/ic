@@ -836,7 +836,7 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.9.11",
+    version = "^0.10.0",
 )
 crate.spec(
     package = "ic-xrc-types",
@@ -1943,7 +1943,7 @@ crate.spec(
 )
 crate.spec(
     package = "walrus",
-    version = "^0.23.3",
+    version = "^0.26.4",
 )
 crate.spec(
     features = ["tls"],
