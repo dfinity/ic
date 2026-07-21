@@ -1,37 +1,22 @@
 #!/usr/bin/env python3
 """
-This is a prototype. Good enough for fast initial development, but the plan is
-to replace this with a properly bazel-ized tool.
+Derive instructions for Claude from STANDARDS_AND_CONVENTIONS.md (the "source"
+file).
 
-That way, we can parse Markdown properly (and maybe do other stuff requiring
-external libraries).
+Basically, this produces a file at
+standards_and_conventions/claude_author_instructions.md, which contains a subset
+of the source file. The reason for this smaller file is to avoid overwhelming
+Claude.
 
-Mechanically derive the small "author AI" instruction set from
-STANDARDS_AND_CONVENTIONS.md.
+Content in the source file that gets excluded are surrounded by paren, or double
+paren. Blank lines are not allowed within single paren. Double paren must occur
+on their own line.
 
-Markup convention (see STANDARDS_AND_CONVENTIONS.md itself for the discussion
-that produced this):
+The plan is to also generate instructions for a collection of Claude reviewers.
 
-  * A whole section wrapped in lines that are exactly "((" and "))" is dropped
-    entirely (these mark content -- e.g. Code Review Protocol, Grandfathering --
-    that is not about writing code, so it is irrelevant to an author AI).
-
-  * Within what remains, any "(...)" span is dropped, keeping the rest of the
-    surrounding sentence. This is elaboration/rationale/nuance that a reviewer
-    AI (or human) may need, but that the small author-AI instruction set does
-    not.
-
-Parens inside code -- either `single-backtick spans` or ```fenced blocks``` --
-never count as markup; they're protected with placeholders before any of the
-above runs, and restored at the very end.
-
-No nesting and no blank lines inside a single "(...)" span are supposed to occur
-in prose (this keeps the source human-editable without a mental parser), but
-this script tolerates both regardless, by stripping innermost no-inner-parens
-spans to a fixed point. Any such cases found are reported, since the source
-should still be cleaned up per its own stated convention even though this script
-doesn't require it.
+Currently, paren in paren is not supported.
 """
+
 import re
 import sys
 from pathlib import Path
