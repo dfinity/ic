@@ -407,6 +407,21 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                     block_number: block_number.try_into().unwrap(),
                 }
             }
+            EventPayload::RegisteredDepositAddresses { addresses } => {
+                ET::RegisteredDepositAddresses(
+                    addresses
+                        .into_iter()
+                        .map(
+                            |a| ic_cketh_minter::state::event::DepositAddressRegistration {
+                                owner: a.owner,
+                                subaccount: a.subaccount,
+                                address: a.address.parse().unwrap(),
+                                registered_at_nanos: a.registered_at_nanos,
+                            },
+                        )
+                        .collect(),
+                )
+            }
         },
     }
 }

@@ -511,6 +511,17 @@ pub mod events {
         QuarantinedReimbursement {
             index: ReimbursementIndex,
         },
+        RegisteredDepositAddresses {
+            addresses: Vec<DepositAddressRegistration>,
+        },
+    }
+
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct DepositAddressRegistration {
+        pub owner: Principal,
+        pub subaccount: Option<[u8; 32]>,
+        pub address: String,
+        pub registered_at_nanos: u64,
     }
 }
 

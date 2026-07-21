@@ -695,12 +695,26 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         }
     }
 
-    fn map_event(Event { timestamp, payload }: Event) -> Option<CandidEvent> {
-        use ic_cketh_minter::endpoints::events::EventPayload as EP;
-        Some(CandidEvent {
+    fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
+        use ic_cketh_minter::endpoints::events::{
+            DepositAddressRegistration as CandidDepositAddressRegistration, EventPayload as EP,
+        };
+        CandidEvent {
             timestamp,
             payload: match payload {
-                EventType::RegisteredDepositAddresses(_) => return None,
+                EventType::RegisteredDepositAddresses(registrations) => {
+                    EP::RegisteredDepositAddresses {
+                        addresses: registrations
+                            .into_iter()
+                            .map(|r| CandidDepositAddressRegistration {
+                                owner: r.owner,
+                                subaccount: r.subaccount,
+                                address: r.address.to_string(),
+                                registered_at_nanos: r.registered_at_nanos,
+                            })
+                            .collect(),
+                    }
+                }
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),
                 EventType::AcceptedDeposit(ReceivedEthEvent {
@@ -896,13 +910,13 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     index: map_reimbursement_index(index),
                 },
             },
-        })
+        }
     }
 
     let events = storage::with_event_iter(|it| {
         it.skip(arg.start as usize)
             .take(arg.length.min(MAX_EVENTS_PER_RESPONSE) as usize)
-            .filter_map(map_event)
+            .map(map_event)
             .collect()
     });
 

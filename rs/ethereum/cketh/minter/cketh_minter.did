@@ -609,6 +609,14 @@ type Event = record {
         QuarantinedReimbursement : record {
             index : ReimbursementIndex;
         };
+        RegisteredDepositAddresses : record {
+            addresses : vec record {
+                owner : principal;
+                subaccount : opt Subaccount;
+                address : text;
+                registered_at_nanos : nat64;
+            };
+        };
     };
 };
 

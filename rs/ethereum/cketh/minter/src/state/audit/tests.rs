@@ -459,6 +459,19 @@ impl GetEventsFile {
                         block_number: block_number.try_into().unwrap(),
                     }
                 }
+                EventPayload::RegisteredDepositAddresses { addresses } => {
+                    ET::RegisteredDepositAddresses(
+                        addresses
+                            .into_iter()
+                            .map(|a| crate::state::event::DepositAddressRegistration {
+                                owner: a.owner,
+                                subaccount: a.subaccount,
+                                address: a.address.parse().unwrap(),
+                                registered_at_nanos: a.registered_at_nanos,
+                            })
+                            .collect(),
+                    )
+                }
             },
         }
     }
