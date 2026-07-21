@@ -63,22 +63,22 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         }
     }
 
-    /// Insert `value` under `key`, after evicting any entries that have outlived their `ttl`.
-    /// Returns the expired entries evicted by this call, or an [`InsertError`] if the key still has
-    /// a live entry ([`InsertError::AlreadyPresent`] — refreshing a live entry is not allowed, so a
-    /// caller cannot extend an entry's lifetime by re-inserting it) or the map is full of live
-    /// entries ([`InsertError::AtCapacity`] — a live entry is never evicted, since a still-armed
-    /// address may already have received funds).
+    /// Insert `value` under `key`. Returns an [`InsertError`] if the key already has a live entry
+    /// ([`InsertError::AlreadyPresent`] — refreshing a live entry is not allowed, so a caller cannot
+    /// extend an entry's lifetime by re-inserting it; the map is left unchanged) or, after evicting
+    /// any entries that have outlived their `ttl`, the map is still full of live entries
+    /// ([`InsertError::AtCapacity`] — a live entry is never evicted, since a still-armed address may
+    /// already have received funds). On success, returns the expired entries evicted by this call.
     pub fn insert(
         &mut self,
         now: Timestamp,
         key: K,
         value: V,
     ) -> Result<Vec<(K, V)>, InsertError<K, V>> {
-        let evicted = self.evict_expired(now);
-        if self.entries.contains_key(&key) {
+        if self.get(now, &key).is_some() {
             return Err(InsertError::AlreadyPresent { key, value });
         }
+        let evicted = self.evict_expired(now);
         if self.entries.len() >= self.capacity.get() {
             return Err(InsertError::AtCapacity { key, value });
         }

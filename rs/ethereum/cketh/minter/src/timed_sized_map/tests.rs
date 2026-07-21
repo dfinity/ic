@@ -74,6 +74,21 @@ fn should_reject_refresh_of_live_key() {
 }
 
 #[test]
+fn should_not_evict_expired_entries_when_rejecting_a_live_refresh() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+    map.insert(ts(0), "dormant", 1).unwrap();
+    map.insert(ts(5), "live", 2).unwrap();
+    let before = map.clone();
+
+    let rejected = map.insert(ts(12), "live", 3);
+
+    assert!(matches!(rejected, Err(InsertError::AlreadyPresent { .. })));
+    assert_eq!(map, before);
+    assert_eq!(map.len(), 2);
+    assert_consistent(&map);
+}
+
+#[test]
 fn should_admit_new_key_after_expired_entries_free_room() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(2));
     map.insert(ts(0), "a", 1).unwrap();
