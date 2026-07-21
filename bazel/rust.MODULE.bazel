@@ -626,7 +626,7 @@ crate.spec(
         "alloc",
     ],
     package = "hpke",
-    version = "^0.12",
+    version = "^0.13",
 )
 crate.spec(
     package = "humantime",
@@ -836,7 +836,7 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.9.11",
+    version = "^0.10.0",
 )
 crate.spec(
     package = "ic-xrc-types",
@@ -1307,8 +1307,23 @@ crate.spec(
     version = "^0.8.6",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "os_rng",
+    ],
+    package = "rand",
+    package_alias = "rand_0_9",
+    version = "^0.9.3",
+)
+crate.spec(
     package = "rand_chacha",
     version = "^0.3.1",
+)
+crate.spec(
+    default_features = False,
+    package = "rand_chacha",
+    package_alias = "rand_chacha_0_9",
+    version = "^0.9.0",
 )
 crate.spec(
     package = "rand_distr",
@@ -1536,7 +1551,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde_with",
-    version = "^1.14.0",
+    version = "^3.21.0",
 )
 crate.spec(
     package = "serde_yaml",
@@ -1928,7 +1943,7 @@ crate.spec(
 )
 crate.spec(
     package = "walrus",
-    version = "^0.23.3",
+    version = "^0.26.4",
 )
 crate.spec(
     features = ["tls"],
