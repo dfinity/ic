@@ -622,7 +622,7 @@ fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) ->
     hasher.write(subnet_id.get().to_string().as_bytes());
     let digest = hasher.finish();
 
-    let first_8_bytes: [u8; 8] = digest[0..8].try_into().unwrap();
+    let first_8_bytes = <[u8; 8]>::try_from(&digest[0..8]).unwrap();
     let priority_int = u64::from_le_bytes(first_8_bytes);
 
     priority_int as f64 / u64::MAX as f64
