@@ -19,8 +19,8 @@ use config_types::{GuestOSConfig, GuestVMType, ICOSSettings};
 use guest_disk::DiskEncryption;
 use guest_disk::crypt::{
     KeyslotMetadata, LUKS2_N_KEYSLOTS, LUKS2_N_TOKENS, LuksHeaderLocation, activate_crypt_device,
-    backup_luks_header_to_file, check_encryption_key, deactivate_crypt_device, format_crypt_device,
-    open_luks2_device, read_keyslot_metadata,
+    check_encryption_key, deactivate_crypt_device, format_crypt_device, open_luks2_device,
+    read_keyslot_metadata,
 };
 use guest_disk::sev::{SevDiskEncryption, can_open_store};
 use ic_device::device_mapping::{Bytes, TempDevice};
@@ -29,7 +29,7 @@ use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
-    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
+    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo,
 };
 use prometheus::Registry;
 use sev::Generation;
@@ -457,38 +457,6 @@ impl TestFixture {
         )
     }
 
-    /// SEV upgrade path: writes the [`PREVIOUS_KEY`] file and formats the store device with
-    /// an *attached* LUKS header locked by that key. Simulates a legacy store partition as it
-    /// exists before the first SEV key rotation.
-    /// Returns the open crypt device handle and the keyslot of the previous key.
-    fn setup_legacy_store_with_previous_key(&self) -> (CryptDevice, u32) {
-        self.write_previous_key();
-        format_crypt_device(
-            self.store_device_path(),
-            LuksHeaderLocation::Attached,
-            PREVIOUS_KEY,
-        )
-        .expect("Failed to format legacy Store device with previous key")
-    }
-
-    /// As [`Self::setup_legacy_store_with_previous_key`], but also backs the attached
-    /// header up to the active slot's detached Store header file. Simulates a legacy device
-    /// that has both an attached and a detached header.
-    fn setup_legacy_store_with_attached_and_detached_headers(&self) -> u32 {
-        let (device, keyslot) = self.setup_legacy_store_with_previous_key();
-        drop(device);
-        self.backup_store_header();
-        keyslot
-    }
-
-    /// Backs the store device's attached LUKS header up to the active slot's detached
-    /// Store header file.
-    fn backup_store_header(&self) {
-        let store_header_path = self.store_header_path();
-        backup_luks_header_to_file(self.store_device_path(), &store_header_path)
-            .expect("Failed to back up Store LUKS header to detached file");
-    }
-
     /// Writes the [`PREVIOUS_KEY`] file on the active slot's var partition.
     fn write_previous_key(&self) {
         let previous_key_path = self.previous_key_path();
@@ -863,12 +831,10 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     // Let's assume the store partition is already encrypted with a previous key.
     let (mut device, _keyslot) = format_crypt_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
         PREVIOUS_KEY,
     )
     .unwrap();
-
-    fixture.backup_store_header();
 
     // Let's also assume that an old deprecated key had been added to the device which will be
     // removed (only the previous key and the new SEV key should remain).
@@ -882,7 +848,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     // Write some data to the disk.
     activate_crypt_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
         "store-crypt",
         PREVIOUS_KEY,
         CryptActivate::empty(),
@@ -893,18 +859,17 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     fixture.store_partition().write_payload(b"hello world");
 
     fixture.store_partition().deactivate();
-    fixture.backup_store_header();
 
     check_encryption_key(
         fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
         PREVIOUS_KEY,
     )
     .expect("previous key should unlock the store partition");
 
     check_encryption_key(
         fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
         DEPRECATED_KEY,
     )
     .expect("deprecated key should unlock the store partition");
@@ -930,14 +895,6 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     )
     .expect("previous key should unlock the store partition");
 
-    // The attached header is wiped during open() when a detached header is available.
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
-        PREVIOUS_KEY,
-    )
-    .expect_err("attached Store header should have been wiped during open()");
-
     let sev_key = fixture.derive_sev_key(Partition::Store);
 
     check_encryption_key(
@@ -946,14 +903,6 @@ fn test_sev_unlock_store_partition_with_previous_key() {
         &sev_key,
     )
     .expect("SEV key should unlock the store partition");
-
-    // The attached header has been wiped, so no key should unlock it.
-    check_encryption_key(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
-        &sev_key,
-    )
-    .expect_err("attached Store header should have been wiped during open()");
 
     check_encryption_key(
         fixture.store_device_path(),
@@ -1045,71 +994,19 @@ fn test_rollback_uses_frozen_header_without_key_exchange() {
 }
 
 #[test]
-fn test_sev_unlock_legacy_store_partition_without_tokens_backfills_token() {
-    let fixture = TestFixture::new_sev();
-
-    let (mut device, previous_keyslot) = fixture.setup_legacy_store_with_previous_key();
-
-    // Strip all legacy tokens so the disk looks like a pre-token GuestOS.
-    {
-        let mut token_handle = device.token_handle();
-        for token_id in 0..LUKS2_N_TOKENS {
-            token_handle
-                .json_set(TokenInput::RemoveToken(token_id))
-                .expect("Failed to remove legacy token");
-        }
-    }
-
-    fixture.backup_store_header();
-    drop(device);
-
-    // Ensure that the legacy Store header has no metadata tokens.
-    let mut legacy_device = open_luks2_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-    )
-    .expect("Failed to open detached Store header before rotation");
-    assert!(
-        read_keyslot_metadata(&mut legacy_device)
-            .expect("Failed to read detached Store key-slot metadata")
-            .is_empty(),
-        "legacy detached Store header should have no metadata tokens"
-    );
-    drop(legacy_device);
-
-    // Open the device with open() - in production, this would happen after an upgrade.
-    // This should rotate the passphrase and backfill the metadata for the new SEV keyslot.
-    fixture
-        .store_partition()
-        .open()
-        .expect("Failed to rotate legacy Store disk from previous key to SEV key");
-
-    let metadata = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata.len(), 1);
-    assert_ne!(
-        metadata[0].keyslot().unwrap(),
-        previous_keyslot,
-        "legacy Store rotation should backfill metadata for a new keyslot"
-    );
-    assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
-}
-
-#[test]
 fn test_sev_upgrade_vm_keeps_previous_key_file() {
     let mut fixture = TestFixture::new_sev();
     fixture.set_guest_vm_type(GuestVMType::Upgrade);
 
     fixture.write_previous_key();
 
-    // Simulate a legacy store partition encrypted with the previous key (attached header).
+    // Simulate a store partition encrypted with the previous key.
     format_crypt_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
         PREVIOUS_KEY,
     )
     .unwrap();
-
-    fixture.backup_store_header();
 
     fixture
         .store_partition()
@@ -1138,12 +1035,10 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
     let sev_key = fixture.derive_sev_key(Partition::Store);
     format_crypt_device(
         fixture.store_device_path(),
-        LuksHeaderLocation::Attached,
+        LuksHeaderLocation::Detached(&fixture.store_header_path()),
         &sev_key,
     )
     .unwrap();
-
-    fixture.backup_store_header();
 
     // Opening it should succeed
     fixture
@@ -1419,81 +1314,6 @@ fn test_open_store_succeeds_with_detached_header_after_attached_header_is_corrup
     );
 }
 
-/// Test that the attached LUKS header is NOT wiped when the detached header cannot be read by
-/// libcryptsetup.
-#[test]
-fn test_open_store_keeps_attached_header_when_detached_header_is_corrupt() {
-    let fixture = TestFixture::new_sev();
-
-    // Simulate a legacy device that has an attached header (formatted via the legacy setup).
-    fixture.setup_legacy_store_with_previous_key();
-
-    assert!(fixture.store_partition().has_attached_luks2_header());
-
-    // Corrupt the detached header so libcryptsetup can no longer read it.
-    fs::write(fixture.store_header_path(), b"not a valid LUKS header")
-        .expect("Failed to corrupt detached header");
-
-    // Opening the store must fail because the detached header is unreadable.
-    fixture
-        .store_partition()
-        .open()
-        .expect_err("opening Store should fail when the detached header is corrupt");
-
-    // Crucially, the attached header must still be present: the wipe guard must have refused
-    // to wipe it because the detached header could not be verified.
-    assert!(
-        fixture.store_partition().has_attached_luks2_header(),
-        "attached LUKS header must not be wiped when the detached header is unreadable"
-    );
-}
-
-/// Test that opening the store partition wipes a legacy attached LUKS header when a detached
-/// header is available. This simulates upgrading from an older GuestOS that wrote both an
-/// attached and a detached header.
-#[test]
-fn test_open_store_wipes_attached_header_when_detached_header_is_available() {
-    let fixture = TestFixture::new_sev();
-
-    // Simulate a legacy device that has both an attached and a detached header.
-    fixture.setup_legacy_store_with_attached_and_detached_headers();
-
-    // Both headers should be present before opening.
-    assert!(fixture.store_partition().has_attached_luks2_header());
-    assert!(fixture.store_partition().has_detached_luks2_header());
-
-    // Opening the store should wipe the attached header.
-    fixture
-        .store_partition()
-        .open()
-        .expect("opening Store should succeed");
-
-    // The attached header should now be gone.
-    assert!(
-        !fixture.store_partition().has_attached_luks2_header(),
-        "attached LUKS header should have been wiped during open()"
-    );
-    // The detached header must still be present and valid.
-    assert!(
-        fixture.store_partition().has_detached_luks2_header(),
-        "detached LUKS header should still be present after open()"
-    );
-    assert!(fixture.store_header_path().exists());
-
-    fixture.store_partition().deactivate();
-
-    // Opening again should still succeed (using only the detached header).
-    fixture
-        .store_partition()
-        .open()
-        .expect("opening Store should succeed again after attached header wipe");
-
-    assert!(
-        fixture.store_partition().mapper_path().exists(),
-        "store mapper device should exist after reopen"
-    );
-}
-
 #[test]
 fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
     for partition in [Partition::Store, Partition::Var] {
@@ -1690,79 +1510,6 @@ fn test_metrics_export() {
     assert!(
         metrics_content.contains("passes_verification=\"true\""),
         "Missing or incorrect passes_verification label: {metrics_content}"
-    );
-}
-
-#[test]
-fn test_store_attached_luks2_header_status_metric_absent() {
-    let fixture = TestFixture::new_sev();
-
-    // Format the store partition with a detached header only; there is no attached header on the
-    // data device.
-    fixture
-        .store_partition()
-        .format()
-        .expect("Failed to format store partition");
-
-    fixture
-        .store_partition()
-        .open()
-        .expect("Failed to open store partition");
-
-    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Store))
-        .expect("Failed to read metrics file");
-
-    assert!(
-        metrics_content.contains("guest_disk_store_attached_luks2_header_status"),
-        "Missing attached LUKS2 header status metric: {metrics_content}"
-    );
-    assert!(
-        metrics_content.contains("status=\"absent\""),
-        "Expected status=\"absent\" label: {metrics_content}"
-    );
-    assert!(
-        !metrics_content.contains("status=\"present\""),
-        "Did not expect status=\"present\" label: {metrics_content}"
-    );
-}
-
-#[test]
-fn test_store_attached_luks2_header_status_metric_present() {
-    let fixture = TestFixture::new_sev();
-
-    // Simulate a legacy device that has both an attached and a detached header.
-    fixture.setup_legacy_store_with_attached_and_detached_headers();
-
-    assert!(fixture.store_partition().has_attached_luks2_header());
-
-    fixture
-        .store_partition()
-        .open()
-        .expect("opening Store should succeed");
-
-    // After opening, the attached header is wiped because a detached header is available.
-    // The metric reflects the end result, so it must report "absent".
-    assert!(
-        !fixture.store_partition().has_attached_luks2_header(),
-        "attached LUKS header should have been wiped during open()"
-    );
-
-    let metrics_content = fs::read_to_string(fixture.metrics_file(Partition::Store))
-        .expect("Failed to read metrics file");
-
-    assert!(
-        metrics_content.contains("guest_disk_store_attached_luks2_header_status"),
-        "Missing attached LUKS2 header status metric: {metrics_content}"
-    );
-    assert!(
-        metrics_content.contains("status=\"absent\""),
-        "Expected status=\"absent\" after wipe: {metrics_content}"
-    );
-    // The LUKS parameters metric must still be present (not overwritten by the header status
-    // metric).
-    assert!(
-        metrics_content.contains("guest_disk_encryption_info"),
-        "Missing encryption info metric: {metrics_content}"
     );
 }
 
