@@ -9,7 +9,7 @@ use axum::{
     http::{Request, StatusCode},
     routing::any,
 };
-use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
+use backon::{BackoffBuilder, ExponentialBuilder};
 use bytes::Bytes;
 use ic_interfaces::p2p::consensus::{Peers, ValidatedPoolReader};
 use ic_logger::{ReplicaLogger, warn};
@@ -298,10 +298,12 @@ pub(crate) async fn download_stripped_message<P: Peers>(
 ) -> (StrippedMessage, NodeId) {
     let message_type = StrippedMessageType::from(&stripped_message_id);
     metrics.report_started_stripped_message_download(message_type);
-    let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
-        .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
-        .with_max_interval(MAX_ARTIFACT_RPC_TIMEOUT)
-        .with_max_elapsed_time(None)
+    let mut artifact_download_timeout = ExponentialBuilder::new()
+        .with_min_delay(MIN_ARTIFACT_RPC_TIMEOUT)
+        .with_max_delay(MAX_ARTIFACT_RPC_TIMEOUT)
+        .with_factor(1.5)
+        .with_jitter()
+        .without_max_times()
         .build();
 
     let mut rng = SmallRng::from_entropy();
@@ -332,7 +334,7 @@ pub(crate) async fn download_stripped_message<P: Peers>(
     loop {
         let next_request_at = Instant::now()
             + artifact_download_timeout
-                .next_backoff()
+                .next()
                 .unwrap_or(MAX_ARTIFACT_RPC_TIMEOUT);
         if let Some(peer) = { peer_rx.peers().into_iter().choose(&mut rng) } {
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {

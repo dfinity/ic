@@ -23,7 +23,7 @@ edition.workspace = true
 head_nns = []
 
 [dependencies]
-backoff = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 flate2 = { workspace = true }
