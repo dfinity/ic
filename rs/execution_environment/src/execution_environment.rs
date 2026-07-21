@@ -1240,63 +1240,85 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FlexibleHttpRequest) => match self.config.flexible_http_requests {
-                FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
-                    response: Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    )),
-                    refund: msg.take_cycles(),
-                },
-                FlagStatus::Enabled => match &msg {
-                    CanisterCall::Request(request) => {
-                        match FlexibleCanisterHttpRequestArgs::decode(payload) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(args) => {
-                                let cost_schedule = match self.own_subnet_type {
-                                    SubnetType::System => CanisterCyclesCostSchedule::Free,
-                                    SubnetType::Application
-                                    | SubnetType::VerifiedApplication
-                                    | SubnetType::CloudEngine => state.get_own_cost_schedule(),
-                                };
-                                match CanisterHttpRequestContext::generate_from_flexible_args(
-                                    state.time(),
-                                    request.as_ref(),
-                                    args,
-                                    &registry_settings.node_ids,
-                                    registry_settings.registry_version,
-                                    cost_schedule,
-                                    rng,
-                                ) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err.into()),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(canister_http_request_context) => match self
-                                        .try_add_http_context_to_replicated_state(
-                                            canister_http_request_context,
-                                            &mut state,
-                                            request.as_ref(),
-                                            since,
-                                        ) {
+            Ok(Ic00Method::FlexibleHttpRequest) => {
+                // Flexible HTTP outcalls are priced with the pay-as-you-go
+                // pricing model. That model is gated behind the
+                // `flexible_http_requests` feature flag and, once enabled,
+                // applies to every subnet. Until then, flexible outcalls are
+                // still offered on subnets where HTTP outcalls are free (pricing
+                // is moot), by falling back to the legacy
+                // (charge-everything-up-front) pricing. That covers subnets on a
+                // free cost schedule as well as system subnets, which charge
+                // zero for HTTP outcalls despite a normal cost schedule. On
+                // paying subnets flexible outcalls remain unavailable until the
+                // flag is enabled, since legacy pricing would overcharge them
+                // (it charges the maximum response size up front).
+                let http_outcalls_are_free =
+                    self.http_outcalls_are_free(state.get_own_cost_schedule());
+                let pricing_version = match self.config.flexible_http_requests {
+                    FlagStatus::Enabled => Some(PricingVersion::PayAsYouGo),
+                    FlagStatus::Disabled if http_outcalls_are_free => Some(PricingVersion::Legacy),
+                    FlagStatus::Disabled => None,
+                };
+                match pricing_version {
+                    None => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    Some(pricing_version) => match &msg {
+                        CanisterCall::Request(request) => {
+                            match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(args) => {
+                                    let cost_schedule = match self.own_subnet_type {
+                                        SubnetType::System => CanisterCyclesCostSchedule::Free,
+                                        SubnetType::Application
+                                        | SubnetType::VerifiedApplication
+                                        | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                                    };
+                                    match CanisterHttpRequestContext::generate_from_flexible_args(
+                                        state.time(),
+                                        request.as_ref(),
+                                        args,
+                                        &registry_settings.node_ids,
+                                        registry_settings.registry_version,
+                                        cost_schedule,
+                                        rng,
+                                        pricing_version,
+                                    ) {
                                         Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
+                                            response: Err(err.into()),
                                             refund: msg.take_cycles(),
                                         },
-                                        Ok(()) => ExecuteSubnetMessageResult::Processing,
-                                    },
+                                        Ok(canister_http_request_context) => match self
+                                            .try_add_http_context_to_replicated_state(
+                                                canister_http_request_context,
+                                                &mut state,
+                                                request.as_ref(),
+                                                since,
+                                            ) {
+                                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                                response: Err(err),
+                                                refund: msg.take_cycles(),
+                                            },
+                                            Ok(()) => ExecuteSubnetMessageResult::Processing,
+                                        },
+                                    }
                                 }
                             }
                         }
-                    }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
-                    }
-                },
-            },
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                        }
+                    },
+                }
+            }
 
             Ok(Ic00Method::HttpRequest) => match state.subnet_features().http_requests {
                 true => match &msg {
@@ -2150,6 +2172,14 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// Returns whether HTTP outcalls are free on this subnet, i.e. the subnet
+    /// charges nothing for them. This is true on a free cost schedule, and on
+    /// system subnets.
+    fn http_outcalls_are_free(&self, cost_schedule: CanisterCyclesCostSchedule) -> bool {
+        cost_schedule == CanisterCyclesCostSchedule::Free
+            || self.own_subnet_type == SubnetType::System
+    }
+
     fn try_add_http_context_to_replicated_state(
         &self,
         mut canister_http_request_context: CanisterHttpRequestContext,
@@ -2219,12 +2249,17 @@ impl ExecutionEnvironment {
             ));
         }
 
+        let http_outcalls_are_free = self.http_outcalls_are_free(cost_schedule);
+
         // The refundable cycles are everything the payment covers beyond the
-        // base fee; on a free cost schedule nothing is charged, so nothing is
+        // base fee; when the outcall is free nothing is charged, so nothing is
         // refundable. We set the refund status even for legacy pricing in order
-        // to enable observability during the dark launch. However, nothing will
-        // actually be refunded for legacy pricing.
-        let refundable_cycles = if cost_schedule == CanisterCyclesCostSchedule::Free {
+        // to enable observability during the dark launch. However, nothing is
+        // refunded via the `refund_status` mechanism under legacy pricing; the
+        // caller is instead refunded the unspent `request.payment` (the full
+        // payment on free/system subnets, where the legacy fee is zero) when the
+        // response is delivered.
+        let refundable_cycles = if http_outcalls_are_free {
             Cycles::new(0)
         } else {
             canister_http_request_context.request.payment - base_fee.real()
@@ -2250,9 +2285,9 @@ impl ExecutionEnvironment {
             }
             PricingVersion::PayAsYouGo => {
                 // Take out the entire payment upfront; the refundable portion is
-                // returned later via the refund mechanism. On a free cost
-                // schedule there is nothing to charge.
-                if cost_schedule != CanisterCyclesCostSchedule::Free {
+                // returned later via the refund mechanism. When the outcall is
+                // free there is nothing to charge.
+                if !http_outcalls_are_free {
                     canister_http_request_context.request.payment.take();
                 }
             }

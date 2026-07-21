@@ -657,6 +657,7 @@ impl CanisterHttpRequestContext {
         registry_version: RegistryVersion,
         cost_schedule: CanisterCyclesCostSchedule,
         rng: &mut dyn RngCore,
+        pricing_version: PricingVersion,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         validate_transform_principal(&args.transform, request.sender.get())?;
         validate_url_length(&args.url)?;
@@ -748,7 +749,7 @@ impl CanisterHttpRequestContext {
                 min_responses,
                 max_responses,
             },
-            pricing_version: PricingVersion::PayAsYouGo,
+            pricing_version,
             // The refund status is populated in `try_add_http_context_to_replicated_state`
             // based on the request's payment and the base fee.
             refund_status: RefundStatus::default(),
@@ -1448,46 +1449,48 @@ mod tests {
         ];
 
         for replication in replications {
-            let initial = CanisterHttpRequestContext {
-                url: "https://example.com".to_string(),
-                headers: vec![CanisterHttpHeader {
-                    name: "Content-Type".to_string(),
-                    value: "application/json".to_string(),
-                }],
-                body: Some(b"{\"hello\":\"world\"}".to_vec()),
-                max_response_bytes: Some(NumBytes::from(1234)),
-                http_method: CanisterHttpMethod::POST,
-                transform: Some(Transform {
-                    method_name: "transform_response".to_string(),
-                    context: vec![1, 2, 3],
-                }),
-                request: Request {
-                    receiver: CanisterId::ic_00(),
-                    sender: CanisterId::ic_00(),
-                    sender_reply_callback: CallbackId::from(3),
-                    payment: Cycles::new(10),
-                    method_name: "transform".to_string(),
-                    method_payload: Vec::new(),
-                    metadata: Default::default(),
-                    deadline: NO_DEADLINE,
-                },
-                time: UNIX_EPOCH,
-                replication,
-                pricing_version: PricingVersion::PayAsYouGo,
-                refund_status: RefundStatus {
-                    refundable_cycles: Cycles::new(13_000_000),
-                    per_replica_allowance: Cycles::new(1_000_000),
-                    refunded_cycles: Cycles::new(123),
-                    refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
-                },
-                registry_version: RegistryVersion::from(7),
-                subnet_size: NumberOfNodes::from(13),
-                cost_schedule: Some(CanisterCyclesCostSchedule::Free),
-            };
+            for pricing_version in [PricingVersion::Legacy, PricingVersion::PayAsYouGo] {
+                let initial = CanisterHttpRequestContext {
+                    url: "https://example.com".to_string(),
+                    headers: vec![CanisterHttpHeader {
+                        name: "Content-Type".to_string(),
+                        value: "application/json".to_string(),
+                    }],
+                    body: Some(b"{\"hello\":\"world\"}".to_vec()),
+                    max_response_bytes: Some(NumBytes::from(1234)),
+                    http_method: CanisterHttpMethod::POST,
+                    transform: Some(Transform {
+                        method_name: "transform_response".to_string(),
+                        context: vec![1, 2, 3],
+                    }),
+                    request: Request {
+                        receiver: CanisterId::ic_00(),
+                        sender: CanisterId::ic_00(),
+                        sender_reply_callback: CallbackId::from(3),
+                        payment: Cycles::new(10),
+                        method_name: "transform".to_string(),
+                        method_payload: Vec::new(),
+                        metadata: Default::default(),
+                        deadline: NO_DEADLINE,
+                    },
+                    time: UNIX_EPOCH,
+                    replication: replication.clone(),
+                    pricing_version,
+                    refund_status: RefundStatus {
+                        refundable_cycles: Cycles::new(13_000_000),
+                        per_replica_allowance: Cycles::new(1_000_000),
+                        refunded_cycles: Cycles::new(123),
+                        refunding_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
+                    },
+                    registry_version: RegistryVersion::from(7),
+                    subnet_size: NumberOfNodes::from(13),
+                    cost_schedule: Some(CanisterCyclesCostSchedule::Free),
+                };
 
-            let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
-            let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
-            assert_eq!(initial, round_trip);
+                let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+                let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+                assert_eq!(initial, round_trip);
+            }
         }
     }
 
@@ -2076,6 +2079,7 @@ mod tests {
             RegistryVersion::from(1),
             CanisterCyclesCostSchedule::Normal,
             &mut ReproducibleRng::new(),
+            PricingVersion::PayAsYouGo,
         )
     }
 }
