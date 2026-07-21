@@ -1256,13 +1256,19 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
+                                let cost_schedule = match self.own_subnet_type {
+                                    SubnetType::System => CanisterCyclesCostSchedule::Free,
+                                    SubnetType::Application
+                                    | SubnetType::VerifiedApplication
+                                    | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                                };
                                 match CanisterHttpRequestContext::generate_from_flexible_args(
                                     state.time(),
                                     request.as_ref(),
                                     args,
                                     &registry_settings.node_ids,
                                     registry_settings.registry_version,
-                                    state.get_own_cost_schedule(),
+                                    cost_schedule,
                                     rng,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
@@ -1301,13 +1307,19 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                             },
                             Ok(args) => {
+                                let cost_schedule = match self.own_subnet_type {
+                                    SubnetType::System => CanisterCyclesCostSchedule::Free,
+                                    SubnetType::Application
+                                    | SubnetType::VerifiedApplication
+                                    | SubnetType::CloudEngine => state.get_own_cost_schedule(),
+                                };
                                 match CanisterHttpRequestContext::generate_from_args(
                                     state.time(),
                                     request.as_ref(),
                                     args,
                                     &registry_settings.node_ids,
                                     registry_settings.registry_version,
-                                    state.get_own_cost_schedule(),
+                                    cost_schedule,
                                     rng,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
