@@ -31,10 +31,11 @@ struct Entry<V> {
 
 /// A map of at most `capacity` entries, each living for at most `ttl`.
 ///
-/// On insertion, entries that have outlived their `ttl` are evicted first; if the map is still at
-/// capacity with only live entries, the insertion is rejected rather than evicting a live entry.
-/// Time is supplied by the caller on every operation, so the structure holds no clock and is
-/// deterministic in tests.
+/// Re-inserting a key that still has a live entry is rejected up front, leaving the map
+/// untouched. Otherwise, admitting a new key first evicts entries that have outlived their `ttl`;
+/// if the map is still at capacity with only live entries, the insertion is rejected rather than
+/// evicting a live entry. Time is supplied by the caller on every operation, so the structure
+/// holds no clock and is deterministic in tests.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct TimedSizedMap<K, V> {
     ttl: Duration,

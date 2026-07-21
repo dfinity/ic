@@ -384,6 +384,8 @@ impl CanisterHttpPayloadBuilderImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
+        // TODO: Use cost schedule from the context instead, once it exists.
+        let cost_schedule = state.get_ref().get_own_cost_schedule();
 
         // Validate the timed out calls
         for timeout_id in &payload.timeouts {
@@ -484,11 +486,12 @@ impl CanisterHttpPayloadBuilderImpl {
                 });
             }
 
-            // Enforce the per-replica refund allowance on every receipt in the proof.
+            // Enforce the per-replica spend limit on every receipt in the proof.
             for sig in response.proof.signatures.values() {
-                utils::check_refund_allowance(
+                utils::check_spent_within_limit(
                     &sig.payment_receipt,
                     request_context.refund_status.per_replica_allowance,
+                    cost_schedule,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
             }
@@ -571,11 +574,12 @@ impl CanisterHttpPayloadBuilderImpl {
                     context.registry_version,
                 ));
 
-                // Enforce per-replica refund allowance for divergence shares.
+                // Enforce the per-replica spend limit for divergence shares.
                 for share in grouped_shares.values().flatten() {
-                    utils::check_refund_allowance(
+                    utils::check_spent_within_limit(
                         &share.content.payment_receipt,
                         context.refund_status.per_replica_allowance,
+                        cost_schedule,
                     )
                     .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                 }
@@ -638,6 +642,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     flex_committee,
                     &mut seen_signers,
                     context.refund_status.per_replica_allowance,
+                    cost_schedule,
                 )
                 .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -705,6 +710,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             context.refund_status.per_replica_allowance,
+                            cost_schedule,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
 
@@ -770,6 +776,7 @@ impl CanisterHttpPayloadBuilderImpl {
                             flex_committee,
                             &mut seen_signers,
                             context.refund_status.per_replica_allowance,
+                            cost_schedule,
                         )
                         .map_err(CanisterHttpPayloadValidationError::InvalidArtifact)?;
                     }

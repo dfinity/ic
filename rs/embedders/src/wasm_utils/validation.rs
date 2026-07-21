@@ -67,6 +67,7 @@ const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 pub const MAX_WASM_FUNCTION_NAME_LENGTH: usize = 1024 * 1024;
+pub const MAX_WASM_FUNCTION_NUM_LOCALS: usize = 10_000;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -1045,7 +1046,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                     } else {
                         return Err(WasmValidationError::InvalidImportSection(format!(
                             "Function import doesn't have a function type. Type found: {:?}",
-                            &module.types.types[&TypeID(*index)]
+                            module.types.types[&TypeID(*index)]
                         )));
                     };
                     set_imports_details(&mut imports_details, import_module, field);
@@ -1336,6 +1337,13 @@ fn validate_function_section(
             .unwrap()
             .body
             .num_locals;
+        if num_locals > MAX_WASM_FUNCTION_NUM_LOCALS as u32 {
+            return Err(WasmValidationError::TooManyLocals {
+                index: *id as usize,
+                defined: num_locals as usize,
+                allowed: MAX_WASM_FUNCTION_NUM_LOCALS,
+            });
+        }
         max_num_locals = max_num_locals.max(num_locals);
     }
 

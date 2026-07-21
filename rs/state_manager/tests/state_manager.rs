@@ -1407,7 +1407,7 @@ fn validate_replicated_state_is_called() {
             metrics,
             "state_manager_tip_handler_request_duration_seconds",
         );
-        for (label, _stats) in request_duration.iter() {
+        for label in request_duration.keys() {
             if label.get("request") == Some(&"validate_replicated_state_and_finalize".to_string()) {
                 return true;
             }
@@ -2154,6 +2154,39 @@ fn backup_checkpoint_is_complete() {
         )
         .unwrap();
         validate_manifest(&manifest, &state_hash).unwrap()
+    });
+}
+
+#[test]
+fn concurrently_computed_manifest_covers_the_whole_checkpoint() {
+    // The manifest is computed on the dedicated manifest thread, concurrently with
+    // checkpoint validation and before the checkpoint is verified. It must still cover
+    // the fully-serialized checkpoint — in particular every canister's `canister.pbuf`,
+    // which is written by `TipToCheckpointAndSwitch` after it returns the checkpoint
+    // layout. `ComputeManifest` is therefore enqueued on the tip channel (ahead of
+    // validation) and forwarded to the manifest thread only once proto serialization
+    // has finished. Here we recompute the manifest from the finalized on-disk
+    // checkpoint and check the *published* root hash matches it: a manifest computed
+    // over a partially-written checkpoint would omit files and produce a different hash.
+    state_manager_test(|_metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+        // Enough canisters that the checkpoint holds many `canister.pbuf` files.
+        for i in 1..=20 {
+            insert_dummy_canister(&mut state, canister_test_id(i));
+        }
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        let state_hash = wait_for_checkpoint(&state_manager, Height(1));
+
+        let manifest = manifest_from_path(
+            state_manager
+                .state_layout()
+                .checkpoint_verified(Height(1))
+                .unwrap()
+                .raw_path(),
+        )
+        .unwrap();
+        validate_manifest(&manifest, &state_hash).unwrap();
     });
 }
 
@@ -7377,6 +7410,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
     canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
     canister.execution_state = Some(ExecutionState::new(
         WasmBinary::new(snapshot.execution_snapshot().wasm_binary.clone()),
+        None,
         ExportedFunctions::new(Default::default()),
         Memory::from(&snapshot.execution_snapshot().wasm_memory),
         Memory::from(&snapshot.execution_snapshot().stable_memory),

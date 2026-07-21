@@ -500,6 +500,7 @@ mod tests {
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
     use ic_types::{
+        NumberOfNodes,
         canister_http::{
             CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus,
             Replication,
@@ -737,6 +738,8 @@ mod tests {
             pricing_version: PricingVersion::Legacy,
             refund_status: RefundStatus::default(),
             registry_version,
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 

@@ -47,7 +47,7 @@ ensure_variable_set IC_ADMIN
     --release-package-urls https://download.dfinity.systems/ic/"${CUSTOM_GIT_SHA}"/guest-os/update-img/update-img.tar.zst \
     --release-package-sha256-hex "${REPLICA_SHA_HEX}" \
     --proposer "${NEURON_ID}" \
-    --summary "Blessing replica with old metering_type"
+    --summary "Electing replica with old metering_type"
 
 sleep 3
 get_latest_nns_proposal

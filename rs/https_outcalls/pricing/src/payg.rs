@@ -3,7 +3,7 @@ use ic_types::{
     NumBytes, NumInstructions, NumberOfNodes,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        Replication,
+        MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET, Replication,
     },
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
@@ -40,7 +40,8 @@ pub struct PayAsYouGoTracker {
     /// Whether responses to this outcalls are gossiped (only flexible and non-replicated).
     is_gossiping: bool,
     /// Whether the subnet uses a free cost schedule. When `true` the tracker
-    /// charges nothing and refunds the full allowance.
+    /// still accumulates the spend (so free subnets report accurate cost
+    /// metrics) but never returns an out-of-cycles error.
     is_free: bool,
     /// The cycles budget available to this replica (already net of the base
     /// cost, which was subtracted when the context was created).
@@ -78,13 +79,17 @@ impl PayAsYouGoTracker {
     }
 
     /// Charges `amount` against the budget. Returns an error if the total spent
-    /// now exceeds the available allowance.
+    /// now exceeds the available allowance (never on a free cost schedule).
     fn charge(&mut self, amount: u128) -> Result<(), PricingError> {
-        // A free cost schedule means the subnet charges nothing for resources.
+        // Always accumulate the spend, including on a free cost schedule, so
+        // free subnets can report the real per-replica cost for canister cost
+        // accounting.
+        self.spent = self.spent.saturating_add(amount);
+        // A free cost schedule charges nothing for resources, so it never runs
+        // out of cycles.
         if self.is_free {
             return Ok(());
         }
-        self.spent = self.spent.saturating_add(amount);
         if self.spent > self.allowance {
             Err(PricingError::InsufficientCycles)
         } else {
@@ -140,8 +145,18 @@ impl BudgetTracker for PayAsYouGoTracker {
     }
 
     fn create_payment_receipt(&self) -> CanisterHttpPaymentReceipt {
+        // Cap the reported spend at the maximum this replica may report having
+        // spent. On a charging subnet that is the allowance. On a free cost
+        // schedule nothing is actually charged, but the real spend is still
+        // reported (so canister cost metrics reflect the actual work), bounded
+        // by `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+        let cap = if self.is_free {
+            MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get()
+        } else {
+            self.allowance
+        };
         CanisterHttpPaymentReceipt {
-            refund: Cycles::new(self.allowance.saturating_sub(self.spent)),
+            spent: Cycles::new(self.spent.min(cap)),
         }
     }
 }
@@ -189,6 +204,8 @@ mod tests {
                 refunding_nodes: BTreeSet::new(),
             },
             registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: None,
         }
     }
 
@@ -232,14 +249,12 @@ mod tests {
     #[test]
     fn does_not_charge_base_cost() {
         // The base cost is handled at context creation, so a freshly created
-        // tracker has spent nothing and a zero-usage request refunds everything.
+        // tracker has spent nothing and a zero-usage request records no spend
+        // (the full allowance is refunded downstream).
         let ctx = context(Replication::FullyReplicated, 1_000_000);
         let tracker = make_tracker(&ctx, 13);
         assert_eq!(tracker.spent, 0);
-        assert_eq!(
-            tracker.create_payment_receipt().refund,
-            Cycles::new(1_000_000)
-        );
+        assert_eq!(tracker.create_payment_receipt().spent, Cycles::zero());
     }
 
     #[test]
@@ -273,8 +288,8 @@ mod tests {
 
         assert_eq!(tracker.spent, network + transform);
         assert_eq!(
-            tracker.create_payment_receipt().refund,
-            Cycles::new(allowance - network - transform)
+            tracker.create_payment_receipt().spent,
+            Cycles::new(network + transform)
         );
     }
 
@@ -293,7 +308,8 @@ mod tests {
 
     #[test]
     fn returns_pricing_error_when_budget_is_exceeded() {
-        let ctx = context(Replication::FullyReplicated, 100);
+        let allowance = 100;
+        let ctx = context(Replication::FullyReplicated, allowance);
         let mut tracker = make_tracker(&ctx, 13);
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
@@ -302,43 +318,93 @@ mod tests {
             }),
             Err(PricingError::InsufficientCycles)
         );
-        assert_eq!(tracker.create_payment_receipt().refund, Cycles::zero());
+        // The reported spend is capped at the allowance, so an over-budget
+        // outcall reports consuming exactly its allowance (the refund derived
+        // downstream is zero) rather than the larger raw amount.
+        assert_eq!(
+            tracker.create_payment_receipt().spent,
+            Cycles::new(allowance)
+        );
     }
 
     #[test]
-    fn charges_nothing_on_free_cost_schedule() {
-        // On a free subnet the tracker charges nothing, even for usage that
-        // would otherwise exceed the allowance, so the full allowance is
-        // refunded. A flexible request is used so the gossip term (which would
-        // not be charged for fully-replicated requests) is also exercised.
-        let allowance = 1_000_000_u128;
-        let ctx = context(flexible(13), allowance);
+    fn free_cost_schedule_reports_real_spend_without_rejecting() {
+        // On a free subnet the tracker charges nothing (it never returns an
+        // error), but it still accumulates the real per-replica spend and
+        // reports it — even though it exceeds the zero allowance — so canister
+        // cost metrics on free subnets stay accurate. The reported spend here is
+        // well below `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`, so the cap is a no-op.
+        // A flexible request is used so the gossip term (not charged for
+        // fully-replicated requests) is also exercised.
+        let subnet_size = 13_u64;
+        let ctx = context(flexible(subnet_size as usize), 0);
         let mut tracker = PayAsYouGoTracker::new(
             &ctx,
-            NumberOfNodes::from(13),
+            NumberOfNodes::from(subnet_size as u32),
             CanisterCyclesCostSchedule::Free,
         );
 
+        let response_size = 1_000_000_u64;
+        let response_ms = 30_000_u128;
         assert_eq!(
             tracker.subtract_network_usage(NetworkUsage {
-                response_size: NumBytes::from(1_000_000),
-                response_time: Duration::from_secs(30),
+                response_size: NumBytes::from(response_size),
+                response_time: Duration::from_millis(response_ms as u64),
             }),
             Ok(())
         );
+        let network =
+            PER_DOWNLOADED_BYTE_FEE * response_size as u128 + PER_RESPONSE_MS_FEE * response_ms;
+
+        let instructions = 1_000_000_000_u64;
         assert_eq!(
-            tracker.subtract_transform_usage(NumInstructions::from(1_000_000_000)),
+            tracker.subtract_transform_usage(NumInstructions::from(instructions)),
             Ok(())
         );
+        let transform = instructions as u128 / TRANSFORM_INSTRUCTION_DIVISOR;
+
+        let transformed_size = 1_000_000_u64;
         assert_eq!(
-            tracker.subtract_gossip_usage(NumBytes::from(1_000_000)),
+            tracker.subtract_gossip_usage(NumBytes::from(transformed_size)),
             Ok(())
+        );
+        let gossip =
+            FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE * transformed_size as u128 * subnet_size as u128;
+
+        let expected = network + transform + gossip;
+        // Nothing is charged (no error), yet the full spend is tracked and
+        // reported, exceeding the zero allowance.
+        assert!(expected > 0);
+        assert!(expected < MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get());
+        assert_eq!(tracker.spent, expected);
+        assert_eq!(
+            tracker.create_payment_receipt().spent,
+            Cycles::new(expected)
+        );
+    }
+
+    #[test]
+    fn free_cost_schedule_caps_reported_spend_at_maximum() {
+        // Even though a free subnet may report a spend exceeding its (zero)
+        // allowance, the reported spend is never unbounded: it is capped at
+        // `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
+        let subnet_size = 13_u64;
+        let ctx = context(flexible(subnet_size as usize), 0);
+        let mut tracker = PayAsYouGoTracker::new(
+            &ctx,
+            NumberOfNodes::from(subnet_size as u32),
+            CanisterCyclesCostSchedule::Free,
         );
 
-        assert_eq!(tracker.spent, 0);
+        // A gossip term large enough to push the raw spend past the cap.
         assert_eq!(
-            tracker.create_payment_receipt().refund,
-            Cycles::new(allowance)
+            tracker.subtract_gossip_usage(NumBytes::from(u64::MAX)),
+            Ok(())
+        );
+        assert!(tracker.spent > MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET.get());
+        assert_eq!(
+            tracker.create_payment_receipt().spent,
+            MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET
         );
     }
 }
