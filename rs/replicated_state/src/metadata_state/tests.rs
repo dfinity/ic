@@ -2408,6 +2408,67 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     );
 }
 
+#[test]
+fn observe_outcalls_cycles_migrates_scalar_fields_into_use_cases() {
+    let mut subnet_metrics = SubnetMetrics {
+        // Simulate a state persisted before use-case tracking existed: the scalar
+        // fields hold the full history while the use-case entries only cover a
+        // more recent (smaller) subset.
+        consumed_cycles_http_outcalls: NominalCycles::new(100),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
+        consumed_cycles_by_use_case: BTreeMap::from([
+            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
+            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
+        ]),
+        consumed_cycles_by_use_case_as_counters: BTreeMap::from([
+            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
+            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
+        ]),
+        ..Default::default()
+    };
+
+    // Observing an HTTP outcall first migrates the (superset) scalar fields into
+    // the use-case entries (via `max`), then bumps the HTTP scalar. In
+    // production the matching `observe_consumed_cycles_with_use_case` call then
+    // bumps the use-case entry by the same amount, keeping them in lockstep.
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
+    subnet_metrics
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
+
+    let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
+    let by_use_case_as_counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
+
+    // HTTP: use-case entry caught up to the scalar (100) and then grew by 5.
+    assert_eq!(
+        by_use_case[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(105)
+    );
+    assert_eq!(
+        by_use_case_as_counters[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(105)
+    );
+    // ECDSA: the scalar (200) has been migrated into the use-case entries as well.
+    assert_eq!(
+        by_use_case[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+    assert_eq!(
+        by_use_case_as_counters[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+
+    // The scalar fields keep evolving in lockstep and are not zeroed (kept for
+    // downgrade compatibility).
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_http_outcalls(),
+        NominalCycles::new(105)
+    );
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
+        NominalCycles::new(200)
+    );
+}
+
 impl From<(u64, u64)> for BlockmakerStats {
     fn from(item: (u64, u64)) -> Self {
         Self {
