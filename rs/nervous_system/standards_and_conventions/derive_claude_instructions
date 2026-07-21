@@ -21,29 +21,24 @@ import re
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SOURCE = REPO_ROOT / "STANDARDS_AND_CONVENTIONS.md"
-OUTPUT = Path(__file__).resolve().parent / "claude_author_instructions.md"
+LOCAL_DIRECTORY = Path(__file__).resolve().parent
+SOURCE = LOCAL_DIRECTORY / "../STANDARDS_AND_CONVENTIONS.md"
+OUTPUT = LOCAL_DIRECTORY / "claude_author_instructions.md"
 
 FRONT_MATTER = (
     "This file is derived mechanically from STANDARDS_AND_CONVENTIONS.md, and\n"
     "tells Claude how to write code here.\n"
 )
 
-# "((" and "))" are only ever recognized here when each is alone on its own
-# line. A "((" or "))" appearing elsewhere (e.g. inside a sentence or code)
-# just isn't matched by this regex at all -- it isn't treated as a marker, so
-# there's no ambiguity to resolve. Declaring the document malformed if that
-# ever happens elsewhere is a reasonable invariant, but this script doesn't
-# even need to enforce it: it simply won't misfire on it.
-SECTION_MARKER_RE = re.compile(r"^\(\(\s*$\n(.*?)^\)\)\s*$\n?", re.DOTALL | re.MULTILINE)
-INNERMOST_PAREN_RE = re.compile(r"\([^()]*\)", re.DOTALL)
+ENCLOSED_BY_DOUBLE_PAREN_RE = re.compile(r"^\(\(\s*$\n(.*?)^\)\)\s*$\n?", re.DOTALL | re.MULTILINE)
+ENCLOSED_BY_SINGLE_PAREN_RE = re.compile(r"\([^()]*\)", re.DOTALL)
 
-FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
 INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 PLACEHOLDER_RE = re.compile(r"\x00CODE\d+\x00")
 
 
+# This is a hack to prevent code snippets from messing with paren exclusion.
 def protect_code(text):
     """Replace all inline `code` and ```fenced``` blocks with opaque
     placeholders, so no later step ever sees a paren that's really Rust
@@ -54,7 +49,7 @@ def protect_code(text):
         saved.append(m.group(0))
         return f"\x00CODE{len(saved) - 1}\x00"
 
-    text = FENCE_RE.sub(save, text)
+    text = CODE_BLOCK_RE.sub(save, text)
     text = INLINE_CODE_RE.sub(save, text)
     return text, saved
 
@@ -70,17 +65,17 @@ def strip_section_markers(text):
         dropped.append(m.group(0))
         return ""
 
-    return SECTION_MARKER_RE.sub(record, text), dropped
+    return ENCLOSED_BY_DOUBLE_PAREN_RE.sub(record, text), dropped
 
 
 def strip_parens_to_fixed_point(text):
     dropped = []
     while True:
-        matches = list(INNERMOST_PAREN_RE.finditer(text))
+        matches = list(ENCLOSED_BY_SINGLE_PAREN_RE.finditer(text))
         if not matches:
             break
         dropped.extend(m.group(0) for m in matches)
-        text = INNERMOST_PAREN_RE.sub("", text)
+        text = ENCLOSED_BY_SINGLE_PAREN_RE.sub("", text)
     return text, dropped
 
 
@@ -128,24 +123,23 @@ def main():
     text = cleanup_whitespace(text).strip() + "\n"
     text = restore_code(text, saved_code)
 
-    def non_ws_len(s):
+    def non_white_space_len(s):
         return sum(1 for c in s if not c.isspace())
 
-    original_chars = non_ws_len(original)
-    kept_chars = non_ws_len(text)
+    original_chars = non_white_space_len(original)
+    kept_chars = non_white_space_len(text)
     cut_chars = original_chars - kept_chars
 
     OUTPUT.write_text(FRONT_MATTER + "\n\n" + text)
 
-    print(f"Wrote {OUTPUT.relative_to(REPO_ROOT)}")
+    print(f"Wrote {OUTPUT.relative_to(LOCAL_DIRECTORY.parent)}")
     print(f"Original non-whitespace chars: {original_chars}")
     print(f"Kept (author AI):              {kept_chars}")
     print(f"Cut:                           {cut_chars} ({100 * cut_chars / original_chars:.1f}%)")
-    print(f"Whole sections dropped: {len(dropped_sections)}")
-    print(f"Paren spans dropped:     {len(dropped_spans)}")
+    print(f"Whole sections dropped:        {len(dropped_sections)}")
+    print(f"Paren spans dropped:           {len(dropped_spans)}")
     if violations:
-        print(f"\n{len(violations)} markup violation(s) found (see warnings above) --", file=sys.stderr)
-        print("handled leniently, but worth cleaning up in the source.", file=sys.stderr)
+        print(f"\n{len(violations)} markup violation(s) found (see warnings above)", file=sys.stderr)
 
 
 if __name__ == "__main__":
