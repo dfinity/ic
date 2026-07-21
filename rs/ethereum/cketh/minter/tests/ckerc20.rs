@@ -144,6 +144,29 @@ fn should_mint_with_ckerc20_setup() {
         .expect_mint();
 }
 
+mod deposit_erc20 {
+    use candid::Principal;
+    use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+    use ic_ledger_suite_orchestrator_test_utils::new_state_machine;
+    use std::sync::Arc;
+
+    #[test]
+    fn should_trap_when_ckerc20_feature_not_active() {
+        let ckerc20 = CkErc20Setup::new_without_ckerc20_active(Arc::new(new_state_machine()));
+        let caller = ckerc20.caller();
+        ckerc20
+            .call_minter_deposit_erc20(caller, None)
+            .expect_trap("disabled");
+    }
+
+    #[test]
+    fn should_trap_when_called_from_anonymous_principal() {
+        CkErc20Setup::default()
+            .call_minter_deposit_erc20(Principal::anonymous(), None)
+            .expect_trap("anonymous");
+    }
+}
+
 mod withdraw_erc20 {
     use super::*;
     use ic_base_types::PrincipalId;
