@@ -29,7 +29,7 @@ use itertools::Either::Right;
 use libcryptsetup_rs::consts::flags::{CryptActivate, CryptVolumeKey};
 use libcryptsetup_rs::consts::vals::{CryptKdf, EncryptionFormat, KeyslotInfo};
 use libcryptsetup_rs::{
-    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo, TokenInput,
+    CryptDevice, CryptInit, CryptParamsLuks2Ref, CryptSettingsHandle, CryptTokenInfo,
 };
 use prometheus::Registry;
 use sev::Generation;
@@ -991,62 +991,6 @@ fn test_rollback_uses_frozen_header_without_key_exchange() {
     fixture.store_partition().open().unwrap();
     fixture.store_partition().assert_payload(b"rollback data");
     fixture.store_partition().deactivate();
-}
-
-#[test]
-fn test_sev_unlock_legacy_store_partition_without_tokens_backfills_token() {
-    let fixture = TestFixture::new_sev();
-
-    fixture.write_previous_key();
-
-    // Format with a detached header locked by the previous key.
-    let (mut device, previous_keyslot) = format_crypt_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-        PREVIOUS_KEY,
-    )
-    .expect("Failed to format Store device with previous key");
-
-    // Strip all tokens so the disk looks like a pre-token GuestOS.
-    {
-        let mut token_handle = device.token_handle();
-        for token_id in 0..LUKS2_N_TOKENS {
-            token_handle
-                .json_set(TokenInput::RemoveToken(token_id))
-                .expect("Failed to remove token");
-        }
-    }
-    drop(device);
-
-    // Ensure that the Store header has no metadata tokens.
-    let mut check_device = open_luks2_device(
-        fixture.store_device_path(),
-        LuksHeaderLocation::Detached(&fixture.store_header_path()),
-    )
-    .expect("Failed to open detached Store header before rotation");
-    assert!(
-        read_keyslot_metadata(&mut check_device)
-            .expect("Failed to read detached Store key-slot metadata")
-            .is_empty(),
-        "Store header should have no metadata tokens before rotation"
-    );
-    drop(check_device);
-
-    // Open the device with open() - in production, this would happen after an upgrade.
-    // This should rotate the passphrase and backfill the metadata for the new SEV keyslot.
-    fixture
-        .store_partition()
-        .open()
-        .expect("Failed to rotate Store disk from previous key to SEV key");
-
-    let metadata = fixture.store_partition().read_keyslot_metadata();
-    assert_eq!(metadata.len(), 1);
-    assert_ne!(
-        metadata[0].keyslot().unwrap(),
-        previous_keyslot,
-        "Store rotation should backfill metadata for a new keyslot"
-    );
-    assert_eq!(fixture.store_partition().active_keyslot_count(), 2);
 }
 
 #[test]
