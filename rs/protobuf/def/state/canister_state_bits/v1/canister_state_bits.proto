@@ -434,7 +434,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 69
+// Next ID: 70
 message CanisterStateBits {
   reserved 1, 2, 3, 5, 6, 9, 10, 14, 16, 17, 24, 30, 35, 42, 47, 48, 49, 52, 53;
 
@@ -478,6 +478,9 @@ message CanisterStateBits {
   optional uint64 global_timer_nanos = 33;
   // Canister version.
   uint64 canister_version = 34;
+  // The round time at which the canister was created, in nanoseconds since the
+  // Unix epoch. Absent for canisters created before this field was introduced.
+  optional uint64 canister_creation_timestamp_nanos = 69;
   // Consumed cycles by use case presented as gauges. When prepayments happen
   // the respective amount is added to the consumed amount while when a refund
   // happens the refund amount is subtracted from consumed amount.

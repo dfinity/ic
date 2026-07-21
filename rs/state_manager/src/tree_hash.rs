@@ -200,6 +200,11 @@ mod tests {
                 metadata,
             );
             canister_state.execution_state = Some(execution_state);
+            // Exercise the `canister_creation_timestamp` leaf added in `V28`.
+            if certification_version >= CertificationVersion::V28 {
+                canister_state.system_state.canister_creation_timestamp =
+                    Some(Time::from_nanos_since_unix_epoch(1234));
+            }
 
             state.put_canister_state(canister_state);
 
@@ -401,6 +406,7 @@ mod tests {
             "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
             "057FA1842C06C958F79C6394C54E12F9C9DCF5036D186EBBB9A49CDB4E3683BF",
             "70D1FCB311A682DAB0350E075806E0A37985456D7BD171750C41A735CF8077F3",
+            "995B6CAFE481325EF08A84A0F1DA4DEE0E3C352B5F44998B20D021A044FD3AF2",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

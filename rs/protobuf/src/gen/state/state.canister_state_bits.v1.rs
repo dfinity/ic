@@ -650,7 +650,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 69
+/// Next ID: 70
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "4")]
@@ -713,6 +713,10 @@ pub struct CanisterStateBits {
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
+    /// The round time at which the canister was created, in nanoseconds since the
+    /// Unix epoch. Absent for canisters created before this field was introduced.
+    #[prost(uint64, optional, tag = "69")]
+    pub canister_creation_timestamp_nanos: ::core::option::Option<u64>,
     /// Consumed cycles by use case presented as gauges. When prepayments happen
     /// the respective amount is added to the consumed amount while when a refund
     /// happens the refund amount is subtracted from consumed amount.

@@ -64,6 +64,7 @@ fn test_wasmtime_system_api() {
         canister_id.get(),
         Cycles::zero(),
         UNIX_EPOCH,
+        UNIX_EPOCH,
         NumSeconds::from(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl),
     );

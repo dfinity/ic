@@ -40,6 +40,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
+            canister_creation_timestamp_nanos: item.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases: item
                 .consumed_cycles_by_use_cases
                 .into_iter()
@@ -197,6 +198,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )?,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
+            canister_creation_timestamp_nanos: value.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases,
             consumed_cycles_by_use_cases_as_counters,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field

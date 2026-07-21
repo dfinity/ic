@@ -53,6 +53,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         task_queue: TaskQueue::default(),
         global_timer_nanos: None,
         canister_version: 0,
+        canister_creation_timestamp_nanos: None,
         consumed_cycles_by_use_cases: BTreeMap::new(),
         consumed_cycles_by_use_cases_as_counters: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
