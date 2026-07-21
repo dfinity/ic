@@ -1,5 +1,5 @@
 {
-  "checksum": "22446b7b142461d94c2d08c9fe4db5d2d9047c00777054093d2d528ed771a456",
+  "checksum": "52fa5f4e480c85ab1c92bc61c3df62f84281c392d154b324bd1a4da5b9a3a411",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -7770,7 +7770,7 @@
         "deps": {
           "common": [
             {
-              "id": "bs58 0.5.0",
+              "id": "bs58 0.5.1",
               "target": "bs58"
             },
             {
@@ -9478,14 +9478,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "bs58 0.5.0": {
+    "bs58 0.5.1": {
       "name": "bs58",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "package_url": "https://github.com/Nullus157/bs58-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bs58/0.5.0/download",
-          "sha256": "f5353f36341f7451062466f0b755b96ac3a9547e4d7f6b70d603fc721a7d7896"
+          "url": "https://static.crates.io/crates/bs58/0.5.1/download",
+          "sha256": "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
         }
       },
       "targets": [
@@ -9527,7 +9527,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -18148,69 +18148,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling 0.13.4": {
-      "name": "darling",
-      "version": "0.13.4",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling/0.13.4/download",
-          "sha256": "a01d95850c592940db9b8194bc39f4bc0e89dee5c4265e4b1807c34a9aba453c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.13.4",
-              "target": "darling_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "darling_macro 0.13.4",
-              "target": "darling_macro"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.13.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "darling 0.20.11": {
       "name": "darling",
       "version": "0.20.11",
@@ -18274,69 +18211,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling 0.21.3": {
-      "name": "darling",
-      "version": "0.21.3",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling/0.21.3/download",
-          "sha256": "9cdf337090841a411e2a7f3deb9187445851f91b309c0c0a29e05f74a00a48c0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.21.3",
-              "target": "darling_core"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "darling_macro 0.21.3",
-              "target": "darling_macro"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.21.3"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "darling 0.23.0": {
       "name": "darling",
       "version": "0.23.0",
@@ -18393,80 +18267,6 @@
           "selects": {}
         },
         "version": "0.23.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "darling_core 0.13.4": {
-      "name": "darling_core",
-      "version": "0.13.4",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_core/0.13.4/download",
-          "sha256": "859d65a907b6852c9361e3185c862aae7fafd2887876799fa55f5f99dc40d610"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "strsim",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "ident_case 1.0.1",
-              "target": "ident_case"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "strsim 0.10.0",
-              "target": "strsim"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.13.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -18548,80 +18348,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling_core 0.21.3": {
-      "name": "darling_core",
-      "version": "0.21.3",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_core/0.21.3/download",
-          "sha256": "1247195ecd7e3c85f83c8d2a366e4210d588e802133e1e355180a9870b517ea4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "darling_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "strsim",
-            "suggestions"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "ident_case 1.0.1",
-              "target": "ident_case"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "strsim 0.11.1",
-              "target": "strsim"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.21.3"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "darling_core 0.23.0": {
       "name": "darling_core",
       "version": "0.23.0",
@@ -18692,61 +18418,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "darling_macro 0.13.4": {
-      "name": "darling_macro",
-      "version": "0.13.4",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_macro/0.13.4/download",
-          "sha256": "9c972679f83bdf9c42bd905396b6c3588a843a17f0f16dfcfa3e2c5d57441835"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "darling_macro",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_macro",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.13.4",
-              "target": "darling_core"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.13.4"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "darling_macro 0.20.11": {
       "name": "darling_macro",
       "version": "0.20.11",
@@ -18795,61 +18466,6 @@
         },
         "edition": "2021",
         "version": "0.20.11"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "darling_macro 0.21.3": {
-      "name": "darling_macro",
-      "version": "0.21.3",
-      "package_url": "https://github.com/TedDriggs/darling",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/darling_macro/0.21.3/download",
-          "sha256": "d38308df82d1080de0afee5d069fa14b0326a88c14f15c5ccda35b4a6c414c81"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "darling_macro",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "darling_macro",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling_core 0.21.3",
-              "target": "darling_core"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.21.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -21060,7 +20676,7 @@
               "alias": "bitcoin_dogecoin"
             },
             {
-              "id": "bs58 0.5.0",
+              "id": "bs58 0.5.1",
               "target": "bs58"
             },
             {
@@ -22040,7 +21656,7 @@
               "target": "serde_regex"
             },
             {
-              "id": "serde_with 1.14.0",
+              "id": "serde_with 3.21.0",
               "target": "serde_with"
             },
             {
@@ -34600,7 +34216,7 @@
               "target": "serde_json"
             },
             {
-              "id": "serde_with 3.16.0",
+              "id": "serde_with 3.21.0",
               "target": "serde_with"
             },
             {
@@ -72295,79 +71911,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_with 1.14.0": {
+    "serde_with 3.21.0": {
       "name": "serde_with",
-      "version": "1.14.0",
-      "package_url": "https://github.com/jonasbb/serde_with",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with/1.14.0/download",
-          "sha256": "678b5a069e50bf00ecd22d0cd8ddf7c236f68581b03db652061ed5eb13a312ff"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_with",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "macros",
-            "serde_with_macros"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_with_macros 1.5.2",
-              "target": "serde_with_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "1.14.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "serde_with 3.16.0": {
-      "name": "serde_with",
-      "version": "3.16.0",
+      "version": "3.21.0",
       "package_url": "https://github.com/jonasbb/serde_with/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_with/3.16.0/download",
-          "sha256": "10574371d41b0d9b2cff89418eda27da52bcaff2cc8741db26382a77c29131f1"
+          "url": "https://static.crates.io/crates/serde_with/3.21.0/download",
+          "sha256": "76a5c54c7310e7b8b9577c286d7e399ddd876c3e12b3ed917a8aabc4b96e9e8c"
         }
       },
       "targets": [
@@ -72411,13 +71962,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_with_macros 3.16.0",
+              "id": "serde_with_macros 3.21.0",
               "target": "serde_with_macros"
             }
           ],
           "selects": {}
         },
-        "version": "3.16.0"
+        "version": "3.21.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -72426,14 +71977,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_with_macros 1.5.2": {
+    "serde_with_macros 3.21.0": {
       "name": "serde_with_macros",
-      "version": "1.5.2",
+      "version": "3.21.0",
       "package_url": "https://github.com/jonasbb/serde_with/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_with_macros/1.5.2/download",
-          "sha256": "e182d6ec6f05393cc0e5ed1bf81ad6db3a8feedf8ee515ecdd369809bcce8082"
+          "url": "https://static.crates.io/crates/serde_with_macros/3.21.0/download",
+          "sha256": "84d57bc0c8b9a17920c178daa6bb924850d54a9c97ab45194bb8c17ad66bb660"
         }
       },
       "targets": [
@@ -72458,67 +72009,7 @@
         "deps": {
           "common": [
             {
-              "id": "darling 0.13.4",
-              "target": "darling"
-            },
-            {
-              "id": "proc-macro2 1.0.106",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.5.2"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "serde_with_macros 3.16.0": {
-      "name": "serde_with_macros",
-      "version": "3.16.0",
-      "package_url": "https://github.com/jonasbb/serde_with/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde_with_macros/3.16.0/download",
-          "sha256": "08a72d8216842fdd57820dc78d840bef99248e35fb2554ff923319e60f2d686b"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "serde_with_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_with_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "darling 0.21.3",
+              "id": "darling 0.23.0",
               "target": "darling"
             },
             {
@@ -72537,7 +72028,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.16.0"
+        "version": "3.21.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -76431,44 +75922,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "strsim 0.10.0": {
-      "name": "strsim",
-      "version": "0.10.0",
-      "package_url": "https://github.com/dguo/strsim-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/strsim/0.10.0/download",
-          "sha256": "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "strsim",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "strsim",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.10.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "strsim 0.11.1": {
       "name": "strsim",
@@ -98514,7 +97967,7 @@
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoin-dogecoin 0.32.7-doge.0",
-    "bs58 0.5.0",
+    "bs58 0.5.1",
     "build-info 0.0.27",
     "build-info-build 0.0.27",
     "by_address 1.1.0",
@@ -98767,7 +98220,7 @@
     "serde_cbor 0.11.2",
     "serde_json 1.0.145",
     "serde_regex 1.1.0",
-    "serde_with 1.14.0",
+    "serde_with 3.21.0",
     "serde_yaml 0.9.34+deprecated",
     "sev 7.1.0",
     "sha2 0.10.9",

@@ -881,7 +881,7 @@ serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_regex = "1.1.0"
-serde_with = "1.14.0"
+serde_with = "3.21.0"
 serde_yaml = "0.9.33"
 sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
