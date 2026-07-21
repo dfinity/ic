@@ -2,19 +2,24 @@
 Title:: Flexible HTTP outcalls.
 
 Goal:: Exhaustively exercise the `flexible_http_request` management canister
-endpoint on a free subnet (where flexible outcalls fall back to legacy pricing).
+endpoint on subnets where HTTP outcalls are free (a free-cost-schedule
+application subnet and a system subnet), where flexible outcalls fall back to
+legacy pricing.
 
 Runbook::
 0. Instantiate a universal VM with a webserver (httpbin).
-1. Instantiate an IC with one application subnet (4 nodes, free cost schedule)
-   with the HTTP feature enabled.
+1. Instantiate an IC with the HTTP feature enabled on both a 4-node application
+   subnet (free cost schedule) and the 1-node system subnet (free for outcalls
+   despite a normal cost schedule).
 2. Install NNS canisters.
-3. Install the proxy canister.
-4. Make flexible HTTP outcalls through the proxy canister covering:
+3. Install a proxy canister on each of the two subnets.
+4. Make flexible HTTP outcalls through the proxy canisters covering:
    - success across replication parameters and HTTP methods,
    - synchronous validation rejections,
    - runtime errors (too many rejects, responses too large),
-   - adapter-level per-node failures.
+   - adapter-level per-node failures,
+   - an outcall on the system subnet,
+   - fault tolerance: an outcall still succeeds with a subnet node killed.
 
 Success::
 1. Each scenario returns the expected `FlexibleHttpRequestResult` (or rejection).
@@ -527,8 +532,7 @@ fn test_put_with_deterministic_replication(env: TestEnv) {
                 min_responses: SUBNET_NODES,
                 max_responses: SUBNET_NODES,
             });
-            // Strip the (non-deterministic) echoed request headers so every node
-            // agrees on the response.
+            // Strip the echoed request headers.
             args.transform = Some(TransformContext {
                 function: TransformFunc(candid::Func {
                     principal: proxy_principal(env),
@@ -647,8 +651,8 @@ fn test_single_request_nondeterministic(env: TestEnv) {
 /// `max_responses` of them would exceed it, so the outcall succeeds with exactly
 /// `min_responses` responses.
 fn test_min_responses_fit_max_would_exceed(env: TestEnv) {
-    // Each node returns a 1 MB body: 2 just fit within the ~2 MiB
-    // (2_097_152 B) payload limit (2.0 MB), but 3 would exceed it (3.0 MB).
+    // Each node returns a 1 MB body: 2 bodies (2.0 MB) fit within the ~2 MiB
+    // (2_097_152 B) payload limit, but 3 (3.0 MB) exceed it.
     const BODY_SIZE: usize = 1_000_000;
     run_flexible_test(
         env,
@@ -768,7 +772,7 @@ fn test_head_method(env: TestEnv) {
         |env| {
             let mut args = get_args(format!("{}/anything", webserver_base(env)));
             args.method = HttpMethod::HEAD;
-            // Strip the echoed request headers for cross-node agreement.
+            // Strip the echoed request headers.
             args.transform = Some(TransformContext {
                 function: TransformFunc(candid::Func {
                     principal: proxy_principal(env),
@@ -1229,9 +1233,9 @@ fn test_too_many_rejects_non_https(env: TestEnv) {
 }
 
 /// When the aggregated responses are too large to fit in a block, the outcall
-/// reports `responses_too_large`. Each node returns a ~1 MiB body (below the
-/// per-response 2 MiB limit), but `min_responses` (3) of them exceed the 2 MiB
-/// payload limit.
+/// reports `responses_too_large`. Each node returns a ~1 MB body (below the
+/// per-node 2 MB limit), but `min_responses` (3) of them exceed the ~2 MiB
+/// block payload limit.
 fn test_responses_too_large(env: TestEnv) {
     run_flexible_test(
         env,
@@ -1449,8 +1453,9 @@ fn test_system_subnet_outcall(env: TestEnv) {
 
 /// A flexible outcall with `min_responses < total_requests` still succeeds when
 /// one of the committee's nodes is down — the defining reliability property of
-/// flexible outcalls. This test kills (and later restarts) a node, so it is
-/// registered as a trailing sequential test rather than in the parallel suite.
+/// flexible outcalls. This test kills a node and leaves it down, so it is
+/// registered as a trailing sequential test rather than in the parallel suite
+/// (nothing must run on the crippled subnet afterwards).
 fn test_fault_tolerance(env: TestEnv) {
     let logger = env.logger();
 
@@ -1488,7 +1493,7 @@ fn test_fault_tolerance(env: TestEnv) {
                     min_responses: 2,
                     max_responses: SUBNET_NODES,
                 });
-                // Attaching cycles should be possible, even of free subnets
+                // Attaching cycles should be possible, even on free subnets.
                 let result = send_flexible(&proxy, args, 1000).await?;
                 // At most the surviving nodes (n - 1) can respond.
                 let payloads = expect_ok(result, 2, (SUBNET_NODES - 1) as usize)?;

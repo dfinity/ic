@@ -3714,6 +3714,21 @@ fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
         "expected flexible replication, got {:?}",
         http_request_context.replication
     );
+
+    // A system subnet charges nothing for HTTP outcalls despite its normal cost
+    // schedule, so `try_add_http_context_to_replicated_state` treats it as free
+    // just like a free-cost-schedule subnet: the full payment is retained (to be
+    // refunded when the response is delivered) and nothing is marked refundable
+    // through the pay-as-you-go mechanism.
+    assert_eq!(http_request_context.request.payment, payment);
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        Cycles::new(0)
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        Cycles::new(0)
+    );
 }
 
 #[test]

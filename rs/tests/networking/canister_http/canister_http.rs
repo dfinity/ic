@@ -467,7 +467,7 @@ pub fn create_proxy_canister_with_cycles<'a>(
 
 pub fn get_proxy_canister_id_with_name(env: &TestEnv, name: &str) -> PrincipalId {
     env.read_json_object(name)
-        .expect("Proxy canister should should .")
+        .unwrap_or_else(|e| panic!("proxy canister id '{name}' not found in TestEnv: {e}"))
 }
 
 pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
