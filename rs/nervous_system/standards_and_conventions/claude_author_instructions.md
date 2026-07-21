@@ -214,7 +214,7 @@ List all defects in invalid data.
 
 When expecting an error, be specific.
 
-New tests must live in separate `*_tests.rs` files.
+Put tests in separate `*_tests.rs` or `tests.rs` files.
 
 Do not assert EXACT wording of error messages. Instead, look for key words and
 phrases.
