@@ -469,6 +469,11 @@ impl SubnetMetrics {
             .consumed_cycles_by_use_case_as_counters
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
+
+        // Migrate the legacy scalar outcall fields into the use-case map. This
+        // runs on every observed use case, independently of whether the scalar
+        // fields themselves are observed.
+        self.migrate_outcalls_cycles_to_use_cases();
     }
 
     pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
@@ -480,7 +485,6 @@ impl SubnetMetrics {
     }
 
     pub fn observe_consumed_cycles_http_outcalls(&mut self, cycles: NominalCycles) {
-        self.migrate_outcalls_cycles_to_use_cases();
         self.consumed_cycles_http_outcalls += cycles;
     }
 
@@ -489,14 +493,13 @@ impl SubnetMetrics {
     }
 
     pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
-        self.migrate_outcalls_cycles_to_use_cases();
         self.consumed_cycles_ecdsa_outcalls += cycles;
     }
 
     /// Migrates the cycles consumed by HTTP and ECDSA outcalls that are tracked
     /// in the legacy scalar fields (`consumed_cycles_http_outcalls` /
     /// `consumed_cycles_ecdsa_outcalls`) into the corresponding entries of
-    /// `consumed_cycles_by_use_case` and `consumed_cycles_by_use_case_as_counters`.
+    /// `consumed_cycles_by_use_case`.
     ///
     /// The scalar fields predate use-case tracking, so they are a superset of
     /// the corresponding use-case entries. We therefore bring the use-case
@@ -504,10 +507,14 @@ impl SubnetMetrics {
     /// that predates use-case tracking while avoiding double counting the
     /// overlapping period.
     ///
-    /// This runs whenever the scalar fields are observed, i.e. right before they
-    /// are incremented (the matching `observe_consumed_cycles_with_use_case`
-    /// call then bumps the use-case entry by the same amount). As a result the
-    /// use-case entries evolve in lockstep with the scalar fields.
+    /// This runs whenever a use case is observed (see
+    /// `observe_consumed_cycles_with_use_case`), i.e. independently of whether
+    /// the scalar fields themselves are observed, so the use-case entries also
+    /// catch up on subnets that stop performing outcalls.
+    ///
+    /// Only the `consumed_cycles_by_use_case` map is migrated; the monotonic
+    /// `consumed_cycles_by_use_case_as_counters` map is intentionally left
+    /// untouched (backfilling it would introduce a spurious counter jump).
     ///
     /// The scalar fields are intentionally kept (and kept up to date) rather
     /// than zeroed, so that they remain the source of truth for readers such as
@@ -532,11 +539,6 @@ impl SubnetMetrics {
                 .entry(use_case)
                 .or_insert_with(NominalCycles::zero);
             *entry = (*entry).max(scalar);
-            let counter = self
-                .consumed_cycles_by_use_case_as_counters
-                .entry(use_case)
-                .or_insert_with(NominalCycles::zero);
-            *counter = (*counter).max(scalar);
         }
     }
 

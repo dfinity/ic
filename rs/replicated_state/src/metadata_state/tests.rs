@@ -2409,7 +2409,7 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 }
 
 #[test]
-fn observe_outcalls_cycles_migrates_scalar_fields_into_use_cases() {
+fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
     let mut subnet_metrics = SubnetMetrics {
         // Simulate a state persisted before use-case tracking existed: the scalar
         // fields hold the full history while the use-case entries only cover a
@@ -2427,45 +2427,97 @@ fn observe_outcalls_cycles_migrates_scalar_fields_into_use_cases() {
         ..Default::default()
     };
 
-    // Observing an HTTP outcall first migrates the (superset) scalar fields into
-    // the use-case entries (via `max`), then bumps the HTTP scalar. In
-    // production the matching `observe_consumed_cycles_with_use_case` call then
-    // bumps the use-case entry by the same amount, keeping them in lockstep.
-    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
+    // Observing an *unrelated* use case triggers the migration, i.e. it runs
+    // independently of whether the HTTP/ECDSA scalar fields are observed.
     subnet_metrics
-        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
 
     let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
-    let by_use_case_as_counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
 
-    // HTTP: use-case entry caught up to the scalar (100) and then grew by 5.
+    // The HTTP/ECDSA use-case entries have been brought up to the (superset)
+    // scalar values, even though no outcall was observed.
     assert_eq!(
         by_use_case[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(105)
+        NominalCycles::new(100)
     );
-    assert_eq!(
-        by_use_case_as_counters[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(105)
-    );
-    // ECDSA: the scalar (200) has been migrated into the use-case entries as well.
     assert_eq!(
         by_use_case[&CyclesUseCase::ECDSAOutcalls],
         NominalCycles::new(200)
     );
+    // The observed use case was recorded as usual.
     assert_eq!(
-        by_use_case_as_counters[&CyclesUseCase::ECDSAOutcalls],
-        NominalCycles::new(200)
+        by_use_case[&CyclesUseCase::Instructions],
+        NominalCycles::new(5)
     );
 
-    // The scalar fields keep evolving in lockstep and are not zeroed (kept for
+    // The migration must NOT touch the monotonic counters map: its HTTP/ECDSA
+    // entries stay at their original values (only the just-observed use case
+    // grew).
+    let counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
+    assert_eq!(
+        counters[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(60)
+    );
+    assert_eq!(
+        counters[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(150)
+    );
+    assert_eq!(
+        counters[&CyclesUseCase::Instructions],
+        NominalCycles::new(5)
+    );
+
+    // The scalar fields are not zeroed (kept as the source of truth / for
     // downgrade compatibility).
     assert_eq!(
         subnet_metrics.get_consumed_cycles_http_outcalls(),
-        NominalCycles::new(105)
+        NominalCycles::new(100)
     );
     assert_eq!(
         subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
         NominalCycles::new(200)
+    );
+}
+
+#[test]
+fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
+    let mut subnet_metrics = SubnetMetrics {
+        // Pre-use-case-tracking history: the scalar (100) is a superset of the
+        // use-case entry (60).
+        consumed_cycles_http_outcalls: NominalCycles::new(100),
+        consumed_cycles_by_use_case: BTreeMap::from([(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(60),
+        )]),
+        consumed_cycles_by_use_case_as_counters: BTreeMap::from([(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(60),
+        )]),
+        ..Default::default()
+    };
+
+    // Production order for an HTTP outcall: the scalar is bumped first, then the
+    // matching use case is observed.
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
+    subnet_metrics
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
+
+    // The use-case entry caught up to the (superset) scalar and grew by 5, with
+    // no double counting.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(105)
+    );
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_http_outcalls(),
+        NominalCycles::new(105)
+    );
+
+    // The counters map is not migrated: it only reflects its own increment (5),
+    // not the backfilled history.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(65)
     );
 }
 
