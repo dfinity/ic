@@ -212,16 +212,24 @@ pub struct WithdrawalArg {
     pub from_subaccount: Option<Subaccount>,
 }
 
+/// Argument for the `deposit_erc20` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositErc20Arg {
+    pub mode: DepositMode,
+}
+
 /// How the fee for a ckERC20 deposit address registration is settled.
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositMode {
-    /// The registration fee is deducted from the deposited amount.
-    DeductFromDeposit,
-    /// The registration fee is paid upfront by the caller.
-    Sponsored {
-        from_subaccount: Option<[u8; 32]>,
-        max_fee: Nat,
-    },
+    /// The registration fee is deducted from the deposited amount. The deposit
+    /// address is derived from the caller's principal and the given subaccount.
+    Unsponsored { subaccount: Option<[u8; 32]> },
+    // TODO(DEFI-2927): a sponsor pays the registration fee upfront so the user
+    // receives the full deposited amount.
+    // Sponsored {
+    //     from_subaccount: Option<[u8; 32]>,
+    //     max_fee: Nat,
+    // },
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]

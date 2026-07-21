@@ -1,5 +1,5 @@
 use crate::deposit_address::{DepositAddressSchema, deposit_address};
-use crate::endpoints::{DepositErc20Error, DepositMode};
+use crate::endpoints::DepositErc20Error;
 use crate::state::State;
 use crate::timed_sized_map::{InsertError, Timestamp};
 use ic_secp256k1::PublicKey;
@@ -19,17 +19,7 @@ pub fn register_deposit_address(
     chain_code: &[u8; 32],
     now: Timestamp,
     account: Account,
-    mode: DepositMode,
 ) -> Result<String, DepositErc20Error> {
-    match mode {
-        DepositMode::Sponsored { .. } => {
-            return Err(DepositErc20Error::TemporarilyUnavailable(
-                "sponsored deposits are not yet supported".to_string(),
-            ));
-        }
-        DepositMode::DeductFromDeposit => {}
-    }
-
     let address = deposit_address(
         master_public_key,
         chain_code,

@@ -1850,7 +1850,6 @@ fn checked_sub(lhs: Erc20Balances, rhs: Erc20Balances) -> BTreeMap<Address, Erc2
 mod deposit_addresses_snapshot {
     use super::*;
     use crate::deposit_erc20::register_deposit_address;
-    use crate::endpoints::DepositMode;
     use crate::state::event::DepositAddressRegistration;
     use crate::timed_sized_map::Timestamp;
     use ic_secp256k1::PrivateKey;
@@ -1877,7 +1876,6 @@ mod deposit_addresses_snapshot {
                 &cc,
                 Timestamp::from_nanos(i as u64 + 1),
                 account,
-                DepositMode::DeductFromDeposit,
             )
             .unwrap();
         }

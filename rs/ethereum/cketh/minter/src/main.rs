@@ -13,10 +13,10 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Error, DepositMode,
-    Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
+    DepositErc20Error, DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg,
+    Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
+    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -176,11 +176,19 @@ async fn minter_address() -> String {
 }
 
 #[update]
-async fn deposit_erc20(account: Account, mode: DepositMode) -> Result<String, DepositErc20Error> {
+async fn deposit_erc20(arg: DepositErc20Arg) -> Result<String, DepositErc20Error> {
     validate_ckerc20_active();
+    let caller = validate_caller_not_anonymous();
+    let subaccount = match arg.mode {
+        DepositMode::Unsponsored { subaccount } => subaccount,
+    };
+    let account = Account {
+        owner: caller,
+        subaccount,
+    };
     let (public_key, chain_code) = state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| register_deposit_address(s, &public_key, &chain_code, now, account, mode))
+    mutate_state(|s| register_deposit_address(s, &public_key, &chain_code, now, account))
 }
 
 #[query]

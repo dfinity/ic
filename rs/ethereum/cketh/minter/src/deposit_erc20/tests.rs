@@ -1,6 +1,6 @@
 use super::*;
 use crate::test_fixtures::initial_state;
-use candid::{Nat, Principal};
+use candid::Principal;
 use ic_secp256k1::PrivateKey;
 
 fn master_key() -> (PublicKey, [u8; 32]) {
@@ -21,14 +21,7 @@ fn should_derive_and_store_deposit_address() {
     let (pk, cc) = master_key();
     let now = Timestamp::from_nanos(0);
 
-    let result = register_deposit_address(
-        &mut state,
-        &pk,
-        &cc,
-        now,
-        account(),
-        DepositMode::DeductFromDeposit,
-    );
+    let result = register_deposit_address(&mut state, &pk, &cc, now, account());
 
     let expected = deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account());
     assert_eq!(result, Ok(expected.to_string()));
@@ -44,50 +37,11 @@ fn should_return_same_address_without_growing_registry_on_reregistration() {
     let mut state = initial_state();
     let (pk, cc) = master_key();
 
-    let first = register_deposit_address(
-        &mut state,
-        &pk,
-        &cc,
-        Timestamp::from_nanos(0),
-        account(),
-        DepositMode::DeductFromDeposit,
-    );
-    let second = register_deposit_address(
-        &mut state,
-        &pk,
-        &cc,
-        Timestamp::from_nanos(1),
-        account(),
-        DepositMode::DeductFromDeposit,
-    );
+    let first = register_deposit_address(&mut state, &pk, &cc, Timestamp::from_nanos(0), account());
+    let second =
+        register_deposit_address(&mut state, &pk, &cc, Timestamp::from_nanos(1), account());
 
     assert!(first.is_ok());
     assert_eq!(first, second);
     assert_eq!(state.deposit_addresses.len(), 1);
-}
-
-#[test]
-fn should_reject_sponsored_mode_without_touching_registry() {
-    let mut state = initial_state();
-    let (pk, cc) = master_key();
-
-    let result = register_deposit_address(
-        &mut state,
-        &pk,
-        &cc,
-        Timestamp::from_nanos(0),
-        account(),
-        DepositMode::Sponsored {
-            from_subaccount: None,
-            max_fee: Nat::from(0_u8),
-        },
-    );
-
-    assert_eq!(
-        result,
-        Err(DepositErc20Error::TemporarilyUnavailable(
-            "sponsored deposits are not yet supported".to_string()
-        ))
-    );
-    assert!(state.deposit_addresses.is_empty());
 }

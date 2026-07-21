@@ -381,12 +381,17 @@ type WithdrawalError = variant {
     TemporarilyUnavailable : text;
 };
 
+// Argument for the deposit_erc20 endpoint.
+type DepositErc20Arg = record { mode : DepositMode };
+
 // How the fee for a ckERC20 deposit address registration is settled.
 type DepositMode = variant {
-    // The registration fee is deducted from the deposited amount.
-    DeductFromDeposit;
-    // The registration fee is paid upfront by the caller.
-    Sponsored : record { from_subaccount : opt blob; max_fee : nat };
+    // The registration fee is deducted from the deposited amount. The deposit
+    // address is derived from the caller's principal and the given subaccount.
+    Unsponsored : record { subaccount : opt blob };
+    // TODO(DEFI-2927): a sponsor pays the registration fee upfront so the user
+    // receives the full deposited amount.
+    // Sponsored : record { from_subaccount : opt blob; max_fee : nat };
 };
 
 type DepositErc20Error = variant {
@@ -745,9 +750,10 @@ service : (MinterArg) -> {
     // Withdraw the specified amount of ERC-20 tokens to the given Ethereum address.
     withdraw_erc20 : (WithdrawErc20Arg) -> (variant { Ok : RetrieveErc20Request; Err : WithdrawErc20Error });
 
-    // Derive and register the ckERC20 deposit address for the given account.
+    // Derive and register the ckERC20 deposit address for the caller.
+    // The account is derived from the caller's principal and the subaccount in the argument.
     // Returns the EIP-55 checksummed Ethereum deposit address.
-    deposit_erc20 : (Account, DepositMode) -> (variant { Ok : text; Err : DepositErc20Error });
+    deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : text; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);
