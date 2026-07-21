@@ -26,8 +26,8 @@ Boring code is good.
 
 ## Naming
 
-Use real words. Use the dictionary or encyclopedia as evidence. This includes
-acronyms. Exceptions:
+Use real words. Use the dictionary as evidence. For example, the dictionary
+knows about CPU, but it does not know that ws = white space. Exceptions:
 * `len`
 
 Be as specific as possible.

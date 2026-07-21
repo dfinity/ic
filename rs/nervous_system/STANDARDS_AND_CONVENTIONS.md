@@ -94,8 +94,9 @@ fixture - Same initial conditions used by multiple tests.
 
 ## Naming
 
-Use real words. Use the dictionary or encyclopedia as evidence. This includes
-acronyms. Exceptions (not in the dictionary, but acceptable):
+Use real words. Use the dictionary as evidence. For example, the dictionary
+knows about CPU, but it does not know that ws = white space. Exceptions (not in
+the dictionary, but acceptable):
 * `len`
 
 Be as specific as possible (but not more).
