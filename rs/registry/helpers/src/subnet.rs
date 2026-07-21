@@ -176,8 +176,9 @@ pub trait SubnetRegistry {
     ///
     /// 2. Non-CloudEngine with blank replica_version_id.
     ///
-    /// In practice, such data problems are prevented from happening elsewhere,
-    /// but we mention them here for completeness.
+    /// In practice, such data problems are prevented from happening elsewhere
+    /// (specifically, Registry's invariants checks), but we mention them here
+    /// for completeness.
     fn get_replica_version(
         &self,
         subnet_id: SubnetId,
