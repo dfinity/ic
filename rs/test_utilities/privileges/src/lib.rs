@@ -96,7 +96,8 @@ mod imp {
         fn prepare() -> Self {
             // Distinguishes concurrently prepared bases within one process.
             static SEQ: AtomicUsize = AtomicUsize::new(0);
-            let base = std::env::temp_dir().join(format!(
+            let temp_root = std::env::temp_dir();
+            let base = temp_root.join(format!(
                 "ic-nobody-{}-{}",
                 std::process::id(),
                 SEQ.fetch_add(1, Ordering::Relaxed)
@@ -119,7 +120,15 @@ mod imp {
             // directory listings or write access (the base itself stays `0700`
             // `nobody`). The sandbox is ephemeral and per-action, so this has no
             // effect beyond the running test.
-            grant_ancestor_traversal(&base);
+            //
+            // Confine this to the default temp root (`/tmp`, used precisely
+            // because `TMPDIR` is unset). An explicitly-configured `TMPDIR` is
+            // left untouched, so running tests as root *outside* the sandbox
+            // cannot be steered into world-traversing a sensitive directory
+            // (e.g. `TMPDIR=/root/tmp` must not relax `/root`).
+            if temp_root == std::path::Path::new("/tmp") {
+                grant_ancestor_traversal(&base);
+            }
             let entry = |name: &str| {
                 CString::new(format!("{name}={}", base.display()))
                     .expect("temp base path contains an interior NUL byte")
