@@ -177,6 +177,22 @@ system_test_nns(
 )
 
 system_test(
+    name = "queries_only_delegation_test",
+    cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:slog",
+        "@crate_index//:strum",
+    ],
+)
+
+system_test(
     name = "sender_info_test",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM with 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
