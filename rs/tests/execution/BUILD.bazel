@@ -179,6 +179,7 @@ system_test_nns(
 system_test(
     name = "queries_only_delegation_test",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
