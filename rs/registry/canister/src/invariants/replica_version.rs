@@ -388,8 +388,8 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_standard_engine_replica_version_record_key().as_bytes(),
             StandardEngineReplicaVersionRecord {
-                new_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
-                old_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
                 deployment_progress: 0.1,
             }
             .encode_to_vec(),
@@ -420,8 +420,8 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_standard_engine_replica_version_record_key().as_bytes(),
             StandardEngineReplicaVersionRecord {
-                new_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
-                old_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
                 deployment_progress: 0.1,
             }
             .encode_to_vec(),
@@ -473,8 +473,8 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![insert(
             make_standard_engine_replica_version_record_key().as_bytes(),
             StandardEngineReplicaVersionRecord {
-                new_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
-                old_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
                 deployment_progress: 0.1,
             }
             .encode_to_vec(),
