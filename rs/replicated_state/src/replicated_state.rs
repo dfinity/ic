@@ -1731,7 +1731,7 @@ impl ReplicatedState {
         let dropped_message_cycles = self
             .metadata
             .subnet_metrics
-            .get_consumed_cycles_by_use_case()
+            .get_consumed_cycles_by_use_case_as_counters()
             .get(&CyclesUseCase::DroppedMessages)
             .map(NominalCycles::get)
             .unwrap_or_default()
