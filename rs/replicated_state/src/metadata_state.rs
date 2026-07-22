@@ -618,7 +618,7 @@ impl SubnetMetrics {
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
-    /// state consumer for certification versions up to and including `V27`.
+    /// state consumer for certification versions up to and including `V28`.
     ///
     /// This version double counts the cycles consumed by deleted canisters: at
     /// deletion, a canister's per-use-case consumption is added both to

@@ -283,7 +283,7 @@ fn canonical_encoding_stream_header_v26() {
 /// }
 /// ```
 ///
-/// Expected (for certification versions up to and including `V27`):
+/// Expected (for certification versions up to and including `V28`):
 ///
 /// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
 /// the invividual values above.
@@ -304,7 +304,7 @@ fn canonical_encoding_stream_header_v26() {
 ///    19 1068                # unsigned(4200)
 /// ```
 ///
-/// Starting with `V28`, the `Instructions` (80B) and
+/// Starting with `V29`, the `Instructions` (80B) and
 /// `RequestAndResponseTransmission` (20B) use case entries are no longer added
 /// on top of the deleted canisters scalar (fixing the double counting), while
 /// the cycles consumed by non-deleted canisters (50B, passed to
