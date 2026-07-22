@@ -7,7 +7,11 @@ use std::{
 
 use axum::body::Body;
 use futures::FutureExt;
-use hickory_resolver::{Resolver, config::LookupIpStrategy};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
@@ -464,26 +468,34 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            // A literal IP address needs no DNS resolution. Short-circuit it so we don't build
-            // the DNS resolver, which reads the system config (`/etc/resolv.conf`) and fails
-            // with "no nameservers found in config" in environments without one (e.g. sandboxed
-            // remote execution).
-            let ip_addr = match domain.parse::<IpAddr>() {
-                Ok(ip_addr) => ip_addr,
-                Err(_) => {
-                    let mut dns_resolver = Resolver::builder_tokio()?;
-                    dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
-                    dns_resolver
-                        .build()?
-                        .lookup_ip(domain.as_str())
-                        .await?
-                        .iter()
-                        .next()
-                        .ok_or_else(|| {
-                            format!("API BN domain {domain} does not resolve to any IPv6 address.")
-                        })?
-                }
+            // To test the DNS resolution in a hermetic environment which does not have any external
+            // network access, we use a placeholder nameserver which is never contacted, because the
+            // domain used in the test is an IP literal. In production, the resolver will use the
+            // system's default nameservers to resolve the domain.
+            let mut dns_resolver = if !cfg!(test) {
+                Resolver::builder(TokioRuntimeProvider::default())?
+            } else {
+                Resolver::builder_with_config(
+                    ResolverConfig::from_parts(
+                        None,
+                        vec![],
+                        vec![NameServerConfig::udp_and_tcp(
+                            std::net::Ipv6Addr::LOCALHOST.into(),
+                        )],
+                    ),
+                    TokioRuntimeProvider::default(),
+                )
             };
+            dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
+            let ip_addr = dns_resolver
+                .build()?
+                .lookup_ip(domain.as_str())
+                .await?
+                .iter()
+                .next()
+                .ok_or_else(|| {
+                    format!("API BN domain {domain} does not resolve to any IPv6 address.",)
+                })?;
 
             let addr = SocketAddr::new(ip_addr, 443);
 
