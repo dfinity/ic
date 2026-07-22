@@ -707,6 +707,11 @@ impl StateLayout {
         &self.root
     }
 
+    /// `syncfs` the filesystem holding the state.
+    pub fn syncfs(&self) -> std::io::Result<()> {
+        syncfs(&self.root)
+    }
+
     /// Returns the path to the temporary directory.
     /// This directory is cleaned during restart of a node.
     pub fn tmp(&self) -> PathBuf {
@@ -2856,6 +2861,26 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
         }
     }
     Ok(false)
+}
+
+/// Synchronizes the filesystem containing the given path.
+///
+/// On Linux, this uses `syncfs` to synchronize the entire filesystem. On other
+/// platforms it falls back to `File::sync_all()`.
+fn syncfs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let f = std::fs::File::open(&path)?;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        if unsafe { libc::syncfs(f.as_raw_fd()) } == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        f.sync_all()?;
+    }
+    Ok(())
 }
 
 fn dir_list_recursive(

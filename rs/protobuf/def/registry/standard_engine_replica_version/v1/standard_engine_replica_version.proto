@@ -24,8 +24,8 @@ message StandardEngineReplicaVersionRecord {
   // 1. Compute SHA-256 of the concatenation of
   //    a. len("upgrade priority"): a single u8
   //    b. "upgrade priority": ASCII encoded
-  //    c. new_replica_version_id: hex decoded
-  //    d. the engine's subnet_id: raw bytes
+  //    c. new_replica_version_id: (not hex decoded)
+  //    d. the engine's subnet_id: text/display representation (not raw bytes)
   //
   // 2. Take the first 8 bytes of that hash, and interpret them as a
   //    little-endian 64 bit unsigned integer.

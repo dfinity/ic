@@ -19,6 +19,7 @@ pub mod memo;
 pub mod numeric;
 pub mod state;
 pub mod storage;
+pub mod timed_sized_map;
 pub mod tx;
 pub mod withdraw;
 
