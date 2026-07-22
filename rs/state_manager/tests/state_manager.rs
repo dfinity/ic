@@ -681,6 +681,74 @@ fn tip_can_be_recovered_from_empty_checkpoint() {
 }
 
 #[test]
+fn canister_creation_timestamp_survives_a_checkpoint() {
+    use ic_types::time::Time;
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let creation_timestamp = Time::from_nanos_since_unix_epoch(1234);
+
+        let (height, mut state) = state_manager.take_tip();
+        assert_eq!(height, Height(0));
+        insert_dummy_canister(&mut state, canister_id);
+        std::sync::Arc::make_mut(state.canister_state_mut_arc(&canister_id).unwrap())
+            .system_state
+            .canister_creation_timestamp = Some(creation_timestamp);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        // Restart the state manager so the state is reloaded from the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+
+        let (height, state) = state_manager.take_tip();
+        assert_eq!(height, Height(1));
+        assert_eq!(
+            state
+                .canister_state(&canister_id)
+                .unwrap()
+                .system_state
+                .canister_creation_timestamp,
+            Some(creation_timestamp),
+        );
+    });
+}
+
+#[test]
+fn last_install_timestamp_survives_a_checkpoint() {
+    use ic_types::time::Time;
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let canister_id: CanisterId = canister_test_id(100);
+        let install_timestamp = Time::from_nanos_since_unix_epoch(1234);
+
+        let (height, mut state) = state_manager.take_tip();
+        assert_eq!(height, Height(0));
+        // `insert_dummy_canister` gives the canister an execution state, on which
+        // the install timestamp lives.
+        insert_dummy_canister(&mut state, canister_id);
+        std::sync::Arc::make_mut(state.canister_state_mut_arc(&canister_id).unwrap())
+            .execution_state
+            .as_mut()
+            .unwrap()
+            .last_install_timestamp = Some(install_timestamp);
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        // Restart the state manager so the state is reloaded from the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+
+        let (height, state) = state_manager.take_tip();
+        assert_eq!(height, Height(1));
+        assert_eq!(
+            state
+                .canister_state(&canister_id)
+                .unwrap()
+                .execution_state
+                .as_ref()
+                .unwrap()
+                .last_install_timestamp,
+            Some(install_timestamp),
+        );
+    });
+}
+
+#[test]
 fn tip_can_be_recovered_from_metadata_checkpoint() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let canister_id: CanisterId = canister_test_id(100);

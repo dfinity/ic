@@ -18013,6 +18013,7 @@ dependencies = [
  "canister-test",
  "futures",
  "ic-agent 0.49.0",
+ "ic-config",
  "ic-error-types 0.2.0",
  "ic-management-canister-types-private",
  "ic-nns-constants",
