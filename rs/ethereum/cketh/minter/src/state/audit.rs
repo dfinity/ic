@@ -4,12 +4,11 @@ mod tests;
 use super::State;
 pub use super::event::{Event, EventType};
 use crate::erc20::CkTokenSymbol;
-use crate::state::automatic_deposits::AutomaticDeposits;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex};
 use crate::storage::{record_event, with_event_iter};
-use icrc_ledger_types::icrc1::account::Account;
+use crate::timed_sized_map::Timestamp;
 
 /// Updates the state to reflect the given state transition.
 // public because it's used in tests since process_event
@@ -167,19 +166,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 *block_number,
             );
         }
-        EventType::RegisteredDepositAddresses(registrations) => {
-            state.automatic_deposits =
-                AutomaticDeposits::from_entries(registrations.iter().map(|r| {
-                    (
-                        r.expires_at_nanos,
-                        Account {
-                            owner: r.owner,
-                            subaccount: r.subaccount,
-                        },
-                        r.address,
-                    )
-                }));
-        }
+        EventType::RegisteredDepositAddresses(registrations) => state
+            .automatic_deposits
+            .rebuild_watchlist(Timestamp::from_nanos(ic_cdk::api::time()), &registrations),
     }
 }
 

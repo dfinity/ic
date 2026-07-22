@@ -992,28 +992,34 @@ fn state_equivalence() {
         .unwrap();
 
     let log_scrapings = LogScrapings::new(BlockNumber::new(1_000_000));
-    let automatic_deposits = AutomaticDeposits::from_entries(vec![
-        (
-            Timestamp::from_nanos(1),
-            Account {
-                owner: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
-                subaccount: Some([0_u8; 32]),
-            },
-            "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0"
-                .parse()
-                .unwrap(),
-        ),
-        (
-            Timestamp::from_nanos(2),
-            Account {
-                owner: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
-                subaccount: Some([1_u8; 32]),
-            },
-            "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25"
-                .parse()
-                .unwrap(),
-        ),
-    ]);
+    let automatic_deposits = {
+        let mut deposits = AutomaticDeposits::default();
+        deposits
+            .watch_address_for_account(
+                Timestamp::from_nanos(1),
+                Account {
+                    owner: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
+                    subaccount: Some([0_u8; 32]),
+                },
+                "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0"
+                    .parse()
+                    .unwrap(),
+            )
+            .unwrap();
+        deposits
+            .watch_address_for_account(
+                Timestamp::from_nanos(2),
+                Account {
+                    owner: "ss2fx-dyaaa-aaaar-qacoq-cai".parse().unwrap(),
+                    subaccount: Some([1_u8; 32]),
+                },
+                "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25"
+                    .parse()
+                    .unwrap(),
+            )
+            .unwrap();
+        deposits
+    };
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),

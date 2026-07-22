@@ -29,7 +29,6 @@ use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
-use ic_cketh_minter::state::event::DepositAddressRegistration;
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
@@ -132,17 +131,7 @@ fn emit_preupgrade_events() {
         }
     });
 
-    let deposit_addresses = read_state(|s| {
-        s.automatic_deposits
-            .watchlist_iter()
-            .map(|(account, deposit)| DepositAddressRegistration {
-                owner: account.owner,
-                subaccount: account.subaccount,
-                address: deposit.value.address,
-                expires_at_nanos: deposit.expires_at,
-            })
-            .collect::<Vec<_>>()
-    });
+    let deposit_addresses = read_state(|s| s.automatic_deposits.watchlist_snapshot());
     if !deposit_addresses.is_empty() {
         storage::record_event(EventType::RegisteredDepositAddresses(deposit_addresses));
     }

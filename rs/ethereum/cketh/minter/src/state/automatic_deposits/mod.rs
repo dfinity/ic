@@ -1,7 +1,9 @@
 use crate::endpoints::DepositErc20Error;
+use crate::state::event::DepositAddressRegistration;
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
+use std::cmp::Reverse;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
@@ -51,29 +53,51 @@ impl AutomaticDeposits {
         }
     }
 
+    /// Rebuild the watchlist from a snapshot previously produced by
+    /// [`Self::watchlist_snapshot`], replacing any existing content.
+    ///
+    /// Entries are re-admitted under *this* version's limits rather than the
+    /// ones in effect when the snapshot was taken: entries already expired as of
+    /// `now` are dropped, each entry's validity is clamped to the current scan
+    /// window, and the current capacity is enforced. Since the snapshot lists
+    /// entries longest-lived first, the soonest-to-expire are the ones dropped
+    /// when the snapshot exceeds the current capacity.
+    pub fn rebuild_watchlist(&mut self, now: Timestamp, snapshot: &[DepositAddressRegistration]) {
+        assert!(
+            self.watchlist.is_empty(),
+            "BUG: attempted to rebuild non-empty watchlist"
+        );
+        for deposit in snapshot {
+            let account = Account {
+                owner: deposit.owner,
+                subaccount: deposit.subaccount,
+            };
+            let entry = Entry {
+                value: DepositRequest::from(deposit.address),
+                expires_at: deposit.expires_at_nanos,
+            };
+            let _ = self.watchlist.insert_entry(now, account, entry);
+        }
+    }
+
     pub fn watchlist_iter(&self) -> impl Iterator<Item = (&Account, &Entry<DepositRequest>)> {
         self.watchlist.iter()
     }
 
-    /// The watched address for `account`, or `None` if absent or expired as of `now`.
-    pub fn get(&self, now: Timestamp, account: &Account) -> Option<&Address> {
-        self.watchlist
-            .get(now, account)
-            .map(|request| &request.address)
-    }
+    pub fn watchlist_snapshot(&self) -> Vec<DepositAddressRegistration> {
+        let mut snapshot: Vec<_> = self
+            .watchlist
+            .iter()
+            .map(|(account, deposit)| DepositAddressRegistration {
+                owner: account.owner,
+                subaccount: account.subaccount,
+                address: deposit.value.address,
+                expires_at_nanos: deposit.expires_at,
+            })
+            .collect();
+        snapshot.sort_unstable_by_key(|deposit| Reverse(deposit.expires_at_nanos));
 
-    /// Rebuild the watchlist from a previously captured snapshot, preserving each entry's original
-    /// expiry time. This is a trusted restore of an already-valid snapshot.
-    pub fn from_entries(entries: impl IntoIterator<Item = (Timestamp, Account, Address)>) -> Self {
-        Self {
-            watchlist: TimedSizedMap::from_entries(
-                DEPOSIT_ADDRESS_SCAN_WINDOW,
-                MAX_ACTIVE_DEPOSIT_ADDRESSES,
-                entries.into_iter().map(|(expires_at, account, address)| {
-                    (expires_at, account, DepositRequest::from(address))
-                }),
-            ),
-        }
+        snapshot
     }
 }
 
