@@ -13,9 +13,9 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg,
-    Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
+    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
+    Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
+    RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
@@ -172,7 +172,7 @@ async fn minter_address() -> String {
 }
 
 #[update]
-async fn deposit_erc20(arg: DepositErc20Arg) -> Result<String, DepositErc20Error> {
+async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
     let subaccount = match arg.mode {
@@ -186,7 +186,12 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<String, DepositErc20Error
     // state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| s.register_deposit_address(now, account)).map(|address| address.to_string())
+    mutate_state(|s| s.register_deposit_address(now, account)).map(|(address, valid_until)| {
+        DepositErc20Response {
+            address: address.to_string(),
+            valid_until: valid_until.as_nanos(),
+        }
+    })
 }
 
 #[query]

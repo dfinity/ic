@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 /// Time window during which a registered ckERC20 deposit address is kept armed.
-const DEPOSIT_ADDRESS_SCAN_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+pub const DEPOSIT_ADDRESS_SCAN_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 // Ethereum blocktime is 12s (on average), so that there are 7_200 blocks per day.
 // Use 1 transaction per block to a minter-controlled address as a crude upper-bound.
@@ -24,24 +24,30 @@ pub struct AutomaticDeposits {
 impl AutomaticDeposits {
     /// Add the deposit `address` derived for `account` to the watchlist.
     ///
-    /// Returns the watched address. Re-registering an account that is still
-    /// armed returns the already-stored address without re-arming it, and
-    /// fails with [`DepositErc20Error::TooManyActiveAddresses`] when the
-    /// watchlist is full of live entries.
+    /// Returns the watched address together with the timestamp until which a
+    /// deposit to it is guaranteed to be noticed. Re-registering an account that
+    /// is still armed returns the already-stored address and its original
+    /// validity window without re-arming it, and fails with
+    /// [`DepositErc20Error::TooManyActiveAddresses`] when the watchlist is full
+    /// of live entries.
     pub fn watch_address_for_account(
         &mut self,
         now: Timestamp,
         account: Account,
         address: Address,
-    ) -> Result<Address, DepositErc20Error> {
+    ) -> Result<(Address, Timestamp), DepositErc20Error> {
         match self
             .watchlist
             .insert(now, account, DepositRequest::from(address))
         {
-            Ok(_) => Ok(address),
-            Err(InsertError::AlreadyPresent { .. }) => Ok(*self
-                .get(now, &account)
-                .expect("BUG: AlreadyPresent implies a live stored entry")),
+            Ok(_) => Ok((address, valid_until(now))),
+            Err(InsertError::AlreadyPresent { .. }) => {
+                let entry = self
+                    .watchlist
+                    .get_entry(now, &account)
+                    .expect("BUG: AlreadyPresent implies a live stored entry");
+                Ok((entry.value.address, valid_until(entry.inserted_at)))
+            }
             Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveAddresses),
         }
     }
@@ -83,6 +89,16 @@ impl Default for AutomaticDeposits {
             ),
         }
     }
+}
+
+/// The timestamp until which a deposit address registered at `registered_at` is
+/// kept armed, i.e. `registered_at + DEPOSIT_ADDRESS_SCAN_WINDOW`.
+fn valid_until(registered_at: Timestamp) -> Timestamp {
+    Timestamp::from_nanos(
+        registered_at
+            .as_nanos()
+            .saturating_add(DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64),
+    )
 }
 
 #[derive(Clone, PartialEq, Debug)]

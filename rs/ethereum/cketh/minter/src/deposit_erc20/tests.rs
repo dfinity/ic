@@ -24,7 +24,11 @@ fn should_derive_and_store_deposit_address() {
     let result = register_deposit_address(&mut state, &pk, &cc, now, account());
 
     let expected = deposit_address(&pk, &cc, DepositAddressSchema::CkErc20, &account());
-    assert_eq!(result, Ok(expected));
+    let expected_valid_until = Timestamp::from_nanos(
+        now.as_nanos()
+            + crate::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64,
+    );
+    assert_eq!(result, Ok((expected, expected_valid_until)));
     assert_eq!(state.automatic_deposits.watchlist_iter().count(), 1);
     assert_eq!(
         state.automatic_deposits.get(now, &account()),

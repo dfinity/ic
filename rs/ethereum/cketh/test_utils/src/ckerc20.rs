@@ -25,7 +25,7 @@ use ic_cketh_minter::endpoints::ckerc20::{
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositMode, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
 };
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_ethereum_types::Address;
@@ -1015,14 +1015,14 @@ impl DepositErc20Flow {
         self.setup
     }
 
-    pub fn expect_deposit_address(self) -> (CkErc20Setup, String) {
-        let deposit_address = self
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositErc20Response) {
+        let response = self
             .minter_response()
             .expect("BUG: unexpected error from minter during deposit_erc20");
-        (self.setup, deposit_address)
+        (self.setup, response)
     }
 
-    fn minter_response(&self) -> Result<String, DepositErc20Error> {
+    fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
         Decode!(
             &assert_reply(
                 self.setup
@@ -1030,7 +1030,7 @@ impl DepositErc20Flow {
                     .await_ingress(self.message_id.clone(), MAX_TICKS)
                     .expect("failed to resolve message with id: {message_id}")
             ),
-            Result<String, DepositErc20Error>
+            Result<DepositErc20Response, DepositErc20Error>
         )
         .unwrap()
     }

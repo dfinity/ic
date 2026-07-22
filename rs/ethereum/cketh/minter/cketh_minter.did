@@ -394,6 +394,15 @@ type DepositMode = variant {
     // Sponsored : record { from_subaccount : opt blob; max_fee : nat };
 };
 
+// Response of the deposit_erc20 endpoint.
+type DepositErc20Response = record {
+    // The Ethereum deposit address derived for the caller.
+    address : text;
+    // Timestamp in nanoseconds since the Unix epoch until which a deposit sent
+    // to `address` is guaranteed to be noticed by the minter.
+    valid_until : nat64;
+};
+
 type DepositErc20Error = variant {
     // The maximum number of concurrently armed deposit addresses has been reached.
     TooManyActiveAddresses;
@@ -753,7 +762,7 @@ service : (MinterArg) -> {
     // Derive and register the ckERC20 deposit address for the caller.
     // The account is derived from the caller's principal and the subaccount in the argument.
     // Returns the EIP-55 checksummed Ethereum deposit address.
-    deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : text; Err : DepositErc20Error });
+    deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.
     retrieve_eth_status : (nat64) -> (RetrieveEthStatus);

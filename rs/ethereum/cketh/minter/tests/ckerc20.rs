@@ -146,9 +146,12 @@ fn should_mint_with_ckerc20_setup() {
 
 mod deposit_erc20 {
     use candid::Principal;
+    use ic_cketh_minter::endpoints::DepositErc20Response;
+    use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
     use ic_ledger_suite_orchestrator_test_utils::new_state_machine;
     use std::sync::Arc;
+    use std::time::Duration;
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
@@ -171,29 +174,46 @@ mod deposit_erc20 {
         let ckerc20 = CkErc20Setup::default();
         let caller = ckerc20.caller();
 
-        let (ckerc20, address) = ckerc20
+        // Ensure the minter's ECDSA public key is cached (it is dropped by the
+        // upgrades performed while building the setup) so that the deposit_erc20
+        // call below executes in a single round without an inter-canister call.
+        let _ = ckerc20.cketh.minter_address();
+
+        // Advance time so that it does not grow implicitly when executing the round
+        // registering the deposit address, making `valid_until` deterministic.
+        ckerc20.env.advance_time(Duration::from_secs(1));
+        let now = ckerc20.env.get_time().as_nanos_since_unix_epoch();
+        let expected = DepositErc20Response {
+            address: "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C".to_string(),
+            valid_until: now + DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64,
+        };
+
+        let (ckerc20, response) = ckerc20
             .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
-            .expect_deposit_address();
+            .expect_deposit_response();
         assert_eq!(
-            address, "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C",
-            "BUG: key derivation should be stable"
+            response, expected,
+            "BUG: unexpected deposit_erc20 response, key derivation should be stable"
         );
 
-        let (ckerc20, address2) = ckerc20
+        let (ckerc20, response2) = ckerc20
             .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
-            .expect_deposit_address();
-        assert_eq!(address, address2, "BUG: deposit_erc20 should be idempotent");
+            .expect_deposit_response();
+        assert_eq!(
+            response, response2,
+            "BUG: deposit_erc20 should be idempotent"
+        );
 
         ckerc20
             .cketh
             .check_audit_logs_and_upgrade_as_ref(Default::default());
 
-        let (_ckerc20, address3) = ckerc20
+        let (_ckerc20, response3) = ckerc20
             .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
-            .expect_deposit_address();
+            .expect_deposit_response();
 
         assert_eq!(
-            address, address3,
+            response, response3,
             "BUG: deposit_erc20 should be idempotent after canister upgrade"
         )
     }

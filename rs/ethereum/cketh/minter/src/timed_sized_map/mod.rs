@@ -1,7 +1,7 @@
+use minicbor::{Decode, Encode};
 use std::collections::{BTreeMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use minicbor::{Decode, Encode};
 
 #[cfg(test)]
 mod tests;
@@ -97,11 +97,17 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
 
     /// The live value under `key`, or `None` if absent or expired as of `now`.
     pub fn get(&self, now: Timestamp, key: &K) -> Option<&V> {
+        self.get_entry(now, key).map(|entry| &entry.value)
+    }
+
+    /// The live entry under `key` (value together with its insertion time), or `None` if absent or
+    /// expired as of `now`.
+    pub fn get_entry(&self, now: Timestamp, key: &K) -> Option<&Entry<V>> {
         let entry = self.entries.get(key)?;
         if self.is_expired(entry.inserted_at, now) {
             None
         } else {
-            Some(&entry.value)
+            Some(entry)
         }
     }
 

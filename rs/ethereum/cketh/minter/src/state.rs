@@ -617,13 +617,15 @@ impl State {
     /// Derive the ckERC20 deposit address for `account` from the minter's master
     /// threshold-ECDSA public key and add it to the watchlist of automatic deposits.
     ///
-    /// Fails with [`DepositErc20Error::TemporarilyUnavailable`] if the minter's
-    /// public key has not been fetched yet.
+    /// Returns the deposit address together with the timestamp until which a
+    /// deposit to it is guaranteed to be noticed. Fails with
+    /// [`DepositErc20Error::TemporarilyUnavailable`] if the minter's public key
+    /// has not been fetched yet.
     pub fn register_deposit_address(
         &mut self,
         now: Timestamp,
         account: Account,
-    ) -> Result<Address, DepositErc20Error> {
+    ) -> Result<(Address, Timestamp), DepositErc20Error> {
         let (master_public_key, chain_code) =
             self.public_key_and_chain_code()
                 .ok_or(DepositErc20Error::TemporarilyUnavailable(

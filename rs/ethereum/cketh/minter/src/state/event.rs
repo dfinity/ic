@@ -7,11 +7,11 @@ use crate::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
 };
+use crate::timed_sized_map::Timestamp;
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
-use crate::timed_sized_map::Timestamp;
 
 /// The event describing the ckETH minter state transition.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]

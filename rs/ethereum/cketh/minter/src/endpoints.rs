@@ -232,6 +232,16 @@ pub enum DepositMode {
     // },
 }
 
+/// Response of the `deposit_erc20` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositErc20Response {
+    /// The Ethereum deposit address derived for the caller.
+    pub address: String,
+    /// Timestamp in nanoseconds since the Unix epoch until which a deposit sent
+    /// to `address` is guaranteed to be noticed by the minter.
+    pub valid_until: u64,
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum DepositErc20Error {
     /// The maximum number of concurrently armed deposit addresses has been reached.
