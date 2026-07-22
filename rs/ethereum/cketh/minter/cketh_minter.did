@@ -628,7 +628,7 @@ type Event = record {
                 owner : principal;
                 subaccount : opt Subaccount;
                 address : text;
-                registered_at_nanos : nat64;
+                expires_at_nanos : nat64;
             };
         };
     };

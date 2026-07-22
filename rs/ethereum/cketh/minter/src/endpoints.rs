@@ -539,7 +539,7 @@ pub mod events {
         pub owner: Principal,
         pub subaccount: Option<[u8; 32]>,
         pub address: String,
-        pub registered_at_nanos: u64,
+        pub expires_at_nanos: u64,
     }
 }
 

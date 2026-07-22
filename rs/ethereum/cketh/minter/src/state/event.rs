@@ -188,7 +188,7 @@ pub struct DepositAddressRegistration {
     #[n(2)]
     pub address: Address,
     #[n(3)]
-    pub registered_at_nanos: Timestamp,
+    pub expires_at_nanos: Timestamp,
 }
 
 impl ReceivedEvent {

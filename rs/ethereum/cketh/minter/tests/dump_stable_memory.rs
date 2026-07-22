@@ -417,7 +417,7 @@ fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
                                 owner: a.owner,
                                 subaccount: a.subaccount,
                                 address: a.address.parse().unwrap(),
-                                registered_at_nanos: Timestamp::from_nanos(a.registered_at_nanos),
+                                expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
                             },
                         )
                         .collect(),

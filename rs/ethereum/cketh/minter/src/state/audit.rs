@@ -171,7 +171,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state.automatic_deposits =
                 AutomaticDeposits::from_entries(registrations.iter().map(|r| {
                     (
-                        r.registered_at_nanos,
+                        r.expires_at_nanos,
                         Account {
                             owner: r.owner,
                             subaccount: r.subaccount,

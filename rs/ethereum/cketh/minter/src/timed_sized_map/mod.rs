@@ -92,7 +92,7 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.get_entry(now, key).map(|entry| &entry.value)
     }
 
-    /// The live entry under `key` (value together with its insertion time), or `None` if absent or
+    /// The live entry under `key` (value together with its expiry time), or `None` if absent or
     /// expired as of `now`.
     pub fn get_entry(&self, now: Timestamp, key: &K) -> Option<&Entry<V>> {
         let entry = self.entries.get(key)?;

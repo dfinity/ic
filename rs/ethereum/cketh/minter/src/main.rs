@@ -139,7 +139,7 @@ fn emit_preupgrade_events() {
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit.value.address,
-                registered_at_nanos: deposit.expires_at,
+                expires_at_nanos: deposit.expires_at,
             })
             .collect::<Vec<_>>()
     });
@@ -721,7 +721,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                                 owner: r.owner,
                                 subaccount: r.subaccount,
                                 address: r.address.to_string(),
-                                registered_at_nanos: r.registered_at_nanos.as_nanos(),
+                                expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             })
                             .collect(),
                     }
