@@ -1055,18 +1055,28 @@ impl LocalBackend {
         let uuid = vm_uuid(group_name, vm_name);
 
         // Create the per-VM TAP, attach it to the group bridge, and bring it up.
-        // `user <current>` tags the TAP as owned by the driver's (unprivileged)
-        // user, letting QEMU — which runs as that same user — open it via
+        // `user <uid>` tags the TAP as owned by the driver's effective uid,
+        // letting QEMU — which runs as that same uid — open it via
         // `-netdev tap,ifname=...,script=no,downscript=no` by owner match, so
-        // QEMU itself needs no capability. Recreating it fresh (delete first)
-        // keeps this idempotent across a re-used VM (e.g. `vm().kill()` +
-        // `vm().start()`).
+        // opening the device relies on no QEMU capability (even though QEMU does
+        // inherit the ambient net caps — see `raise_ambient_net_caps`). Recreating
+        // it fresh (delete first) keeps this idempotent across a re-used VM (e.g.
+        // `vm().kill()` + `vm().start()`).
+        //
+        // We pass the numeric effective uid, not a username: the kernel resolves
+        // the `TUNSETOWNER` uid through the driver's private user namespace, whose
+        // only mapped uid is the driver's own (see `ensure_administrable_netns`,
+        // which maps a single uid — the caller's, or `1` when the caller is
+        // fake-root). Any other uid — e.g. the one a username like `ubuntu`
+        // resolves to — is unmapped there, so `ioctl(TUNSETOWNER)` fails with
+        // `EINVAL`. `geteuid()` here returns that inner uid, which is also the uid
+        // QEMU runs as, so the owner match holds.
         let tap = Self::tap_name(group_name, vm_name);
         let bridge = Self::bridge_name(group_name);
-        let user = current_username();
+        let uid = nix::unistd::geteuid().as_raw();
         let tap_script = format!(
             "ip link del {tap} 2>/dev/null; \
-             ip tuntap add dev {tap} mode tap user {user} && \
+             ip tuntap add dev {tap} mode tap user {uid} && \
              ip link set dev {tap} master {bridge} && \
              ip link set dev {tap} up"
         );
@@ -1080,7 +1090,7 @@ impl LocalBackend {
         if has_ipv4 {
             let tap_ipv4_script = format!(
                 "ip link del {tap_ipv4} 2>/dev/null; \
-                 ip tuntap add dev {tap_ipv4} mode tap user {user} && \
+                 ip tuntap add dev {tap_ipv4} mode tap user {uid} && \
                  ip link set dev {tap_ipv4} master {bridge} && \
                  ip link set dev {tap_ipv4} up"
             );
@@ -1453,14 +1463,6 @@ fn sanitize_name(s: &str) -> String {
             }
         })
         .collect()
-}
-
-/// The current user's login name, used to tag TAP device ownership so the
-/// unprivileged QEMU (which runs as the same user) may open them. Falls back to
-/// the `USER` environment variable and finally to `ubuntu` (the container's
-/// default user).
-fn current_username() -> String {
-    std::env::var("USER").unwrap_or_else(|_| "ubuntu".to_string())
 }
 
 /// Send a single no-argument QMP command to a VM's monitor socket and wait for
