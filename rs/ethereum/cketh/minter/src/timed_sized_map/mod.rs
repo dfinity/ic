@@ -61,6 +61,12 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         }
     }
 
+    /// Remove all entries, leaving `ttl` and `capacity` unchanged.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.by_time.clear();
+    }
+
     /// Insert `value` under `key`. Returns an [`InsertError`] if the key already has a live entry
     /// ([`InsertError::AlreadyPresent`] — refreshing a live entry is not allowed, so a caller cannot
     /// extend an entry's lifetime by re-inserting it; the map is left unchanged) or, after evicting

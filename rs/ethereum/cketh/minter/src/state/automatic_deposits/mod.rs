@@ -63,10 +63,7 @@ impl AutomaticDeposits {
     /// entries longest-lived first, the soonest-to-expire are the ones dropped
     /// when the snapshot exceeds the current capacity.
     pub fn rebuild_watchlist(&mut self, now: Timestamp, snapshot: &[DepositAddressRegistration]) {
-        assert!(
-            self.watchlist.is_empty(),
-            "BUG: attempted to rebuild non-empty watchlist"
-        );
+        self.watchlist.clear();
         for deposit in snapshot {
             let account = Account {
                 owner: deposit.owner,
