@@ -133,6 +133,89 @@ fn should_expire_entries_after_ttl() {
 }
 
 #[test]
+fn should_clamp_insert_entry_expiry_to_ttl() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+
+    // The entry claims to live until ts(100), but the cache ttl caps it at ts(10).
+    map.insert_entry(
+        ts(0),
+        "a",
+        Entry {
+            value: 1,
+            expires_at: ts(100),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(map.get(ts(10), &"a"), Some(&1));
+    assert_eq!(map.get(ts(11), &"a"), None);
+    assert_consistent(&map);
+}
+
+#[test]
+fn should_keep_insert_entry_expiry_shorter_than_ttl() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+
+    map.insert_entry(
+        ts(0),
+        "a",
+        Entry {
+            value: 1,
+            expires_at: ts(5),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(map.get(ts(5), &"a"), Some(&1));
+    assert_eq!(map.get(ts(6), &"a"), None);
+    assert_consistent(&map);
+}
+
+#[test]
+fn should_ignore_already_expired_insert_entry() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(10), cap(5));
+
+    let evicted = map
+        .insert_entry(
+            ts(20),
+            "a",
+            Entry {
+                value: 1,
+                expires_at: ts(5),
+            },
+        )
+        .unwrap();
+
+    assert!(evicted.is_empty());
+    assert!(map.is_empty());
+    assert_eq!(map.get(ts(20), &"a"), None);
+    assert_consistent(&map);
+}
+
+#[test]
+fn should_reject_insert_entry_when_full_of_live_entries() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(1000), cap(1));
+    map.insert(ts(1), "a", 1).unwrap();
+    let before = map.clone();
+
+    let rejected = map.insert_entry(
+        ts(2),
+        "b",
+        Entry {
+            value: 2,
+            expires_at: ts(500),
+        },
+    );
+
+    assert_eq!(
+        rejected,
+        Err(InsertError::AtCapacity { key: "b", value: 2 })
+    );
+    assert_eq!(map, before);
+    assert_consistent(&map);
+}
+
+#[test]
 fn should_preserve_timestamps_and_not_evict_or_cap_in_from_entries() {
     let entries = vec![(ts(0), "a", 1), (ts(1_000_000), "b", 2)];
     let map = TimedSizedMap::from_entries(Duration::from_nanos(10), cap(1), entries);
