@@ -5,8 +5,9 @@ use super::subnet_call_context_manager::{
 };
 use super::*;
 use crate::metadata_state::testing::SystemMetadataTesting;
+use crate::metrics::ReplicatedStateMetrics;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
-use crate::{CanisterPriority, InputQueueType};
+use crate::{CanisterPriority, InputQueueType, ReplicatedState};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -15,13 +16,16 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::no_op_logger;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
+use ic_test_utilities_metrics::fetch_gauge;
 use ic_test_utilities_types::ids::{
     SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
     user_test_id,
@@ -2453,6 +2457,77 @@ fn consumed_cycles_total_calculates_the_right_amount() {
         subnet_metrics.consumed_cycles_total_v27(),
         NominalCycles::new(131064)
     );
+}
+
+/// The `replicated_state_consumed_cycles_since_replica_started` gauge is
+/// computed in `ReplicatedStateMetrics::observe` by summing the per-canister
+/// totals with the subnet-level use cases. This test exercises every
+/// subnet-level use case that contributes to the total, so that omitting any of
+/// them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use cases once were)
+/// would change the reported value and fail the assertion. Distinct powers of
+/// two are used so that a missing use case is always detectable in the total.
+#[test]
+fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
+    // The three use cases with a dedicated scalar field are also mirrored in the
+    // by-use-case map (as they are in production), while `SchnorrOutcalls`,
+    // `VetKd` and `DroppedMessages` live only in the map.
+    let mut consumed_cycles_by_use_case = BTreeMap::new();
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(4));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(16));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(32));
+
+    // The canister-level use cases are also present in the by-use-case map (in
+    // production they end up there via deleted canisters), but the gauge derives
+    // their contribution from the per-canister totals and the
+    // `consumed_cycles_by_deleted_canisters` scalar rather than from the map.
+    // Insert them with a large value to ensure they are *not* double-counted
+    // into the gauge total from the map.
+    for use_case in [
+        CyclesUseCase::Memory,
+        CyclesUseCase::ComputeAllocation,
+        CyclesUseCase::IngressInduction,
+        CyclesUseCase::Instructions,
+        CyclesUseCase::RequestAndResponseTransmission,
+        CyclesUseCase::Uninstall,
+        CyclesUseCase::CanisterCreation,
+        CyclesUseCase::BurnedCycles,
+    ] {
+        consumed_cycles_by_use_case.insert(use_case, NominalCycles::new(1024));
+    }
+
+    let subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
+        consumed_cycles_http_outcalls: NominalCycles::new(4),
+        consumed_cycles_by_use_case,
+        ..Default::default()
+    };
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.metadata.subnet_metrics = subnet_metrics;
+
+    let registry = MetricsRegistry::new();
+    let metrics = ReplicatedStateMetrics::new(&registry);
+    metrics.observe(
+        state.metadata.own_subnet_id,
+        &state,
+        Height::new(0),
+        &no_op_logger(),
+    );
+
+    // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
+    // + dropped messages (32) = 63. There are no canisters, so the per-canister
+    // contribution is zero, and the canister-level use cases inserted into the
+    // map above (each worth 1024) must not appear in the total.
+    let gauge = fetch_gauge(
+        &registry,
+        "replicated_state_consumed_cycles_since_replica_started",
+    )
+    .unwrap();
+    assert_eq!(gauge, 63.0);
 }
 
 #[test]
