@@ -73,17 +73,49 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         key: K,
         value: V,
     ) -> Result<Vec<(K, V)>, InsertError<K, V>> {
+        self.insert_entry(
+            now,
+            key,
+            Entry {
+                value,
+                expires_at: self.expiry(now),
+            },
+        )
+    }
+
+    /// Insert a timestamped `value` under `key`.
+    ///
+    /// Inserting an already-expired entry is a no-op.
+    /// The entry's validity is clamped to that of the one defined by the cache.
+    pub fn insert_entry(
+        &mut self,
+        now: Timestamp,
+        key: K,
+        entry: Entry<V>,
+    ) -> Result<Vec<(K, V)>, InsertError<K, V>> {
+        if is_expired(entry.expires_at, now) {
+            return Ok(vec![]);
+        }
         if self.get(now, &key).is_some() {
-            return Err(InsertError::AlreadyPresent { key, value });
+            return Err(InsertError::AlreadyPresent {
+                key,
+                value: entry.value,
+            });
         }
         let evicted = self.evict_expired(now);
         if self.entries.len() >= self.capacity.get() {
-            return Err(InsertError::AtCapacity { key, value });
+            return Err(InsertError::AtCapacity {
+                key,
+                value: entry.value,
+            });
         }
-        let expires_at = self.expiry(now);
-        self.entries
-            .insert(key.clone(), Entry { value, expires_at });
-        self.by_time.entry(expires_at).or_default().push_back(key);
+        let mut entry = entry;
+        entry.expires_at = entry.expires_at.min(self.expiry(now));
+        self.by_time
+            .entry(entry.expires_at)
+            .or_default()
+            .push_back(key.clone());
+        self.entries.insert(key, entry);
         Ok(evicted)
     }
 
