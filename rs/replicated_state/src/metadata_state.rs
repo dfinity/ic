@@ -546,6 +546,33 @@ impl SubnetMetrics {
         self.consumed_cycles_ecdsa_outcalls
     }
 
+    /// Cycles consumed by Schnorr threshold-signature outcalls. Unlike ECDSA and
+    /// HTTP outcalls, this use case has no dedicated field; it is only tracked in
+    /// the by-use-case map (it can never originate from a deleted canister, so
+    /// the map entry is exactly the subnet-level consumption).
+    pub fn get_consumed_cycles_schnorr_outcalls(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::SchnorrOutcalls)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
+    /// Cycles consumed by VetKd outcalls. See `get_consumed_cycles_schnorr_outcalls`.
+    pub fn get_consumed_cycles_vetkd(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::VetKd)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
+    /// Cycles lost due to dropped messages. See `get_consumed_cycles_schnorr_outcalls`.
+    pub fn get_consumed_cycles_dropped_messages(&self) -> NominalCycles {
+        self.consumed_cycles_by_use_case
+            .get(&CyclesUseCase::DroppedMessages)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero)
+    }
+
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
     }
