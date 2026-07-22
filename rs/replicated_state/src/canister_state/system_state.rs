@@ -571,6 +571,12 @@ pub struct SystemState {
     /// Canister version.
     canister_version: u64,
 
+    /// The round time at which the canister was created, in nanoseconds since the
+    /// Unix epoch. It is `None` only for canisters created before this field was
+    /// introduced (i.e. loaded from a checkpoint that predates it); every newly
+    /// created canister has it set.
+    pub canister_creation_timestamp: Option<Time>,
+
     /// Canister history.
     #[validate_eq(CompareWithValidateEq)]
     canister_history: CanisterHistory,
@@ -726,6 +732,7 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         time_of_last_allocation_charge: Time,
+        canister_creation_timestamp: Time,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
@@ -734,6 +741,7 @@ impl SystemState {
             controller,
             initial_cycles,
             time_of_last_allocation_charge,
+            Some(canister_creation_timestamp),
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
@@ -745,6 +753,7 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         time_of_last_allocation_charge: Time,
+        canister_creation_timestamp: Option<Time>,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
@@ -771,6 +780,7 @@ impl SystemState {
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
+            canister_creation_timestamp,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
@@ -808,6 +818,7 @@ impl SystemState {
         task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
+        canister_creation_timestamp: Option<Time>,
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
@@ -843,6 +854,7 @@ impl SystemState {
             task_queue,
             global_timer,
             canister_version,
+            canister_creation_timestamp,
             canister_history,
             wasm_chunk_store: WasmChunkStore::from_checkpoint(
                 wasm_chunk_store_data,
@@ -926,6 +938,7 @@ impl SystemState {
             controller,
             initial_cycles,
             UNIX_EPOCH,
+            None,
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
@@ -2685,6 +2698,7 @@ pub mod testing {
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: Default::default(),
+            canister_creation_timestamp: Default::default(),
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
