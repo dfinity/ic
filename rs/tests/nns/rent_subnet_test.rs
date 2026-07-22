@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResourceOverrides},
+        ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
@@ -132,38 +132,36 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    let mut ic = InternetComputer::new();
-
-    // This hack is needed so that we can install a (mock) Exchange Rate
-    // canister at its usual canister ID. This hack is copied from
-    // rs/tests/testnets/src_testing.rs. What this does is ensure that there is
-    // a system subnet that is assigned a canister ID range containing the usual
-    // Exchange Rate canister ID (uf6dk-hyaaa-aaaaq-qaaaq-cai).
-    for _ in 0..32 {
-        ic = ic.add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_resource_overrides(VmResourceOverrides {
-                    vcpus: Some(NrOfVCPUs::new(1)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(8_389_000)),
-                    ..VmResourceOverrides::default()
+    InternetComputer::new()
+        // The first subnet becomes the root (NNS) subnet. Because of
+        // use_specified_ids_allocation_range below, it is also assigned the
+        // canister ID range that covers all mainnet canister IDs. This allows
+        // us to later install the (mock) Exchange Rate canister at its usual
+        // mainnet canister ID (uf6dk-hyaaa-aaaaq-qaaaq-cai) on this subnet.
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
                 })
                 .add_nodes(1),
-        );
-    }
-    ic = ic.add_subnet(
-        Subnet::new(SubnetType::System)
-            .with_features(SubnetFeatures {
-                http_requests: true,
-                ..SubnetFeatures::default()
-            })
-            .add_nodes(1),
-    );
-    ic = ic.add_subnet(Subnet::fast(
-        SubnetType::System,
-        1, // Node count.
-    ));
-
-    ic.with_unassigned_nodes(1)
+        )
+        // A second system subnet, used as the initial DKG subnet when the
+        // rented subnet gets created.
+        .add_subnet(Subnet::fast(
+            SubnetType::System,
+            1, // Node count.
+        ))
+        // Assign the first subnet a pair of canister ID ranges: one covering
+        // all mainnet canister IDs (where canisters can be created at
+        // specified IDs), and a disjoint one for the allocation of new
+        // canister IDs. Without this, no canister ID range in the test
+        // environment would contain the usual Exchange Rate canister ID, and
+        // we would have to pad the routing table by creating 32 bogus
+        // single-node Application subnets to make a system subnet end up with
+        // the canister ID range containing that ID.
+        .use_specified_ids_allocation_range()
+        .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
@@ -573,7 +571,12 @@ fn install_nns_canisters(env: &TestEnv) {
         nns_node.node_id
     );
 
+    // at_ids is needed because, with use_specified_ids_allocation_range (see
+    // setup), new canister IDs on the root subnet are no longer allocated
+    // sequentially starting from 0; instead, the NNS canisters must be
+    // explicitly created at their usual canister IDs.
     let mut installer = NnsInstallationBuilder::new()
+        .at_ids()
         .with_subnet_rental_canister()
         .with_exchange_rate_canister();
 
