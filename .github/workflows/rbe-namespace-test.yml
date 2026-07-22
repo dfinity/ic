@@ -214,6 +214,16 @@ jobs:
 
             --remote_download_minimal
 
+            # Force the test logs of every system-test to be downloaded from the
+            # remote CAS. Under BwoB (--remote_download_minimal) test outputs stay
+            # remote, and --test_output=errors can't even echo the failing logs
+            # because multi-MB system-test logs exceed
+            # --experimental_ui_max_stdouterr_bytes (default 1 MiB), leaving only
+            # unreachable CAS paths in the console. Downloading them lets the
+            # "Stage failed and flaky system-test logs" step below collect and
+            # upload the logs of the tests that failed or were flaky.
+            --remote_download_regex='.*/testlogs/.*'
+
             # Capture the Build Event Protocol and the execution profile so this
             # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
             # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
@@ -225,7 +235,72 @@ jobs:
             --keep_going
           )
 
-          bazel "${bazel_args[@]}" //rs/tests/...
+          # Tee the output to a file (in /tmp/test-logs, separate from the BEP
+          # directory) so the "Stage failed and flaky system-test logs" step below
+          # can parse which targets failed or were flaky. pipefail preserves
+          # Bazel's exit code so the step still fails when a test fails.
+          mkdir -p /tmp/test-logs
+          bazel "${bazel_args[@]}" //rs/tests/... 2>&1 | tee /tmp/test-logs/systests-bazel-output.log
+
+      - name: Stage failed and flaky system-test logs
+        # Collect the Bazel test logs of the system-tests that FAILED or were
+        # FLAKY so the "Upload failed and flaky system-test logs" step below can
+        # push them to Namespace Artifact Storage. Runs even when the test step
+        # failed, but not when the job is cancelled.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          out=/tmp/test-logs/systests-bazel-output.log
+          dest=/tmp/test-logs/failed-test-logs
+          mkdir -p "$dest"
+
+          if [ ! -f "$out" ]; then
+            echo "No Bazel output captured at $out; nothing to stage."
+            exit 0
+          fi
+
+          # Resolve the testlogs tree of the system-tests invocation (compilation
+          # mode 'opt' -> bazel-out/k8-opt/testlogs). Prefer the convenience
+          # symlink; fall back to 'bazel info' with the same bazelrc so the
+          # configuration (and thus the path) matches.
+          testlogs="$(readlink -f bazel-testlogs 2>/dev/null || true)"
+          if [ -z "$testlogs" ] || [ ! -d "$testlogs" ]; then
+            testlogs="$(bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build info bazel-testlogs 2>/dev/null || true)"
+          fi
+          if [ -z "$testlogs" ] || [ ! -d "$testlogs" ]; then
+            echo "Could not resolve the bazel-testlogs directory; nothing to stage."
+            exit 0
+          fi
+
+          # Bazel's end-of-run summary prints one status line per test target:
+          # "<label>  FAILED in ..." for tests that ultimately failed and
+          # "<label>  FLAKY, failed in ..." for tests that passed only on retry.
+          # Match both: the per-attempt logs of a flaky test are just as useful
+          # for debugging as those of a hard failure. (Their failed attempts live
+          # under test_attempts/ in the same directory, which we copy wholesale.)
+          mapfile -t failed < <(grep -oE '^//[^ ]+ +(FAILED|FLAKY)' "$out" | awk '{print $1}' | sort -u)
+
+          if [ "${#failed[@]}" -eq 0 ]; then
+            echo "No failed or flaky system-tests found; nothing to stage."
+            exit 0
+          fi
+
+          echo "Staging logs for ${#failed[@]} failed/flaky system-test(s):"
+          for label in "${failed[@]}"; do
+            echo "  $label"
+            rel="${label#//}"     # //rs/tests/nns:foo_test -> rs/tests/nns:foo_test
+            rel="${rel/:/\/}"     # rs/tests/nns:foo_test    -> rs/tests/nns/foo_test
+            src="$testlogs/$rel"
+            if [ -d "$src" ]; then
+              mkdir -p "$dest/$rel"
+              # -L dereferences the CAS symlinks so we copy the actual log content.
+              cp -RL "$src/." "$dest/$rel/"
+            else
+              echo "    WARNING: test log directory not found: $src"
+            fi
+          done
 
       - name: Upload Bazel BEP and profile to Namespace Artifact Storage
         # Store the Build Event Protocol (.pb) and execution profile (.json) from
@@ -238,6 +313,24 @@ jobs:
         uses: namespace-actions/upload-artifact@v1
         with:
           name: bazel-bep-rbe
-          path: /tmp/bep/*
+          path: |
+            /tmp/bep/*.pb
+            /tmp/bep/*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload failed and flaky system-test logs to Namespace Artifact Storage
+        # Push the logs staged above (test.log, test.xml and per-attempt logs of
+        # every FAILED or FLAKY system-test), plus the captured Bazel console
+        # output, to Namespace Artifact Storage. Runs on failure too, but not when
+        # the job is cancelled. Retrieve with namespace-actions/download-artifact
+        # or `nsc artifact`.
+        if: ${{ !cancelled() }}
+        uses: namespace-actions/upload-artifact@v1
+        with:
+          name: failed-test-logs
+          path: |
+            /tmp/test-logs/failed-test-logs/**
+            /tmp/test-logs/systests-bazel-output.log
           if-no-files-found: ignore
           retention-days: 14
