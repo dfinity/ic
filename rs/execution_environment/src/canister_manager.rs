@@ -1934,7 +1934,7 @@ impl CanisterManager {
             .real();
         let message_memory_usage = canister.message_memory_usage();
         self.cycles_account_manager
-            .consume_cycles(
+            .consume_cycles_for_final_instructions(
                 &mut canister.system_state,
                 new_memory_usage,
                 message_memory_usage,
