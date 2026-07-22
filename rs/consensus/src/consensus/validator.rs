@@ -1210,14 +1210,6 @@ impl Validator {
             return Err(ValidationFailure::FailedToGetRegistryVersion.into());
         };
 
-        // If the replica is halted, block payload should be empty.
-        if status == Status::Halting || status == Status::Halted {
-            let payload = proposal.as_ref().payload.as_ref();
-            if !payload.is_summary() && !payload.is_empty() {
-                return Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into());
-            }
-        }
-
         let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
 
@@ -1274,11 +1266,18 @@ impl Validator {
             .into());
         }
 
-        // If the replica is halted, data block payloads are empty so we can skip the rest of the
-        // validation.
-        if !proposal.payload.is_summary() && (status == Status::Halting || status == Status::Halted)
-        {
-            return Ok(());
+        // While halting or halted, data blocks must have an empty payload: skip the rest of the
+        // validation if they do, and reject them otherwise. Summary blocks always carry a payload,
+        // so they are validated normally.
+        if status == Status::Halting || status == Status::Halted {
+            let payload = proposal.payload.as_ref();
+            if !payload.is_summary() {
+                return if payload.is_empty() {
+                    Ok(())
+                } else {
+                    Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into())
+                };
+            }
         }
 
         // Below are all the payload validations
@@ -2878,7 +2877,9 @@ pub mod test {
             assert_matches!(
                 result,
                 Err(ValidationError::InvalidArtifact(
-                    InvalidArtifactReason::InvalidPayload(_)
+                    InvalidArtifactReason::InvalidPayload(
+                        InvalidPayloadReason::PayloadTooBig { .. }
+                    )
                 ))
             );
         })
