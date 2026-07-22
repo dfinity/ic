@@ -5159,6 +5159,41 @@ fn last_install_timestamp_tracks_code_deployment_and_uninstall() {
 }
 
 #[test]
+fn canister_creation_timestamp_is_set_at_creation_and_stable() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    // Advance the time so the recorded creation timestamp is distinct from the
+    // default, making the assertion below meaningful.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    let creation_time = test.state().time();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let creation_timestamp = |test: &ExecutionTest| {
+        test.canister_state(canister_id)
+            .system_state
+            .canister_creation_timestamp
+    };
+
+    // The creation time is recorded at creation.
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+
+    // Unlike the install timestamp, it lives on the system state and is set only
+    // once, so it is unaffected by later code deployments or uninstall.
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+
+    test.state_mut().metadata.batch_time += std::time::Duration::from_secs(1);
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+
+    test.uninstall_code(canister_id).unwrap();
+    assert_eq!(creation_timestamp(&test), Some(creation_time));
+}
+
+#[test]
 fn reinstall_clears_canister_state() {
     let reinstall_canister = |test: &mut ExecutionTest, canister_id: CanisterId| {
         test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())

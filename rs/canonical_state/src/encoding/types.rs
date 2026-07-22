@@ -733,7 +733,12 @@ impl
             CertificationVersion,
         ),
     ) -> Self {
-        let (high, low) = metrics.consumed_cycles_total().into_parts();
+        // All currently supported certification versions (up to and including
+        // `V27`) use the legacy total, which double counts the cycles consumed
+        // by deleted canisters. Switching to the fixed `consumed_cycles_total`
+        // changes the certified value, so it must be gated behind a new
+        // certification version once one is introduced.
+        let (high, low) = metrics.consumed_cycles_total_v27().into_parts();
         Self {
             num_canisters: metrics.num_canisters,
             canister_state_bytes: metrics.canister_state_bytes.get(),

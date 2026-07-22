@@ -4517,6 +4517,7 @@ impl ExecutionEnvironment {
                 .apply_ingress_induction_cycles_debit(
                     canister_id,
                     cost_schedule,
+                    true, // strict
                     log,
                     &self.metrics.charging_from_balance_error,
                 );
