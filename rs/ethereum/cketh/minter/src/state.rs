@@ -1,4 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::deposit_address::{DepositAddressSchema, deposit_address};
 use crate::endpoints::{CandidBlockTag, DepositErc20Error};
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
@@ -631,13 +632,14 @@ impl State {
                 .ok_or(DepositErc20Error::TemporarilyUnavailable(
                     "Minter's ECDSA public key not yet initialized".to_string(),
                 ))?;
-        crate::deposit_erc20::register_deposit_address(
-            self,
+        let address = deposit_address(
             &master_public_key,
             &chain_code,
-            now,
-            account,
-        )
+            DepositAddressSchema::CkErc20,
+            &account,
+        );
+        self.automatic_deposits
+            .watch_address_for_account(now, account, address)
     }
 }
 
