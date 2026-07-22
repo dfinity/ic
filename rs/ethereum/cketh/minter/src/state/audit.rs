@@ -168,7 +168,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         }
         EventType::RegisteredDepositAddresses(registrations) => state
             .automatic_deposits
-            .rebuild_watchlist(Timestamp::from_nanos(ic_cdk::api::time()), &registrations),
+            .rebuild_watchlist(Timestamp::from_nanos(ic_cdk::api::time()), registrations),
     }
 }
 
