@@ -207,14 +207,44 @@ mod deposit_erc20 {
             .cketh
             .check_audit_logs_and_upgrade_as_ref(Default::default());
 
-        let (_ckerc20, response3) = ckerc20
+        let (ckerc20, response3) = ckerc20
             .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
             .expect_deposit_response();
 
         assert_eq!(
             response, response3,
             "BUG: deposit_erc20 should be idempotent after canister upgrade"
-        )
+        );
+
+        // Register a second address and upgrade again. Each upgrade appends a
+        // deposit-address snapshot to the (append-only) event log, so replay
+        // must cope with more than one snapshot without dropping addresses.
+        let (ckerc20, response_other) = ckerc20
+            .call_minter_deposit_erc20(caller, Some([7_u8; 32]))
+            .expect_deposit_response();
+        assert_ne!(
+            response.address, response_other.address,
+            "BUG: distinct subaccounts should derive distinct addresses"
+        );
+
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+
+        let (ckerc20, response_after_second_upgrade) = ckerc20
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .expect_deposit_response();
+        let (_ckerc20, response_other_after_second_upgrade) = ckerc20
+            .call_minter_deposit_erc20(caller, Some([7_u8; 32]))
+            .expect_deposit_response();
+        assert_eq!(
+            response, response_after_second_upgrade,
+            "BUG: the first address should survive repeated upgrades"
+        );
+        assert_eq!(
+            response_other, response_other_after_second_upgrade,
+            "BUG: the second address should survive repeated upgrades"
+        );
     }
 
     #[test]
