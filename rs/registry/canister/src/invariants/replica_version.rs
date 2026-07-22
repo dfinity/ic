@@ -118,14 +118,16 @@ fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<
             } = get_subnet_record(snapshot, *subnet_id);
 
             if !replica_version_id.is_empty() {
-                // For non-CloudEngines, this is normal (because it is required).
+                // For non-CloudEngines, this is normal (because it is
+                // required). CloudEngines can also end up here.
                 return Some(replica_version_id);
             }
 
             if subnet_type == SubnetType::CloudEngine as i32
                 && cloud_engines_are_allowed_to_have_blank_replica_version_id
             {
-                // For CloudEngines, this is normal (because this is allowed and typical).
+                // For CloudEngines, this is normal (because this is allowed and
+                // typical).
                 return None;
             }
 
