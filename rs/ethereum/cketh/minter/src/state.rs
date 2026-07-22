@@ -11,10 +11,10 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
-use crate::state::automatic_deposits::AutomaticDeposits;
+use crate::state::automatic_deposits::{AutomaticDeposits, DepositRequest};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
-use crate::timed_sized_map::Timestamp;
+use crate::timed_sized_map::{Entry, Timestamp};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
@@ -626,7 +626,7 @@ impl State {
         &mut self,
         now: Timestamp,
         account: Account,
-    ) -> Result<(Address, Timestamp), DepositErc20Error> {
+    ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
         let (master_public_key, chain_code) =
             self.public_key_and_chain_code()
                 .ok_or(DepositErc20Error::TemporarilyUnavailable(

@@ -186,11 +186,9 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    mutate_state(|s| s.register_deposit_address(now, account)).map(|(address, valid_until)| {
-        DepositErc20Response {
-            address: address.to_string(),
-            valid_until: valid_until.as_nanos(),
-        }
+    mutate_state(|s| s.register_deposit_address(now, account)).map(|request| DepositErc20Response {
+        address: request.value.address.to_string(),
+        valid_until: request.expires_at.as_nanos(),
     })
 }
 

@@ -35,7 +35,7 @@ impl AutomaticDeposits {
         now: Timestamp,
         account: Account,
         address: Address,
-    ) -> Result<(Address, Timestamp), DepositErc20Error> {
+    ) -> Result<Entry<DepositRequest>, DepositErc20Error> {
         match self
             .watchlist
             .insert(now, account, DepositRequest::from(address))
@@ -45,7 +45,7 @@ impl AutomaticDeposits {
                     .watchlist
                     .get_entry(now, &account)
                     .expect("BUG: the entry is live right after insert or AlreadyPresent");
-                Ok((entry.value.address, entry.expires_at))
+                Ok(entry.clone())
             }
             Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveAddresses),
         }
