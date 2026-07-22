@@ -1,9 +1,4 @@
-use std::{
-    convert::TryFrom,
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-    time::Duration,
-};
+use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::body::Body;
 use futures::FutureExt;
