@@ -1205,7 +1205,7 @@ mod tests {
     }
 
     #[test]
-    fn test_traverse_subnet_metrics_includes_canister_consumed_cycles_at_v28() {
+    fn test_traverse_subnet_metrics_includes_canister_consumed_cycles_at_v29() {
         use crate::encoding::encode_subnet_metrics;
         use ic_types_cycles::{CompoundCycles, Instructions, NominalCycles};
 
