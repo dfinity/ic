@@ -216,24 +216,6 @@ fn should_reject_insert_entry_when_full_of_live_entries() {
 }
 
 #[test]
-fn should_preserve_timestamps_and_not_evict_or_cap_in_from_entries() {
-    let entries = vec![(ts(0), "a", 1), (ts(1_000_000), "b", 2)];
-    let map = TimedSizedMap::from_entries(Duration::from_nanos(10), cap(1), entries);
-
-    assert_eq!(map.len(), 2);
-    assert_eq!(map.get(ts(0), &"a"), Some(&1));
-    assert_eq!(map.get(ts(1_000_000), &"b"), Some(&2));
-    assert_consistent(&map);
-}
-
-#[test]
-#[should_panic(expected = "duplicate key")]
-fn should_panic_when_from_entries_receives_duplicate_key() {
-    let entries = vec![(ts(0), "a", 1), (ts(1), "a", 2)];
-    let _ = TimedSizedMap::from_entries(Duration::from_nanos(10), cap(5), entries);
-}
-
-#[test]
 fn should_keep_indices_consistent_through_churn() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(100), cap(4));
     for (i, key) in ["a", "b", "c", "d"].into_iter().enumerate() {

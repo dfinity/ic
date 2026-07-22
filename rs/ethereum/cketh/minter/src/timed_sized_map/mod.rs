@@ -161,26 +161,6 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.entries.iter()
     }
 
-    /// Rebuild a map from a previously captured snapshot, preserving each entry's original
-    /// expiry time. This is a trusted restore of an already-valid snapshot: it performs no
-    /// eviction, capacity, or refresh checks, and requires the entries to have distinct keys.
-    pub fn from_entries(
-        ttl: Duration,
-        capacity: NonZeroUsize,
-        entries: impl IntoIterator<Item = (Timestamp, K, V)>,
-    ) -> Self {
-        let mut map = Self::new(ttl, capacity);
-        for (expires_at, key, value) in entries {
-            let previous = map.entries.insert(key.clone(), Entry { value, expires_at });
-            assert!(
-                previous.is_none(),
-                "BUG: from_entries received a duplicate key"
-            );
-            map.by_time.entry(expires_at).or_default().push_back(key);
-        }
-        map
-    }
-
     pub fn len(&self) -> usize {
         self.entries.len()
     }
