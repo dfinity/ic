@@ -1,13 +1,14 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::time::Duration;
+use minicbor::{Decode, Encode};
 
 #[cfg(test)]
 mod tests;
 
 /// Nanoseconds since the Unix epoch (as returned by `ic_cdk::api::time()`).
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct Timestamp(u64);
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Decode, Encode)]
+pub struct Timestamp(#[n(0)] u64);
 
 impl Timestamp {
     pub const fn from_nanos(nanos: u64) -> Self {
@@ -24,9 +25,9 @@ impl Timestamp {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct Entry<V> {
-    value: V,
-    inserted_at: Timestamp,
+pub struct Entry<V> {
+    pub value: V,
+    pub inserted_at: Timestamp,
 }
 
 /// A map of at most `capacity` entries, each living for at most `ttl`.
@@ -126,20 +127,8 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         evicted
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        self.entries.iter().map(|(key, entry)| (key, &entry.value))
-    }
-
-    /// Iterate over the live (unexpired as of `now`) entries together with the time each was
-    /// inserted.
-    pub fn iter_live(&self, now: Timestamp) -> impl Iterator<Item = (Timestamp, &K, &V)> {
-        self.entries.iter().filter_map(move |(key, entry)| {
-            if self.is_expired(entry.inserted_at, now) {
-                None
-            } else {
-                Some((entry.inserted_at, key, &entry.value))
-            }
-        })
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &Entry<V>)> {
+        self.entries.iter().map(|(key, entry)| (key, entry))
     }
 
     /// Rebuild a map from a previously captured snapshot, preserving each entry's original

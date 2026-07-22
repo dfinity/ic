@@ -9,7 +9,6 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex};
 use crate::storage::{record_event, with_event_iter};
-use crate::timed_sized_map::Timestamp;
 use icrc_ledger_types::icrc1::account::Account;
 
 /// Updates the state to reflect the given state transition.
@@ -172,7 +171,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state.automatic_deposits =
                 AutomaticDeposits::from_entries(registrations.iter().map(|r| {
                     (
-                        Timestamp::from_nanos(r.registered_at_nanos),
+                        r.registered_at_nanos,
                         Account {
                             owner: r.owner,
                             subaccount: r.subaccount,

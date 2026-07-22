@@ -132,18 +132,15 @@ fn emit_preupgrade_events() {
         }
     });
 
-    let now = Timestamp::from_nanos(ic_cdk::api::time());
     let deposit_addresses = read_state(|s| {
         s.automatic_deposits
-            .iter_live(now)
-            .map(
-                |(registered_at, account, address)| DepositAddressRegistration {
-                    owner: account.owner,
-                    subaccount: account.subaccount,
-                    address: *address,
-                    registered_at_nanos: registered_at.as_nanos(),
-                },
-            )
+            .watchlist_iter()
+            .map(|(account, deposit)| DepositAddressRegistration {
+                owner: account.owner,
+                subaccount: account.subaccount,
+                address: deposit.value.address,
+                registered_at_nanos: deposit.inserted_at,
+            })
             .collect::<Vec<_>>()
     });
     if !deposit_addresses.is_empty() {
@@ -719,7 +716,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                                 owner: r.owner,
                                 subaccount: r.subaccount,
                                 address: r.address.to_string(),
-                                registered_at_nanos: r.registered_at_nanos,
+                                registered_at_nanos: r.registered_at_nanos.as_nanos(),
                             })
                             .collect(),
                     }

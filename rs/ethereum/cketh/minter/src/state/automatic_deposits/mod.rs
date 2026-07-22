@@ -1,5 +1,5 @@
 use crate::endpoints::DepositErc20Error;
-use crate::timed_sized_map::{InsertError, TimedSizedMap, Timestamp};
+use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::num::NonZeroUsize;
@@ -39,13 +39,15 @@ impl AutomaticDeposits {
             .insert(now, account, DepositRequest::from(address))
         {
             Ok(_) => Ok(address),
-            Err(InsertError::AlreadyPresent { .. }) => Ok(self
-                .watchlist
+            Err(InsertError::AlreadyPresent { .. }) => Ok(*self
                 .get(now, &account)
-                .expect("BUG: AlreadyPresent implies a live stored entry")
-                .address),
+                .expect("BUG: AlreadyPresent implies a live stored entry")),
             Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveAddresses),
         }
+    }
+
+    pub fn watchlist_iter(&self) -> impl Iterator<Item = (&Account, &Entry<DepositRequest>)> {
+        self.watchlist.iter()
     }
 
     /// The watched address for `account`, or `None` if absent or expired as of `now`.
@@ -53,17 +55,6 @@ impl AutomaticDeposits {
         self.watchlist
             .get(now, account)
             .map(|request| &request.address)
-    }
-
-    /// Iterate over the live (unexpired as of `now`) watched accounts together with the time each
-    /// was registered and its watched address.
-    pub fn iter_live(
-        &self,
-        now: Timestamp,
-    ) -> impl Iterator<Item = (Timestamp, &Account, &Address)> {
-        self.watchlist
-            .iter_live(now)
-            .map(|(registered_at, account, request)| (registered_at, account, &request.address))
     }
 
     /// Rebuild the watchlist from a previously captured snapshot, preserving each entry's original
@@ -81,14 +72,6 @@ impl AutomaticDeposits {
             ),
         }
     }
-
-    pub fn len(&self) -> usize {
-        self.watchlist.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.watchlist.is_empty()
-    }
 }
 
 impl Default for AutomaticDeposits {
@@ -104,7 +87,7 @@ impl Default for AutomaticDeposits {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct DepositRequest {
-    address: Address,
+    pub address: Address,
 }
 
 impl From<Address> for DepositRequest {

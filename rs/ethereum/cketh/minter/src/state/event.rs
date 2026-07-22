@@ -11,6 +11,7 @@ use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
+use crate::timed_sized_map::Timestamp;
 
 /// The event describing the ckETH minter state transition.
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
@@ -187,7 +188,7 @@ pub struct DepositAddressRegistration {
     #[n(2)]
     pub address: Address,
     #[n(3)]
-    pub registered_at_nanos: u64,
+    pub registered_at_nanos: Timestamp,
 }
 
 impl ReceivedEvent {
