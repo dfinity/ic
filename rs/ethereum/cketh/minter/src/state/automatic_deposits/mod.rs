@@ -40,13 +40,12 @@ impl AutomaticDeposits {
             .watchlist
             .insert(now, account, DepositRequest::from(address))
         {
-            Ok(_) => Ok((address, valid_until(now))),
-            Err(InsertError::AlreadyPresent { .. }) => {
+            Ok(_) | Err(InsertError::AlreadyPresent { .. }) => {
                 let entry = self
                     .watchlist
                     .get_entry(now, &account)
-                    .expect("BUG: AlreadyPresent implies a live stored entry");
-                Ok((entry.value.address, valid_until(entry.inserted_at)))
+                    .expect("BUG: the entry is live right after insert or AlreadyPresent");
+                Ok((entry.value.address, entry.expires_at))
             }
             Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveAddresses),
         }
@@ -64,17 +63,15 @@ impl AutomaticDeposits {
     }
 
     /// Rebuild the watchlist from a previously captured snapshot, preserving each entry's original
-    /// registration time. This is a trusted restore of an already-valid snapshot.
+    /// expiry time. This is a trusted restore of an already-valid snapshot.
     pub fn from_entries(entries: impl IntoIterator<Item = (Timestamp, Account, Address)>) -> Self {
         Self {
             watchlist: TimedSizedMap::from_entries(
                 DEPOSIT_ADDRESS_SCAN_WINDOW,
                 MAX_ACTIVE_DEPOSIT_ADDRESSES,
-                entries
-                    .into_iter()
-                    .map(|(registered_at, account, address)| {
-                        (registered_at, account, DepositRequest::from(address))
-                    }),
+                entries.into_iter().map(|(expires_at, account, address)| {
+                    (expires_at, account, DepositRequest::from(address))
+                }),
             ),
         }
     }
@@ -89,16 +86,6 @@ impl Default for AutomaticDeposits {
             ),
         }
     }
-}
-
-/// The timestamp until which a deposit address registered at `registered_at` is
-/// kept armed, i.e. `registered_at + DEPOSIT_ADDRESS_SCAN_WINDOW`.
-fn valid_until(registered_at: Timestamp) -> Timestamp {
-    Timestamp::from_nanos(
-        registered_at
-            .as_nanos()
-            .saturating_add(DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64),
-    )
 }
 
 #[derive(Clone, PartialEq, Debug)]

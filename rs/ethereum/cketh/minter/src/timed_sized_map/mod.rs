@@ -18,16 +18,12 @@ impl Timestamp {
     pub const fn as_nanos(self) -> u64 {
         self.0
     }
-
-    fn checked_duration_since(self, earlier: Timestamp) -> Option<Duration> {
-        self.0.checked_sub(earlier.0).map(Duration::from_nanos)
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Entry<V> {
     pub value: V,
-    pub inserted_at: Timestamp,
+    pub expires_at: Timestamp,
 }
 
 /// A map of at most `capacity` entries, each living for at most `ttl`.
@@ -84,14 +80,10 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         if self.entries.len() >= self.capacity.get() {
             return Err(InsertError::AtCapacity { key, value });
         }
-        self.entries.insert(
-            key.clone(),
-            Entry {
-                value,
-                inserted_at: now,
-            },
-        );
-        self.by_time.entry(now).or_default().push_back(key);
+        let expires_at = self.expiry(now);
+        self.entries
+            .insert(key.clone(), Entry { value, expires_at });
+        self.by_time.entry(expires_at).or_default().push_back(key);
         Ok(evicted)
     }
 
@@ -104,7 +96,7 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     /// expired as of `now`.
     pub fn get_entry(&self, now: Timestamp, key: &K) -> Option<&Entry<V>> {
         let entry = self.entries.get(key)?;
-        if self.is_expired(entry.inserted_at, now) {
+        if is_expired(entry.expires_at, now) {
             None
         } else {
             Some(entry)
@@ -114,13 +106,13 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     /// Evict and return every entry that has outlived its `ttl` as of `now`.
     pub fn evict_expired(&mut self, now: Timestamp) -> Vec<(K, V)> {
         let mut evicted = Vec::new();
-        while let Some(&inserted_at) = self.by_time.keys().next() {
-            if !self.is_expired(inserted_at, now) {
+        while let Some(&expires_at) = self.by_time.keys().next() {
+            if !is_expired(expires_at, now) {
                 break;
             }
             let bucket = self
                 .by_time
-                .remove(&inserted_at)
+                .remove(&expires_at)
                 .expect("BUG: bucket must exist");
             for key in bucket {
                 let entry = self
@@ -138,7 +130,7 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     }
 
     /// Rebuild a map from a previously captured snapshot, preserving each entry's original
-    /// insertion time. This is a trusted restore of an already-valid snapshot: it performs no
+    /// expiry time. This is a trusted restore of an already-valid snapshot: it performs no
     /// eviction, capacity, or refresh checks, and requires the entries to have distinct keys.
     pub fn from_entries(
         ttl: Duration,
@@ -146,15 +138,13 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         entries: impl IntoIterator<Item = (Timestamp, K, V)>,
     ) -> Self {
         let mut map = Self::new(ttl, capacity);
-        for (inserted_at, key, value) in entries {
-            let previous = map
-                .entries
-                .insert(key.clone(), Entry { value, inserted_at });
+        for (expires_at, key, value) in entries {
+            let previous = map.entries.insert(key.clone(), Entry { value, expires_at });
             assert!(
                 previous.is_none(),
                 "BUG: from_entries received a duplicate key"
             );
-            map.by_time.entry(inserted_at).or_default().push_back(key);
+            map.by_time.entry(expires_at).or_default().push_back(key);
         }
         map
     }
@@ -171,8 +161,15 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
         self.capacity
     }
 
-    fn is_expired(&self, inserted_at: Timestamp, now: Timestamp) -> bool {
-        now.checked_duration_since(inserted_at)
-            .is_some_and(|age| age > self.ttl)
+    /// The expiry timestamp for an entry inserted at `now`, i.e. `now + ttl`.
+    fn expiry(&self, now: Timestamp) -> Timestamp {
+        let ttl_nanos = u64::try_from(self.ttl.as_nanos()).unwrap_or(u64::MAX);
+        Timestamp::from_nanos(now.as_nanos().saturating_add(ttl_nanos))
     }
+}
+
+/// Whether an entry expiring at `expires_at` is expired as of `now`. An entry
+/// remains live through its expiry instant (inclusive).
+fn is_expired(expires_at: Timestamp, now: Timestamp) -> bool {
+    now > expires_at
 }

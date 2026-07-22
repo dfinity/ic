@@ -139,7 +139,7 @@ fn emit_preupgrade_events() {
                 owner: account.owner,
                 subaccount: account.subaccount,
                 address: deposit.value.address,
-                registered_at_nanos: deposit.inserted_at,
+                registered_at_nanos: deposit.expires_at,
             })
             .collect::<Vec<_>>()
     });

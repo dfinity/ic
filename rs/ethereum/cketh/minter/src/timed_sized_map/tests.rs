@@ -20,7 +20,7 @@ fn assert_consistent<K: Ord + Clone + std::fmt::Debug, V>(map: &TimedSizedMap<K,
     for (key, entry) in &map.entries {
         let bucket = map
             .by_time
-            .get(&entry.inserted_at)
+            .get(&entry.expires_at)
             .expect("entry timestamp missing from time index");
         assert!(
             bucket.contains(key),
