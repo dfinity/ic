@@ -2,7 +2,11 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::body::Body;
 use futures::FutureExt;
-use hickory_resolver::{Resolver, config::{LookupIpStrategy, NameServerConfig, ResolverConfig}, net::runtime::TokioRuntimeProvider};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
@@ -466,12 +470,16 @@ async fn connect(
             let mut dns_resolver = if !cfg!(test) {
                 Resolver::builder(TokioRuntimeProvider::default())?
             } else {
-                Resolver::builder_with_config(ResolverConfig::from_parts(
-                    None,
-                    vec![],
-                    vec![NameServerConfig::udp_and_tcp(std::net::Ipv6Addr::LOCALHOST.into())],
-                ),
-                    TokioRuntimeProvider::default())
+                Resolver::builder_with_config(
+                    ResolverConfig::from_parts(
+                        None,
+                        vec![],
+                        vec![NameServerConfig::udp_and_tcp(
+                            std::net::Ipv6Addr::LOCALHOST.into(),
+                        )],
+                    ),
+                    TokioRuntimeProvider::default(),
+                )
             };
             dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
             let ip_addr = dns_resolver
