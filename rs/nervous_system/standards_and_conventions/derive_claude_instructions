@@ -109,7 +109,7 @@ def cleanup_whitespace(text):
 
 
 def main():
-    original = SOURCE.read_text()
+    original = SOURCE.read_text(encoding="utf-8")
 
     protected, saved_code = protect_code(original)
 
@@ -123,14 +123,14 @@ def main():
     text = cleanup_whitespace(text).strip() + "\n"
     text = restore_code(text, saved_code)
 
-    def non_white_space_len(s):
+    def non_whitespace_len(s):
         return sum(1 for c in s if not c.isspace())
 
-    original_chars = non_white_space_len(original)
-    kept_chars = non_white_space_len(text)
+    original_chars = non_whitespace_len(original)
+    kept_chars = non_whitespace_len(text)
     cut_chars = original_chars - kept_chars
 
-    OUTPUT.write_text(FRONT_MATTER + "\n\n" + text)
+    OUTPUT.write_text(FRONT_MATTER + "\n\n" + text, encoding="utf-8")
 
     print(f"Wrote {OUTPUT.relative_to(LOCAL_DIRECTORY.parent)}")
     print(f"Original non-whitespace chars: {original_chars}")
