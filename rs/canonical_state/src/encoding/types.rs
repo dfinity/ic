@@ -736,17 +736,17 @@ impl
             CertificationVersion,
         ),
     ) -> Self {
-        // Up to and including `V27`, the reported total uses the legacy
-        // `consumed_cycles_total_v27`, which double counts the cycles consumed
+        // Up to and including `V28`, the reported total uses the legacy
+        // `consumed_cycles_total_v28`, which double counts the cycles consumed
         // by deleted canisters and does not account for non-deleted canisters.
         //
-        // Starting with `V28`, the reported total uses the fixed
+        // Starting with `V29`, the reported total uses the fixed
         // `consumed_cycles_total` (which no longer double counts deleted
         // canisters) plus the cycles consumed by all non-deleted canisters.
-        let consumed_cycles_total = if certification_version >= CertificationVersion::V28 {
+        let consumed_cycles_total = if certification_version >= CertificationVersion::V29 {
             metrics.consumed_cycles_total() + consumed_cycles_by_canisters
         } else {
-            metrics.consumed_cycles_total_v27()
+            metrics.consumed_cycles_total_v28()
         };
         let (high, low) = consumed_cycles_total.into_parts();
         Self {

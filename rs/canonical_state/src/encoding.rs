@@ -110,7 +110,7 @@ pub fn encode_subnet_canister_ranges(ranges: Option<&Vec<(PrincipalId, Principal
 ///
 /// `consumed_cycles_by_canisters` is the total number of cycles consumed by all
 /// non-deleted canisters on the subnet. It is only included in the reported
-/// `consumed_cycles_total` starting with certification version `V28`; for
+/// `consumed_cycles_total` starting with certification version `V29`; for
 /// earlier versions the argument is ignored.
 pub fn encode_subnet_metrics(
     metrics: &SubnetMetrics,

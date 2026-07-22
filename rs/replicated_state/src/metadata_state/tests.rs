@@ -2386,46 +2386,185 @@ fn stream_responses_tracking() {
 
 #[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
+    // Each entry gets a distinct power of two so that the resulting total is a
+    // bitmask: any use case that is miscategorized (added when it should be
+    // skipped, or vice versa) changes the total by a unique amount that cannot
+    // be masked by other entries cancelling out.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    // Use cases already covered by the scalar metrics below; these must not be
+    // Use cases covered by a dedicated scalar metric below; these must not be
     // added to the total again (otherwise the cycles consumed by deleted
-    // canisters would be double counted).
-    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(5));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(12));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(30));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
+    // canisters / outcalls would be double counted).
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
+    // Canister-level use cases that only ever enter the map when a canister is
+    // deleted; already covered by the deleted canisters scalar, so not added to
+    // the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ComputeAllocation, NominalCycles::new(16));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::IngressInduction, NominalCycles::new(32));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(64));
+    consumed_cycles_by_use_case.insert(
+        CyclesUseCase::RequestAndResponseTransmission,
+        NominalCycles::new(128),
+    );
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Uninstall, NominalCycles::new(256));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(512));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::BurnedCycles, NominalCycles::new(1024));
     // Subnet-level use cases not covered by any scalar metric; these are added
     // to the total.
-    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(7));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(8));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(9));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(2048));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(4096));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(8192));
+
+    // Every use case must be exercised above, so that adding a new variant
+    // forces this test (and the categorization in `consumed_cycles_total`) to
+    // be revisited.
+    for use_case in CyclesUseCase::iter() {
+        assert!(
+            consumed_cycles_by_use_case.contains_key(&use_case),
+            "use case {use_case:?} is not covered by this test"
+        );
+    }
 
     let subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
-        consumed_cycles_http_outcalls: NominalCycles::new(20),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(30),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(16384),
+        consumed_cycles_http_outcalls: NominalCycles::new(32768),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(65536),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
-    // 10 (deleted canisters) + 20 (HTTP outcalls) + 30 (ECDSA outcalls)
-    // + 7 (Schnorr outcalls) + 8 (VetKd) + 9 (dropped messages) = 84.
+    // 16384 (deleted canisters) + 32768 (HTTP outcalls) + 65536 (ECDSA outcalls)
+    // + 2048 (Schnorr outcalls) + 4096 (VetKd) + 8192 (dropped messages).
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::new(84)
+        NominalCycles::new(129024)
     );
 
     // The legacy computation additionally sums the per-use-case entries that a
     // deleted canister contributes to the map (already covered by the deleted
-    // canisters scalar), hence the double counting:
-    // 10 (deleted canisters) + 20 (HTTP outcalls) + 30 (ECDSA outcalls)
-    // + 7 (Schnorr outcalls) + 8 (VetKd) + 9 (dropped messages)
-    // + 100 (instructions) + 50 (memory) + 40 (canister creation) = 274.
+    // canisters scalar), hence the double counting. On top of the 129024 from
+    // the fixed `consumed_cycles_total` above:
+    // 129024 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
+    // + 64 (instructions) + 128 (request and response transmission)
+    // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
     assert_eq!(
-        subnet_metrics.consumed_cycles_total_v27(),
-        NominalCycles::new(274)
+        subnet_metrics.consumed_cycles_total_v28(),
+        NominalCycles::new(131064)
+    );
+}
+
+#[test]
+fn observe_use_case_migrates_outcalls_scalar_fields_into_use_cases() {
+    let mut subnet_metrics = SubnetMetrics {
+        // Simulate a state persisted before use-case tracking existed: the scalar
+        // fields hold the full history while the use-case entries only cover a
+        // more recent (smaller) subset.
+        consumed_cycles_http_outcalls: NominalCycles::new(100),
+        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
+        consumed_cycles_by_use_case: BTreeMap::from([
+            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
+            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
+        ]),
+        consumed_cycles_by_use_case_as_counters: BTreeMap::from([
+            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
+            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
+        ]),
+        ..Default::default()
+    };
+
+    // Observing an *unrelated* use case triggers the migration, i.e. it runs
+    // independently of whether the HTTP/ECDSA scalar fields are observed.
+    subnet_metrics
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
+
+    let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
+
+    // The HTTP/ECDSA use-case entries have been brought up to the (superset)
+    // scalar values, even though no outcall was observed.
+    assert_eq!(
+        by_use_case[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        by_use_case[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(200)
+    );
+    // The observed use case was recorded as usual.
+    assert_eq!(
+        by_use_case[&CyclesUseCase::Instructions],
+        NominalCycles::new(5)
+    );
+
+    // The migration must NOT touch the monotonic counters map: its HTTP/ECDSA
+    // entries stay at their original values (only the just-observed use case
+    // grew).
+    let counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
+    assert_eq!(
+        counters[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(60)
+    );
+    assert_eq!(
+        counters[&CyclesUseCase::ECDSAOutcalls],
+        NominalCycles::new(150)
+    );
+    assert_eq!(
+        counters[&CyclesUseCase::Instructions],
+        NominalCycles::new(5)
+    );
+
+    // The scalar fields are not zeroed (kept as the source of truth / for
+    // downgrade compatibility).
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_http_outcalls(),
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
+        NominalCycles::new(200)
+    );
+}
+
+#[test]
+fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
+    let mut subnet_metrics = SubnetMetrics {
+        // Pre-use-case-tracking history: the scalar (100) is a superset of the
+        // use-case entry (60).
+        consumed_cycles_http_outcalls: NominalCycles::new(100),
+        consumed_cycles_by_use_case: BTreeMap::from([(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(60),
+        )]),
+        consumed_cycles_by_use_case_as_counters: BTreeMap::from([(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(60),
+        )]),
+        ..Default::default()
+    };
+
+    // Production order for an HTTP outcall: the scalar is bumped first, then the
+    // matching use case is observed.
+    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
+    subnet_metrics
+        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
+
+    // The use-case entry caught up to the (superset) scalar and grew by 5, with
+    // no double counting.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(105)
+    );
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_http_outcalls(),
+        NominalCycles::new(105)
+    );
+
+    // The counters map is not migrated: it only reflects its own increment (5),
+    // not the backfilled history.
+    assert_eq!(
+        subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
+        NominalCycles::new(65)
     );
 }
 

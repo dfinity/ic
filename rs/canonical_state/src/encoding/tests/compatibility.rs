@@ -344,7 +344,7 @@ fn canonical_encoding_subnet_metrics() {
 
         let consumed_cycles_by_canisters = NominalCycles::new(50_000_000_000);
 
-        let expected = if certification_version >= CertificationVersion::V28 {
+        let expected = if certification_version >= CertificationVersion::V29 {
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 2E 90 ED D0 00 01 00 03 19 10 68"
         } else {
             "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68"

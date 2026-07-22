@@ -143,12 +143,13 @@ crate.spec(
     version = "^0.7.3",
 )
 crate.spec(
-    package = "backoff",
-    version = "^0.4.0",
-)
-crate.spec(
+    default_features = False,
+    features = [
+        "std",
+        "std-blocking-sleep",
+    ],
     package = "backon",
-    version = "^0.4.1",
+    version = "^1.6.0",
 )
 crate.spec(
     package = "base32",
@@ -836,7 +837,7 @@ crate.spec(
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.9.11",
+    version = "^0.10.0",
 )
 crate.spec(
     package = "ic-xrc-types",
@@ -1551,7 +1552,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde_with",
-    version = "^1.14.0",
+    version = "^3.21.0",
 )
 crate.spec(
     package = "serde_yaml",
@@ -1943,7 +1944,7 @@ crate.spec(
 )
 crate.spec(
     package = "walrus",
-    version = "^0.23.3",
+    version = "^0.26.4",
 )
 crate.spec(
     features = ["tls"],

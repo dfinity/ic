@@ -494,6 +494,117 @@ mod tests {
         }
     }
 
+    /// The `canister_creation_timestamp` leaf is exposed from certification
+    /// version `V28` onwards for every canister (with or without installed code)
+    /// that has a recorded creation timestamp, and omitted below `V28` or for
+    /// canisters created before the field existed.
+    #[test]
+    fn canister_creation_timestamp_leaf() {
+        use ic_canonical_state_tree_hash::lazy_tree::{LazyTree, follow_path};
+
+        let controller = user_test_id(24);
+        let creation_time = ic_types::Time::from_nanos_since_unix_epoch(1234);
+
+        // (a) A canister with no installed code, with a creation timestamp.
+        let codeless_id = canister_test_id(1);
+        let mut codeless = new_canister_state(
+            codeless_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        codeless.system_state.canister_creation_timestamp = Some(creation_time);
+
+        // (b) A canister with installed code, with a creation timestamp.
+        let with_code_id = canister_test_id(2);
+        let mut with_code = new_canister_state(
+            with_code_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        with_code.execution_state = Some(ExecutionState::new(
+            WasmBinary::new(CanisterModule::new(vec![])),
+            None,
+            ExportedFunctions::new(BTreeSet::new()),
+            Memory::new_for_testing(),
+            Memory::new_for_testing(),
+            vec![],
+            WasmMetadata::new(Default::default()),
+        ));
+        with_code.system_state.canister_creation_timestamp = Some(creation_time);
+
+        // (c) A canister created before the field existed (no creation timestamp).
+        let no_timestamp_id = canister_test_id(3);
+        let no_timestamp = new_canister_state(
+            no_timestamp_id,
+            controller.get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.put_canister_state(codeless);
+        state.put_canister_state(with_code);
+        state.put_canister_state(no_timestamp);
+
+        let expected_leaf = {
+            let mut buf = Vec::new();
+            leb128::write::unsigned(&mut buf, 1234).unwrap();
+            buf
+        };
+
+        // Below `V28` the leaf is never present.
+        state.metadata.certification_version = CertificationVersion::V27;
+        {
+            let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
+            for id in [codeless_id, with_code_id, no_timestamp_id] {
+                let principal = id.get();
+                let path: [&[u8]; 3] = [
+                    b"canister",
+                    principal.as_slice(),
+                    b"canister_creation_timestamp",
+                ];
+                assert!(
+                    follow_path(&tree, &path).is_none(),
+                    "creation leaf should be absent below V28 for {id}"
+                );
+            }
+        }
+
+        // From `V28`, canisters with a recorded creation timestamp expose it (as
+        // the LEB128-encoded nanoseconds), regardless of whether they have code.
+        state.metadata.certification_version = CertificationVersion::V28;
+        {
+            let tree = replicated_state_as_lazy_tree(&state, Height::new(0));
+            for id in [codeless_id, with_code_id] {
+                let principal = id.get();
+                let path: [&[u8]; 3] = [
+                    b"canister",
+                    principal.as_slice(),
+                    b"canister_creation_timestamp",
+                ];
+                let leaf = follow_path(&tree, &path)
+                    .unwrap_or_else(|| panic!("creation leaf missing for {id}"));
+                let LazyTree::LazyBlob(thunk) = leaf else {
+                    unreachable!("the `canister_creation_timestamp` leaf is a lazy blob");
+                };
+                assert_eq!(thunk(), expected_leaf);
+            }
+            // A canister created before the field existed still omits the leaf.
+            let principal = no_timestamp_id.get();
+            let path: [&[u8]; 3] = [
+                b"canister",
+                principal.as_slice(),
+                b"canister_creation_timestamp",
+            ];
+            assert!(
+                follow_path(&tree, &path).is_none(),
+                "creation leaf should be omitted without a creation timestamp"
+            );
+        }
+    }
+
     #[test]
     fn test_traverse_streams() {
         use ic_replicated_state::metadata_state::Stream;
@@ -1161,7 +1272,7 @@ mod tests {
 
             // The tree must pass the sum of the non-deleted canisters' consumed
             // cycles to `encode_subnet_metrics`; it is only reflected in the
-            // encoding starting with V28.
+            // encoding starting with V29.
             let expected_blob = encode_subnet_metrics(
                 &state.metadata.subnet_metrics,
                 consumed_by_canisters,
@@ -1172,13 +1283,13 @@ mod tests {
                 "unexpected metrics leaf for certification_version: {certification_version:?}"
             );
 
-            // The canister's consumed cycles are included only starting with V28.
+            // The canister's consumed cycles are included only starting with V29.
             let without_canisters = encode_subnet_metrics(
                 &state.metadata.subnet_metrics,
                 NominalCycles::zero(),
                 certification_version,
             );
-            if certification_version >= CertificationVersion::V28 {
+            if certification_version >= CertificationVersion::V29 {
                 assert_ne!(metrics_blob, without_canisters);
             } else {
                 assert_eq!(metrics_blob, without_canisters);
