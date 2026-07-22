@@ -19255,6 +19255,7 @@ dependencies = [
  "ic-types",
  "idna",
  "indoc 1.0.9",
+ "lazy_static",
  "libc",
  "mockall 0.13.1",
  "nix 0.24.3",

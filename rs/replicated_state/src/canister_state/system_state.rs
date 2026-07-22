@@ -1002,41 +1002,42 @@ impl SystemState {
         self.ingress_induction_cycles_debit += charge;
     }
 
-    /// Removes a previously postponed charge for ingress messages from the balance
-    /// of the canister.
-    ///
-    /// Note that this will saturate the balance to zero if the charge to remove is
-    /// larger than the current debit.
-    pub fn remove_charge_from_ingress_induction_cycles_debit(&mut self, charge: Cycles) {
-        self.ingress_induction_cycles_debit -= charge;
-    }
-
     /// Charges the pending 'ingress_induction_cycles_debit' from the balance.
     ///
-    /// Precondition:
-    /// - The balance is large enough to cover the debit.
+    /// If `strict` is `true`, the caller guarantees that the balance is large
+    /// enough to cover the debit and it is a bug if that is not the case.
+    ///
+    /// If `strict` is `false`, the balance is allowed to be smaller than the
+    /// debit: only the available cycles are charged and the rest of the debit is
+    /// silently dropped (making some of the postponed ingress induction charges
+    /// free). This is used after a cleanup callback, which can burn the canister's
+    /// cycles balance below the pending debit and must always be allowed to
+    /// succeed.
     pub fn apply_ingress_induction_cycles_debit(
         &mut self,
         canister_id: CanisterId,
         cost_schedule: CanisterCyclesCostSchedule,
+        strict: bool,
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
         // We rely on saturating operations of `Cycles` here.
         let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
-        debug_assert_eq!(remaining_debit.get(), 0);
-        if remaining_debit.get() > 0 {
-            // This case is unreachable and may happen only due to a bug: if the
-            // caller has reduced the cycles balance below the cycles debit.
-            charging_from_balance_error.inc();
-            error!(
-                log,
-                "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {} in install_code",
-                canister_id,
-                remaining_debit,
-            );
-            // Continue the execution by dropping the remaining debit, which makes
-            // some of the postponed charges free.
+        if strict {
+            debug_assert_eq!(remaining_debit.get(), 0);
+            if remaining_debit.get() > 0 {
+                // This case is unreachable and may happen only due to a bug: if the
+                // caller has reduced the cycles balance below the cycles debit.
+                charging_from_balance_error.inc();
+                error!(
+                    log,
+                    "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {}",
+                    canister_id,
+                    remaining_debit,
+                );
+                // Continue the execution by dropping the remaining debit, which makes
+                // some of the postponed charges free.
+            }
         }
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
             self.ingress_induction_cycles_debit,
