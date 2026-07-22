@@ -2139,6 +2139,8 @@ impl SystemState {
         // The use cases below are not valid on the canister
         // level, they should only appear on the subnet level.
         debug_assert_ne!(use_case, CyclesUseCase::ECDSAOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::SchnorrOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::VetKd);
         debug_assert_ne!(use_case, CyclesUseCase::HTTPOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
