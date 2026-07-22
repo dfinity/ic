@@ -145,13 +145,14 @@ fn should_mint_with_ckerc20_setup() {
 }
 
 mod deposit_erc20 {
+    use assert_matches::assert_matches;
     use candid::Principal;
-    use ic_cketh_minter::endpoints::DepositErc20Response;
+    use ic_cketh_minter::endpoints::events::EventPayload;
     use ic_cketh_minter::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
+    use ic_cketh_test_utils::DEFAULT_USER_SUBACCOUNT;
     use ic_cketh_test_utils::ckerc20::CkErc20Setup;
     use ic_ledger_suite_orchestrator_test_utils::new_state_machine;
     use std::sync::Arc;
-    use std::time::Duration;
 
     #[test]
     fn should_trap_when_ckerc20_feature_not_active() {
@@ -173,27 +174,25 @@ mod deposit_erc20 {
     fn should_record_address_to_deposit() {
         let ckerc20 = CkErc20Setup::default();
         let caller = ckerc20.caller();
+        let scan_window_nanos = DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64;
 
-        // Ensure the minter's ECDSA public key is cached (it is dropped by the
-        // upgrades performed while building the setup) so that the deposit_erc20
-        // call below executes in a single round without an inter-canister call.
-        let _ = ckerc20.cketh.minter_address();
-
-        // Advance time so that it does not grow implicitly when executing the round
-        // registering the deposit address, making `valid_until` deterministic.
-        ckerc20.env.advance_time(Duration::from_secs(1));
-        let now = ckerc20.env.get_time().as_nanos_since_unix_epoch();
-        let expected = DepositErc20Response {
-            address: "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C".to_string(),
-            valid_until: now + DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64,
-        };
-
+        let time_before = ckerc20.env.get_time().as_nanos_since_unix_epoch();
         let (ckerc20, response) = ckerc20
-            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .call_minter_deposit_erc20(caller, Some(DEFAULT_USER_SUBACCOUNT))
             .expect_deposit_response();
+        let time_after = ckerc20.env.get_time().as_nanos_since_unix_epoch();
+
         assert_eq!(
-            response, expected,
-            "BUG: unexpected deposit_erc20 response, key derivation should be stable"
+            response.address, "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C",
+            "BUG: key derivation should be stable"
+        );
+        assert!(
+            (time_before + scan_window_nanos..=time_after + scan_window_nanos)
+                .contains(&response.valid_until),
+            "BUG: valid_until {} not in [{}, {}]",
+            response.valid_until,
+            time_before + scan_window_nanos,
+            time_after + scan_window_nanos,
         );
 
         let (ckerc20, response2) = ckerc20
@@ -216,6 +215,72 @@ mod deposit_erc20 {
             response, response3,
             "BUG: deposit_erc20 should be idempotent after canister upgrade"
         )
+    }
+
+    #[test]
+    fn should_not_record_one_event_per_registered_deposit_address() {
+        let mut ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        let subaccounts: Vec<[u8; 32]> = (0..10_u8).map(|i| [i; 32]).collect();
+
+        let events_before = ckerc20.cketh.get_all_events();
+
+        let mut responses = Vec::with_capacity(subaccounts.len());
+        for subaccount in &subaccounts {
+            let (setup, response) = ckerc20
+                .call_minter_deposit_erc20(caller, Some(*subaccount))
+                .expect_deposit_response();
+            ckerc20 = setup;
+            responses.push(response);
+        }
+
+        assert_eq!(
+            ckerc20.cketh.get_all_events(),
+            events_before,
+            "BUG: registering a deposit address should not record an event"
+        );
+
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+
+        let new_events: Vec<EventPayload> = ckerc20.cketh.get_all_events()[events_before.len()..]
+            .iter()
+            .map(|event| event.payload.clone())
+            .collect();
+        let snapshot_and_upgrade: Vec<EventPayload> = new_events
+            .iter()
+            .filter(|payload| {
+                !matches!(
+                    payload,
+                    EventPayload::SyncedToBlock { .. }
+                        | EventPayload::SyncedErc20ToBlock { .. }
+                        | EventPayload::SyncedDepositWithSubaccountToBlock { .. }
+                )
+            })
+            .cloned()
+            .collect();
+        assert_matches!(
+            snapshot_and_upgrade.as_slice(),
+            [
+                EventPayload::RegisteredDepositAddresses { addresses },
+                EventPayload::Upgrade(_)
+            ] if addresses.len() == subaccounts.len(),
+            "BUG: expected a single deposit-address snapshot with all addresses and one upgrade event, got {new_events:#?}"
+        );
+
+        let mut responses_after_upgrade = Vec::with_capacity(subaccounts.len());
+        for subaccount in &subaccounts {
+            let (setup, response) = ckerc20
+                .call_minter_deposit_erc20(caller, Some(*subaccount))
+                .expect_deposit_response();
+            ckerc20 = setup;
+            responses_after_upgrade.push(response);
+        }
+        assert_eq!(
+            responses, responses_after_upgrade,
+            "BUG: deposit addresses should survive an upgrade unchanged"
+        );
     }
 }
 
