@@ -264,8 +264,8 @@ system_test(
     # + 1 unassigned), demanding ~51 vCPUs and ~328 GiB of RAM. That fits on
     # DFINITY's local-backend runners (64 CPUs, plenty of RAM) but not on a
     # Namespace Bazel Execution Worker (16 CPUs, 32 GiB), where the host thrashes
-    # and nodes never become reachable. Pin this test to the Farm backend, where
-    # each VM runs on its own host.
+    # and nodes never become reachable. Pin this test to the Farm backend, where VMs
+    # are provisioned by the Farm cluster instead of being booted on the Bazel worker.
     backend = "farm",
     cpus = MIN_LOCAL_CPUS + 32 * 1 + 3 * DEFAULT_VCPUS_PER_VM,  # 32 App IC Node VMs with 1 vCPU override + 1 System + 1 fast System + 1 unassigned IC Node VMs * 6 vCPUs.
     tags = [
