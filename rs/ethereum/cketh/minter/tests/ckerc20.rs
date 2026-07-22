@@ -165,6 +165,38 @@ mod deposit_erc20 {
             .call_minter_deposit_erc20(Principal::anonymous(), None)
             .expect_trap("anonymous");
     }
+
+    #[test]
+    fn should_record_address_to_deposit() {
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+
+        let (ckerc20, address) = ckerc20
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .expect_deposit_address();
+        assert_eq!(
+            address, "0x9cEc8260d73Be0C2f2cC217808bf21008Bf22E4C",
+            "BUG: key derivation should be stable"
+        );
+
+        let (ckerc20, address2) = ckerc20
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .expect_deposit_address();
+        assert_eq!(address, address2, "BUG: deposit_erc20 should be idempotent");
+
+        ckerc20
+            .cketh
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+
+        let (_ckerc20, address3) = ckerc20
+            .call_minter_deposit_erc20(caller, Some([42_u8; 32]))
+            .expect_deposit_address();
+
+        assert_eq!(
+            address, address3,
+            "BUG: deposit_erc20 should be idempotent after canister upgrade"
+        )
+    }
 }
 
 mod withdraw_erc20 {
