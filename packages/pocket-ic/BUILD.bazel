@@ -12,7 +12,7 @@ rust_library(
     version = "15.0.0",
     deps = [
         # Keep sorted.
-        "@crate_index//:backoff",
+        "@crate_index//:backon",
         "@crate_index//:base64",
         "@crate_index//:candid",
         "@crate_index//:flate2",

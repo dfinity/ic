@@ -62,7 +62,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
     "@crate_index//:axum-server",
-    "@crate_index//:backoff",
+    "@crate_index//:backon",
     "@crate_index//:base64",
     "@crate_index//:bitcoin_dogecoin",
     "@crate_index//:bytes",

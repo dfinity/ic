@@ -35,8 +35,7 @@ use axum::{
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
-use backoff::backoff::Backoff;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backon::{BackoffBuilder, ExponentialBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
@@ -321,11 +320,13 @@ async fn run_operation<T: Serialize + FromOpOut>(
 ) -> (StatusCode, ApiResponse<T>) {
     let retry_if_busy = op.retry_if_busy();
     let op = Arc::new(op);
-    let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
-        .with_initial_interval(Duration::from_millis(10))
-        .with_max_interval(Duration::from_secs(1))
-        .with_multiplier(2.0)
-        .with_max_elapsed_time(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
+    let mut retry_policy = ExponentialBuilder::new()
+        .with_min_delay(Duration::from_millis(10))
+        .with_max_delay(Duration::from_secs(1))
+        .with_factor(2.0)
+        .with_jitter()
+        .with_total_delay(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
+        .without_max_times()
         .build();
     loop {
         match api_state
@@ -359,7 +360,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                                 "run_operation::retry_busy instance_id={} state_label={:?} op_id={}",
                                 instance_id, state_label, op_id.0
                             );
-                            match retry_policy.next_backoff() {
+                            match retry_policy.next() {
                                 Some(duration) => tokio::time::sleep(duration).await,
                                 None => {
                                     break (

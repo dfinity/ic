@@ -10,7 +10,7 @@ async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { workspace = true }
 axum-server = { workspace = true }
-backoff = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 bitcoin = { workspace = true }
 bytes = { workspace = true }
