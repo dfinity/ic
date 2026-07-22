@@ -134,7 +134,7 @@ fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<
             // Most likely, this will eventually lead to an explosion, because
             // at this point, replica_version_id is empty, and in practice, we
             // would have no elected replica version with an ID of length 0.
-            return Some(replica_version_id);
+            Some(replica_version_id)
         })
         .collect()
 }
