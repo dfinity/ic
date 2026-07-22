@@ -1,6 +1,6 @@
 use std::{
     convert::TryFrom,
-    net::{IpAddr, SocketAddr},
+    net::SocketAddr,
     sync::Arc,
     time::Duration,
 };
