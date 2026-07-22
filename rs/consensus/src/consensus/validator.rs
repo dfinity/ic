@@ -1210,14 +1210,6 @@ impl Validator {
             return Err(ValidationFailure::FailedToGetRegistryVersion.into());
         };
 
-        // If the replica is halted, block payload should be empty.
-        if status == Status::Halting || status == Status::Halted {
-            let payload = proposal.as_ref().payload.as_ref();
-            if !payload.is_summary() && !payload.is_empty() {
-                return Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into());
-            }
-        }
-
         let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
 
@@ -1274,10 +1266,18 @@ impl Validator {
             .into());
         }
 
-        // If the replica is halted, the block payload is empty so we can skip the rest of the
-        // validation.
+        // While halting or halted, data blocks must have an empty payload: skip the rest of the
+        // validation if they do, and reject them otherwise. Summary blocks always carry a payload,
+        // so they are validated normally.
         if status == Status::Halting || status == Status::Halted {
-            return Ok(());
+            let payload = proposal.payload.as_ref();
+            if !payload.is_summary() {
+                return if payload.is_empty() {
+                    Ok(())
+                } else {
+                    Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into())
+                };
+            }
         }
 
         // Below are all the payload validations
@@ -2801,6 +2801,86 @@ pub mod test {
             assert_eq!(results.len(), 1);
             assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
                 if b == &block_proposal
+            );
+        })
+    }
+
+    #[test]
+    fn test_summary_block_is_validated_while_halted() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let dkg_interval_length = 9;
+            let committee: Vec<_> = (0..4).map(node_test_id).collect();
+            let ValidatorAndDependencies {
+                validator,
+                payload_builder,
+                state_manager,
+                registry_client,
+                replica_config,
+                mut pool,
+                time_source,
+                ..
+            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&committee)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .with_halt_at_cup_height(true)
+                        .build(),
+                )],
+            ));
+
+            // Any payload validation fails, so we can observe whether validation was attempted.
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| {
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidPayloadReason::PayloadTooBig {
+                            expected: ic_types::NumBytes::new(0),
+                            received: ic_types::NumBytes::new(1),
+                        },
+                    ))
+                });
+
+            // Advance to the block right before the *next* summary height and build the summary
+            // block proposal at the DKG boundary.
+            pool.advance_round_normal_operation_n(dkg_interval_length);
+            let summary_proposal = pool.make_next_block();
+            assert!(
+                summary_proposal.content.as_ref().payload.is_summary(),
+                "expected a summary block at the DKG boundary",
+            );
+
+            // Sanity check: the subnet is indeed halting/halted at this height.
+            assert_matches!(
+                status::get_status(
+                    summary_proposal.height(),
+                    registry_client.as_ref(),
+                    replica_config.subnet_id,
+                    &PoolReader::new(&pool),
+                    &no_op_logger(),
+                ),
+                Some(Status::Halting | Status::Halted)
+            );
+
+            let context = summary_proposal.content.as_ref().context.clone();
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(context.certified_height);
+            time_source.set_time(context.time).unwrap();
+
+            // The block must be validated, so the failing payload validation is hit.
+            let result = validator.check_block_validity(&PoolReader::new(&pool), &summary_proposal);
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidArtifactReason::InvalidPayload(
+                        InvalidPayloadReason::PayloadTooBig { .. }
+                    )
+                ))
             );
         })
     }
