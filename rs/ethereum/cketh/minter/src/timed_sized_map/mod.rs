@@ -128,7 +128,7 @@ impl<K: Ord + Clone, V> TimedSizedMap<K, V> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&K, &Entry<V>)> {
-        self.entries.iter().map(|(key, entry)| (key, entry))
+        self.entries.iter()
     }
 
     /// Rebuild a map from a previously captured snapshot, preserving each entry's original

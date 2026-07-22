@@ -19,6 +19,7 @@ use num_traits::ToPrimitive;
 use phantom_newtype::Id;
 use std::env;
 use std::path::PathBuf;
+use crate::timed_sized_map::Timestamp;
 
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
@@ -467,7 +468,9 @@ impl GetEventsFile {
                                 owner: a.owner,
                                 subaccount: a.subaccount,
                                 address: a.address.parse().unwrap(),
-                                registered_at_nanos: a.registered_at_nanos,
+                                registered_at_nanos: Timestamp::from_nanos(
+                                    a.registered_at_nanos,
+                                ),
                             })
                             .collect(),
                     )
