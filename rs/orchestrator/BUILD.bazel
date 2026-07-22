@@ -137,6 +137,7 @@ rust_test(
         "@crate_index//:assert_matches",
         "@crate_index//:async-stream",
         "@crate_index//:hyper-util",
+        "@crate_index//:lazy_static",
         "@crate_index//:libc",
         "@crate_index//:mockall",
         "@crate_index//:rcgen",
