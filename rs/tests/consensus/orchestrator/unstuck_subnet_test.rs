@@ -28,9 +28,10 @@ use ic_consensus_system_test_utils::{
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
-    ic::{InternetComputer, Subnet},
+    ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResourceOverrides},
     test_env::TestEnv,
     test_env_api::*,
+    test_setup::SystemTestBackend,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{JournalStreamer, block_on};
@@ -41,14 +42,32 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 const NUM_READ_RETRIES: usize = 10;
 
+// Per-VM memory used on the local backend. There all VMs run on a single host,
+// so the Farm default of 24 GiB per VM would let the 4 System VMs collectively
+// exceed the host's RAM. Under Namespace remote execution the host is an even
+// smaller RBE worker, so the VMs thrash and freeze while the orchestrator
+// unpacks and writes the ~579 MiB update image to disk during the upgrade. The
+// frozen nodes never rejoin, so the test times out waiting for them to report
+// the new version. 4 GiB per VM keeps all 4 VMs comfortably within the host's
+// RAM (matching the sibling `upgrade_downgrade_*_subnet_test`s).
+const LOCAL_BACKEND_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(4 * 1024 * 1024);
+
 fn config(env: TestEnv) {
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(SUBNET_SIZE)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-        )
-        .setup_and_start(&env)
+    let mut ic = InternetComputer::new().add_subnet(
+        Subnet::new(SubnetType::System)
+            .add_nodes(SUBNET_SIZE)
+            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+    );
+    // On the local backend, cap the per-VM memory so all VMs fit within the
+    // single host's RAM (see `LOCAL_BACKEND_VM_MEMORY`). On Farm, keep the
+    // generous default.
+    if SystemTestBackend::from_env() == SystemTestBackend::Local {
+        ic = ic.with_resource_overrides(VmResourceOverrides {
+            memory_kibibytes: Some(LOCAL_BACKEND_VM_MEMORY),
+            ..Default::default()
+        });
+    }
+    ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
