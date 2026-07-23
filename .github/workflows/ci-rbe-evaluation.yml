@@ -260,7 +260,7 @@ jobs:
             --remote_default_exec_properties=container-image="$worker_image"
 
             # Namespace currently deploys 15 workers that can run 8 actions:
-            --jobs=64
+            --jobs=128
 
             # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
             # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
@@ -317,7 +317,7 @@ jobs:
             --remote_default_exec_properties=namespace_action_isolation=sandboxed
             --remote_default_exec_properties=container-image="$worker_image"
 
-            --jobs=32
+            --jobs=64
 
             # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
             # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
