@@ -234,8 +234,6 @@ impl CanisterHttpPayloadBuilderImpl {
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;
                 };
-                // The subnet size for this request is pinned in its context and
-                // feeds the consensus-cost term of the collective initial spend.
                 let subnet_size = request.subnet_size.get();
                 match &request.replication {
                     Replication::FullyReplicated => {
@@ -443,8 +441,6 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
-            // The subnet size is pinned in the request context and feeds the
-            // consensus-cost term of the collective initial spend.
             let subnet_size = request_context.subnet_size.get();
 
             let (effective_committee, effective_threshold) = match request_context.replication {
@@ -624,8 +620,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
-            // The subnet size (used for the consensus-cost term of the collective
-            // initial spend) is pinned in the request context.
             let subnet_size = context.subnet_size.get();
             let Replication::Flexible {
                 committee: flex_committee,
@@ -710,8 +704,6 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
-            // The subnet size (used for the consensus-cost term of the collective
-            // initial spend) is pinned in the request context.
             let subnet_size = context.subnet_size.get();
             let Replication::Flexible {
                 committee: flex_committee,
