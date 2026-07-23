@@ -2,7 +2,11 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 
 use axum::body::Body;
 use futures::FutureExt;
-use hickory_resolver::{Resolver, config::LookupIpStrategy};
+use hickory_resolver::{
+    Resolver,
+    config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+};
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
@@ -459,7 +463,24 @@ async fn connect(
             let (api_bn_id, domain) = get_random_api_boundary_node(registry_client)
                 .map_err(|err| format!("Could not find an API BN to talk to. Error: {err}"))?;
 
-            let mut dns_resolver = Resolver::builder_tokio()?;
+            // To test the DNS resolution in a hermetic environment which does not have any external
+            // network access, we use a placeholder nameserver which is never contacted, because the
+            // domain used in the test is an IP literal. In production, the resolver will use the
+            // system's default nameservers to resolve the domain.
+            let mut dns_resolver = if !cfg!(test) {
+                Resolver::builder(TokioRuntimeProvider::default())?
+            } else {
+                Resolver::builder_with_config(
+                    ResolverConfig::from_parts(
+                        None,
+                        vec![],
+                        vec![NameServerConfig::udp_and_tcp(
+                            std::net::Ipv6Addr::LOCALHOST.into(),
+                        )],
+                    ),
+                    TokioRuntimeProvider::default(),
+                )
+            };
             dns_resolver.options_mut().ip_strategy = LookupIpStrategy::Ipv6Only;
             let ip_addr = dns_resolver
                 .build()?

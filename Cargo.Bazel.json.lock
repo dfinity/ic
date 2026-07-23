@@ -1,5 +1,5 @@
 {
-  "checksum": "beec4b43d21535a1fdc42ba152ca90dcd9676ef202cade55514af29d9ae3b46a",
+  "checksum": "d5ffecbe5eb539cc383255d2073c58ee29b2e68ff04ebfbcded41ae738abb154",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -20976,7 +20976,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "ic-agent 0.49.0",
+              "id": "ic-agent 0.49.1",
               "target": "ic_agent"
             },
             {
@@ -21060,7 +21060,7 @@
               "target": "ic_http_certification"
             },
             {
-              "id": "ic-identity-hsm 0.49.0",
+              "id": "ic-identity-hsm 0.49.1",
               "target": "ic_identity_hsm"
             },
             {
@@ -21093,11 +21093,11 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-transport-types 0.49.0",
+              "id": "ic-transport-types 0.49.1",
               "target": "ic_transport_types"
             },
             {
-              "id": "ic-utils 0.49.0",
+              "id": "ic-utils 0.49.1",
               "target": "ic_utils"
             },
             {
@@ -33642,14 +33642,14 @@
       ],
       "license_file": null
     },
-    "ic-agent 0.49.0": {
+    "ic-agent 0.49.1": {
       "name": "ic-agent",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.49.0/download",
-          "sha256": "65a32acd8665871aff33d8c2d47ab8bf5da60635652d83a3770bfa34b9ef91ad"
+          "url": "https://static.crates.io/crates/ic-agent/0.49.1/download",
+          "sha256": "499d1647334e4c8bccd9a96a92bf4be8b332a4507369c0e36d7ab9585a24f725"
         }
       },
       "targets": [
@@ -33693,8 +33693,8 @@
               "target": "async_lock"
             },
             {
-              "id": "backoff 0.4.0",
-              "target": "backoff"
+              "id": "backon 1.6.0",
+              "target": "backon"
             },
             {
               "id": "bytes 1.11.1",
@@ -33749,7 +33749,7 @@
               "target": "ic_ed25519"
             },
             {
-              "id": "ic-transport-types 0.49.0",
+              "id": "ic-transport-types 0.49.1",
               "target": "ic_transport_types"
             },
             {
@@ -33862,7 +33862,7 @@
           ],
           "selects": {}
         },
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36587,14 +36587,14 @@
       ],
       "license_file": null
     },
-    "ic-identity-hsm 0.49.0": {
+    "ic-identity-hsm 0.49.1": {
       "name": "ic-identity-hsm",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-identity-hsm/0.49.0/download",
-          "sha256": "bd610c57b9353fbbc00af59894341e43eb98299f327a46eda5f5a6bf841b0fc1"
+          "url": "https://static.crates.io/crates/ic-identity-hsm/0.49.1/download",
+          "sha256": "af528049c02d371578ea1dde0ad75b7d572d5f5145a61ff7a5ac0711b151f419"
         }
       },
       "targets": [
@@ -36623,7 +36623,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-agent 0.49.0",
+              "id": "ic-agent 0.49.1",
               "target": "ic_agent"
             },
             {
@@ -36646,7 +36646,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37353,14 +37353,14 @@
       ],
       "license_file": null
     },
-    "ic-transport-types 0.49.0": {
+    "ic-transport-types 0.49.1": {
       "name": "ic-transport-types",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.49.0/download",
-          "sha256": "ede9080798410ed4777b6c4e02f011467b256fb9ddd393fc48aef86eb96442e6"
+          "url": "https://static.crates.io/crates/ic-transport-types/0.49.1/download",
+          "sha256": "9ae3ab1d620565ff148c9fd9486bf2e9da0cfa8d42f7020d0cff13e2d6eff8b5"
         }
       },
       "targets": [
@@ -37433,7 +37433,7 @@
           ],
           "selects": {}
         },
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37545,14 +37545,14 @@
       ],
       "license_file": null
     },
-    "ic-utils 0.49.0": {
+    "ic-utils 0.49.1": {
       "name": "ic-utils",
-      "version": "0.49.0",
+      "version": "0.49.1",
       "package_url": "https://github.com/dfinity/agent-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-utils/0.49.0/download",
-          "sha256": "9eee176e6e16bb85f904442af47503b1e214da3d62e4cad2fda4a64d9b72de28"
+          "url": "https://static.crates.io/crates/ic-utils/0.49.1/download",
+          "sha256": "a143d270c29f00fb6274d43d490d619cd3aaf6d87f128ab1073d14f5842f573a"
         }
       },
       "targets": [
@@ -37591,7 +37591,7 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.49.0",
+              "id": "ic-agent 0.49.1",
               "target": "ic_agent"
             },
             {
@@ -37647,7 +37647,7 @@
           ],
           "selects": {}
         },
-        "version": "0.49.0"
+        "version": "0.49.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -45377,7 +45377,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
+            "Rev": "a244a247789fd9ece0fe1a406180c32e5bbc0c3f"
           }
         }
       },
@@ -45409,7 +45409,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.10.0",
               "target": "bitflags"
             },
             {
@@ -45427,7 +45427,7 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2024",
         "version": "0.14.99"
       },
       "license": "Apache-2.0",
@@ -45444,7 +45444,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
+            "Rev": "a244a247789fd9ece0fe1a406180c32e5bbc0c3f"
           },
           "strip_prefix": "lmdb-sys",
           "patch_args": [
@@ -45505,7 +45505,7 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2024",
         "version": "0.11.99"
       },
       "build_script_attrs": {
@@ -97790,7 +97790,7 @@
     "hyper-rustls 0.27.7",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.20",
-    "ic-agent 0.49.0",
+    "ic-agent 0.49.1",
     "ic-bn-lib 0.2.3",
     "ic-bn-lib-common 0.2.2",
     "ic-btc-interface 0.4.0",
@@ -97811,7 +97811,7 @@
     "ic-doge-interface 0.3.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.1.0",
-    "ic-identity-hsm 0.49.0",
+    "ic-identity-hsm 0.49.1",
     "ic-management-canister-types 0.8.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.1.0",
@@ -97819,8 +97819,8 @@
     "ic-stable-structures 0.6.8",
     "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
-    "ic-transport-types 0.49.0",
-    "ic-utils 0.49.0",
+    "ic-transport-types 0.49.1",
+    "ic-utils 0.49.1",
     "ic-verify-bls-signature 0.6.0",
     "ic-vetkeys 0.7.0",
     "ic-wasm 0.10.0",

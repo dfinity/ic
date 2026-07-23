@@ -165,6 +165,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 *block_number,
             );
         }
+        EventType::RegisteredDepositAddresses(registry) => {
+            state.automatic_deposits.rebuild_watchlist(registry)
+        }
     }
 }
 

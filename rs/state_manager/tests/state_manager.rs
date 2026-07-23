@@ -2604,6 +2604,60 @@ fn state_sync_message_contains_manifest() {
 }
 
 #[test]
+fn state_sync_get_populates_file_group_cache_of_matched_height() {
+    state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
+        // Height 1: default state; without canisters its file group is empty.
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        let hash1 = wait_for_checkpoint(&*state_manager, Height(1));
+
+        // Height 2: contains a canister, so its manifest and file group differ from height 1's.
+        let (_height, mut state) = state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(1));
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+        let hash2 = wait_for_checkpoint(&*state_manager, Height(2));
+        assert_ne!(hash1, hash2);
+
+        let honest_id1 = StateSyncArtifactId {
+            height: Height(1),
+            hash: hash1.get(),
+        };
+
+        // Honest request for height 1 populates and returns height 1's own file group.
+        let baseline_h1 = state_sync
+            .get(&honest_id1)
+            .expect("honest height-1 request must resolve");
+
+        // Request claiming height 1 but carrying height 2's hash. It is matched by hash to
+        // height 2 and computes height 2's file group. Height 2's cache is still empty here, so
+        // the computed value is written back; the write-back must target the matched height (2).
+        let mismatched_id = StateSyncArtifactId {
+            height: Height(1),
+            hash: hash2.get(),
+        };
+        let mismatched_msg = state_sync
+            .get(&mismatched_id)
+            .expect("hash-matched request must resolve");
+
+        // The two heights must have different file groups, otherwise this test does not make sense.
+        assert_ne!(
+            baseline_h1.state_sync_file_group,
+            mismatched_msg.state_sync_file_group
+        );
+
+        // Height 1's file group must be unchanged: the write-back must not land on the
+        // caller-supplied height.
+        let after_h1 = state_sync
+            .get(&honest_id1)
+            .expect("honest height-1 request must still resolve");
+        assert_eq!(
+            after_h1.state_sync_file_group,
+            baseline_h1.state_sync_file_group
+        );
+    });
+}
+
+#[test]
 fn state_sync_priority_fn_respects_states_to_fetch() {
     state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         fn hash(n: u8) -> CryptoHashOfState {

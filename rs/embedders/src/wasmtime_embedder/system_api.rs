@@ -1972,6 +1972,19 @@ impl SystemApiImpl {
     }
 }
 
+/// Parameters of `ic0.cost_http_request_v2`, mirrors the
+/// management canister's HTTP-request cost arguments.
+#[derive(CandidType, Deserialize)]
+struct CostHttpRequestV2Params {
+    request_bytes: u64,
+    http_roundtrip_time_ms: u64,
+    raw_response_bytes: u64,
+    transformed_response_bytes: u64,
+    transform_instructions: u64,
+}
+
+const MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE: usize = 79;
+
 impl SystemApi for SystemApiImpl {
     fn set_execution_error(&mut self, error: HypervisorError) {
         self.execution_error = Some(error)
@@ -4347,21 +4360,25 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-        #[derive(CandidType, Deserialize)]
-        struct CostHttpRequestV2Params {
-            request_bytes: u64,
-            http_roundtrip_time_ms: u64,
-            raw_response_bytes: u64,
-            transformed_response_bytes: u64,
-            transform_instructions: u64,
-        }
-
         let params_bytes = valid_subslice(
             "ic0.cost_http_request_v2 heap",
             InternalAddress::new(params_src),
             InternalAddress::new(params_size),
             heap,
         )?;
+
+        // Sanity check for the parameter size. Allow up to 2x increase to enable
+        // future extensions without breaking backward compatibility.
+        if params_bytes.len() > 2 * MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE {
+            return Err(HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "ic0.cost_http_request_v2 params blob is too large: {} bytes (maximum {})",
+                    params_bytes.len(),
+                    2 * MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE,
+                ),
+            });
+        }
+
         let mut decoder_config = DecoderConfig::new();
         decoder_config.set_skipping_quota(0);
 
@@ -4685,6 +4702,19 @@ pub(crate) fn valid_subslice<'a>(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_cost_http_request_v2_params_size_is_constant() {
+        let max = CostHttpRequestV2Params {
+            request_bytes: u64::MAX,
+            http_roundtrip_time_ms: u64::MAX,
+            raw_response_bytes: u64::MAX,
+            transformed_response_bytes: u64::MAX,
+            transform_instructions: u64::MAX,
+        };
+        let encoded = candid::encode_one(&max).unwrap();
+        assert_eq!(MAX_COST_HTTP_REQUEST_V2_PARAMS_SIZE, encoded.len());
+    }
 
     #[test]
     fn test_valid_subslice() {

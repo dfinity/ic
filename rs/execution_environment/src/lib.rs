@@ -16,6 +16,7 @@ mod types;
 pub mod units;
 pub mod util;
 
+pub use crate::canister_logs::fetch_canister_logs_response_for_bench;
 pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;

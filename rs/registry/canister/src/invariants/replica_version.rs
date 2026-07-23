@@ -1,16 +1,20 @@
 use std::collections::BTreeSet;
 
-use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
-    get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
-    get_subnet_ids_from_snapshot, get_value_from_snapshot,
+use crate::{
+    flags::is_blank_replica_version_id_for_cloud_engines_enabled,
+    invariants::common::{
+        InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
+        get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
+        get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    },
 };
 
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
     standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
-    subnet::v1::SubnetRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    subnet::v1::{SubnetRecord, SubnetType},
+    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
     make_replica_version_key, make_standard_engine_replica_version_record_key,
@@ -28,6 +32,11 @@ use prost::Message;
 /// * The corresponding ReplicaVersionRecord exists.
 /// * Each URL is well-formed.
 /// * Release package hash is a well-formed hex-encoded SHA256 value.
+///
+/// Exception: a CloudEngine can have a blank replica_version_id in its
+/// SubnetRecord if there is a StandardEngineReplicaVersionRecord. As of July
+/// 22, 2026, this feature is disabled via a flag (but the plan is to enable it
+/// in the not too distant future).
 pub(crate) fn check_replica_version_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -93,9 +102,40 @@ fn get_subnet_record(snapshot: &RegistrySnapshot, subnet_id: SubnetId) -> Subnet
 /// Returns the list of replica versions where each version is referred to
 /// by at least one subnet.
 fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
+    let cloud_engines_are_allowed_to_have_blank_replica_version_id =
+        is_blank_replica_version_id_for_cloud_engines_enabled()
+            && snapshot
+                .get(make_standard_engine_replica_version_record_key().as_bytes())
+                .is_some();
+
     get_subnet_ids_from_snapshot(snapshot)
         .iter()
-        .map(|subnet_id| get_subnet_record(snapshot, *subnet_id).replica_version_id)
+        .filter_map(|subnet_id| {
+            let SubnetRecord {
+                replica_version_id,
+                subnet_type,
+                ..
+            } = get_subnet_record(snapshot, *subnet_id);
+
+            if !replica_version_id.is_empty() {
+                // For non-CloudEngines, this is normal (because it is
+                // required). CloudEngines can also end up here.
+                return Some(replica_version_id);
+            }
+
+            if subnet_type == SubnetType::CloudEngine as i32
+                && cloud_engines_are_allowed_to_have_blank_replica_version_id
+            {
+                // For CloudEngines, this is normal (because this is allowed and
+                // typical).
+                return None;
+            }
+
+            // Most likely, this will eventually lead to an explosion, because
+            // at this point, replica_version_id is empty, and in practice, we
+            // would have no elected replica version with an ID of length 0.
+            Some(replica_version_id)
+        })
         .collect()
 }
 
@@ -124,7 +164,16 @@ fn get_all_standard_engine_replica_versions(snapshot: &RegistrySnapshot) -> BTre
 
 #[cfg(test)]
 mod tests {
-    use crate::common::test_helpers::invariant_compliant_registry;
+    use crate::{
+        common::test_helpers::{
+            invariant_compliant_registry, prepare_registry_with_cloud_engine_subnet,
+        },
+        flags::{
+            temporarily_disable_blank_replica_version_id_for_cloud_engines,
+            temporarily_enable_blank_replica_version_id_for_cloud_engines,
+        },
+        registry::Registry,
+    };
 
     use super::*;
     use canister_test::PrincipalId;
@@ -287,6 +336,165 @@ mod tests {
 
         // Attempt mutation.
         let mutation = vec![insert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+    }
+
+    /// Adds a CloudEngine subnet (subnet_type, cycles cost schedule, member
+    /// node reward types, and crypto/CUP material all set up) to the given
+    /// registry. Its replica_version_id is left as the default, which is
+    /// non-blank. Returns the new subnet's id.
+    fn add_cloud_engine_subnet(registry: &mut Registry) -> SubnetId {
+        let (cloud_engine_request, subnet_id) = prepare_registry_with_cloud_engine_subnet(1, 1);
+        registry.maybe_apply_mutation_internal(cloud_engine_request.mutations);
+
+        subnet_id
+    }
+
+    /// Returns a collection of mutations that blanks out the given subnet's
+    /// replica_version_id.
+    fn blank_replica_version_id_mutation(
+        registry: &Registry,
+        subnet_id: SubnetId,
+    ) -> Vec<RegistryMutation> {
+        let mut subnet = registry.get_subnet_or_panic(subnet_id);
+        subnet.replica_version_id = "".to_string();
+
+        vec![upsert(
+            make_subnet_record_key(subnet_id).into_bytes(),
+            subnet.encode_to_vec(),
+        )]
+    }
+
+    /// One thing not mentioned in the name is that
+    /// StandardEngineReplicaVersionRecord must exist (and this feature must be
+    /// enabled via flag).
+    #[test]
+    fn test_blank_replica_version_id_is_allowed() {
+        // Step 1: Prepare the world.
+
+        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
+        let mut registry = invariant_compliant_registry(0);
+
+        // Elect replica versions 1 and 2.
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+            REPLICA_VERSION_ID_2.to_string(),
+        ]));
+
+        // Upgrade 10% of CloudEngines to replica version 2 (from version 1).
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_standard_engine_replica_version_record_key().as_bytes(),
+            StandardEngineReplicaVersionRecord {
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+                deployment_progress: 0.1,
+            }
+            .encode_to_vec(),
+        )]);
+
+        // Create a Cloud Engine.
+        let subnet_id = add_cloud_engine_subnet(&mut registry);
+
+        // Step 2: Run the code under test.
+        let mutation = blank_replica_version_id_mutation(&registry, subnet_id);
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The implicit assertion is that the previous line did not panic.
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_blank_replica_version_id_is_not_enabled_yet() {
+        // Step 1: Prepare the world. The only difference compared to the
+        // previous test is that here, the feature is DISABLED.
+        let _restore_on_drop = temporarily_disable_blank_replica_version_id_for_cloud_engines();
+        let mut registry = invariant_compliant_registry(0);
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+            REPLICA_VERSION_ID_2.to_string(),
+        ]));
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_standard_engine_replica_version_record_key().as_bytes(),
+            StandardEngineReplicaVersionRecord {
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+                deployment_progress: 0.1,
+            }
+            .encode_to_vec(),
+        )]);
+        let subnet_id = add_cloud_engine_subnet(&mut registry);
+
+        // Step 2: Run the code under test. Same as the previous test.
+        let mutation = blank_replica_version_id_mutation(&registry, subnet_id);
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+        // Unlike the previous test where the nominal behavior is NO panic.
+    }
+
+    /// It is fine for there to be no standard engine replica version if there
+    /// are no CloudEngines, but in general, there would be, so the name of this
+    /// test does not mention this "and the sun must exist" condition.
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_there_is_no_standard_replica_version() {
+        // Step 1: Prepare the world.
+        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = add_cloud_engine_subnet(&mut registry);
+
+        // Step 2: Run the code under test.
+        let mutation = blank_replica_version_id_mutation(&registry, subnet_id);
+        registry.check_global_state_invariants(&mutation);
+
+        // Step 3: Verify result(s).
+        // The assertion is at the top: #[should_panic(...)].
+    }
+
+    #[test]
+    #[should_panic(expected = "Using a version that isn't elected.")]
+    fn panic_when_non_cloud_engine_subnet_has_blank_replica_version_id() {
+        // Step 1: Prepare the world.
+
+        let _restore_on_drop = temporarily_enable_blank_replica_version_id_for_cloud_engines();
+        let mut registry = invariant_compliant_registry(0);
+
+        // Like in previous tests, elect a couple of replica versions, and
+        // upgrade 10% of the CloudEngine fleet to version 2 (from version 1).
+        registry.maybe_apply_mutation_internal(elect_version_mutations(vec![
+            REPLICA_VERSION_ID_1.to_string(),
+            REPLICA_VERSION_ID_2.to_string(),
+        ]));
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_standard_engine_replica_version_record_key().as_bytes(),
+            StandardEngineReplicaVersionRecord {
+                new_replica_version_id: REPLICA_VERSION_ID_2.to_string(),
+                old_replica_version_id: REPLICA_VERSION_ID_1.to_string(),
+                deployment_progress: 0.1,
+            }
+            .encode_to_vec(),
+        )]);
+
+        // Step 2: Run the code under test.
+
+        // Blank the replica_version_id field of a (non-CloudEngine) subnet.
+        let list = registry.get_subnet_list_record();
+        let subnet_id =
+            SubnetId::from(PrincipalId::try_from(list.subnets.first().unwrap()).unwrap());
+        let mut subnet = registry.get_subnet_or_panic(subnet_id);
+        assert_ne!(subnet.subnet_type, SubnetType::CloudEngine as i32);
+        subnet.replica_version_id = "".to_string();
+
+        // Update the record.
+        let mutation = vec![upsert(
+            make_subnet_record_key(subnet_id).into_bytes(),
+            subnet.encode_to_vec(),
+        )];
         registry.check_global_state_invariants(&mutation);
 
         // Step 3: Verify result(s).
