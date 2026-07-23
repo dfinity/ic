@@ -234,28 +234,28 @@ impl CanisterHttpPayloadBuilderImpl {
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;
                 };
-                // Committee threshold/faults_tolerated and the subnet size for
-                // this request are derived from the registry version pinned in
-                // its context. The subnet size feeds the consensus-cost term of
-                // the collective initial spend.
-                // TODO: Take subnet size from context instead, once it exists.
-                let CanisterHttpCommittee {
-                    threshold,
-                    faults_tolerated,
-                    committee,
-                } = match self
-                    .membership
-                    .get_canister_http_committee(request.registry_version)
-                {
-                    Ok(committee) => committee,
-                    Err(err) => {
-                        warn!(self.log, "Failed to get canister http committee: {:?}", err);
-                        continue;
-                    }
-                };
-                let subnet_size = committee.len() as u32;
+                // The subnet size for this request is pinned in its context and
+                // feeds the consensus-cost term of the collective initial spend.
+                let subnet_size = request.subnet_size.get();
                 match &request.replication {
                     Replication::FullyReplicated => {
+                        // Committee threshold and faults_tolerated for this
+                        // request are derived from the registry version pinned in
+                        // its context.
+                        let CanisterHttpCommittee {
+                            threshold,
+                            faults_tolerated,
+                            ..
+                        } = match self
+                            .membership
+                            .get_canister_http_committee(request.registry_version)
+                        {
+                            Ok(committee) => committee,
+                            Err(err) => {
+                                warn!(self.log, "Failed to get canister http committee: {:?}", err);
+                                continue;
+                            }
+                        };
                         if let Some(response) = find_fully_replicated_response(
                             grouped_shares,
                             threshold,
@@ -443,28 +443,30 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
-            // The committee is the subnet node set at the registry version
-            // pinned in the request context; its size feeds the consensus-cost
-            // term of the collective initial spend.
-            // TODO: Take subnet size from context instead, once it exists.
-            let CanisterHttpCommittee {
-                committee,
-                threshold,
-                ..
-            } = self
-                .membership
-                .get_canister_http_committee(request_context.registry_version)
-                .map_err(|err| {
-                    warn!(self.log, "Failed to get membership: {:?}", err);
-                    CanisterHttpPayloadValidationError::ValidationFailed(
-                        CanisterHttpPayloadValidationFailure::Membership,
-                    )
-                })?;
-            let subnet_size = committee.len() as u32;
+            // The subnet size is pinned in the request context and feeds the
+            // consensus-cost term of the collective initial spend.
+            let subnet_size = request_context.subnet_size.get();
 
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
-                Replication::FullyReplicated => (committee, threshold),
+                Replication::FullyReplicated => {
+                    // The committee is the subnet node set at the registry
+                    // version pinned in the request context.
+                    let CanisterHttpCommittee {
+                        committee,
+                        threshold,
+                        ..
+                    } = self
+                        .membership
+                        .get_canister_http_committee(request_context.registry_version)
+                        .map_err(|err| {
+                            warn!(self.log, "Failed to get membership: {:?}", err);
+                            CanisterHttpPayloadValidationError::ValidationFailed(
+                                CanisterHttpPayloadValidationFailure::Membership,
+                            )
+                        })?;
+                    (committee, threshold)
+                }
                 Replication::Flexible { .. } => {
                     return invalid_artifact(
                         InvalidCanisterHttpPayloadReason::InvalidPayloadSection(callback_id),
@@ -623,19 +625,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
             // The subnet size (used for the consensus-cost term of the collective
-            // initial spend) is the full node set at the context's registry
-            // version.
-            // TODO: Take subnet size from context instead, once it exists.
-            let CanisterHttpCommittee { committee, .. } = self
-                .membership
-                .get_canister_http_committee(context.registry_version)
-                .map_err(|err| {
-                    warn!(self.log, "Failed to get membership: {:?}", err);
-                    CanisterHttpPayloadValidationError::ValidationFailed(
-                        CanisterHttpPayloadValidationFailure::Membership,
-                    )
-                })?;
-            let subnet_size = committee.len() as u32;
+            // initial spend) is pinned in the request context.
+            let subnet_size = context.subnet_size.get();
             let Replication::Flexible {
                 committee: flex_committee,
                 min_responses,
@@ -720,19 +711,8 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
             // The subnet size (used for the consensus-cost term of the collective
-            // initial spend) is the full node set at the context's registry
-            // version, not the flexible committee subset.
-            // TODO: Take subnet size from context instead, once it exists.
-            let CanisterHttpCommittee { committee, .. } = self
-                .membership
-                .get_canister_http_committee(context.registry_version)
-                .map_err(|err| {
-                    warn!(self.log, "Failed to get membership: {:?}", err);
-                    CanisterHttpPayloadValidationError::ValidationFailed(
-                        CanisterHttpPayloadValidationFailure::Membership,
-                    )
-                })?;
-            let subnet_size = committee.len() as u32;
+            // initial spend) is pinned in the request context.
+            let subnet_size = context.subnet_size.get();
             let Replication::Flexible {
                 committee: flex_committee,
                 min_responses,

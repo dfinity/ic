@@ -1078,7 +1078,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
-            subnet_size: NumberOfNodes::from(13),
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
@@ -1119,7 +1119,10 @@ fn validate_payload_fails_for_initial_spent_mismatch() {
         let delegated_node_id = node_test_id(1);
         let callback_id = CallbackId::from(77);
 
-        let request_context = request_context(Replication::NonReplicated(delegated_node_id));
+        let request_context = CanisterHttpRequestContext {
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
+            ..request_context(Replication::NonReplicated(delegated_node_id))
+        };
         inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
 
         // Build an otherwise-valid response, then claim a collective initial spend
@@ -1620,7 +1623,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             pricing_version: ic_types::canister_http::PricingVersion::Legacy,
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
-            subnet_size: NumberOfNodes::from(13),
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
@@ -4906,6 +4909,15 @@ fn setup_test_with_contexts(
     contexts: Vec<(CallbackId, CanisterHttpRequestContext)>,
     run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
 ) {
+    // The context's subnet size must match the subnet the test registers, since
+    // payload building and validation source the subnet size from the context.
+    let contexts: Vec<_> = contexts
+        .into_iter()
+        .map(|(cb, mut ctx)| {
+            ctx.subnet_size = NumberOfNodes::from(num_nodes as u32);
+            (cb, ctx)
+        })
+        .collect();
     test_config_with_http_feature(true, num_nodes, |mut payload_builder, pool| {
         inject_request_contexts(&mut payload_builder, contexts);
         run(payload_builder, pool);
