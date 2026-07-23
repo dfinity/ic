@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::endpoints::DepositErc20Error;
 use crate::state::event::DepositAddressRegistration;
 use crate::timed_sized_map::{Entry, InsertError, TimedSizedMap, Timestamp};
