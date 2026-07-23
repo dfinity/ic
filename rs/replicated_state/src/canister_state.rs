@@ -687,9 +687,13 @@ impl CanisterState {
     /// account for the additional canister history).
     ///
     /// The returned change is *not* applied to the subnet available execution
-    /// memory; the caller is responsible for accounting for it (e.g. by passing
-    /// it to `cycles_and_memory_usage_checks_and_updates`, or accumulating it
-    /// across multiple steps of `install_code`).
+    /// memory; the caller is responsible for accounting for the recorded canister
+    /// history. Callers that update the subnet available execution memory directly
+    /// consume the returned change (applying it, e.g. in `rename_canister`, or
+    /// accumulating it across the steps of `install_code`); callers that go through
+    /// `cycles_and_memory_usage_checks_and_updates` instead record the change first
+    /// and pass it the memory usage *including* the change (discarding the returned
+    /// change).
     #[must_use]
     pub fn add_canister_change(
         &mut self,
