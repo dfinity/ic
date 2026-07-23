@@ -1087,7 +1087,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
-                vm_domain_name: vm_domain_name(guest_vm_type, None).to_string(),
+                vm_domain_name: vm_domain_name(guest_vm_type, slot).to_string(),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
