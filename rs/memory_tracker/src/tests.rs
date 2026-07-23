@@ -9,8 +9,9 @@ use ic_replicated_state::{
 use ic_sys::{PAGE_SIZE, PageBytes};
 use ic_types::{NumBytes, NumOsPages};
 use libc::c_void;
-use nix::sys::mman::{MapFlags, ProtFlags, mmap};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous};
 use rstest::rstest;
+use std::num::NonZeroUsize;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
@@ -62,16 +63,15 @@ fn setup(
     page_map.update(&pages);
 
     let memory = unsafe {
-        mmap(
-            std::ptr::null_mut(),
-            memory_pages * PAGE_SIZE,
+        mmap_anonymous(
+            None,
+            NonZeroUsize::new(memory_pages * PAGE_SIZE).expect("mmap length must be non-zero"),
             ProtFlags::PROT_NONE,
-            MapFlags::MAP_PRIVATE | MapFlags::MAP_ANON,
-            -1,
-            0,
+            MapFlags::MAP_PRIVATE,
         )
         .unwrap()
-    };
+    }
+    .as_ptr();
 
     match missing_page_handler_kind {
         MissingPageHandlerKind::Deterministic => {

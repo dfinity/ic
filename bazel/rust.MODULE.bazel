@@ -1071,12 +1071,20 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "ptrace",
-        "user",
-        "signal",
+        "fs",  # used by ic-sys/state_manager for memfd_create, dup, flock, renameat2
+        "ioctl",  # used by ic-os device for the ioctl_read! macro
+        "mman",  # used by replicated_state/memory_tracker/embedders for mmap/mprotect/madvise
+        "net",  # used by xnet payload_builder tests for SockaddrIn
+        "process",  # used by canister_sandbox/execution_environment for sys::wait
+        "ptrace",  # used by execution_environment fuzzer for sys::ptrace
+        "signal",  # used by canister_sandbox/guestos_tool for sys::signal
+        "socket",  # used by xnet payload_builder tests for socket/bind/getsockname
+        "time",  # used by state_manager tests for TimeSpec (utimensat)
+        "user",  # used by test_utilities/ic-os for getuid/geteuid/getegid
+        "zerocopy",  # used by ic-sys for fcntl::copy_file_range
     ],
     package = "nix",
-    version = "^0.24.3",
+    version = "^0.31.3",
 )
 crate.spec(
     package = "num-bigint",

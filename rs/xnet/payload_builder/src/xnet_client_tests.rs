@@ -212,6 +212,7 @@ async fn query_request_failed() {
     use nix::sys::socket::{
         AddressFamily, SockFlag, SockType, SockaddrIn, bind, getsockname, socket,
     };
+    use std::os::fd::AsRawFd;
 
     let metrics = &MetricsRegistry::new();
 
@@ -225,8 +226,8 @@ async fn query_request_failed() {
         None,
     )
     .expect("Socket creation failed");
-    bind(socket, &address).expect("bind() failed");
-    let sa = getsockname::<SockaddrIn>(socket).expect("getsockname() failed");
+    bind(socket.as_raw_fd(), &address).expect("bind() failed");
+    let sa = getsockname::<SockaddrIn>(socket.as_raw_fd()).expect("getsockname() failed");
 
     // URL to query a server that would be running on the allocated port.
     let url = format!("http://{sa}").parse::<Uri>().unwrap();

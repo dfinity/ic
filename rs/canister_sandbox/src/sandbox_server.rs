@@ -244,7 +244,10 @@ mod tests {
         let mut fds: Vec<&mut std::os::unix::io::RawFd> = vec![];
         memory.enumerate_fds(&mut fds);
         for fd in fds.into_iter() {
-            *fd = nix::unistd::dup(*fd).unwrap();
+            use std::os::fd::{BorrowedFd, IntoRawFd};
+            // SAFETY: `*fd` is a valid file descriptor.
+            let borrowed = unsafe { BorrowedFd::borrow_raw(*fd) };
+            *fd = nix::unistd::dup(borrowed).unwrap().into_raw_fd();
         }
         memory
     }
