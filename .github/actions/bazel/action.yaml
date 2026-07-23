@@ -23,7 +23,8 @@ inputs:
     default: ${{ github.job }}-${{ github.action }}-bep
     description: "The name of the Bazel Build Event Protocol (BEP) artifact."
   GPG_PASSPHRASE:
-    required: true
+    required: false
+    default: ""
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:

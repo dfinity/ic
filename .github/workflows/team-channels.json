@@ -9,7 +9,7 @@
     "ic-owners-owners": "owners-owners",
     "InfraSec": "security",
     "languages": "eng-motoko",
-    "governance": "eng-nns-prs",
+    "governance-team": "eng-nns-prs",
     "node": "eng-node-prs",
     "Platform Operations": "eng-platform-ops",
     "pocket-ic": "pocket-ic",

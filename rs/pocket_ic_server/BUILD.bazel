@@ -62,7 +62,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
     "@crate_index//:axum-server",
-    "@crate_index//:backoff",
+    "@crate_index//:backon",
     "@crate_index//:base64",
     "@crate_index//:bitcoin_dogecoin",
     "@crate_index//:bytes",
@@ -354,8 +354,8 @@ rust_test(
             "II_FRONTEND_WASM": "$(rootpath @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
+        exec_properties = {"cpu": "8"},
         tags = [
-            "cpu:8",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
             # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",

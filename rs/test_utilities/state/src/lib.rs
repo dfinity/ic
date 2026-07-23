@@ -165,7 +165,8 @@ impl ReplicatedStateBuilder {
         });
 
         state.metadata.batch_time = self.batch_time;
-        state.metadata.own_subnet_features = self.subnet_features;
+        std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).subnet_features =
+            self.subnet_features;
 
         state.epoch_query_stats = self.query_stats;
 
@@ -608,6 +609,7 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState::new(
                 WasmBinary::new(CanisterModule::new(vec![])),
+                None,
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),
                 Memory::new_for_testing(),

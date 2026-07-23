@@ -10,10 +10,12 @@ use ic_cdk::api::management_canister::http_request::{
     http_request as ic_cdk_http_request,
 };
 use ic_cdk::api::management_canister::main::{
-    CanisterInstallMode, CanisterSettings, CreateCanisterArgument, InstallCodeArgument,
-    UpdateSettingsArgument, create_canister as ic_cdk_create_canister,
-    install_code as ic_cdk_install_code, update_settings as ic_cdk_update_settings,
+    CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgument,
+    InstallCodeArgument, UpdateSettingsArgument, create_canister as ic_cdk_create_canister,
+    delete_canister as ic_cdk_delete_canister, install_code as ic_cdk_install_code,
+    stop_canister as ic_cdk_stop_canister, update_settings as ic_cdk_update_settings,
 };
+use ic_cdk::call::Call;
 use ic_cdk::update;
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +59,62 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
         remaining_canisters -= batch_size;
     }
     result
+}
+
+/// Creates `2 * args.canisters_number` canisters and then deletes every other
+/// one (in canister ID order), leaving `args.canisters_number` canisters
+/// separated by gaps. As a result, the management canister's `list_canisters`
+/// method reports (roughly) one ID range per remaining canister. Returns the
+/// number of remaining canisters.
+#[update]
+async fn create_canisters_with_gaps(args: CreateCanistersArgs) -> u64 {
+    let mut canister_ids = create_canisters(CreateCanistersArgs {
+        canisters_number: args.canisters_number * 2,
+        canisters_per_batch: args.canisters_per_batch,
+        initial_cycles: args.initial_cycles,
+    })
+    .await;
+
+    // Canister ID principals encode the canister index in big-endian order, so
+    // sorting by the principal's bytes yields the numeric canister ID order.
+    canister_ids.sort_by(|a, b| a.as_slice().cmp(b.as_slice()));
+
+    // Delete every other canister so that the remaining ones are separated by
+    // gaps (i.e. each remaining canister forms its own ID range).
+    let to_delete: Vec<Principal> = canister_ids.iter().skip(1).step_by(2).copied().collect();
+    let mut remaining = to_delete.as_slice();
+    while !remaining.is_empty() {
+        let batch_size = (args.canisters_per_batch as usize).min(remaining.len());
+        let (batch, rest) = remaining.split_at(batch_size);
+        remaining = rest;
+
+        // A canister must be stopped before it can be deleted.
+        let stop_futures: Vec<_> = batch
+            .iter()
+            .map(|canister_id| {
+                ic_cdk_stop_canister(CanisterIdRecord {
+                    canister_id: *canister_id,
+                })
+            })
+            .collect();
+        join_all(stop_futures).await.into_iter().for_each(|r| {
+            r.unwrap(); // Reject if there is an error.
+        });
+
+        let delete_futures: Vec<_> = batch
+            .iter()
+            .map(|canister_id| {
+                ic_cdk_delete_canister(CanisterIdRecord {
+                    canister_id: *canister_id,
+                })
+            })
+            .collect();
+        join_all(delete_futures).await.into_iter().for_each(|r| {
+            r.unwrap(); // Reject if there is an error.
+        });
+    }
+
+    (canister_ids.len() - to_delete.len()) as u64
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
@@ -218,6 +276,31 @@ async fn http_request(args: HttpRequestArgs) {
     results.into_iter().for_each(|r| {
         r.unwrap(); // Reject if there is an error.
     });
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct CanisterIdRange {
+    pub start: Principal,
+    pub end: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+pub struct ListCanistersResult {
+    pub canisters: Vec<CanisterIdRange>,
+}
+
+/// Calls the management canister's `list_canisters` method (which takes no
+/// arguments) and returns the number of canister ID ranges reported for the
+/// subnet. This canister must be a subnet admin for the call to succeed.
+#[update]
+async fn list_canisters() -> u64 {
+    let result: ListCanistersResult =
+        Call::unbounded_wait(Principal::management_canister(), "list_canisters")
+            .await
+            .expect("list_canisters call failed")
+            .candid()
+            .expect("failed to decode list_canisters response");
+    result.canisters.len() as u64
 }
 
 fn main() {}

@@ -63,7 +63,7 @@ struct StateMachineTestFixture {
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
     initial_state: ReplicatedState,
-    network_topology: NetworkTopology,
+    network_topology: Arc<NetworkTopology>,
     metrics: MessageRoutingMetrics,
     metrics_registry: MetricsRegistry,
 }
@@ -151,7 +151,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         demux,
         stream_builder,
         initial_state,
-        network_topology,
+        network_topology: Arc::new(network_topology),
         metrics,
         metrics_registry,
     }
@@ -175,30 +175,24 @@ fn state_machine_populates_network_topology() {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         ));
 
         assert_ne!(
-            fixture.initial_state.metadata.network_topology.as_ref(),
-            &fixture.network_topology
+            fixture.initial_state.metadata.network_topology,
+            fixture.network_topology
         );
 
         let state = state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
             provided_batch,
-            Default::default(),
+            fixture.network_topology.clone(),
             Default::default(),
             &test_registry_settings(),
-            Default::default(),
         );
 
-        assert_eq!(
-            state.metadata.network_topology.as_ref(),
-            &fixture.network_topology
-        );
+        assert_eq!(state.metadata.network_topology, fixture.network_topology);
     });
 }
 
@@ -213,19 +207,16 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         ));
 
         state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
             provided_batch,
-            Default::default(),
+            fixture.network_topology.clone(),
             Default::default(),
             &test_registry_settings(),
-            Default::default(),
         )
     })
 }
@@ -645,19 +636,16 @@ fn state_machine_handles_messages_to_deleted_subnet() {
             scheduler,
             demux,
             stream_builder,
-            Default::default(),
             log,
             message_routing_metrics,
         ));
 
         let mut state = state_machine.execute_round(
             initial_state,
-            network_topology,
             provided_batch,
-            Default::default(),
+            Arc::new(network_topology),
             Default::default(),
             &test_registry_settings(),
-            Default::default(),
         );
 
         // Stream to the deleted subnet (8 messages) is gone — all dropped silently.
@@ -806,7 +794,7 @@ fn split_fixture() -> StateMachineTestFixture {
         demux,
         stream_builder,
         initial_state,
-        network_topology,
+        network_topology: Arc::new(network_topology),
         metrics,
         metrics_registry,
     }
@@ -838,19 +826,16 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         ));
 
         state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
             split_batch,
-            Default::default(),
+            fixture.network_topology.clone(),
             Default::default(),
             &test_registry_settings(),
-            Default::default(),
         )
     });
 
@@ -949,7 +934,6 @@ fn test_batch_time_impl(
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
-            Default::default(),
             log,
             fixture.metrics,
         );
@@ -962,12 +946,10 @@ fn test_batch_time_impl(
 
         let state = state_machine.execute_round(
             fixture.initial_state,
-            fixture.network_topology.clone(),
             provided_batch,
-            Default::default(),
+            fixture.network_topology.clone(),
             Default::default(),
             &test_registry_settings(),
-            Default::default(),
         );
 
         assert_eq!(

@@ -1,0 +1,50 @@
+# Drop rustc's deprecated `-Wl,-O1` linker-optimization flag before it reaches
+# zig's lld. rustc appends `-Wl,-O1` to every link at opt-level >= 2; zig's lld
+# has deprecated that ELF "linker optimization" setting and ignores it, but
+# prints a warning on every link (surfaced by rustc 1.97's linker_messages lint).
+diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
+index 066827b..1e24814 100644
+--- a/toolchain/zig-wrapper.zig
++++ b/toolchain/zig-wrapper.zig
+@@ -302,8 +302,18 @@ fn parseArgs(
+         .arg1, .cc => try args.appendSlice(arena, &[_][]const u8{arg0_noexe}),
+     }
+ 
+-    while (argv_it.next()) |arg|
++    while (argv_it.next()) |arg| {
++        // Drop the linker "-O" optimization setting (passed through the
++        // compiler driver as `-Wl,-O<n>`). rustc appends `-Wl,-O1` to every
++        // link at opt-level >= 2; zig's lld has deprecated this setting and
++        // ignores it, printing
++        //   warning: ignoring deprecated linker optimization setting '1'
++        // on every link (surfaced by rustc 1.97's linker_messages lint). It
++        // is a no-op, so strip it here to keep build output clean.
++        if (isDeprecatedLinkerOptFlag(arg))
++            continue;
+         try args.append(arena, arg);
++    }
+ 
+     // Add -target as the last parameter. The wrapper should overwrite
+     // the target specified by other tools calling the wrapper.
+@@ -333,6 +343,21 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) u8 {
+     return 1;
+ }
+ 
++// Matches the linker "-O" optimization setting handed to the compiler driver
++// as `-Wl,-O<n>` (e.g. rustc's `-Wl,-O1`). zig's lld has deprecated this
++// setting and ignores it, so we strip it before invoking zig. Only the
++// linker-directed (`-Wl,`) form is matched; a bare `-O<n>` is a compiler
++// optimization flag and is left untouched.
++fn isDeprecatedLinkerOptFlag(arg: []const u8) bool {
++    const prefix = "-Wl,-O";
++    if (!mem.startsWith(u8, arg, prefix)) return false;
++    const level = arg[prefix.len..];
++    if (level.len == 0) return false;
++    for (level) |c|
++        if (!std.ascii.isDigit(c)) return false;
++    return true;
++}
++
+ fn getRunMode(self_exe: []const u8, self_base_noexe: []const u8) error{BadParent}!RunMode {
+     if (mem.eql(u8, "zig-wrapper", self_base_noexe))
+         return .wrapper;

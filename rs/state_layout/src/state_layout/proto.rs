@@ -40,6 +40,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
+            canister_creation_timestamp_nanos: item.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases: item
                 .consumed_cycles_by_use_cases
                 .into_iter()
@@ -67,6 +68,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .into(),
             snapshot_visibility: pb_canister_state_bits::SnapshotVisibility::from(
                 &item.snapshot_visibility,
+            )
+            .into(),
+            status_visibility: pb_canister_state_bits::StatusVisibility::from(
+                &item.status_visibility,
             )
             .into(),
             log_memory_limit: item.log_memory_limit.get(),
@@ -197,6 +202,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )?,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
+            canister_creation_timestamp_nanos: value.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases,
             consumed_cycles_by_use_cases_as_counters,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
@@ -223,6 +229,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             snapshot_visibility: try_from_option_field(
                 value.snapshot_visibility,
                 "CanisterStateBits::snapshot_visibility",
+            )
+            .unwrap_or_default(),
+            status_visibility: try_from_option_field(
+                value.status_visibility,
+                "CanisterStateBits::status_visibility",
             )
             .unwrap_or_default(),
             log_memory_limit: NumBytes::from(value.log_memory_limit),
@@ -268,6 +279,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
             binary_hash: item.binary_hash.to_vec(),
+            last_install_timestamp_nanos: item.last_install_timestamp_nanos,
             next_scheduled_method: Some(
                 pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
                     .into(),
@@ -302,6 +314,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
             binary_hash: WasmHash::from(binary_hash),
+            last_install_timestamp_nanos: value.last_install_timestamp_nanos,
             next_scheduled_method: match value.next_scheduled_method {
                 Some(method_id) => pb_canister_state_bits::NextScheduledMethod::try_from(method_id)
                     .unwrap_or_default()

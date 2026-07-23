@@ -107,22 +107,6 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
     metrics: &CheckpointMetrics,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
-    maybe_parallel_map(
-        &mut thread_pool,
-        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
-        |pm| validate(pm),
-    )
-    .into_iter()
-    .try_for_each(identity)?;
-
-    maybe_parallel_map(
-        &mut thread_pool,
-        checkpoint_layout.all_existing_wasm_files()?.into_iter(),
-        |wasm_file| try_mmap_wasm_file(wasm_file),
-    )
-    .into_iter()
-    .try_for_each(identity)?;
-
     if let Some(reference_state) = reference_state {
         validate_eq_checkpoint(
             checkpoint_layout,
@@ -132,6 +116,26 @@ pub(crate) fn validate_and_finalize_checkpoint_and_remove_unverified_marker(
             fd_factory,
             metrics,
         );
+    } else {
+        // Overlays are validated at write time (see `write_overlay` / `write_base` in
+        // `page_map::storage`) and Wasm files are written by us, so we only need to
+        // re-validate them on the state-sync path (`reference_state == None`), where
+        // the files came from peers rather than being produced locally.
+        maybe_parallel_map(
+            &mut thread_pool,
+            checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+            |pm| validate(pm),
+        )
+        .into_iter()
+        .try_for_each(identity)?;
+
+        maybe_parallel_map(
+            &mut thread_pool,
+            checkpoint_layout.all_existing_wasm_files()?.into_iter(),
+            |wasm_file| try_mmap_wasm_file(wasm_file),
+        )
+        .into_iter()
+        .try_for_each(identity)?;
     }
     checkpoint_layout
         .finalize_and_remove_unverified_marker(thread_pool)
@@ -586,8 +590,8 @@ impl CheckpointLoader {
             format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
         let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots
-            .iter()
-            .flat_map(|(_, x)| x.iter().map(|x| *x.0))
+            .values()
+            .flat_map(|x| x.iter().map(|x| *x.0))
             .collect();
         on_disk_snapshot_ids.sort();
         ref_snapshot_ids.sort();
@@ -769,6 +773,9 @@ pub fn load_canister_state(
 
             Some(ExecutionState {
                 wasm_binary,
+                last_install_timestamp: execution_state_bits
+                    .last_install_timestamp_nanos
+                    .map(Time::from_nanos_since_unix_epoch),
                 exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
@@ -856,30 +863,31 @@ pub fn load_canister_state(
         canister_state_bits.task_queue,
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
+        canister_state_bits
+            .canister_creation_timestamp_nanos
+            .map(Time::from_nanos_since_unix_epoch),
         canister_state_bits.canister_history,
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
         canister_state_bits.snapshot_visibility,
+        canister_state_bits.status_visibility,
         canister_state_bits.canister_log,
         log_memory_store_data,
         canister_state_bits.log_memory_store_persistent_next_idx,
-        canister_state_bits.log_memory_store_migrated,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.environment_variables,
         metrics,
     );
 
-    if system_state.log_memory_store.is_migrated() {
-        let lms_next_idx = system_state.log_memory_store.next_idx();
-        let log_next_idx = system_state.canister_log.next_idx();
-        if lms_next_idx != log_next_idx {
-            metrics.observe_broken_soft_invariant(format!(
-                "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
-                 != canister_log.next_idx ({log_next_idx})",
-            ));
-        }
+    let lms_next_idx = system_state.log_memory_store.next_idx();
+    let log_next_idx = system_state.canister_log.next_idx();
+    if lms_next_idx != log_next_idx {
+        metrics.observe_broken_soft_invariant(format!(
+            "canister {canister_id}: log_memory_store.next_idx ({lms_next_idx}) \
+             != canister_log.next_idx ({log_next_idx})",
+        ));
     }
 
     let canister_state = CanisterState {

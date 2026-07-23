@@ -187,8 +187,12 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
+            // Exercise the `last_install_timestamp` leaf added in `V27`.
+            let last_install_timestamp = (certification_version >= CertificationVersion::V27)
+                .then(|| Time::from_nanos_since_unix_epoch(1234));
             let execution_state = ExecutionState::new(
                 wasm_binary,
+                last_install_timestamp,
                 ExportedFunctions::new(BTreeSet::new()),
                 wasm_memory,
                 Memory::new_for_testing(),
@@ -196,6 +200,11 @@ mod tests {
                 metadata,
             );
             canister_state.execution_state = Some(execution_state);
+            // Exercise the `canister_creation_timestamp` leaf added in `V28`.
+            if certification_version >= CertificationVersion::V28 {
+                canister_state.system_state.canister_creation_timestamp =
+                    Some(Time::from_nanos_since_unix_epoch(1234));
+            }
 
             state.put_canister_state(canister_state);
 
@@ -283,7 +292,7 @@ mod tests {
                 |_| {},
             );
 
-            state.metadata.node_public_keys = btreemap! {
+            std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).node_public_keys = btreemap! {
                 node_test_id(1) => vec![1; 44],
                 node_test_id(2) => vec![2; 44],
             };
@@ -396,6 +405,8 @@ mod tests {
             "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
             "416172D9AFD573236F1CDE2459756736EEB25028D64FB8D7192AAF33AFC0DA6F",
             "057FA1842C06C958F79C6394C54E12F9C9DCF5036D186EBBB9A49CDB4E3683BF",
+            "70D1FCB311A682DAB0350E075806E0A37985456D7BD171750C41A735CF8077F3",
+            "995B6CAFE481325EF08A84A0F1DA4DEE0E3C352B5F44998B20D021A044FD3AF2",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

@@ -1202,7 +1202,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
                 Err(vec!["Request.nns_proposal_id is unspecified.".to_string()])
             }
         };
-        let request_str = format!("{:#?}", &request);
+        let request_str = format!("{:#?}", request);
         // Validate request.result
         let swap_result = if let Some(result) = request.result {
             SwapResult::try_from(result).map_err(|err| vec![err])
@@ -4660,6 +4660,7 @@ impl Governance {
                     ));
                 }
             }
+            #[allow(clippy::collapsible_match)]
             Command::Follow(follow) => {
                 if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
                     return Err(GovernanceError::new_with_message(
@@ -4955,6 +4956,7 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
+            #[allow(clippy::collapsible_match)]
             ValidNnsFunction::SplitSubnet => {
                 if !are_subnet_splitting_proposals_enabled() {
                     return Err(invalid_proposal_error(String::from(

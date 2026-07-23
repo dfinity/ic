@@ -9,7 +9,7 @@ use crate::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
 };
-use crossbeam_channel::{Sender, bounded, unbounded};
+use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
@@ -27,8 +27,9 @@ use ic_replicated_state::page_map::{
 };
 use ic_replicated_state::{CanisterState, NumWasmPages, PageMap, ReplicatedState};
 use ic_state_layout::{
-    CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
-    ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile, error::LayoutError,
+    CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, CheckpointStatus,
+    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
+    error::LayoutError,
 };
 use ic_types::{CanisterId, Height, SnapshotId, malicious_flags::MaliciousFlags};
 use ic_utils::thread::parallel_map;
@@ -127,14 +128,14 @@ pub(crate) enum TipRequest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         pagemaptypes: Vec<PageMapType>,
     },
-    /// Compute manifest, store result into states and persist metadata as result.
-    ///
-    /// State: `latest_checkpoint_state.has_manifest = true`
+    /// Compute the manifest on the dedicated manifest thread (concurrently with
+    /// `ValidateReplicatedStateAndFinalize` on the tip thread). The resulting
+    /// `BundledManifest` is sent to `manifest_sender`, to be published by the tip
+    /// thread after it has verified the checkpoint (see `WaitForManifest`).
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
-        states: Arc<parking_lot::RwLock<SharedState>>,
-        persist_metadata_guard: Arc<Mutex<()>>,
+        manifest_sender: Sender<crate::BundledManifest>,
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
@@ -146,9 +147,34 @@ pub(crate) enum TipRequest {
         own_subnet_type: SubnetType,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     },
+    /// Wait for the async manifest computation to finish, then publish the
+    /// bundled manifest into `states` and persist metadata. Running *after*
+    /// `ValidateReplicatedStateAndFinalize` guarantees that the checkpoint has
+    /// been verified before the manifest becomes visible to Consensus.
+    ///
+    /// State: `latest_checkpoint_state.has_manifest = true`
+    WaitForManifest {
+        height: Height,
+        states: Arc<parking_lot::RwLock<SharedState>>,
+        persist_metadata_guard: Arc<Mutex<()>>,
+        manifest_receiver: Receiver<crate::BundledManifest>,
+    },
     /// Wait for the message to be executed and notify back via sender.
     ///
     /// State: `*`
+    Wait { sender: Sender<()> },
+}
+
+enum ManifestRequest {
+    /// Compute the manifest, concurrently with `ValidateReplicatedStateAndFinalize`
+    /// on the tip thread. The resulting `BundledManifest` is sent to
+    /// `manifest_sender`.
+    ComputeManifest {
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
+        base_manifest_info: Option<BaseManifestInfo>,
+        manifest_sender: Sender<crate::BundledManifest>,
+    },
+    /// Wait for `ComputeManifest` to complete, then notify back via sender.
     Wait { sender: Sender<()> },
 }
 
@@ -178,11 +204,85 @@ pub(crate) fn spawn_tip_thread(
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     #[allow(clippy::disallowed_methods)]
     let (tip_sender, tip_receiver) = unbounded();
+
+    // Dedicated manifest thread. It handles `ComputeManifest` requests (computing
+    // the manifest concurrently with validation on the tip thread) and hands the
+    // resulting bundled manifest back for the tip thread to publish via
+    // `WaitForManifest`.
+    //
+    // `ComputeManifest` requests are forwarded to it by the tip thread, so that
+    // they are only released once the preceding `TipToCheckpointAndSwitch` has
+    // finished serializing Wasms and protos.
+    #[allow(clippy::disallowed_methods)]
+    let (manifest_thread_sender, manifest_receiver) = unbounded::<ManifestRequest>();
+    {
+        // Own thread pool, to run concurrently with the tip thread's checkpoint work.
+        let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+        let metrics = metrics.clone();
+        let log = log.clone();
+        let malicious_flags = malicious_flags.clone();
+        std::thread::Builder::new()
+            .name("TipManifest".to_string())
+            .spawn(move || {
+                let mut rehash_divergence = false;
+                while let Ok(req) = manifest_receiver.recv() {
+                    match req {
+                        ManifestRequest::ComputeManifest {
+                            checkpoint_layout,
+                            base_manifest_info,
+                            manifest_sender,
+                        } => {
+                            let _timer = request_timer(&metrics, "compute_manifest_total");
+                            handle_compute_manifest_request(
+                                &mut thread_pool,
+                                &checkpoint_layout,
+                                base_manifest_info,
+                                &malicious_flags,
+                                &mut rehash_divergence,
+                                manifest_sender,
+                                &metrics,
+                                &log,
+                            );
+                        }
+
+                        // Flush barrier (see `flush_tip_channel`): forwarded by the tip thread so a
+                        // flush also waits for in-flight manifest work — including rehash — to drain.
+                        ManifestRequest::Wait { sender } => {
+                            let _ = sender.send(());
+                        }
+                    }
+                }
+            })
+            .expect("failed to spawn TipManifest thread");
+    }
+
+    // Background best-effort `syncfs` helper. The tip thread pings it (non-blocking)
+    // after completing large numbers of writes (all protos; or `reset_tip`), so the
+    // kernel starts flushing that dirty data early instead of leaving it all for
+    // the blocking `syncfs` in `finalize_and_remove_unverified_marker`. This is
+    // purely an optimization, so its errors are non-fatal.
+    let (syncfs_sender, syncfs_receiver) = bounded::<()>(1);
+    {
+        let state_layout = state_layout.clone();
+        let metrics = metrics.clone();
+        let log = log.clone();
+        std::thread::Builder::new()
+            .name("TipSyncfs".to_string())
+            .spawn(move || {
+                while syncfs_receiver.recv().is_ok() {
+                    let _timer = request_timer(&metrics, "background_syncfs");
+                    if let Err(err) = state_layout.syncfs() {
+                        warn!(log, "Background syncfs failed: {}", err);
+                    }
+                }
+            })
+            .expect("failed to spawn TipSyncfs thread");
+    }
+
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
     let mut tip_state = TipState::default();
     // Height(0) doesn't need manifest
     tip_state.latest_checkpoint_state.has_manifest = true;
-    let mut rehash_divergence = false;
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -243,6 +343,8 @@ pub(crate) fn spawn_tip_thread(
                                     fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
                                 });
                             }
+                            // Start flushing the freshly written Wasm binaries.
+                            let _ = syncfs_sender.try_send(());
                             let tip_to_checkpoint_result = {
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_and_switch");
@@ -293,6 +395,9 @@ pub(crate) fn spawn_tip_thread(
                                 }
                             };
                             tip_state.latest_checkpoint_state.has_protos = Some(height);
+                            // Start flushing the freshly-written protos in the background so they're mostly
+                            // persisted by the time `finalize` calls its blocking `syncfs`.
+                            let _ = syncfs_sender.try_send(());
                         }
 
                         TipRequest::FlushPageMapDelta {
@@ -373,6 +478,10 @@ pub(crate) fn spawn_tip_thread(
                                     }
                                 },
                             );
+                            // Start flushing any freshly written overlays (and any snapshot hardlinks from
+                            // `flush_unflushed_checkpoint_ops` above) so they don't accumulate for a later
+                            // blocking flush.
+                            let _ = syncfs_sender.try_send(());
                         }
 
                         TipRequest::ResetTipAndMerge {
@@ -399,8 +508,11 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 });
                             drop(timer);
+                            // Start flushing `reset_tip`'s up to 1M hardlinks now, so it runs concurrently
+                            // with `merge` below rather than piling onto a later blocking flush.
+                            let _ = syncfs_sender.try_send(());
 
-                            let _timer = request_timer(&metrics, "merge");
+                            let timer = request_timer(&metrics, "merge");
                             merge(
                                 &mut tip_handler,
                                 &pagemaptypes,
@@ -410,47 +522,60 @@ pub(crate) fn spawn_tip_thread(
                                 &lsmt_config,
                                 &metrics,
                             );
+                            drop(timer);
+                            // And flush the freshly merged/rewritten overlay files.
+                            let _ = syncfs_sender.try_send(());
                         }
 
                         TipRequest::Wait { sender } => {
                             let _timer = request_timer(&metrics, "wait");
-                            let _ = sender.send(());
+                            // Also forward to the manifest thread (FIFO after any forwarded
+                            // `ComputeManifest`) so the flush also waits for any post-publish rehash to
+                            // complete; the manifest thread replies to `sender`.
+                            manifest_thread_sender
+                                .send(ManifestRequest::Wait { sender })
+                                .expect("manifest thread dropped the receiver");
                         }
 
                         TipRequest::ComputeManifest {
                             checkpoint_layout,
                             base_manifest_info,
+                            manifest_sender,
+                        } => {
+                            // Forward to the dedicated manifest thread. Routing this through the tip
+                            // channel (where it is enqueued before `ValidateReplicatedStateAndFinalize`)
+                            // guarantees that the preceding `TipToCheckpointAndSwitch` has fully serialized
+                            // the checkpoint's Wasms and protos before the manifest computation walks the
+                            // checkpoint directory.
+                            manifest_thread_sender
+                                .send(ManifestRequest::ComputeManifest {
+                                    checkpoint_layout,
+                                    base_manifest_info,
+                                    manifest_sender,
+                                })
+                                .expect("manifest thread dropped the receiver");
+                        }
+                        TipRequest::WaitForManifest {
+                            height,
                             states,
                             persist_metadata_guard,
+                            manifest_receiver,
                         } => {
-                            let _timer = request_timer(&metrics, "compute_manifest_total");
-                            if let Some(base_manifest_info) = &base_manifest_info {
-                                info!(
-                                    log,
-                                    "Computing manifest for checkpoint @{} incrementally \
-                                        from checkpoint @{}",
-                                    checkpoint_layout.height(),
-                                    base_manifest_info.base_height
-                                );
-                            } else {
-                                info!(
-                                    log,
-                                    "Computing manifest for checkpoint @{} from scratch",
-                                    checkpoint_layout.height()
-                                );
-                            }
-                            tip_state.latest_checkpoint_state.has_manifest = true;
-                            handle_compute_manifest_request(
-                                &mut thread_pool,
-                                &metrics,
+                            let _timer = request_timer(&metrics, "wait_for_manifest");
+                            // Block until the manifest thread has computed the manifest. Because this is
+                            // enqueued after `ValidateReplicatedStateAndFinalize`, by the time we publish,
+                            // the checkpoint has been verified.
+                            let bundled_manifest = manifest_receiver
+                                .recv()
+                                .expect("manifest thread dropped the sender");
+                            publish_bundled_manifest(
                                 &log,
-                                &states,
+                                &metrics,
                                 &state_layout,
-                                &checkpoint_layout,
-                                base_manifest_info,
+                                &states,
                                 &persist_metadata_guard,
-                                &malicious_flags,
-                                &mut rehash_divergence,
+                                height,
+                                bundled_manifest,
                             );
                             tip_state.latest_checkpoint_state.has_manifest = true;
                         }
@@ -1203,6 +1328,9 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             last_executed_round: execution_state.last_executed_round,
             metadata: execution_state.metadata.clone(),
             binary_hash: execution_state.wasm_binary.binary.module_hash().into(),
+            last_install_timestamp_nanos: execution_state
+                .last_install_timestamp
+                .map(|t| t.as_nanos_since_unix_epoch()),
             next_scheduled_method: execution_state.next_scheduled_method,
             is_wasm64: execution_state.wasm_execution_mode.is_wasm64(),
         });
@@ -1263,6 +1391,10 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .global_timer
                 .to_nanos_since_unix_epoch(),
             canister_version: canister_state.system_state.canister_version(),
+            canister_creation_timestamp_nanos: canister_state
+                .system_state
+                .canister_creation_timestamp
+                .map(|t| t.as_nanos_since_unix_epoch()),
             consumed_cycles_by_use_cases: canister_state
                 .system_state
                 .canister_metrics()
@@ -1282,10 +1414,15 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
             snapshot_visibility: canister_state.system_state.snapshot_visibility.clone(),
+            status_visibility: canister_state.system_state.status_visibility.clone(),
             log_memory_limit: canister_state.log_memory_limit(),
             canister_log: canister_state.system_state.canister_log.clone(),
             next_canister_log_record_idx: canister_state.system_state.canister_log.next_idx(),
-            log_memory_store_migrated: canister_state.system_state.log_memory_store.is_migrated(),
+            // The one-time migration from `CanisterLog` to `LogMemoryStore`
+            // completed on all subnets, so this is always `true`. The field is
+            // still serialized (rather than dropped) so checkpoints remain
+            // readable by replicas that predate the log memory store.
+            log_memory_store_migrated: true,
             log_memory_store_persistent_next_idx: canister_state
                 .system_state
                 .log_memory_store
@@ -1345,24 +1482,41 @@ fn serialize_snapshot_protos_to_checkpoint_readwrite(
     Ok(())
 }
 
+/// Computes the manifest for `checkpoint_layout` and sends the resulting
+/// `BundledManifest` to `manifest_sender`, so it can be published as soon as
+/// the checkpoint has been verified. Runs on the dedicated manifest thread,
+/// concurrently with validation. Post-publish bookkeeping (sanity checks,
+/// metrics, rehash) is also done here, after the hand-off.
 #[allow(clippy::too_many_arguments)]
 fn handle_compute_manifest_request(
     thread_pool: &mut scoped_threadpool::Pool,
-    metrics: &StateManagerMetrics,
-    log: &ReplicaLogger,
-    states: &parking_lot::RwLock<SharedState>,
-    state_layout: &StateLayout,
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     base_manifest_info: Option<crate::manifest::BaseManifestInfo>,
-    persist_metadata_guard: &Arc<Mutex<()>>,
     #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
     rehash_divergence: &mut bool,
+    manifest_sender: Sender<crate::BundledManifest>,
+    metrics: &StateManagerMetrics,
+    log: &ReplicaLogger,
 ) {
     let base_manifest_info = if *rehash_divergence {
         None
     } else {
         base_manifest_info
     };
+    if let Some(base_manifest_info) = &base_manifest_info {
+        info!(
+            log,
+            "Computing manifest for checkpoint @{} incrementally from checkpoint @{}",
+            checkpoint_layout.height(),
+            base_manifest_info.base_height
+        );
+    } else {
+        info!(
+            log,
+            "Computing manifest for checkpoint @{} from scratch",
+            checkpoint_layout.height()
+        );
+    }
     let system_metadata = checkpoint_layout
         .system_metadata()
         .deserialize()
@@ -1383,20 +1537,12 @@ fn handle_compute_manifest_request(
                     Maximum supported StateSync version is {MAX_SUPPORTED_STATE_SYNC_VERSION:?}"
     );
 
-    // According to the current checkpointing workflow, encountering a checkpoint with the unverified marker should not happen.
-    // Proceeding with manifest computation in such a scenario is risky because replicas might publish the root hash and create a CUP
-    // for an unverified checkpoint, which could then be lost.
-    // Therefore, crashing the replica is the safest option in this case.
-    //
-    // Note: In the future, if we decide to allow manifest computation before removing the unverified marker and introduce a mechanism
-    // to hide the manifest until the checkpoint is verified, this crash behavior should be re-evaluated accordingly.
-    if !checkpoint_layout.is_checkpoint_verified() {
-        fatal!(
-            log,
-            "Trying to compute manifest for unverified checkpoint @{}",
-            checkpoint_layout.height()
-        );
-    }
+    // We deliberately compute the manifest before the checkpoint is verified, so
+    // it can run concurrently with `ValidateReplicatedStateAndFinalize`. Publishing
+    // the manifest/root hash (which makes it visible to Consensus, and could create
+    // a CUP for an as-yet-unverified checkpoint) is deferred: we only hand the
+    // bundled manifest to the tip thread, which publishes it from `WaitForManifest`
+    // — enqueued after validation — so the checkpoint is verified by then.
 
     // State sync checkpoints should already have their associated manifests.
     // If this warning is triggered, it indicates an unexpected situation that should be investigated.
@@ -1504,13 +1650,13 @@ fn handle_compute_manifest_request(
         .map(|base| base.base_manifest.clone());
     drop(base_manifest_info);
 
-    let mut states = states.write();
-
-    if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
-        metadata.bundled_manifest = Some(bundled_manifest);
-    }
-
-    release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+    // Hand the bundled manifest to the tip thread; it publishes it (into `states`
+    // + persisted metadata) from `WaitForManifest`, i.e. only after the checkpoint
+    // has been verified. Everything below is post-publish bookkeeping that only
+    // needs `manifest`/`base_manifest`, so it can run here after the hand-off.
+    manifest_sender
+        .send(bundled_manifest)
+        .expect("WaitForManifest receiver was dropped");
 
     let timer = request_timer(metrics, "observe_build_file_group_chunks");
     let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
@@ -1580,6 +1726,37 @@ fn handle_compute_manifest_request(
     *rehash_divergence = manifest != rehashed_manifest;
 }
 
+/// Publishes a `BundledManifest` (computed asynchronously by the manifest thread)
+/// into `states` and persists the metadata. Called from the tip thread's
+/// `WaitForManifest` handler, i.e. after the checkpoint has been verified, so the
+/// manifest only becomes visible to Consensus once the checkpoint is verified.
+fn publish_bundled_manifest(
+    log: &ReplicaLogger,
+    metrics: &StateManagerMetrics,
+    state_layout: &StateLayout,
+    states: &parking_lot::RwLock<SharedState>,
+    persist_metadata_guard: &Arc<Mutex<()>>,
+    height: Height,
+    bundled_manifest: crate::BundledManifest,
+) {
+    if !matches!(
+        state_layout.checkpoint_status(height),
+        Ok(CheckpointStatus::Verified),
+    ) {
+        fatal!(
+            log,
+            "Trying to publish manifest for unverified checkpoint @{}",
+            height
+        );
+    }
+
+    let mut states = states.write();
+    if let Some(metadata) = states.states_metadata.get_mut(&height) {
+        metadata.bundled_manifest = Some(bundled_manifest);
+    }
+    release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1604,54 +1781,6 @@ mod test {
                 lsmt_config_default(),
                 metrics,
                 MaliciousFlags::default(),
-            );
-        });
-    }
-
-    #[test]
-    #[should_panic(expected = "compute manifest for unverified checkpoint")]
-    fn should_crash_handle_compute_manifest_request() {
-        with_test_replica_logger(|log| {
-            let tempdir = tmpdir("state_layout");
-            let root_path = tempdir.path().to_path_buf();
-            let metrics_registry = ic_metrics::MetricsRegistry::new();
-            let state_layout =
-                StateLayout::try_new(log.clone(), root_path, &metrics_registry).unwrap();
-            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
-
-            let height = Height::new(42);
-            let mut tip_handler = state_layout.capture_tip_handler();
-            let tip = tip_handler.tip(height).unwrap();
-
-            // Create a marker in the tip and promote it to a checkpoint.
-            let checkpoint_layout = state_layout
-                .promote_scratchpad_to_unverified_checkpoint(tip, height)
-                .unwrap()
-                .as_readonly();
-
-            let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
-                certifications_metadata: Default::default(),
-                certifications: Default::default(),
-                states_metadata: Default::default(),
-                snapshots: Default::default(),
-                last_advertised: Height::new(0),
-                fetch_state: None,
-                tip_height: height,
-                tip: None,
-            }));
-
-            // Trying to compute manifest for an unverified checkpoint should crash.
-            handle_compute_manifest_request(
-                &mut scoped_threadpool::Pool::new(1),
-                &metrics,
-                &log,
-                &dummy_states,
-                &state_layout,
-                &checkpoint_layout,
-                None,
-                &Default::default(),
-                &Default::default(),
-                &mut false,
             );
         });
     }

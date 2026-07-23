@@ -138,6 +138,7 @@ fn canister_with_heartbeat_method_is_not_cold() {
     let mut canister = make_canister(1);
     Arc::make_mut(&mut canister).execution_state = Some(ExecutionState::new(
         WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        None,
         ExportedFunctions::new(btreeset![WasmMethod::System(
             SystemMethod::CanisterHeartbeat,
         )]),
@@ -676,6 +677,7 @@ fn memory_aggregators_combine_hot_and_cold_impl(
     // Also populate custom sections.
     Arc::make_mut(&mut c1).execution_state = Some(ExecutionState::new(
         WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        None,
         ExportedFunctions::new(btreeset![]),
         Memory::new_for_testing(),
         Memory::new_for_testing(),

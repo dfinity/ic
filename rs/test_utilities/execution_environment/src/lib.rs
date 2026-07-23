@@ -51,6 +51,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::heap_delta_capacity_for_message_memory;
 use ic_replicated_state::{
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
@@ -1724,6 +1725,7 @@ impl ExecutionTest {
         };
         let maybe_canister_id = get_effective_canister_id(message.clone());
         let is_install_code = check_is_install_code(message.clone());
+        let is_list_canisters = check_is_list_canisters(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
@@ -1808,7 +1810,9 @@ impl ExecutionTest {
                         .insert(canister_id, paused_subnet_message);
                 }
             }
-        } else {
+        } else if !is_list_canisters {
+            // `list_canisters` has no effective canister ID but still consumes
+            // round instructions, so it is exempt from this assertion.
             assert_eq!(slice_instructions_used.get(), 0);
         }
         self.check_invariants();
@@ -2044,7 +2048,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let cost_schedule = state.get_own_cost_schedule();
         abort_all_paused_executions(&mut state, &self.exec_env, cost_schedule, &self.log);
-        for (_, paused_subnet_message) in self.paused_subnet_messages.iter_mut() {
+        for paused_subnet_message in self.paused_subnet_messages.values_mut() {
             paused_subnet_message.instructions = NumInstructions::new(0);
         }
         self.state = Some(state);
@@ -2611,9 +2615,9 @@ impl ExecutionTestBuilder {
         mut self,
         subnet_guaranteed_response_message_memory: u64,
     ) -> Self {
-        self.execution_config
-            .guaranteed_response_message_memory_capacity =
-            NumBytes::from(subnet_guaranteed_response_message_memory);
+        self.resource_limits.maximum_state_delta = Some(heap_delta_capacity_for_message_memory(
+            NumBytes::from(subnet_guaranteed_response_message_memory),
+        ));
         self
     }
 
@@ -2663,16 +2667,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_canister_sandboxing_disabled(mut self) -> Self {
         self.execution_config.canister_sandboxing_flag = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_disabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Disabled;
-        self
-    }
-
-    pub fn with_log_memory_store_feature_enabled(mut self) -> Self {
-        self.execution_config.log_memory_store_feature = FlagStatus::Enabled;
         self
     }
 
@@ -2973,12 +2967,14 @@ impl ExecutionTestBuilder {
             );
         }
 
+        let own_subnet_info = std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info);
         if self.subnet_features.is_empty() {
-            state.metadata.own_subnet_features = SubnetFeatures::default();
+            own_subnet_info.subnet_features = SubnetFeatures::default();
         } else {
-            state.metadata.own_subnet_features =
+            own_subnet_info.subnet_features =
                 SubnetFeatures::from_str(&self.subnet_features).unwrap();
         }
+        own_subnet_info.resource_limits = self.resource_limits;
 
         let metrics_registry = MetricsRegistry::new();
 
@@ -3290,6 +3286,15 @@ fn check_is_install_code(message: SubnetMessage) -> bool {
         SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
     message.method_name() == "install_code" || message.method_name() == "install_chunked_code"
+}
+
+fn check_is_list_canisters(message: SubnetMessage) -> bool {
+    let message = match message {
+        SubnetMessage::Response(_) => return false,
+        SubnetMessage::Request(request) => CanisterCall::Request(request),
+        SubnetMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
+    };
+    message.method_name() == "list_canisters"
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
