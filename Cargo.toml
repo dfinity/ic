@@ -262,6 +262,7 @@ members = [
     "rs/nervous_system/governance",
     "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/ids",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
     "rs/nervous_system/instruction_stats_update_attribute",
@@ -778,7 +779,7 @@ mockall = "0.13.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
-nix = { version = "0.24.3", features = ["ptrace", "user", "signal"] }
+nix = { version = "0.31.3", features = ["fs", "ioctl", "mman", "net", "process", "ptrace", "signal", "socket", "time", "user", "zerocopy"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"

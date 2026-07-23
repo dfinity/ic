@@ -12,6 +12,7 @@ use ic_limits::{
     MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK,
     UNIT_DELAY_APP_SUBNET,
 };
+use ic_nervous_system_ids::is_potential_full_git_commit_id;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_nns_governance_derive_self_describing::SelfDescribing;
@@ -373,15 +374,6 @@ impl ValidFulfillSubnetRentalRequest {
         // Let the caller know that all seems to have gone well.
         Ok(())
     }
-}
-
-/// Full git commit IDs are SHA-1s, which are hexidecimal strings of length 40.
-fn is_potential_full_git_commit_id(s: &str) -> bool {
-    if s.len() != 40 {
-        return false;
-    }
-
-    s.chars().all(|character| character.is_ascii_hexdigit())
 }
 
 #[cfg(test)]
