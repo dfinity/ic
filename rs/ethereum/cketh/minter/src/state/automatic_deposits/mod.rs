@@ -21,7 +21,8 @@ pub const DEPOSIT_ADDRESS_SCAN_WINDOW: Duration = Duration::from_secs(24 * 60 * 
 const SCAN_GAP_SECS: [u64; 33] = [
     // Burst then ramp: cumulative 1_800s (30min) over the first ten scans.
     30, 30, 60, 120, 120, 240, 300, 300, 300, 300,
-    // Hourly tail up to the 24h window: 23 more scans, cumulative 84_600s (23.5h).
+    // Hourly tail up to the 24h window: 23 more scans of 3_600s (82_800s), for a
+    // cumulative 84_600s (23.5h) including the burst/ramp above.
     3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600,
     3600, 3600, 3600, 3600, 3600, 3600, 3600,
 ];
