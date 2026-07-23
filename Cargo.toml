@@ -763,8 +763,8 @@ libcryptsetup-rs = "0.15"
 libflate = "2.1.0"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
-lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
-lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "64eb770caa940f215190d86d61e4c132511be5e2" }
+lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
+lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 lzma-sys = { version = "0.1.20", features = ["static"] }
