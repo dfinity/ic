@@ -1,7 +1,7 @@
 use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
     CanisterId, NumBytes, NumInstructions,
-    canister_http::{CanisterHttpPaymentReceipt, ReplicationKind},
+    canister_http::{CanisterHttpPaymentReceipt, CanisterHttpRequestContext, ReplicationKind},
 };
 
 use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError, metrics::PricingMetrics};
@@ -30,16 +30,15 @@ impl DarkLaunchTracker {
     pub fn new(
         real: Box<dyn BudgetTracker>,
         shadow: Box<dyn BudgetTracker>,
-        canister_id: CanisterId,
-        replication: ReplicationKind,
+        context: &CanisterHttpRequestContext,
         metrics: PricingMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             real,
             shadow,
-            canister_id,
-            replication,
+            canister_id: context.request.sender,
+            replication: context.replication.kind(),
             metrics,
             log,
             error_reported: false,
@@ -122,7 +121,60 @@ mod tests {
     use super::*;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_types::{
+        NodeId, NumberOfNodes, PrincipalId, RegistryVersion,
+        canister_http::{
+            CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus,
+            Replication,
+        },
+        messages::{CallbackId, NO_DEADLINE, Request},
+        time::UNIX_EPOCH,
+    };
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+    use std::collections::BTreeSet;
     use std::time::Duration;
+
+    fn flexible() -> Replication {
+        Replication::Flexible {
+            committee: BTreeSet::from([NodeId::from(PrincipalId::new_node_test_id(0))]),
+            min_responses: 1,
+            max_responses: 1,
+        }
+    }
+
+    fn non_replicated() -> Replication {
+        Replication::NonReplicated(NodeId::from(PrincipalId::new_node_test_id(0)))
+    }
+
+    /// Builds a minimal request context with the given `replication`. Only the
+    /// sender (canister id) and replication kind are read by `DarkLaunchTracker`.
+    fn context(replication: Replication) -> CanisterHttpRequestContext {
+        CanisterHttpRequestContext {
+            request: Request {
+                receiver: CanisterId::from_u64(7),
+                sender: CanisterId::from_u64(7),
+                sender_reply_callback: CallbackId::from(1),
+                payment: Cycles::zero(),
+                method_name: String::new(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            url: String::new(),
+            max_response_bytes: None,
+            headers: vec![],
+            body: None,
+            http_method: CanisterHttpMethod::GET,
+            transform: None,
+            time: UNIX_EPOCH,
+            replication,
+            pricing_version: PricingVersion::Legacy,
+            refund_status: RefundStatus::default(),
+            registry_version: RegistryVersion::from(1),
+            subnet_size: NumberOfNodes::from(13),
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
+        }
+    }
 
     /// A [`BudgetTracker`] whose accounting steps return preconfigured results.
     struct FakeTracker {
@@ -168,14 +220,13 @@ mod tests {
     fn dark_launch(
         real: FakeTracker,
         shadow: FakeTracker,
-        replication: ReplicationKind,
+        replication: Replication,
         metrics: PricingMetrics,
     ) -> DarkLaunchTracker {
         DarkLaunchTracker::new(
             Box::new(real),
             Box::new(shadow),
-            CanisterId::from_u64(7),
-            replication,
+            &context(replication),
             metrics,
             no_op_logger(),
         )
@@ -211,7 +262,7 @@ mod tests {
         let mut tracker = dark_launch(
             FakeTracker::ok(),
             shadow,
-            ReplicationKind::FullyReplicated,
+            Replication::FullyReplicated,
             metrics.clone(),
         );
 
@@ -234,12 +285,7 @@ mod tests {
             transform: Err(PricingError::InsufficientCycles),
             transformed: Err(PricingError::InsufficientCycles),
         };
-        let mut tracker = dark_launch(
-            FakeTracker::ok(),
-            shadow,
-            ReplicationKind::Flexible,
-            metrics.clone(),
-        );
+        let mut tracker = dark_launch(FakeTracker::ok(), shadow, flexible(), metrics.clone());
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
         assert_eq!(
@@ -258,7 +304,7 @@ mod tests {
         let mut tracker = dark_launch(
             FakeTracker::ok(),
             FakeTracker::ok(),
-            ReplicationKind::FullyReplicated,
+            Replication::FullyReplicated,
             metrics.clone(),
         );
 
@@ -277,12 +323,7 @@ mod tests {
             network: Err(PricingError::InsufficientCycles),
             ..FakeTracker::ok()
         };
-        let mut tracker = dark_launch(
-            FakeTracker::ok(),
-            shadow,
-            ReplicationKind::NonReplicated,
-            metrics.clone(),
-        );
+        let mut tracker = dark_launch(FakeTracker::ok(), shadow, non_replicated(), metrics.clone());
 
         assert_eq!(tracker.subtract_network_usage(network_usage()), Ok(()));
 

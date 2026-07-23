@@ -41,6 +41,7 @@ use ic_types::{
     signature::BasicSignature,
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::CanisterCyclesCostSchedule;
 
 /// Registry version that the whole benchmark operates at. The subnet record,
 /// the node signing keys and the responses' metadata all use this version.
@@ -490,7 +491,7 @@ fn request_context(replication: Replication) -> CanisterHttpRequestContext {
         refund_status: RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
-        cost_schedule: None,
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 
