@@ -179,11 +179,6 @@ struct RunResult {
     /// test, including any canister history recorded by the operation (which is
     /// accounted for like any other canister memory).
     allocated_bytes: NumBytes,
-    /// The number of additional allocated bytes after running the operation under
-    /// test, *excluding* the canister history recorded by the operation itself.
-    /// Used to decide whether the operation makes a "real" allocation (and thus
-    /// whether the reserved-cycles-limit and freezing-threshold sub-tests apply).
-    allocated_bytes_without_history: NumBytes,
     /// The number of additional reserved cycles after running the operation under test.
     reserved_cycles: Cycles,
     /// The minimum amount of initial cycles before running the operation under test.
@@ -434,18 +429,25 @@ where
                 assert_gt!(initial_memory_usage, final_memory_usage_without_history)
             }
         };
-        if newly_allocated_bytes_without_history.get() > 0 {
+        if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
             // Exception: `IncreaseLogAndMemoryAllocation` with `MemoryAllocation::Large`
             // reserves cycles only for 128 KiB (memory allocation increase)
             // while the freezing limit is based on the pre-existing 80 GiB allocation,
             // so the invariant may not hold.
+            // Exception: an `OtherManagement` operation with `MemoryUsageChange::None`
+            // makes no "real" net allocation and only records a small canister history
+            // entry; the cycles reserved for those few bytes are dominated by the
+            // freezing limit based on the pre-existing memory usage, so the invariant
+            // may not hold.
             let skip_short_invariant =
-                matches!(
+                (matches!(
                     scenario_params.scenario,
                     Scenario::IncreaseLogAndMemoryAllocation
-                ) && matches!(run_params.memory_allocation, MemoryAllocation::Large);
+                ) && matches!(run_params.memory_allocation, MemoryAllocation::Large))
+                    || (matches!(scenario_params.scenario, Scenario::OtherManagement)
+                        && matches!(scenario_params.memory_usage_change, MemoryUsageChange::None));
             match run_params.freezing_threshold {
                 FreezingThreshold::Long => {
                     assert_gt!(freezing_limit_cycles, newly_reserved_cycles);
@@ -603,7 +605,6 @@ where
     RunResult {
         err,
         allocated_bytes: newly_allocated_bytes,
-        allocated_bytes_without_history: newly_allocated_bytes_without_history,
         reserved_cycles: newly_reserved_cycles,
         minimum_initial_cycles,
     }
@@ -837,7 +838,7 @@ where
                 res.allocated_bytes,
             );
 
-            if res.allocated_bytes_without_history > NumBytes::from(0) {
+            if res.allocated_bytes > NumBytes::from(0) {
                 test_reserved_cycles_limit(
                     &scenario_params,
                     default_run_params.clone(),
