@@ -492,6 +492,23 @@ prepended to the directly-available transactions.
 
 ---
 
+## ic-nervous-system-ids
+
+**Path:** `rs/nervous_system/ids/`
+
+### Purpose
+
+Recognizes strings that could plausibly be a full git commit ID (a SHA-1 hash), used to validate
+`git_commit_id` metadata fields such as those consumed by `sync-with-released-nervous-system-wasms`.
+
+### Public API
+
+| Item | Description |
+|---|---|
+| `is_potential_full_git_commit_id(s: &str) -> bool` | Returns `true` if `s` is exactly 40 characters long and every character is an ASCII hex digit (case-insensitive). |
+
+---
+
 ## Tools
 
 ### ic-nervous-system-tools-neuron-subaccount
