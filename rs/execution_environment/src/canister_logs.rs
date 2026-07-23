@@ -130,7 +130,7 @@ mod tests {
             fetch_canister_logs_instructions(10, NumBytes::new(4_096)),
             NumInstructions::new(150_000 + 900 * 10 + 4_096)
         );
-        // Monotonically non-decreasing in both the record count and content size.
+        // Monotonically increasing in both the record count and content size.
         assert!(
             fetch_canister_logs_instructions(100, NumBytes::new(1_000))
                 < fetch_canister_logs_instructions(200, NumBytes::new(1_000))
