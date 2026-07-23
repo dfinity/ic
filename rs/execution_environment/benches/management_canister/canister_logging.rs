@@ -201,8 +201,6 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
                 request
             },
             |request| fetch_canister_logs_response_for_bench(sender, canister, request),
-            // The response (up to ~2 MB) is dropped outside the timed region,
-            // with bounded memory across the batch.
             BatchSize::LargeInput,
         );
     });
