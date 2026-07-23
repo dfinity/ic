@@ -79,6 +79,8 @@ def strip_parens_to_fixed_point(text):
     return text, dropped
 
 
+# TODO: Add --check, or something, which would be used in CI to block changes
+# where there are violations.
 def find_violations(text):
     # Code is already protected by the time this runs, so any paren seen
     # here is a real markup paren, not Rust syntax.
