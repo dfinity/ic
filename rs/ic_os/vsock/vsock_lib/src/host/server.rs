@@ -3,6 +3,8 @@ use crate::protocol::{Request, Response, parse_request};
 use std::io::{Error, ErrorKind, Read, Result, Write};
 use vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
 
+// The first CID available for guests to use. This is used later to enforce
+// that only the first guest is able to connect over VSOCK, for now.
 const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
 const DEFAULT_PORT: u32 = 19090;
 

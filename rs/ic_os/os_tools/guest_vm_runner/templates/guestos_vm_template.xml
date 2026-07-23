@@ -191,9 +191,9 @@
       <alias name='console1'/>
     </console>
     <vsock model='virtio'>
-  {%- if cid.is_some() %}
-      <cid address='{{cid.unwrap()}}'/>
-  {% else %}
+  {%- if let Some(vsock_cid) = vsock_cid %}
+      <cid address='{{vsock_cid}}'/>
+  {%- else %}
       <cid auto='yes'/>
   {%- endif %}
     </vsock>

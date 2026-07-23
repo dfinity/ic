@@ -107,6 +107,7 @@ fn node_ipv6_address(
         calculate_multi_deterministic_mac(
             &hostos_config.icos_settings.mgmt_mac,
             hostos_config.icos_settings.deployment_environment,
+            node_type,
             slot,
         )
     } else {

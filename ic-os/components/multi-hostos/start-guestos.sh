@@ -18,8 +18,8 @@ esac
 
 # If not a type4 node, fall to the default GuestOS flow
 if ((COUNT == 1)); then
-    systemctl start guestos.service || true
+    systemctl start guestos.service
     exit 0
 fi
 
-eval systemctl start guestos@{0..$((COUNT - 1))}.service || true
+eval systemctl start --no-block guestos@{0..$((COUNT - 1))}.service

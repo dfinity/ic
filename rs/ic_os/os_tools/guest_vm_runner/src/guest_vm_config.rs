@@ -22,6 +22,8 @@ const DEFAULT_VM_MEMORY_GIB: u32 = 480;
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GIB: u32 = 4;
 
+// The first CID available for guests to use. This is used later to enforce
+// that only the first guest is able to connect over VSOCK, for now.
 const VIR_VSOCK_GUEST_CID_MIN: u32 = 3;
 
 #[derive(Template)]
@@ -34,7 +36,7 @@ pub struct GuestOSTemplateProps {
     pub vm_memory: u32,
     pub nr_of_vcpus: u32,
     pub topology: Topology,
-    pub cid: Option<u32>,
+    pub vsock_cid: Option<u32>,
     pub mac_address: macaddr::MacAddr6,
     pub disk_device: PathBuf,
     pub config_media_path: PathBuf,
@@ -130,6 +132,7 @@ pub fn generate_vm_config(
         calculate_multi_deterministic_mac(
             &config.icos_settings.mgmt_mac,
             config.icos_settings.deployment_environment,
+            node_type,
             slot,
         )
     } else {
@@ -174,7 +177,7 @@ pub fn generate_vm_config(
         vm_memory: vm_memory_gib,
         nr_of_vcpus,
         topology,
-        cid: guest_vm_slot.map(|v| v as u32 + VIR_VSOCK_GUEST_CID_MIN),
+        vsock_cid: guest_vm_slot.map(|v| v as u32 + VIR_VSOCK_GUEST_CID_MIN),
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -208,7 +211,11 @@ fn split_resources_for_type_4(
     config: &HostOSConfig,
     memory: u32,
     vcpus: u32,
-) -> (u32, u32, Topology) {
+) -> (
+    /* memory */ u32,
+    /* vcpus */ u32,
+    /* topology */ Topology,
+) {
     let (memory, vcpus) = match &config.icos_settings.node_reward_type {
         Some(val) if val == "type4.0" => (memory / 32, vcpus / 32),
         Some(val) if val == "type4.1" => (memory / 60, 2 /* Overcommit vCPUs */),
@@ -238,7 +245,7 @@ pub fn vm_domain_name(guest_vm_type: GuestVMType, slot: Option<u8>) -> String {
     let slot_suffix = slot.map(|v| v.to_string()).unwrap_or_default();
     match guest_vm_type {
         GuestVMType::Default => format!("{DEFAULT_GUEST_VM_DOMAIN_NAME}{slot_suffix}"),
-        GuestVMType::Upgrade => UPGRADE_GUEST_VM_DOMAIN_NAME.to_string(),
+        GuestVMType::Upgrade => format!("{UPGRADE_GUEST_VM_DOMAIN_NAME}{slot_suffix}"),
     }
 }
 
@@ -246,7 +253,7 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: Option<u8>) -> String {
     let slot = slot.unwrap_or(0x66);
     match guest_vm_type {
         GuestVMType::Default => format!("fd897da5-8017-41c8-8575-a706dba307{slot:02x}"),
-        GuestVMType::Upgrade => "1ea49839-7f46-4560-a4c7-fce677bbfbbd".to_string(),
+        GuestVMType::Upgrade => format!("1ea49839-7f46-4560-a4c7-fce677bbfb{slot:02x}"),
     }
 }
 
@@ -254,7 +261,7 @@ pub fn serial_log_path(guest_vm_type: GuestVMType, slot: Option<u8>) -> PathBuf 
     let slot_suffix = slot.map(|v| v.to_string()).unwrap_or_default();
     match guest_vm_type {
         GuestVMType::Default => PathBuf::from(format!("{DEFAULT_SERIAL_LOG_PATH}{slot_suffix}")),
-        GuestVMType::Upgrade => PathBuf::from(UPGRADE_SERIAL_LOG_PATH.to_string()),
+        GuestVMType::Upgrade => PathBuf::from(format!("{UPGRADE_SERIAL_LOG_PATH}{slot_suffix}")),
     }
 }
 
@@ -350,6 +357,7 @@ mod tests {
         enable_direct_boot: bool,
         guest_vm_type: GuestVMType,
         available_hugepages_gib: u64,
+        slot: Option<u8>,
     ) {
         let mut mint = Mint::new(goldenfiles_path());
         let mut config = create_test_hostos_config();
@@ -378,7 +386,7 @@ mod tests {
             direct_boot,
             Path::new("/dev/guest_disk"),
             Path::new("/var/serial/console.txt"),
-            None,
+            slot,
             guest_vm_type,
             available_hugepages_gib,
             &metrics,
@@ -403,6 +411,7 @@ mod tests {
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
             16,
+            None,
         );
     }
 
@@ -422,6 +431,7 @@ mod tests {
             /*enable_direct_boot=*/ true,
             GuestVMType::Upgrade,
             4,
+            None,
         );
     }
 
@@ -441,6 +451,7 @@ mod tests {
             /*enable_direct_boot=*/ false,
             GuestVMType::Default,
             0,
+            None,
         );
     }
 
@@ -460,6 +471,27 @@ mod tests {
             /*enable_direct_boot=*/ true,
             GuestVMType::Default,
             470,
+            None,
+        );
+    }
+
+    #[test]
+    fn test_generate_multi_vm_config() {
+        test_vm_config(
+            "multi_guestos_vm.xml",
+            HostOSSettings {
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
+                ..HostOSSettings::default()
+            },
+            /*enable_trusted_execution_environment=*/ false,
+            /*enable_direct_boot=*/ true,
+            GuestVMType::Default,
+            16,
+            Some(16),
         );
     }
 
