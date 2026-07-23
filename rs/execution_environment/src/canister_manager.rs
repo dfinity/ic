@@ -1925,9 +1925,7 @@ impl CanisterManager {
     // other canister memory). Callers that record a canister history entry therefore
     // read `new_memory_usage` after recording it, so that the subnet available
     // execution memory, freezing threshold, and storage reservation below all account
-    // for it over the true total memory usage (computing the allocated bytes just
-    // once, rather than folding an already-allocated history delta back through
-    // `allocated_bytes()`).
+    // for it over the true total memory usage.
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
