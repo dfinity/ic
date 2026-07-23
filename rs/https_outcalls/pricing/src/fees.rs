@@ -11,7 +11,7 @@
 //!      block payload.
 
 use ic_types::{
-    NumBytes,
+    NumBytes, NumberOfNodes,
     canister_http::{CanisterHttpResponseProof, CanisterHttpResponseShare, Replication},
 };
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, HTTPOutcalls};
@@ -93,8 +93,8 @@ pub fn base_fee(
 
 /// Per-response-byte consensus cost coefficient `N * (10 * N + 600)`, where `N`
 /// is the subnet size.
-pub fn consensus_cost_coefficient(subnet_size: u32) -> u128 {
-    let n = subnet_size as u128;
+pub fn consensus_cost_coefficient(subnet_size: NumberOfNodes) -> u128 {
+    let n = subnet_size.get() as u128;
     n * (CONSENSUS_PER_NODE_BYTE_FEE * n + CONSENSUS_BYTE_FEE)
 }
 
@@ -106,7 +106,7 @@ pub fn consensus_cost_coefficient(subnet_size: u32) -> u128 {
 /// including the aggregated response in a block.
 pub fn fully_replicated_initial_spent(
     proof: &CanisterHttpResponseProof,
-    subnet_size: u32,
+    subnet_size: NumberOfNodes,
 ) -> Cycles {
     let spent_sum: Cycles = proof
         .signatures
@@ -132,7 +132,7 @@ pub fn fully_replicated_initial_spent(
 /// consensus, where `K` is the number of shares.
 pub fn flexible_initial_spent<'a>(
     shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
-    subnet_size: u32,
+    subnet_size: NumberOfNodes,
     min_responses: u32,
 ) -> Cycles {
     let mut spent_sum = Cycles::zero();
@@ -143,7 +143,7 @@ pub fn flexible_initial_spent<'a>(
         size_term += FLEXIBLE_RESPONSE_SIZE_OVERHEAD + share.content.content_size() as u128;
         count += 1;
     }
-    let n = subnet_size as u128;
+    let n = subnet_size.get() as u128;
     let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
     let extra_responses = count.saturating_sub(min_responses) as u128;
     let extra_cost = Cycles::from(

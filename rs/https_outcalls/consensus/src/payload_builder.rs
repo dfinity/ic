@@ -235,7 +235,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 let Some(grouped_shares) = shares_by_callback_id.get(callback_id) else {
                     continue;
                 };
-                let subnet_size = request.subnet_size.get();
+                let subnet_size = request.subnet_size;
                 match &request.replication {
                     Replication::FullyReplicated => {
                         // Committee threshold and faults_tolerated for this
@@ -442,7 +442,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 ),
             )?;
 
-            let subnet_size = request_context.subnet_size.get();
+            let subnet_size = request_context.subnet_size;
 
             let (effective_committee, effective_threshold) = match request_context.replication {
                 Replication::NonReplicated(node_id) => (vec![node_id], 1),
@@ -620,7 +620,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
-            let subnet_size = context.subnet_size.get();
+            let subnet_size = context.subnet_size;
             let Replication::Flexible {
                 committee: flex_committee,
                 min_responses,
@@ -705,7 +705,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     InvalidCanisterHttpPayloadReason::UnknownCallbackId(callback_id),
                 ),
             )?;
-            let subnet_size = context.subnet_size.get();
+            let subnet_size = context.subnet_size;
             let Replication::Flexible {
                 committee: flex_committee,
                 min_responses,

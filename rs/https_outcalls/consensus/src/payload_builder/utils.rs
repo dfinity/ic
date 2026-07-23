@@ -2,7 +2,7 @@ use CanisterHttpResponseContent::Reject;
 use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
-    CountBytes, NodeId, NumBytes, RegistryVersion,
+    CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
     batch::{
         FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
@@ -346,7 +346,7 @@ pub(crate) fn group_shares_by_callback_id<
 pub(crate) fn find_fully_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
-    subnet_size: u32,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -376,7 +376,7 @@ pub(crate) fn find_fully_replicated_response(
 pub(crate) fn find_non_replicated_response(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
-    subnet_size: u32,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> Option<CanisterHttpResponseWithConsensus> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
@@ -432,7 +432,7 @@ pub(crate) fn find_flexible_result(
     max_responses: u32,
     accumulated_size: usize,
     max_payload_size: NumBytes,
-    subnet_size: u32,
+    subnet_size: NumberOfNodes,
     pool_access: &dyn CanisterHttpPool,
 ) -> FlexibleFindResult {
     let mut entries_sorted_asc: Vec<_> = grouped_shares.iter().collect();
