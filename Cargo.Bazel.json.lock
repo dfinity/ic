@@ -1,5 +1,5 @@
 {
-  "checksum": "85249f409e5a6709d56b2bb9b5e221097d6eaf92280824bb9e00b3ef8ad5c2f1",
+  "checksum": "d5ffecbe5eb539cc383255d2073c58ee29b2e68ff04ebfbcded41ae738abb154",
   "crates": {
     "actix-codec 0.5.1": {
       "name": "actix-codec",
@@ -45377,7 +45377,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
+            "Rev": "a244a247789fd9ece0fe1a406180c32e5bbc0c3f"
           }
         }
       },
@@ -45409,7 +45409,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.10.0",
               "target": "bitflags"
             },
             {
@@ -45427,7 +45427,7 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2024",
         "version": "0.14.99"
       },
       "license": "Apache-2.0",
@@ -45444,7 +45444,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
+            "Rev": "a244a247789fd9ece0fe1a406180c32e5bbc0c3f"
           },
           "strip_prefix": "lmdb-sys",
           "patch_args": [
@@ -45505,7 +45505,7 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
+        "edition": "2024",
         "version": "0.11.99"
       },
       "build_script_attrs": {
