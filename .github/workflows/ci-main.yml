@@ -173,7 +173,9 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            targets_args=()
+            # Local system-tests will run on the Remote Execution Cluster @ Namespace
+            # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
+            targets_args=(--exclude_tags=local_system_test)
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
@@ -237,7 +239,6 @@ jobs:
             # make sure the version is stamped in
             bazel_args+=( --config=stamped )
           fi
-
 
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 

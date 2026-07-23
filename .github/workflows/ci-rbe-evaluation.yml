@@ -1,30 +1,171 @@
-name: RBE Namespace Test
+name: CI RBE Evaluation
 
-# Experimental: run `bazel test` on Namespace runners using Remote
-# Build Execution (RBE). Actions execute on Namespace workers booted from a custom
-# worker image (a mirror of ic-build) that is built, optimized and pinned by the
-# `container-autobuild.yml` workflow.
-#
-# See: https://namespace.so/docs/bazel/execution
+# This workflow is used to evaluate the performance and stability of
+# Bazel builds and tests on the Remote Build Execution (RBE) cluster @ Namespace.
+# It will be compared against the existing `bazel-test-all` job in `.github/workflows/ci-main.yml`.
+# Therefore, this workflow is mostly a copy of a subset of `.github/workflows/ci-main.yml` then adapted to RBE.
+# Like `.github/workflows/ci-main.yml` it's called from `.github/workflows/ci-kickoff.yml`
+# but it's allowed to fail in order not to block PRs or releases.
 
 on:
-  workflow_dispatch:
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-  push:
-    branches:
-      - 'dev-gh-*'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+  workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
+      release-build:
+        description: Whether this CI run is for a release build which means artifacts will be stamped.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
 
+env:
+  CI_EVENT_NAME: ${{ github.event_name }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+
 jobs:
-  bazel-test-rbe:
-    name: Bazel Test (Remote Build Execution @ Namespace)
+  config:
+    name: Set Config
+    runs-on: ubuntu-latest
+    outputs:
+      release-build: ${{ steps.config.outputs.release-build }}
+      diff-only: ${{ steps.config.outputs.diff-only }}
+      skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+      skip_buf_checks: ${{ steps.config.outputs.skip_buf_checks }}
+    steps:
+      - name: Infer build config
+        id: config
+        run: |
+          set -euo pipefail
+
+          # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
+          # the full build to occur (including versioning)
+          protected_branches=("^master$" "^feat-ai-on-engines$" "^rc--" "^hotfix-" "^public-hotfix-")
+          for pattern in "${protected_branches[@]}"; do
+              if [[ "$BRANCH_NAME" =~ $pattern ]]; then
+                  is_protected_branch="true"
+                  break
+              fi
+          done
+
+          if [[ "${is_protected_branch:-}" == "true" ]]; then
+              # if we are on a "protected" branch, targeting an rc branch or master we
+              # upload all artifacts and run a release build (with versioning)
+              release_build="true"
+              diff_only="false"
+              skip_long_tests="false"
+          elif [[ '${{ github.event_name }}' == "merge_group" ]]; then
+              # on a merge group, we don't upload the artifacts (i.e. no release
+              # build) but we ensure all targets are built (no diff)
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
+          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+              # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
+              # branch
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="false"
+          elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
+              # On pushes to dev-gh-* branches don't do a release, build all targets except long_tests.
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
+          elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
+              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all targets
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="false"
+          else
+              # default behavior is to not release, only build targets with modified inputs and skip long_tests.
+              release_build="false"
+              diff_only="true"
+              skip_long_tests="true"
+          fi
+
+          # if release build was set, override whatever was determined above
+          if [[ '${{ inputs.release-build }}' != '' ]]; then
+              release_build=${{ inputs.release-build }}
+          fi
+
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
+              skip_buf_checks="true"
+          else
+              skip_buf_checks="false"
+          fi
+
+          echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "release-build: $release_build"
+          echo "release-build=$release_build" >> "$GITHUB_OUTPUT"
+          echo "| \`release-build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "diff-only: $diff_only"
+          echo "diff-only=$diff_only" >> "$GITHUB_OUTPUT"
+          echo "| \`diff-only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_long_tests: $skip_long_tests"
+          echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_buf_checks: $skip_buf_checks"
+          echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  infer-bazel-targets:
+    name: Infer Bazel Targets
+    runs-on: ubuntu-latest
+    needs: [config]
+    steps:
+      # calculate which bazel targets may need to be rebuilt
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.commit-sha }}
+      - name: Infer Targets
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            # Farm-based system-tests run via .github/workflows/ci-main.yml so skip them here:
+            targets_args=(--exclude_tags=farm_system_test)
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
+            fi
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
+
+            # creates a list of targets suitable for --target_pattern_file and list
+            # the targets on the step summary
+            /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
+            /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
+
+      - name: Upload target files
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: bazel-targets
+          path: |
+            ${{ runner.temp }}/build-targets
+            ${{ runner.temp }}/test-targets
+
+  bazel-test-all-rbe:
+    name: Bazel Test All on RBE
+    needs: [config, infer-bazel-targets]
+    # This job is currently in the evaluation phase where we compare its speed and stability with the `bazel-test-all` job.
+    # We expect it to fail and that's OK and it shouldn't block PRs.
+    continue-on-error: true
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd
@@ -45,21 +186,47 @@ jobs:
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
-    timeout-minutes: 250
-    if: >-
-      github.repository == 'dfinity/ic' &&
-      ( github.event_name != 'pull_request' ||
-        ( github.event.pull_request.head.repo.full_name == github.repository &&
-          contains(github.event.pull_request.labels.*.name, 'CI_RBE') ) )
+    timeout-minutes: 150
     steps:
       - uses: namespacelabs/nscloud-setup@v0
       - name: Set up Bazel Remote Execution
         run: |
           nsc bazel execution setup --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - *checkout
       - uses: ./.github/actions/netrc
+
+      - name: Infer Bazel Args
+        id: infer-bazel-args
+        shell: bash
+        run: |
+          # Determine bazel_args based on event type or branch name
+          bazel_args=( --config=flaky_retry ) # auto retry eg systests
+          if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
+              bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
+          elif [[ $BRANCH_NAME =~ ^(hotfix-|public-hotfix-) ]]; then
+              bazel_args+=( --test_timeout_filters=short,moderate )
+          else
+              bazel_args+=( --keep_going )
+          fi
+
+          if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+            # make sure the version is stamped in
+            bazel_args+=( --config=stamped )
+          fi
+
+          echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
+
+      - name: Download target files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bazel-targets
+          path: ~/.cache/bazel-targets
+
+      # Just like with bazel-test-all the job is broken up between a build and a test step
+      # such that lateron build artifacts can be uploaded even when tests fail.
+
       - name: Bazel Build with RBE
-        timeout-minutes: 120
+        timeout-minutes: 60
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +237,10 @@ jobs:
           # later uploaded to Namespace Artifact Storage for offline analysis.
           mkdir -p /tmp/bep
 
+          read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
+
+          build_targets="$HOME/.cache/bazel-targets/build-targets"
+
           bazel_args=(
             --noworkspace_rc
             --bazelrc=./bazel/conf/.bazelrc.build
@@ -77,7 +248,7 @@ jobs:
 
             build
 
-            --config=flaky_retry
+            "${inferred_args[@]}"
 
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
@@ -87,8 +258,6 @@ jobs:
 
             # Namespace currently deploys 15 workers that can run 8 actions:
             --jobs=64
-
-            --build_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
             # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
             # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
@@ -109,14 +278,13 @@ jobs:
             --profile=/tmp/bep/profile-build.json
             --experimental_profile_include_target_label
 
-            --keep_going
+            --target_pattern_file=$build_targets
           )
 
-          bazel "${bazel_args[@]}" //...
+          bazel "${bazel_args[@]}"
 
       - name: Bazel Test with RBE
-        if: ${{ !cancelled() }}
-        timeout-minutes: 120
+        timeout-minutes: 90
         shell: bash
         run: |
           set -euo pipefail
@@ -127,6 +295,10 @@ jobs:
           # later uploaded to Namespace Artifact Storage for offline analysis.
           mkdir -p /tmp/bep
 
+          read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
+
+          test_targets="$HOME/.cache/bazel-targets/test-targets"
+
           bazel_args=(
             --noworkspace_rc
             --bazelrc=./bazel/conf/.bazelrc.build
@@ -134,7 +306,7 @@ jobs:
 
             test
 
-            --config=flaky_retry
+            "${inferred_args[@]}"
 
             --spawn_strategy=remote,sandboxed,local
             --strategy=Genrule=remote,sandboxed,local
@@ -143,8 +315,6 @@ jobs:
             --remote_default_exec_properties=container-image="$worker_image"
 
             --jobs=32
-
-            --test_tag_filters=-farm_system_test,-system_test_large,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly,-pocketic_tests_nightly
 
             # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
             # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
@@ -175,7 +345,7 @@ jobs:
             --profile=/tmp/bep/profile-tests.json
             --experimental_profile_include_target_label
 
-            --keep_going
+            --target_pattern_file=$test_targets
           )
 
           # Tee the output to a file (in /tmp/test-logs, separate from the BEP
@@ -183,7 +353,7 @@ jobs:
           # can parse which targets failed or were flaky. pipefail preserves
           # Bazel's exit code so the step still fails when a test fails.
           mkdir -p /tmp/test-logs
-          bazel "${bazel_args[@]}" //... 2>&1 | tee /tmp/test-logs/tests-bazel-output.log
+          bazel "${bazel_args[@]}" 2>&1 | tee /tmp/test-logs/tests-bazel-output.log
 
       - name: Stage failed and flaky test logs
         # Collect the Bazel test logs of the tests that FAILED or were
