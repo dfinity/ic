@@ -37,7 +37,7 @@ fn encode_single_call_golden_vector() {
     expected.extend_from_slice(&[0x82, 0xad, 0x56, 0xcb]); // aggregate3 selector
     expected.extend_from_slice(&word(0x20)); // offset to array
     expected.extend_from_slice(&word(1)); // array length
-    expected.extend_from_slice(&word(1 * 32)); // head offset for tuple 0 = N*32
+    expected.extend_from_slice(&word(32)); // head offset for tuple 0 = N*32, N=1
     expected.extend_from_slice(&tuple(&TOKEN0, &HOLDER0));
 
     let encoded = encode_balance_of_aggregate3(&calls);
