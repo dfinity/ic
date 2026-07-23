@@ -212,6 +212,44 @@ pub struct WithdrawalArg {
     pub from_subaccount: Option<Subaccount>,
 }
 
+/// Argument for the `deposit_erc20` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositErc20Arg {
+    pub mode: DepositMode,
+}
+
+/// How the fee for a ckERC20 deposit address registration is settled.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositMode {
+    /// The registration fee is deducted from the deposited amount. The deposit
+    /// address is derived from the caller's principal and the given subaccount.
+    Unsponsored { subaccount: Option<[u8; 32]> },
+    // TODO(DEFI-2927): a sponsor pays the registration fee upfront so the user
+    // receives the full deposited amount.
+    // Sponsored {
+    //     from_subaccount: Option<[u8; 32]>,
+    //     max_fee: Nat,
+    // },
+}
+
+/// Response of the `deposit_erc20` endpoint.
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct DepositErc20Response {
+    /// The Ethereum deposit address derived for the caller.
+    pub address: String,
+    /// Timestamp in nanoseconds since the Unix epoch until which a deposit sent
+    /// to `address` is guaranteed to be noticed by the minter.
+    pub valid_until: u64,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub enum DepositErc20Error {
+    /// The maximum number of concurrently armed deposit addresses has been reached.
+    TooManyActiveAddresses,
+    /// The minter is temporarily unavailable, retry the request.
+    TemporarilyUnavailable(String),
+}
+
 #[derive(PartialEq, Debug, CandidType, Deserialize)]
 pub enum WithdrawalError {
     AmountTooLow { min_withdrawal_amount: Nat },
@@ -491,6 +529,19 @@ pub mod events {
         QuarantinedReimbursement {
             index: ReimbursementIndex,
         },
+        RegisteredDepositAddresses {
+            scan_window_nanos: u64,
+            capacity: u64,
+            addresses: Vec<DepositAddressRegistration>,
+        },
+    }
+
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+    pub struct DepositAddressRegistration {
+        pub owner: Principal,
+        pub subaccount: Option<[u8; 32]>,
+        pub address: String,
+        pub expires_at_nanos: u64,
     }
 }
 
