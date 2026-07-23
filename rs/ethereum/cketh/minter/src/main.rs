@@ -12,7 +12,8 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPrice,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
+    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
     Eip1559TransactionPriceArg, Erc20Balance, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
     RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
@@ -35,6 +36,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{
     STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
+use ic_cketh_minter::timed_sized_map::Timestamp;
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
     CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
@@ -128,6 +130,11 @@ fn emit_preupgrade_events() {
             storage::record_event(event);
         }
     });
+
+    let registry = read_state(|s| s.automatic_deposits.watchlist_snapshot());
+    if !registry.registrations.is_empty() {
+        storage::record_event(EventType::RegisteredDepositAddresses(registry));
+    }
 }
 
 #[pre_upgrade]
@@ -151,6 +158,34 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 #[update]
 async fn minter_address() -> String {
     state::minter_address().await.to_string()
+}
+
+#[update]
+async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
+    validate_ckerc20_active();
+    let caller = validate_caller_not_anonymous();
+    let subaccount = match arg.mode {
+        DepositMode::Unsponsored { subaccount } => subaccount,
+    };
+    let account = Account {
+        owner: caller,
+        subaccount,
+    };
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    if let Some(entry) = read_state(|s| s.automatic_deposits.get_entry(now, &account).cloned()) {
+        return Ok(DepositErc20Response {
+            address: entry.value.address.to_string(),
+            valid_until: entry.expires_at.as_nanos(),
+        });
+    }
+    // Ensure the minter's ECDSA public key has been fetched and cached in the
+    // state so that the (synchronous) registration below can derive the address.
+    state::lazy_call_ecdsa_public_key_with_chain_code().await;
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    mutate_state(|s| s.register_deposit_address(now, account)).map(|request| DepositErc20Response {
+        address: request.value.address.to_string(),
+        valid_until: request.expires_at.as_nanos(),
+    })
 }
 
 #[query]
@@ -666,10 +701,26 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
     }
 
     fn map_event(Event { timestamp, payload }: Event) -> CandidEvent {
-        use ic_cketh_minter::endpoints::events::EventPayload as EP;
+        use ic_cketh_minter::endpoints::events::{
+            DepositAddressRegistration as CandidDepositAddressRegistration, EventPayload as EP,
+        };
         CandidEvent {
             timestamp,
             payload: match payload {
+                EventType::RegisteredDepositAddresses(registry) => EP::RegisteredDepositAddresses {
+                    scan_window_nanos: registry.scan_window_nanos,
+                    capacity: registry.capacity,
+                    addresses: registry
+                        .registrations
+                        .into_iter()
+                        .map(|r| CandidDepositAddressRegistration {
+                            owner: r.owner,
+                            subaccount: r.subaccount,
+                            address: r.address.to_string(),
+                            expires_at_nanos: r.expires_at_nanos.as_nanos(),
+                        })
+                        .collect(),
+                },
                 EventType::Init(args) => EP::Init(args),
                 EventType::Upgrade(args) => EP::Upgrade(args),
                 EventType::AcceptedDeposit(ReceivedEthEvent {

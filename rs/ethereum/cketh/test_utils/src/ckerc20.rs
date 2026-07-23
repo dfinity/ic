@@ -24,7 +24,9 @@ use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
-use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
+use ic_cketh_minter::endpoints::{
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
+};
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
@@ -342,6 +344,34 @@ impl CkErc20Setup {
             Encode!(&withdraw_erc20_arg).expect("failed to encode withdraw args"),
         );
         RefreshGasFeeEstimate {
+            setup: self,
+            message_id,
+        }
+    }
+
+    pub fn call_minter_deposit_erc20(
+        self,
+        from: Principal,
+        subaccount: Option<[u8; 32]>,
+    ) -> DepositErc20Flow {
+        let arg = DepositErc20Arg {
+            mode: DepositMode::Unsponsored { subaccount },
+        };
+        self.call_minter_deposit_erc20_with(from, arg)
+    }
+
+    pub fn call_minter_deposit_erc20_with(
+        self,
+        from: Principal,
+        deposit_erc20_arg: DepositErc20Arg,
+    ) -> DepositErc20Flow {
+        let message_id = self.env.send_ingress(
+            PrincipalId::from(from),
+            self.cketh.minter_id,
+            "deposit_erc20",
+            Encode!(&deposit_erc20_arg).expect("failed to encode deposit_erc20 args"),
+        );
+        DepositErc20Flow {
             setup: self,
             message_id,
         }
@@ -957,6 +987,51 @@ impl Erc20WithdrawalFlow {
             .await_ingress(self.message_id.clone(), MAX_TICKS)
             .expect("failed to resolve message with id: {message_id}"),
     ), Result<RetrieveErc20Request, WithdrawErc20Error>)
+        .unwrap()
+    }
+}
+
+pub struct DepositErc20Flow {
+    pub setup: CkErc20Setup,
+    pub message_id: MessageId,
+}
+
+impl DepositErc20Flow {
+    pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
+        let result = self
+            .setup
+            .env
+            .await_ingress(self.message_id.clone(), MAX_TICKS);
+        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains(error_substring));
+        self.setup
+    }
+
+    pub fn expect_error(self, error: DepositErc20Error) -> CkErc20Setup {
+        assert_eq!(
+            self.minter_response(),
+            Err(error),
+            "BUG: unexpected result during deposit_erc20"
+        );
+        self.setup
+    }
+
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositErc20Response) {
+        let response = self
+            .minter_response()
+            .expect("BUG: unexpected error from minter during deposit_erc20");
+        (self.setup, response)
+    }
+
+    fn minter_response(&self) -> Result<DepositErc20Response, DepositErc20Error> {
+        Decode!(
+            &assert_reply(
+                self.setup
+                    .env
+                    .await_ingress(self.message_id.clone(), MAX_TICKS)
+                    .expect("failed to resolve message with id: {message_id}")
+            ),
+            Result<DepositErc20Response, DepositErc20Error>
+        )
         .unwrap()
     }
 }
