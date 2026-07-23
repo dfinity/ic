@@ -128,6 +128,9 @@ just like the word "marklar" in _South Park_):
     * run
     * execute
 
+Existing compound jargon (e.g. "canister state") is grandfathered in, but do not
+coin new jargon from banned words.
+
 
 ### Functions and Methods
 

@@ -56,6 +56,9 @@ Do not use the following words:
     * run
     * execute
 
+Existing compound jargon is grandfathered in, but do not
+coin new jargon from banned words.
+
 
 ### Functions and Methods
 
