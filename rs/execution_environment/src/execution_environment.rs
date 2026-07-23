@@ -3152,6 +3152,11 @@ impl ExecutionEnvironment {
         let to_total_num_changes = args.rename_to.total_num_changes;
         let requested_by = args.requested_by();
 
+        let resource_saturation = self.subnet_memory_saturation(
+            &round_limits.subnet_available_memory,
+            state.resource_limits(),
+        );
+
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
             None => {
@@ -3176,6 +3181,7 @@ impl ExecutionEnvironment {
                 requested_by,
                 state,
                 round_limits,
+                &resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());

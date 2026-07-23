@@ -719,7 +719,7 @@ impl CanisterManager {
                     // memory change past that point, so the new memory usage (read after
                     // recording it) differs from the old one exactly by that entry.
                     let old_memory_usage = canister.memory_usage();
-                    let _ = canister.add_canister_change(
+                    canister.add_canister_change(
                         timestamp_nanos,
                         origin,
                         CanisterChangeDetails::settings_change(
@@ -750,7 +750,7 @@ impl CanisterManager {
             // change past that point, so the new memory usage (read after recording it)
             // differs from the old one exactly by that entry.
             let old_memory_usage = canister.memory_usage();
-            let _ = canister.add_canister_change(
+            canister.add_canister_change(
                 timestamp_nanos,
                 origin,
                 CanisterChangeDetails::controllers_change(new_controllers),
@@ -1023,11 +1023,7 @@ impl CanisterManager {
         // Record the `CanisterCodeUninstall` canister history change, then read the
         // memory usage after dropping the execution state etc. *and* recording the
         // history entry, i.e. the overall memory usage including all of the above.
-        let _ = canister.add_canister_change(
-            time,
-            origin,
-            CanisterChangeDetails::CanisterCodeUninstall,
-        );
+        canister.add_canister_change(time, origin, CanisterChangeDetails::CanisterCodeUninstall);
         let new_memory_usage = canister.memory_usage();
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
@@ -1597,7 +1593,7 @@ impl CanisterManager {
         // memory usage (read after recording it) differs from the old one exactly by
         // that entry.
         let old_memory_usage = new_canister.memory_usage();
-        let _ = new_canister.add_canister_change(
+        new_canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
@@ -2135,7 +2131,7 @@ impl CanisterManager {
         let deleted_call_context_responses = if uninstall_code {
             let rejects =
                 uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
-            let _ = canister.add_canister_change(
+            canister.add_canister_change(
                 time,
                 origin,
                 CanisterChangeDetails::CanisterCodeUninstall,
@@ -2491,7 +2487,7 @@ impl CanisterManager {
         // `new_memory_usage` after recording it (i.e. the overall memory usage
         // including the loaded snapshot and the history entry).
         new_canister.system_state.bump_canister_version();
-        let _ = new_canister.add_canister_change(
+        new_canister.add_canister_change(
             time,
             origin,
             CanisterChangeDetails::load_snapshot(
@@ -3058,6 +3054,7 @@ impl CanisterManager {
         requested_by: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
         // In addition to this endpoint only being available from the NNS subnet, the calling canister
         // has to be a controller of the canister to be renamed.
@@ -3084,10 +3081,28 @@ impl CanisterManager {
             .system_state
             .get_canister_history()
             .get_total_num_changes();
+
+        // Renaming the canister and recording its `rename_canister` history entry
+        // mutate the canister, and accounting for the recorded history against the
+        // subnet available execution memory (and the canister's cycles) may fail.
+        // Snapshot the canister and `round_limits` beforehand so that we can roll
+        // back all these mutations on failure, keeping the rename atomic. Note that
+        // the caller puts the canister back into the state under its (unchanged) old
+        // id in that case.
+        let canister_snapshot = canister.clone();
+        let round_limits_snapshot = round_limits.clone();
+
         canister
             .system_state
             .rename_canister(new_id, to_version, to_total_num_changes);
-        let available_execution_memory_change = canister.add_canister_change(
+        // Recording the `rename_canister` canister history entry is the only memory
+        // change here, so the new memory usage (read after recording it) differs from
+        // the old one exactly by that entry. Account for it against the subnet
+        // available execution memory (and the canister's cycles), just like any other
+        // canister memory, failing if the subnet cannot account for the canister
+        // history.
+        let old_memory_usage = canister.memory_usage();
+        canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::rename_canister(
@@ -3099,9 +3114,21 @@ impl CanisterManager {
                 requested_by,
             ),
         );
-        round_limits
-            .subnet_available_memory
-            .update_execution_memory_unchecked(available_execution_memory_change);
+        let new_memory_usage = canister.memory_usage();
+        if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
+            state.get_own_subnet_cycles_config(),
+            canister,
+            sender,
+            NumInstructions::new(0),
+            round_limits,
+            new_memory_usage,
+            old_memory_usage,
+            resource_saturation,
+        ) {
+            *canister = canister_snapshot;
+            *round_limits = round_limits_snapshot;
+            return Err(err);
+        }
 
         if let Some(execution_state) = canister.execution_state.as_mut() {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();

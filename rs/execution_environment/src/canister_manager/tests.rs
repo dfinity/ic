@@ -7336,6 +7336,146 @@ fn only_controllers_can_rename() {
     assert_matches!(wasm_result, WasmResult::Reject(r) if r.contains("Only the controllers of the canister"));
 }
 
+// Renaming a canister records a `rename_canister` change in the canister history,
+// which must be accounted for in the subnet available execution memory. The
+// `rename_canister` change carries no controllers, so its memory usage is exactly
+// one canister history entry.
+fn rename_canister_history_bytes() -> i64 {
+    size_of::<CanisterChange>() as i64
+}
+
+/// Sets up a stopped canister (controlled by the migration canister, with no
+/// execution state, no memory allocation, and a zero freezing threshold, so that
+/// its entire memory usage is its canister history and it does not need to be
+/// solvent to account for the recorded entry) and renames it via the canister
+/// manager with exactly `available_execution_memory` subnet available execution
+/// memory. Returns the rename result together with the (possibly rolled-back)
+/// canister and round limits for further inspection.
+fn rename_canister_with_available_memory(
+    available_execution_memory: i64,
+) -> (
+    Result<(), CanisterManagerError>,
+    CanisterState,
+    RoundLimits,
+    CanisterId,
+    CanisterId,
+) {
+    let subnet_id = subnet_test_id(1);
+    let canister_manager = CanisterManagerBuilder::default()
+        .with_subnet_id(subnet_id)
+        .build();
+    let mut state = initial_state(subnet_id, false);
+
+    let old_id = canister_test_id(0);
+    let new_id = canister_test_id(1);
+    // The migration canister is the only authorized sender and must be a controller.
+    let sender = crate::util::MIGRATION_CANISTER_ID.get();
+    let mut canister = CanisterStateBuilder::new()
+        .with_canister_id(old_id)
+        .with_cycles(Cycles::new(1_000_000_000_000))
+        .with_status(CanisterStatusType::Stopped)
+        .with_controller(sender)
+        .with_freezing_threshold(0)
+        .build();
+
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        subnet_available_memory: SubnetAvailableMemory::new_for_testing(
+            available_execution_memory,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+        ),
+        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
+    };
+
+    let result = canister_manager.rename_canister(
+        sender,
+        &mut canister,
+        canister_change_origin_from_principal(&sender),
+        old_id,
+        new_id,
+        /* to_version */ 42,
+        /* to_total_num_changes */ 50,
+        /* requested_by */ sender,
+        &mut state,
+        &mut round_limits,
+        &ResourceSaturation::default(),
+    );
+
+    (result, canister, round_limits, old_id, new_id)
+}
+
+#[test]
+fn rename_canister_succeeds_if_subnet_can_account_for_canister_history() {
+    // Exactly enough subnet available execution memory to account for the
+    // `rename_canister` canister history entry.
+    let rename_bytes = rename_canister_history_bytes();
+    let (result, canister, round_limits, _old_id, new_id) =
+        rename_canister_with_available_memory(rename_bytes);
+
+    result.unwrap();
+
+    // The canister was renamed to the new id.
+    assert_eq!(canister.canister_id(), new_id);
+    // Exactly one canister history entry (the `rename_canister` change) was recorded.
+    let recorded_changes: Vec<_> = canister
+        .system_state
+        .get_canister_history()
+        .get_changes(usize::MAX)
+        .cloned()
+        .collect();
+    assert_eq!(recorded_changes.len(), 1);
+    assert_matches!(
+        recorded_changes[0].details(),
+        CanisterChangeDetails::CanisterRename(_)
+    );
+    // The canister has no execution state and no memory allocation, so its entire
+    // memory usage is its canister history: the single recorded entry.
+    assert_eq!(
+        canister.canister_history_memory_usage().get() as i64,
+        rename_bytes
+    );
+    // Accounting for the history entry consumed all the subnet available execution
+    // memory.
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
+        0
+    );
+}
+
+#[test]
+fn rename_canister_fails_if_subnet_cannot_account_for_canister_history() {
+    // One byte too little subnet available execution memory to account for the
+    // `rename_canister` canister history entry.
+    let rename_bytes = rename_canister_history_bytes();
+    let (result, canister, round_limits, old_id, _new_id) =
+        rename_canister_with_available_memory(rename_bytes - 1);
+
+    assert_matches!(
+        result.unwrap_err(),
+        CanisterManagerError::SubnetMemoryCapacityOverSubscribed { .. }
+    );
+
+    // The rename failed atomically: the canister keeps its old id, records no
+    // canister history entry, and the subnet available execution memory was left
+    // untouched (rather than decremented by the recorded canister history).
+    assert_eq!(canister.canister_id(), old_id);
+    assert_eq!(
+        canister
+            .system_state
+            .get_canister_history()
+            .get_total_num_changes(),
+        0
+    );
+    assert_eq!(canister.canister_history_memory_usage().get(), 0);
+    assert_eq!(
+        round_limits.subnet_available_memory.get_execution_memory(),
+        rename_bytes - 1
+    );
+}
+
 #[test]
 fn can_create_canister() {
     let mut test = ExecutionTestBuilder::new().build();

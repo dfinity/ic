@@ -14,9 +14,7 @@ use crate::canister_state::system_state::{
 use crate::{InputQueueType, OutputRequest, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::{
-    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
-};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
     SnapshotVisibility, StatusVisibility,
@@ -681,37 +679,23 @@ impl CanisterState {
             .is_low_wasm_memory_hook_condition_satisfied(self.wasm_memory_usage())
     }
 
-    /// Adds a canister change to canister history and returns the resulting
-    /// change of the canister's allocated execution memory (i.e. the amount by
-    /// which the subnet available execution memory needs to be updated to
-    /// account for the additional canister history).
+    /// Adds a canister change to canister history.
     ///
-    /// The returned change is *not* applied to the subnet available execution
-    /// memory; the caller is responsible for accounting for the recorded canister
-    /// history. Callers that update the subnet available execution memory directly
-    /// consume the returned change (applying it, e.g. in `rename_canister`, or
-    /// accumulating it across the steps of `install_code`); callers that go through
-    /// `cycles_and_memory_usage_checks_and_updates` instead record the change first
-    /// and pass it the memory usage *including* the change (discarding the returned
-    /// change).
-    #[must_use]
+    /// The additional canister history increases the canister's memory usage, which
+    /// the caller is responsible for accounting for in the subnet available
+    /// execution memory (and the canister's cycles). Callers typically record the
+    /// change and then pass the memory usage *including* it to
+    /// `cycles_and_memory_usage_checks_and_updates`; callers that update the subnet
+    /// available execution memory directly can instead read the change in
+    /// `memory_allocated_bytes()` across this call.
     pub fn add_canister_change(
         &mut self,
         timestamp_nanos: Time,
         change_origin: CanisterChangeOrigin,
         change_details: CanisterChangeDetails,
-    ) -> SubnetAvailableExecutionMemoryChange {
-        let old_allocated_bytes = self.memory_allocated_bytes();
+    ) {
         self.system_state
             .add_canister_change(timestamp_nanos, change_origin, change_details);
-        let new_allocated_bytes = self.memory_allocated_bytes();
-        if new_allocated_bytes >= old_allocated_bytes {
-            let allocated_bytes = new_allocated_bytes - old_allocated_bytes;
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes)
-        } else {
-            let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
-        }
     }
 }
 
