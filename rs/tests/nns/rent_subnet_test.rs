@@ -568,10 +568,6 @@ fn install_nns_canisters(env: &TestEnv) {
         nns_node.node_id
     );
 
-    // at_ids is needed because, with use_specified_ids_allocation_range (see
-    // setup), new canister IDs on the root subnet are no longer allocated
-    // sequentially starting from 0; instead, the NNS canisters must be
-    // explicitly created at their usual canister IDs.
     let mut installer = NnsInstallationBuilder::new()
         // This causes NNS canisters to be created with their well-known
         // production IDs. In order for this to work,
