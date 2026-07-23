@@ -185,7 +185,8 @@ Do NOT be vacuous.
 No `pub` fields.
 Exception: Prost, Candid.
 
-Derive as much as possible. In particular,
+If a basic trait makes sense, derive it, even if you are not using it yet. In
+particular,
 * `Debug` - For visibility.
 * Construction:
     * `Default`
