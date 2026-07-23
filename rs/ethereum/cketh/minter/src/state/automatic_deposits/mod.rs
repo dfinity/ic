@@ -94,12 +94,15 @@ impl AutomaticDeposits {
         self.watchlist.get_entry(now, account)
     }
 
-    /// The deposit address of every account still armed (unexpired) as of `now`.
-    pub fn live_addresses(&self, now: Timestamp) -> impl Iterator<Item = (Account, Address)> + '_ {
+    /// The deposit address (and expiry) of every account still armed as of `now`.
+    pub fn live_addresses(
+        &self,
+        now: Timestamp,
+    ) -> impl Iterator<Item = (Account, Address, Timestamp)> + '_ {
         self.watchlist
             .iter()
             .filter(move |(_, entry)| entry.expires_at >= now)
-            .map(|(account, entry)| (*account, entry.value.address))
+            .map(|(account, entry)| (*account, entry.value.address, entry.expires_at))
     }
 
     /// Full snapshot of the watchlist, faithful enough to reconstruct it exactly

@@ -1067,6 +1067,7 @@ fn state_equivalence() {
         pending_withdrawal_principals: Default::default(),
         active_tasks: Default::default(),
         last_balance_scan: None,
+        deposit_scan_progress: BTreeMap::new(),
         http_request_counter: 100,
         eth_balance: Default::default(),
         erc20_balances: Default::default(),

@@ -102,6 +102,7 @@ impl TryFrom<InitArg> for State {
             skipped_blocks: Default::default(),
             active_tasks: Default::default(),
             last_balance_scan: None,
+            deposit_scan_progress: Default::default(),
             http_request_counter: 0,
             last_transaction_price_estimate: None,
             ledger_suite_orchestrator_id: None,

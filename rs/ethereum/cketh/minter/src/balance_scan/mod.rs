@@ -7,14 +7,25 @@ use crate::eth_rpc_client::{AnyOf, MIN_ATTACHED_CYCLES, ToReducedWithStrategy, r
 use crate::guard::TimerGuard;
 use crate::logs::INFO;
 use crate::numeric::Erc20Value;
+use crate::state::automatic_deposits::DEPOSIT_ADDRESS_SCAN_WINDOW;
 use crate::state::{State, TaskType, mutate_state, read_state};
 use crate::timed_sized_map::Timestamp;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use multicall3::{BalanceOfCall, MULTICALL3_ADDRESS};
+use std::collections::BTreeSet;
 
 const MAX_CALLS_PER_MULTICALL: usize = 200;
+
+/// Cumulative offsets (in seconds) from an address's registration time at which
+/// it is scanned. The per-address scan cadence is governed by this schedule;
+/// after the last offset the address is no longer scanned (it expires at 24h).
+const SCAN_SCHEDULE_SECS: [u64; 33] = [
+    30, 60, 120, 240, 360, 600, 900, 1200, 1500, 1800, 5400, 9000, 12600, 16200, 19800, 23400,
+    27000, 30600, 34200, 37800, 41400, 45000, 48600, 52200, 55800, 59400, 63000, 66600, 70200,
+    73800, 77400, 81000, 84600,
+];
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BalanceScanStats {
@@ -30,12 +41,13 @@ pub async fn balance_scan() {
         Err(_) => return,
     };
     let now = Timestamp::from_nanos(ic_cdk::api::time());
-    let (addresses_scanned, pairs, calls) = read_state(|s| build_calls(s, now));
+    let (due_accounts, pairs, calls) = read_state(|s| build_due_calls(s, now));
     if calls.is_empty() {
         mutate_state(|s| {
+            prune_dead_progress(s, now);
             s.last_balance_scan = Some(BalanceScanStats {
                 scanned_at_ns: now.as_nanos(),
-                addresses_scanned,
+                addresses_scanned: 0,
                 candidates_found: 0,
                 chunks_failed: 0,
             })
@@ -83,11 +95,17 @@ pub async fn balance_scan() {
         }
     }
 
+    let addresses_scanned = due_accounts.len();
     log!(
         INFO,
         "[balance_scan]: scanned {addresses_scanned} addresses, found {candidates} candidate(s), {chunks_failed} chunk(s) failed",
     );
     mutate_state(|s| {
+        for account in &due_accounts {
+            let entry = s.deposit_scan_progress.entry(*account).or_default();
+            *entry = entry.saturating_add(1);
+        }
+        prune_dead_progress(s, now);
         s.last_balance_scan = Some(BalanceScanStats {
             scanned_at_ns: now.as_nanos(),
             addresses_scanned,
@@ -97,19 +115,32 @@ pub async fn balance_scan() {
     });
 }
 
-fn build_calls(
+fn build_due_calls(
     state: &State,
     now: Timestamp,
-) -> (usize, Vec<(Account, Address)>, Vec<BalanceOfCall>) {
+) -> (Vec<Account>, Vec<(Account, Address)>, Vec<BalanceOfCall>) {
     let tokens: Vec<Address> = state
         .supported_ck_erc20_tokens()
         .map(|token| token.erc20_contract_address)
         .collect();
-    let mut addresses_scanned = 0_usize;
+    let mut due_accounts = Vec::new();
     let mut pairs = Vec::new();
     let mut calls = Vec::new();
-    for (account, deposit_address) in state.automatic_deposits.live_addresses(now) {
-        addresses_scanned += 1;
+    for (account, deposit_address, expires_at) in state.automatic_deposits.live_addresses(now) {
+        let registered_at = Timestamp::from_nanos(
+            expires_at
+                .as_nanos()
+                .saturating_sub(DEPOSIT_ADDRESS_SCAN_WINDOW.as_nanos() as u64),
+        );
+        let scans_done = state
+            .deposit_scan_progress
+            .get(&account)
+            .copied()
+            .unwrap_or(0) as usize;
+        if !is_scan_due(registered_at, scans_done, now) {
+            continue;
+        }
+        due_accounts.push(account);
         for token in &tokens {
             pairs.push((account, *token));
             calls.push(BalanceOfCall {
@@ -118,7 +149,28 @@ fn build_calls(
             });
         }
     }
-    (addresses_scanned, pairs, calls)
+    (due_accounts, pairs, calls)
+}
+
+fn is_scan_due(registered_at: Timestamp, scans_done: usize, now: Timestamp) -> bool {
+    match SCAN_SCHEDULE_SECS.get(scans_done) {
+        None => false,
+        Some(&offset_secs) => {
+            let age_ns = now.as_nanos().saturating_sub(registered_at.as_nanos());
+            age_ns >= offset_secs.saturating_mul(1_000_000_000)
+        }
+    }
+}
+
+fn prune_dead_progress(state: &mut State, now: Timestamp) {
+    let live: BTreeSet<Account> = state
+        .automatic_deposits
+        .live_addresses(now)
+        .map(|(account, _, _)| account)
+        .collect();
+    state
+        .deposit_scan_progress
+        .retain(|account, _| live.contains(account));
 }
 
 fn count_candidates(
