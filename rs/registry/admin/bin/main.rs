@@ -4706,6 +4706,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(_) => (),
+            SubCommand::ProposeToUpdateStandardEngineReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
