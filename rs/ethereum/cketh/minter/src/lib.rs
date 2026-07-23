@@ -34,6 +34,7 @@ use std::time::Duration;
 
 pub const MAIN_DERIVATION_PATH: Vec<ByteBuf> = vec![];
 pub const SCRAPING_ETH_LOGS_INTERVAL: Duration = Duration::from_secs(3 * 60);
+pub const REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL: Duration = Duration::from_secs(30);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(6 * 60);
 pub const PROCESS_REIMBURSEMENT: Duration = Duration::from_secs(3 * 60);
 pub const PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL: Duration = Duration::from_secs(3 * 60);

@@ -474,6 +474,8 @@ impl GetEventsFile {
                             subaccount: a.subaccount,
                             address: a.address.parse().unwrap(),
                             expires_at_nanos: Timestamp::from_nanos(a.expires_at_nanos),
+                            last_scanned_block: None,
+                            scan_count: None,
                         })
                         .collect(),
                 }),

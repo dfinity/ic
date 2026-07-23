@@ -1033,6 +1033,7 @@ fn state_equivalence() {
         ethereum_block_height: CandidBlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
+        latest_block_height: Some(BlockNumber::new(2_000_010)),
         events_to_mint: btreemap! {
             source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
                 transaction_hash: "0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467".parse().unwrap(),
@@ -1082,6 +1083,7 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             ecdsa_public_key: None,
             last_observed_block_number: None,
+            latest_block_height: None,
             http_request_counter: 0,
             ..state.clone()
         }),

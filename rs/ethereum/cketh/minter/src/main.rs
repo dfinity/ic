@@ -4,7 +4,7 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
-use ic_cketh_minter::deposit::scrape_logs;
+use ic_cketh_minter::deposit::{refresh_latest_block_height, scrape_logs};
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
@@ -43,8 +43,8 @@ use ic_cketh_minter::withdraw::{
     process_reimbursement, process_retrieve_eth_requests,
 };
 use ic_cketh_minter::{
-    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL,
-    state, storage,
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
+    REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, SCRAPING_ETH_LOGS_INTERVAL, state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_ethereum_types::Address;
@@ -85,6 +85,14 @@ fn setup_timers() {
     });
     ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || {
         scrape_logs().await;
+    });
+    // Refresh the latest block height immediately after the install, then repeat
+    // with the interval.
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        refresh_latest_block_height().await;
+    });
+    ic_cdk_timers::set_timer_interval(REFRESH_LATEST_BLOCK_HEIGHT_INTERVAL, async || {
+        refresh_latest_block_height().await;
     });
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests().await;
