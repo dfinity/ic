@@ -19,6 +19,8 @@ pub(crate) fn fetch_canister_logs(
     // Charge the read/encode work against the round's instruction budget. No cycles
     // fee is charged for the call because every term is already covered by fees the
     // caller pays (per-message execution fee and per-byte response transmission fee).
+    // On a subnet with a "free" cost schedule the call's fee is zero, but the fee for
+    // the subnet covers the work.
     let instructions = fetch_canister_logs_instructions(record_count, content_size);
     round_limits.instructions -= as_round_instructions(instructions);
     Ok(CanisterManagerResponse {
