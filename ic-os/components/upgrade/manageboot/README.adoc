@@ -1,0 +1,39 @@
+= manageboot
+
++manageboot.sh+ is the IC-OS A/B upgrade control script used by both GuestOS and
+HostOS. It installs images into the inactive slot, commits the next boot target,
+and confirms when the currently booted slot should be considered stable.
+
+== Why it exists
+
+The bootloader state in +grubenv+ is intentionally small:
+
+- +boot_alternative+ selects slot +A+ or +B+
+- +boot_cycle+ records whether that slot is already trusted or still in a
+  rollback-sensitive probation phase
+
++manageboot.sh+ is the component that translates upgrade lifecycle events into
+those +grubenv+ transitions.
+
+== Main actions
+
+- +upgrade-install+: write a new image into the inactive slot, but do not change
+  the next boot target yet.
+- +upgrade-commit+: point +grubenv+ at the target slot and set
+  +boot_cycle=first_boot+, then reboot.
+- +confirm+: acknowledge that the currently booted slot should now be treated as
+  stable by writing +boot_cycle=stable+.
+
++confirm+ is safe to call repeatedly. If the slot is already stable, it becomes
+a no-op.
+
+== Boot-cycle meaning
+
+- +install+: first boot in the machine's lifetime after initial installation
+- +first_boot+: first boot after an upgrade into a new slot
+- +stable+: slot is accepted as the normal boot target
+- +failsafe_check+: the probationary slot was not confirmed in time, so the next
+  boot should fall back to the other slot
+
+In other words, +first_boot+ is the upgrade probation state, while +install+ is
+only for the machine's initial deployment.

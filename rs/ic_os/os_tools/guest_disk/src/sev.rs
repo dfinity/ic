@@ -56,11 +56,11 @@ impl SevDiskEncryption {
             .context("Failed to add new key to store partition")?;
 
         info!("Removing old key slots from store partition");
-        // Keep the key slot that was used to unlock the partition with the previous key.
-        // Delete all other key slots and add the new key.
-        // In the end, the store partition will have two keys:
-        // 1. The previous key that was used to unlock the partition before the upgrade.
-        // 2. The new key that is used to unlock the partition after the upgrade.
+        // Keep exactly two passphrases for rollback safety:
+        // 1. the previous key, so the old GuestOS can still reopen `store` if
+        //    HostOS rolls back to the previous slot;
+        // 2. the new measurement-derived key for the upgraded GuestOS.
+        // Any older keyslots are pruned after a successful migration.
         destroy_keyslots_except(&mut crypt_device, &[previous_keyslot, new_keyslot])
             .context("Failed to destroy keyslots")?;
 
@@ -123,10 +123,12 @@ impl DiskEncryption for SevDiskEncryption {
             }
 
             Partition::Store => {
-                // Try to read the previous SEV key. This is the key that the previous version of the
-                // GuestOS used to unlock the store (data) partition. During the upgrade this key is
-                // written to `previous_key_path`. After the upgrade, when the GuestOS boots for the
-                // first time, it unlocks the disk using the previous key and adds its own key.
+                // Try to read the previous SEV key. This is the key that the
+                // previous GuestOS version used for `store`. During the upgrade
+                // it is written to `previous_key_path`. On the first boot of the
+                // new default GuestOS, we use it once to unlock `store`, add the
+                // new measurement-derived key, prune stale keyslots, and then
+                // remove the temporary previous-key file.
 
                 // Keep this logic consistent with can_open_store below.
                 if self.previous_key_path.exists() {
@@ -198,8 +200,8 @@ impl DiskEncryption for SevDiskEncryption {
     }
 }
 
-/// Check whether we can open the store partition with either the previous key or the SEV derived
-/// key.
+/// Check whether `store` is accessible with either the rollback key from the
+/// previous GuestOS or the current measurement-derived SEV key.
 pub fn can_open_store(
     device_path: &Path,
     previous_key_path: &Path,

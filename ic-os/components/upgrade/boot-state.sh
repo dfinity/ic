@@ -64,7 +64,10 @@ read_boot_cycle_from_grubenv() {
     return 1
 }
 
-# Writes "boot_alternative" and "boot_cycle" variables to grubenv file
+# Writes "boot_alternative" and "boot_cycle" variables to grubenv file.
+#
+# This file stores the A/B boot state, so we try hard to avoid torn writes:
+# write a full replacement file, rename it atomically, and sync it before returning success.
 #
 # Arguments:
 # $1 - name of grubenv file
@@ -101,7 +104,8 @@ write_grubenv() {
     truncate --size=1024 "${TMP_FILE}"
     chmod 0644 "${TMP_FILE}"
 
-    # Create backup of original file if it exists
+    # Create backup of original file if it exists so that a failed sync can
+    # roll back to the last known-good control state.
     if [ -f "${GRUBENV_FILE}" ]; then
         BACKUP_FILE="${GRUBENV_FILE}.backup.$(date +%s)"
         cp "${GRUBENV_FILE}" "${BACKUP_FILE}"

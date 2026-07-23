@@ -146,9 +146,13 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// `manageboot.sh` commands.
     fn manageboot_runner(&self) -> &dyn ManagebootRunner;
 
-    /// Calls a corresponding script to "confirm" that the base OS could boot
-    /// successfully. Without a confirmation the image will be reverted on the next
-    /// restart.
+    /// Calls the GuestOS `manageboot.sh confirm` path to acknowledge that the
+    /// currently booted slot should be considered stable.
+    ///
+    /// This is the GuestOS-side completion of the A/B upgrade flow: rollback protection is
+    /// cleared once this confirmation updates `grubenv` to `boot_cycle=stable`.
+    /// Without this confirmation, the image will be reverted on the next restart-
+    /// The operation is intended to be safe to call repeatedly.
     async fn confirm_boot(&self) {
         let args = ["guestos".as_ref(), "confirm".as_ref()];
         if let Err(err) = self.manageboot_runner().run(&args).await {

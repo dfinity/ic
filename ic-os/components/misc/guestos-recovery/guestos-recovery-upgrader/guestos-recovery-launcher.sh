@@ -6,7 +6,8 @@ set -e
 
 validate_argument() {
     local arg="$1"
-    # Only allow known parameters with constrained formats
+    # Only allow known parameters with constrained formats so this can be safely passed
+    # between tools.
     # NOTE: version=RECOVERY_VERSION is allowed as a dummy value for testing purposes.
     if [[ "$arg" =~ ^mode=(prep|install|run)$ ]] \
         || [[ "$arg" =~ ^version=[a-f0-9]{40}$ ]] \

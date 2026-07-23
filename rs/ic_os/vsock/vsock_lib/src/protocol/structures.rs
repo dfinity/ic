@@ -37,7 +37,11 @@ impl fmt::Display for Request {
     }
 }
 
-/// All commands that can be sent to the Host server
+/// All commands that can be sent from GuestOS to the HostOS vsock server.
+///
+/// This enum is intentionally small: vsock is the narrow, allowlisted control
+/// surface across the HostOS/GuestOS isolation boundary, not a general-purpose
+/// RPC mechanism.
 #[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Command {
     #[serde(rename = "attach-hsm")]

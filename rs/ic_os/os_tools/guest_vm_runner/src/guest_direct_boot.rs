@@ -1,7 +1,10 @@
 //! Direct boot bypasses the GuestOS VM's internal GRUB bootloader. Instead,
 //! HostOS extracts the kernel, initrd, and boot args from the GuestOS partition
-//! and passes them to QEMU directly. Required for SEV-SNP so that the kernel
-//! and root hash are included in the VM's launch measurement.
+//! and passes them to QEMU directly.
+//!
+//! This matters for SEV-SNP because the kernel, initrd, and boot args need to be
+//! part of the attested launch measurement so other GuestOS components can make
+//! trust decisions based on TEE evidence.
 
 use crate::GuestVMType;
 use crate::boot_args::read_boot_args;
@@ -56,11 +59,18 @@ impl DirectBoot {
     }
 }
 
-/// Prepares a direct boot configuration by reading the GRUB environment and boot partition.
+/// Prepares a direct boot configuration by reading `grubenv` to determine the GuestOS boot slot
+/// and then extracting the necessary direct boot components (kernel, initrd, etc.) from the
+/// selected GuestOS boot partition.
+///
+/// The default GuestOS VM consumes the `grubenv` state machine before launch,
+/// while the temporary Upgrade VM intentionally does not mutate `grubenv` and
+/// instead boots from the opposite slot.
+///
+/// Because `grubenv` refresh is not idempotent, callers must not persist a
+/// refreshed state until they know which boot path they will actually use.
 ///
 /// # Arguments
-/// * `should_refresh_grubenv` - Whether the code should refresh the GRUB environment based on the
-///   boot state transition rules
 /// * `guest_partition_provider` - Provider for accessing partitions of the Guest
 ///
 /// # Returns
@@ -73,6 +83,9 @@ pub async fn prepare_direct_boot(
     tee_enabled: bool,
     guest_partition_provider: &dyn PartitionProvider,
 ) -> Result<Option<DirectBoot>> {
+    // Only the default GuestOS consumes/advances the boot-cycle state machine.
+    // The Upgrade VM must leave grubenv alone so it can stage the new slot
+    // without changing the primary boot decision under the running node.
     let should_refresh_grubenv = match guest_vm_type {
         GuestVMType::Default => true,
         GuestVMType::Upgrade => false,
@@ -102,6 +115,8 @@ pub async fn prepare_direct_boot(
         .context("Failed to read boot_alternative from grubenv")?;
 
     if guest_vm_type == GuestVMType::Upgrade {
+        // The Upgrade VM always boots from the opposite slot because that is
+        // where the candidate GuestOS release was installed.
         boot_alternative = boot_alternative.get_opposite();
     }
 
@@ -199,8 +214,16 @@ pub async fn prepare_direct_boot(
     }))
 }
 
-/// Refreshes the boot cycle and boot alternative in `grub_env`.
-/// Returns true if `grub_env` changed.
+/// Refreshes `grubenv` according to the GuestOS A/B boot-state machine.
+///
+/// Transition rules:
+/// - `install -> stable`
+/// - `first_boot -> failsafe_check`
+/// - `failsafe_check -> stable` and switch to the opposite boot alternative
+///
+/// Undefined values are treated as the first-boot defaults (`A`, `stable`).
+///
+/// Returns `true` if the effective state changed.
 fn refresh_grubenv(grub_env: &mut GrubEnv) -> Result<bool> {
     let mut boot_alternative = grub_env
         .boot_alternative
