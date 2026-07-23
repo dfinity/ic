@@ -3,10 +3,10 @@
 # has deprecated that ELF "linker optimization" setting and ignores it, but
 # prints a warning on every link (surfaced by rustc 1.97's linker_messages lint).
 diff --git a/toolchain/zig-wrapper.zig b/toolchain/zig-wrapper.zig
-index 066827b..1e24814 100644
+index 14695f0..8b22097 100644
 --- a/toolchain/zig-wrapper.zig
 +++ b/toolchain/zig-wrapper.zig
-@@ -302,8 +302,18 @@ fn parseArgs(
+@@ -329,8 +329,18 @@ fn parseArgs(
          .arg1, .cc => try args.appendSlice(arena, &[_][]const u8{arg0_noexe}),
      }
  
@@ -24,9 +24,9 @@ index 066827b..1e24814 100644
          try args.append(arena, arg);
 +    }
  
-     // Add -target as the last parameter. The wrapper should overwrite
-     // the target specified by other tools calling the wrapper.
-@@ -333,6 +343,21 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) u8 {
+     // Workaround for https://github.com/ziglang/zig/issues/23287: zig 0.14.0
+     // lld does not handle the colon-link syntax (-l :filename or -l:filename).
+@@ -397,6 +407,21 @@ pub fn fatal(comptime fmt: []const u8, args: anytype) u8 {
      return 1;
  }
  
