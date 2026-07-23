@@ -703,6 +703,7 @@ mod tests {
     use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_routing_table::RoutingTable;
     use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
     use ic_replicated_state::SubnetTopology;
     use ic_replicated_state::metadata_state::testing::{
@@ -721,6 +722,7 @@ mod tests {
     };
     use rand::thread_rng;
     use rcgen::{CertifiedKey, generate_simple_self_signed};
+    use rstest::rstest;
     use rustls::{
         ClientConfig, DigitallySignedStruct, SignatureScheme,
         client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
@@ -1579,16 +1581,6 @@ mod tests {
         .expect("Should fetch an initial delegation on an app subnet")
     }
 
-    /// Waits until the reader exposes a new delegation and returns it.
-    async fn wait_for_delegation_change(reader: &mut NNSDelegationReader) -> CertificateDelegation {
-        loop {
-            reader.receiver.changed().await.unwrap();
-            if let Some(delegation) = reader.get_delegation(CanisterRangesFilter::None) {
-                return delegation;
-            }
-        }
-    }
-
     #[tokio::test]
     async fn proactive_fetch_skips_and_reactive_fetch_runs_when_public_key_changed_test() {
         let rt_handle = tokio::runtime::Handle::current();
@@ -1710,17 +1702,13 @@ mod tests {
             CancellationToken::new(),
         );
 
-        timeout(
-            DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
-            wait_for_delegation_change(&mut reader),
-        )
-        .await
-        .expect("Should proactively fetch an initial delegation");
+        // The initial delegation should be fetched immediately.
+        reader.receiver.changed().await.unwrap();
 
         // The next refresh can only be produced by `proactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            wait_for_delegation_change(&mut reader),
+            reader.receiver.changed(),
         )
         .await
         .expect_err(
@@ -1754,12 +1742,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        timeout(
-            DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
-            wait_for_delegation_change(&mut reader),
-        )
-        .await
-        .expect("Should proactively fetch an initial delegation");
+        reader.receiver.changed().await.unwrap();
 
         // Change the public key in the state, which should trigger a reactive refresh.
         {
@@ -1777,23 +1760,125 @@ mod tests {
         }
 
         // The next refresh should be produced by `reactive_fetch`.
-        let refreshed_delegation = timeout(
+        timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            wait_for_delegation_change(&mut reader),
+            reader.receiver.changed(),
         )
         .await
-        .expect("`reactive_fetch` should refresh the delegation when the public key changed");
+        .expect("`reactive_fetch` should refresh the delegation when the public key changed")
+        .unwrap();
 
-        let newest_delegation = timeout(
-            DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
-            wait_for_delegation_change(&mut reader),
+        // Since the test setup will keep serving the old delegation, the manager should keep trying
+        // to refresh the delegation until it matches the current state.
+        timeout(
+            DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
+            reader.receiver.changed(),
         )
         .await
-        .expect("Should proactively fetch a new delegation");
+        .expect("Should try to reactively refresh the delegation until the latter matches the current state")
+        .unwrap();
+    }
 
-        assert_ne!(
-            newest_delegation.certificate,
-            refreshed_delegation.certificate
+    #[tokio::test]
+    #[rstest]
+    // Note: the subnet under test is initialized with canister ranges 1-10
+    #[case::new_canister_range(
+        vec![
+            CanisterIdRange {
+                start: canister_test_id(1),
+                end: canister_test_id(10),
+            },
+            CanisterIdRange {
+                start: canister_test_id(100),
+                end: canister_test_id(200),
+            }
+        ]
+    )]
+    #[case::decreased_canister_range(
+        vec![CanisterIdRange {
+            start: canister_test_id(1),
+            end: canister_test_id(5),
+        }]
+    )]
+    #[case::increased_canister_range(
+        vec![CanisterIdRange {
+            start: canister_test_id(1),
+            end: canister_test_id(20),
+        }]
+    )]
+    #[case::fragmented_canister_range(
+        vec![
+            CanisterIdRange {
+                start: canister_test_id(1),
+                end: canister_test_id(3),
+            },
+            CanisterIdRange {
+                start: canister_test_id(6),
+                end: canister_test_id(10),
+            }
+        ]
+    )]
+    async fn manager_run_reactively_refreshes_when_canister_ranges_changed_test(
+        #[case] new_canister_ranges: Vec<CanisterIdRange>,
+    ) {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config, state_reader, mutable_state) =
+            set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                APP_SUBNET_ID,
+            );
+
+        let (_, mut reader) = start_nns_delegation_manager(
+            &MetricsRegistry::new(),
+            Config::default(),
+            no_op_logger(),
+            rt_handle,
+            APP_SUBNET_ID,
+            SubnetType::Application,
+            NNS_SUBNET_ID,
+            state_reader,
+            registry_client,
+            tls_config,
+            CancellationToken::new(),
         );
+
+        // The initial delegation should be fetched immediately.
+        reader.receiver.changed().await.unwrap();
+
+        // Change the canister ranges in the state, which should trigger a reactive refresh.
+        {
+            let mut state = mutable_state.write().unwrap();
+            let subnet_id = state.metadata.own_subnet_id;
+            state.metadata.modify_network_topology(move |topology| {
+                *topology.routing_table_mut() = RoutingTable::try_from(
+                    new_canister_ranges
+                        .into_iter()
+                        .map(|range| (range, subnet_id))
+                        .collect::<BTreeMap<_, _>>(),
+                )
+                .unwrap();
+            });
+        }
+
+        // The next refresh should be produced by `reactive_fetch`.
+        timeout(
+            DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
+            reader.receiver.changed(),
+        )
+        .await
+        .expect("`reactive_fetch` should refresh the delegation when the canister ranges changed")
+        .unwrap();
+
+        // Since the test setup will keep serving the old delegation, the manager should keep trying
+        // to refresh the delegation until it matches the current state.
+        timeout(
+            DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
+            reader.receiver.changed(),
+        )
+        .await
+        .expect("Should try to reactively refresh the delegation until the latter matches the current state")
+        .unwrap();
     }
 }

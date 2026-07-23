@@ -86,6 +86,7 @@ rust_test(
         "@crate_index//:hyper",
         "@crate_index//:rand",
         "@crate_index//:rcgen",
+        "@crate_index//:rstest",
         "@crate_index//:tokio",
     ],
 )

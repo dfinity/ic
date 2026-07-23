@@ -12087,6 +12087,7 @@ dependencies = [
  "prometheus",
  "rand 0.8.6",
  "rcgen 0.13.2",
+ "rstest",
  "rustls 0.23.37",
  "serde",
  "serde_cbor",
