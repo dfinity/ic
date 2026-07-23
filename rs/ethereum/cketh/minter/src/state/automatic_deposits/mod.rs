@@ -77,6 +77,12 @@ impl AutomaticDeposits {
         }
     }
 
+    /// The live watchlist entry for `account`, or `None` if the account is not
+    /// currently armed (absent or expired as of `now`).
+    pub fn get_entry(&self, now: Timestamp, account: &Account) -> Option<&Entry<DepositRequest>> {
+        self.watchlist.get_entry(now, account)
+    }
+
     pub fn watchlist_iter(&self) -> impl Iterator<Item = (&Account, &Entry<DepositRequest>)> {
         self.watchlist.iter()
     }

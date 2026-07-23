@@ -171,6 +171,13 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
+    let now = Timestamp::from_nanos(ic_cdk::api::time());
+    if let Some(entry) = read_state(|s| s.automatic_deposits.get_entry(now, &account).cloned()) {
+        return Ok(DepositErc20Response {
+            address: entry.value.address.to_string(),
+            valid_until: entry.expires_at.as_nanos(),
+        });
+    }
     // Ensure the minter's ECDSA public key has been fetched and cached in the
     // state so that the (synchronous) registration below can derive the address.
     state::lazy_call_ecdsa_public_key_with_chain_code().await;
