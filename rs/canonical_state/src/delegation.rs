@@ -120,12 +120,13 @@ fn does_public_key_match(
     state: &ReplicatedState,
     subnet_id: SubnetId,
 ) -> Result<bool, DelegationValidationError> {
-    let subnet_topology = state
+    let state_public_key = &state
         .metadata
         .network_topology
         .subnets_for_certification()
         .get(&subnet_id)
-        .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?;
+        .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?
+        .public_key;
 
     let certified_public_key = match lookup_path(
         tree,
@@ -138,7 +139,7 @@ fn does_public_key_match(
             )));
         }
     };
-    Ok(certified_public_key.as_slice() == subnet_topology.public_key.as_slice())
+    Ok(certified_public_key.as_slice() == state_public_key.as_slice())
 }
 
 /// Returns whether the canister ranges certified in `tree` match the ranges
@@ -197,9 +198,12 @@ fn do_canister_ranges_match(
                     // match the ranges assigned to the subnet in the state.
                     if children.is_empty() {
                         // This could genuinely happen if the routing table has changed but we
-                        // haven't refreshed the NNS delegation just yet.
+                        // haven't refreshed the NNS delegation just yet. In that case, we would
+                        // have built a delegation with no ranges, which is invalid. So we return
+                        // false here.
                         return Ok(false);
                     }
+
                     for (_label, child) in children.iter() {
                         match child {
                             LabeledTree::Leaf(bytes) => {
@@ -210,7 +214,7 @@ fn do_canister_ranges_match(
                                     };
 
                                     // Return early if the state does not assign this range to the
-                                    // subnet or if it assigns it to a different subnet.
+                                    // subnet.
                                     let Some(assigned_subnet) =
                                         state_routing_table.lookup_range(certified_range)
                                     else {

@@ -147,6 +147,7 @@ impl DelegationManager {
         };
 
         ic_canonical_state::delegation::is_delegation_valid_with_respect_to_state(
+            // Build the delegation in the flat format to capture all ranges
             &old_delegation.build_or_original(CanisterRangesFilter::Flat, &self.log),
             CertificateDelegationFormat::Flat,
             self.state_reader.get_latest_certified_state()?.get_ref(),
@@ -190,7 +191,8 @@ impl DelegationManager {
         if self.is_delegation_valid_with_respect_to_state(new_delegation.as_ref()) == Some(false) {
             // If the new delegation is incompatible with our state, hold it back. Once the state
             // will have caught up, `reactive_fetch` will fetch the new delegation.
-            // When not being able to determine this (e.g. the call returned `None`, still accept it)
+            // When not being able to determine this (e.g. the call above returned `None`, still
+            // accept it)
             return None;
         }
 
@@ -224,11 +226,10 @@ impl DelegationManager {
 
         loop {
             // Fetch the delegation if enough time has passed
-            let new_delegation = select! {
+            let Some(new_delegation) = select!(
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
                 _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_ref()).await,
-            };
-            let Some(new_delegation) = new_delegation else {
+            ) else {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
