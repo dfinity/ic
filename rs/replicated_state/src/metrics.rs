@@ -727,19 +727,17 @@ impl ReplicatedStateInvariants {
         // `O(|hot canisters|)` thanks to `CanisterStates` maintaining precomputed stats
         // for all cold canisters.
         let canisters_memory = state.canister_states().memory_taken();
-        let total_canister_history_memory_usage = canisters_memory.canister_history();
         let total_canister_memory_allocated_bytes = canisters_memory.execution();
         let subnet_memory_capacity = state
             .resource_limits()
             .maximum_state_size_or(self.default_subnet_memory_capacity);
 
         // Check that subnet memory usage invariant still holds after the round execution.
-        // We allow `total_canister_memory_allocated_bytes` to exceed the subnet memory capacity
-        // by `total_canister_history_memory_usage` because the canister history
-        // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-        if total_canister_memory_allocated_bytes
-            > subnet_memory_capacity + total_canister_history_memory_usage
-        {
+        // Canister history memory usage is accounted for in `SubnetAvailableMemory`
+        // during a round like any other canister memory, so the total canister memory
+        // allocated bytes (which includes canister history) must not exceed the subnet
+        // memory capacity.
+        if total_canister_memory_allocated_bytes > subnet_memory_capacity {
             self.subnet_memory_usage_invariant.inc();
             warn!(
                 logger,
