@@ -25,7 +25,7 @@ permissions:
 jobs:
   bazel-test-rbe:
     name: Bazel Test (Remote Build Execution @ Namespace)
-    runs-on: namespace-profile-amd64-linux-32x64
+    runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build-worker@sha256:3f3cd90dcc0ff4255d3fed1cb3b2a17ae5bcf36c26679b65e5e1821767f348bd
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
