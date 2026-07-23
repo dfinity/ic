@@ -159,6 +159,24 @@ fn should_snapshot_entries_in_time_index_order() {
     );
 }
 
+#[test]
+fn should_yield_only_live_addresses() {
+    let mut deposits = AutomaticDeposits::default();
+    deposits
+        .watch_address_for_account(ts(0), account(0), deposit_address(&account(0)))
+        .unwrap();
+    deposits
+        .watch_address_for_account(ts(10), account(1), deposit_address(&account(1)))
+        .unwrap();
+
+    // account(0) expires at window_nanos(); at this instant it is gone while
+    // account(1) (armed 10ns later) is still live.
+    let now = ts(window_nanos() + 1);
+    let live: Vec<_> = deposits.live_addresses(now).collect();
+
+    assert_eq!(live, vec![(account(1), deposit_address(&account(1)))]);
+}
+
 fn ts(nanos: u64) -> Timestamp {
     Timestamp::from_nanos(nanos)
 }
