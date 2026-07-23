@@ -20,7 +20,7 @@ tags: [cketh, ckerc20, minter, deposit, eip-7702]
 - [Implementation](#implementation)
   - [Constraints](#constraints)
   - [EIP-7702 primer](#eip-7702-primer-the-sweep-one-transaction-at-a-time)
-  - [EIP-7702 transaction layer](#eip-7702-support-in-the-transaction-layer-srctxrs)
+  - [EIP-7702 transaction layer](#eip-7702-support-in-the-transaction-layer-srctx)
   - [Address derivation, signing, and nonces](#address-derivation-tree-signing-and-nonces)
   - [Sweeper delegate contract](#sweeper-delegate-contract)
   - [Test plan](#test-plan)
@@ -394,21 +394,27 @@ unique, deterministic deposit address, derived from the minter's threshold-ECDSA
   funds at a deposit address never depend on contract code — even without
   EIP-7702, any balance is recoverable by funding the address with gas and signing
   a normal transfer.
-* Endpoint `deposit_erc20(account, fee?) -> String` (EIP-55 checksummed).
-  **Decided: the endpoint is ERC-20-specific** — mirroring the existing
+* Endpoint `deposit_erc20(account, fee?)` returning `{ address, valid_until }` —
+  the EIP-55 checksummed deposit address and the timestamp until which a deposit
+  to it is guaranteed to be noticed (the scanning-window expiry). **Decided: the
+  endpoint is ERC-20-specific** — mirroring the existing
   `withdraw_eth`/`withdraw_erc20` split — so whether different tokens ever get
   different deposit addresses stays open (today all ERC-20s share the schema-1
   address); Phase 2 adds `deposit_eth` for the schema-2 address. An **update
   call** (an action, not a getter) because it has side effects: it registers the
-  address in state (`deposit_addresses: Account ↔ Address` bimap + per-address
-  bookkeeping: `registered_at_block`, delegation status, credited/swept counters,
-  scanning-window expiry), arms the scanning window (`R15`) and emits a
-  `DepositAddressRegistered` audit event. Without the optional `fee` argument,
-  nothing else happens — no tECDSA signature, no Ethereum transaction (`R13`):
-  registrations are free for callers, so any per-registration spending is a DoS
-  vector. With `fee = {from_subaccount, max_fee}`, the call is *sponsored*: the
-  caller pays the sweep gas in ckETH and detection/sweep/crediting run on demand
-  (step 0). Repeated calls are cheap lookups that re-arm the window.
+  address in a bounded, time-expiring `Account → Address` watchlist with a
+  per-entry scanning-window expiry, and arms the scanning window (`R15`). The
+  per-address detection/sweep bookkeeping (scan-floor block, delegation status,
+  credited/swept counters) is added by the later detection and sweeping PRs. The
+  watchlist is **not event-sourced per registration**; instead it is persisted
+  across upgrades by a `RegisteredDepositAddresses` snapshot emitted at
+  `pre_upgrade` and replayed on `post_upgrade` (the `log_scrapings` pattern,
+  `R8`) — registration itself records no event. Without the optional `fee`
+  argument, nothing else happens — no tECDSA signature, no Ethereum transaction
+  (`R13`): registrations are free for callers, so any per-registration spending
+  is a DoS vector. With `fee = {from_subaccount, max_fee}`, the call is
+  *sponsored*: the caller pays the sweep gas in ckETH and detection/sweep/crediting
+  run on demand (step 0). Repeated calls are cheap lookups that re-arm the window.
 
 **Variants — address layout across asset classes** (decided: per-asset, introduced
 with Phase 2):
@@ -449,16 +455,18 @@ Detection runs as a **minter background task over "active" addresses**:
 * When `deposit_erc20` is called, the minter records the address together with the
   then-current **last observed block number** (the latest finalized block) — the
   scan floor: history before registration is never scanned.
-* The number of addresses tracked in parallel is **capped** (configurable). When
-  the active set is full, an unsponsored call still registers and returns the
-  address but signals that scanning is saturated; a *sponsored* call bypasses the
-  cap (the caller pays).
-* Each active address carries a **cycles budget**, decremented by its share of
-  every scan tick's outcalls. When the budget is exhausted the minter gives up:
-  the address goes dormant and costs nothing until re-armed by another
-  `deposit_erc20` call (which resets the budget). This is the *scanning window* of
-  `R15`, bounded by cost rather than wall time. Cap and budget together bound the
-  DoS surface (`R13`): the cap bounds per-tick cost, the budget bounds any
+* The number of addresses tracked in parallel is a **fixed hard cap** (currently
+  7'000). When the active set is full of live entries, an unsponsored call is
+  **rejected with `TooManyActiveAddresses` and does not register**; a *sponsored*
+  call bypasses the cap (the caller pays).
+* Each registered address is armed for a **scanning window**: currently a fixed
+  wall-time TTL (24h, `DEPOSIT_ADDRESS_SCAN_WINDOW`); once deposit-address
+  processing lands this becomes a per-address **cycles budget**, decremented by
+  its share of every scan tick's outcalls, so the window is bounded by cost rather
+  than wall time. Either way, when the window is exhausted the address goes dormant
+  and costs nothing until re-armed by another `deposit_erc20` call (which resets
+  it). This is the *scanning window* of `R15`. Cap and window together bound the
+  DoS surface (`R13`): the cap bounds per-tick cost, the window bounds any
   address' lifetime cost.
 * The **minimum deposit amount per token** is a configurable list (`R4`, `R7`).
 
@@ -691,9 +699,9 @@ function sweepErc20(
 
 ### Constraints
 
-* The minter's transaction layer supports only EIP-1559 (type `0x02`) transactions
-  (`src/tx.rs`, `EIP1559_TX_ID`); EIP-7702 requires adding the type `0x04`
-  (`SetCode`) transaction and authorization-tuple signing.
+* The minter's transaction layer originally supported only EIP-1559 (type `0x02`)
+  transactions (`src/tx/eip_1559.rs`); EIP-7702 required adding the type `0x04`
+  (`SetCode`) transaction and authorization-tuple signing (`src/tx/eip_7702.rs`).
 * The minter's main address uses the *empty* ECDSA derivation path
   (`MAIN_DERIVATION_PATH` in `src/lib.rs`); any per-account path must be non-empty and
   collision-free with it. Withdrawals assume a single sequential nonce for the main
@@ -830,7 +838,7 @@ does when switching a deposit EOA from `CkSweeper` to `CkSweeperViaHelper`) or
 clear the code by delegating to `address(0)` — the key always retains full
 control, which is the recovery story of step 1.
 
-### EIP-7702 support in the transaction layer (`src/tx.rs`)
+### EIP-7702 support in the transaction layer (`src/tx/`)
 
 * New `Eip7702TransactionRequest` with `SET_CODE_TX_ID: u8 = 4`, payload
   `0x04 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit,
@@ -839,7 +847,7 @@ control, which is the recovery story of step 1.
   `keccak256(0x05 || rlp([chain_id, delegate, nonce]))` with `sign_with_ecdsa` using
   the deposit address' derivation path; `chain_id` is set explicitly (never 0) to
   prevent cross-chain replay; recovery-id determination reuses the existing
-  `Eip1559Signature` machinery.
+  `TransactionSignature` machinery (shared by the EIP-1559 and EIP-7702 requests).
 * Deposit-EOA nonces: fetched via `eth_getTransactionCount` (finalized) with the usual
   consensus strategy at authorization-signing time; an applied authorization increments
   the EOA nonce, tracked in state to avoid re-fetching. Deposit EOAs never send
@@ -1042,12 +1050,13 @@ the delegate.
 
 ### Delivery / PR sequence
 
-1. **EIP-7702 transaction support** in `src/tx.rs` + authorization signing in
-   `src/management` — pure library code, no behavior change. AC: encoding/signing unit
-   tests vs. EIP test vectors.
+1. **EIP-7702 transaction support** in `src/tx/` (`eip_7702.rs`), including
+   authorization-tuple signing — pure library code, no behavior change. AC:
+   encoding/signing unit tests vs. EIP test vectors.
 2. **Deposit address derivation, registration state, `deposit_erc20`,
-   scanning-window state** + audit events + dashboard section. AC: `R1`, `R8`, `R9`
-   (addresses only), `R13`, `R15` (state machine only).
+   scanning-window state**, persisted across upgrades by a `pre_upgrade` snapshot
+   rather than per-registration events (`R8`). The dashboard section (`R9`) is a
+   separate ticket. AC: `R1`, `R8`, `R13`, `R15` (state machine only).
 3. **ckERC20 deposit detection and crediting** (background scans, log queries, fees,
    minimums, blocklist incl. sweep exclusion). AC: `R2`, `R3`, `R4`, `R7`, `R8`,
    `R15`.
