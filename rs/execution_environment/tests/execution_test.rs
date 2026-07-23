@@ -2966,6 +2966,7 @@ fn maximum_state_size() {
     let resource_limits = ResourceLimits {
         maximum_state_size: Some(maximum_state_size),
         maximum_state_delta: None,
+        ..Default::default()
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let hypervisor_config = HypervisorConfig {
@@ -3004,6 +3005,7 @@ fn maximum_state_delta() {
     let resource_limits = ResourceLimits {
         maximum_state_size: None,
         maximum_state_delta: Some(maximum_state_delta),
+        ..Default::default()
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     // We disable per-canister rate-limiting of heap delta to simplify the test.

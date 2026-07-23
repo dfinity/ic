@@ -749,6 +749,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             resource_limits: ResourceLimits {
                 maximum_state_size: Some(own_maximum_state_size),
                 maximum_state_delta: Some(own_maximum_state_delta),
+                ..Default::default()
             },
 
             ..Default::default()

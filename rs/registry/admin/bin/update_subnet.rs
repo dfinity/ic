@@ -346,14 +346,24 @@ impl ProposeToUpdateSubnetCmd {
             let ResourceLimits {
                 maximum_state_size,
                 maximum_state_delta,
+                maximum_query_instructions,
+                maximum_composite_query_instructions,
             } = resource_limits;
             let maximum_state_size =
                 maximum_state_size.or(subnet_record.resource_limits.maximum_state_size);
             let maximum_state_delta =
                 maximum_state_delta.or(subnet_record.resource_limits.maximum_state_delta);
+            let maximum_query_instructions = maximum_query_instructions
+                .or(subnet_record.resource_limits.maximum_query_instructions);
+            let maximum_composite_query_instructions =
+                maximum_composite_query_instructions.or(subnet_record
+                    .resource_limits
+                    .maximum_composite_query_instructions);
             ResourceLimits {
                 maximum_state_size,
                 maximum_state_delta,
+                maximum_query_instructions,
+                maximum_composite_query_instructions,
             }
         });
 
@@ -417,7 +427,7 @@ mod tests {
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
-    use ic_types::{NumBytes, PrincipalId};
+    use ic_types::{NumBytes, NumInstructions, PrincipalId};
 
     use super::*;
 
@@ -870,6 +880,7 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = None;
@@ -889,17 +900,20 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: None,
             maximum_state_delta: None,
+            ..Default::default()
         });
 
         // `expected_resource_limits` are `None` if and only if `resource_limits_mutation` is None
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
@@ -914,11 +928,13 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: None,
+            ..Default::default()
         });
 
         // `maximum_state_size` is overriden according to `resource_limits_mutation`,
@@ -927,6 +943,7 @@ mod tests {
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
@@ -941,11 +958,13 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: None,
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: None,
+            ..Default::default()
         });
 
         // `maximum_state_size` is overriden according to `resource_limits_mutation`,
@@ -954,6 +973,7 @@ mod tests {
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
@@ -968,16 +988,49 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(256)),
+            ..Default::default()
         });
 
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(256)),
+            ..Default::default()
+        });
+
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_works_for_resource_limits_instruction_limits() {
+        let initial_resource_limits = ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(42)),
+            maximum_composite_query_instructions: Some(NumInstructions::new(64)),
+            ..Default::default()
+        };
+
+        let resource_limits_mutation = Some(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(128)),
+            maximum_composite_query_instructions: None,
+            ..Default::default()
+        });
+
+        // `maximum_query_instructions` is overriden according to `resource_limits_mutation`,
+        // `maximum_composite_query_instructions` is not set in `resource_limits_mutation` and thus
+        // the value from `initial_resource_limits` is used.
+        let expected_resource_limits = Some(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(128)),
+            maximum_composite_query_instructions: Some(NumInstructions::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
