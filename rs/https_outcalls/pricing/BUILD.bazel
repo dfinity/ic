@@ -7,6 +7,13 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_https_outcalls_pricing",
     version = "0.1.0",
+    # The `fees` module is the single home for HTTP-outcall pay-as-you-go pricing,
+    # so `cycles_account_manager` (which computes the base fee) depends on it in
+    # addition to the https_outcalls subpackages.
+    visibility = [
+        "//rs/cycles_account_manager:__pkg__",
+        "//rs/https_outcalls:__subpackages__",
+    ],
     deps = [
         # Keep sorted.
         "//rs/config",

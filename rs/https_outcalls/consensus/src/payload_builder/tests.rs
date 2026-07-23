@@ -13,6 +13,7 @@ use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -1090,8 +1091,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         // The proof must contain exactly ONE signature, from the DELEGATED node.
         add_signer_to_proof(&mut proof, delegated_node_id);
-        proof.initial_spent =
-            super::utils::fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
+        proof.initial_spent = fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
 
         let payload = CanisterHttpPayload {
             responses: vec![proof],
@@ -1130,8 +1130,7 @@ fn validate_payload_fails_for_initial_spent_mismatch() {
         let (response, metadata) = test_response_and_metadata(callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         add_signer_to_proof(&mut proof, delegated_node_id);
-        let computed =
-            super::utils::fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
+        let computed = fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
         // A content-bearing response has a nonzero consensus cost, so the honest
         // value is nonzero; claim one cycle too many.
         proof.initial_spent = computed + Cycles::new(1);
@@ -1637,8 +1636,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
         let (response, metadata) = test_response_and_metadata(duplicate_callback_id.get());
         let mut proof = response_and_metadata_to_proof(&response, &metadata);
         add_signer_to_proof(&mut proof, delegated_node_id);
-        proof.initial_spent =
-            super::utils::fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
+        proof.initial_spent = fully_replicated_initial_spent(&proof.proof, subnet_size as u32);
 
         // 4. Create a payload that includes this same proof twice.
         let payload = CanisterHttpPayload {
@@ -4609,11 +4607,8 @@ fn validate_payload_fails_for_initial_spent_mismatch_too_many_rejects() {
             .collect();
         // The honest collective initial spend the validator recomputes from the
         // receipts and subnet size...
-        let computed = super::utils::flexible_initial_spent(
-            reject_entries.iter().map(|r| &r.proof),
-            num_nodes as u32,
-            3,
-        );
+        let computed =
+            flexible_initial_spent(reject_entries.iter().map(|r| &r.proof), num_nodes as u32, 3);
         // ...but the payload claims one cycle more.
         let payload = CanisterHttpPayload {
             flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
@@ -5212,7 +5207,7 @@ fn flexible_group(
     min_responses: u32,
     responses: Vec<FlexibleCanisterHttpResponseWithProof>,
 ) -> FlexibleCanisterHttpResponses {
-    let initial_spent = super::utils::flexible_initial_spent(
+    let initial_spent = flexible_initial_spent(
         responses.iter().map(|r| &r.proof),
         subnet_size,
         min_responses,
@@ -5232,7 +5227,7 @@ fn too_many_rejects(
     min_responses: u32,
     reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
 ) -> FlexibleCanisterHttpError {
-    let initial_spent = super::utils::flexible_initial_spent(
+    let initial_spent = flexible_initial_spent(
         reject_responses.iter().map(|r| &r.proof),
         subnet_size,
         min_responses,

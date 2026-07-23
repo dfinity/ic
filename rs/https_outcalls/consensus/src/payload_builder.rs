@@ -19,6 +19,7 @@ use ic_consensus_utils::{
     membership::{CanisterHttpCommittee, Membership},
 };
 use ic_error_types::RejectCode;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
@@ -501,8 +502,7 @@ impl CanisterHttpPayloadBuilderImpl {
             // The collective initial spend must match the value recomputed from
             // the request context's subnet size and the signed per-replica
             // receipts.
-            let computed_spent =
-                utils::fully_replicated_initial_spent(&response.proof, subnet_size);
+            let computed_spent = fully_replicated_initial_spent(&response.proof, subnet_size);
             if response.initial_spent != computed_spent {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
                     callback_id,
@@ -669,7 +669,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
             // The collective initial spend must match the value recomputed from
             // the request context's subnet size and the signed receipts.
-            let computed_spent = utils::flexible_initial_spent(
+            let computed_spent = flexible_initial_spent(
                 group.responses.iter().map(|r| &r.proof),
                 subnet_size,
                 min_responses,
@@ -754,7 +754,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
                     // The collective initial spend must match the value recomputed
                     // from the request context's subnet size and the signed receipts.
-                    let computed_spent = utils::flexible_initial_spent(
+                    let computed_spent = flexible_initial_spent(
                         reject_responses.iter().map(|r| &r.proof),
                         subnet_size,
                         min_responses as u32,

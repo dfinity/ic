@@ -1,4 +1,5 @@
 use CanisterHttpResponseContent::Reject;
+use ic_https_outcalls_pricing::fees::{flexible_initial_spent, fully_replicated_initial_spent};
 use ic_interfaces::canister_http::{CanisterHttpPool, InvalidCanisterHttpPayloadReason};
 use ic_types::{
     CountBytes, NodeId, NumBytes, RegistryVersion,
@@ -73,66 +74,6 @@ pub(crate) fn check_response_consistency(
     }
 
     Ok(())
-}
-
-/// Per-replica consensus cost coefficient `N * (10 * N + 600)`, where `N` is the
-/// subnet size recorded in the request context.
-fn consensus_cost_coefficient(subnet_size: u32) -> u128 {
-    let n = subnet_size as u128;
-    n * (10 * n + 600)
-}
-
-/// Computes the collective initial spent cycles for a fully-replicated (or
-/// non-replicated) HTTP outcall response.
-///
-/// The spend is the sum of the per-replica spends claimed in the proof's payment
-/// receipts, plus the consensus cost `N * (10 * N + 600) * <response_size>` of
-/// including the aggregated response in a block. The messaging layer derives the
-/// caller's refund from this and the per-replica allowance, and reports it as the
-/// consumed-cycles metric.
-pub(crate) fn fully_replicated_initial_spent(
-    proof: &CanisterHttpResponseProof,
-    subnet_size: u32,
-) -> Cycles {
-    let spent_sum: Cycles = proof
-        .signatures
-        .values()
-        .map(|sig| sig.payment_receipt.spent)
-        .sum();
-    let consensus_cost =
-        Cycles::from(consensus_cost_coefficient(subnet_size) * proof.metadata.content_size as u128);
-    spent_sum + consensus_cost
-}
-
-/// Computes the collective initial spent cycles for a group of flexible HTTP
-/// outcall responses (used both for successful responses and `TooManyRejects`
-/// errors).
-///
-/// The spend is the sum of the per-replica spends claimed in the shares' payment
-/// receipts, plus the consensus cost
-/// `N * (10 * N + 600) * sum over K replicas (181 + <transformed_response_size_i>)`,
-/// plus an additional per-extra-response cost
-/// `N * (2000 * N * (K - min_responses) + 100_000 * (K - min_responses))` charged
-/// for every response beyond the `min_responses` required to reach consensus,
-/// where `K` is the number of shares.
-pub(crate) fn flexible_initial_spent<'a>(
-    shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
-    subnet_size: u32,
-    min_responses: u32,
-) -> Cycles {
-    let mut spent_sum = Cycles::zero();
-    let mut size_term: u128 = 0;
-    let mut count: u32 = 0;
-    for share in shares {
-        spent_sum += share.content.payment_receipt.spent;
-        size_term += 181 + share.content.content_size() as u128;
-        count += 1;
-    }
-    let n = subnet_size as u128;
-    let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
-    let extra_responses = count.saturating_sub(min_responses) as u128;
-    let extra_cost = Cycles::from(n * (2000 * n * extra_responses + 100_000 * extra_responses));
-    spent_sum + consensus_cost + extra_cost
 }
 
 /// Enforces the per-replica spend limit from the request context: the amount
