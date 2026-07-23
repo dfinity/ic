@@ -2850,9 +2850,16 @@ impl From<pb::UpdateStandardEngineReplicaVersion> for api::UpdateStandardEngineR
 impl From<api::UpdateStandardEngineReplicaVersion> for pb::UpdateStandardEngineReplicaVersion {
     fn from(item: api::UpdateStandardEngineReplicaVersion) -> Self {
         Self {
+            // These are string fields. Therefore, if no value is supplied,
+            // unwrap_or_default returns an empty string, which will be rejected
+            // later (during proposal creation time), because we require that
+            // these fields have the shape of a git commit ID.
             new_replica_version_id: item.new_replica_version_id.unwrap_or_default(),
             old_replica_version_id: item.old_replica_version_id.unwrap_or_default(),
-            deployment_progress: item.deployment_progress.unwrap_or_default(),
+            // -1.0 is a "poison" value. That way, we do not make the unfounded
+            // assumption that the user intended that deployment_progress be set
+            // to 0.0.
+            deployment_progress: item.deployment_progress.unwrap_or(-1.0),
         }
     }
 }
