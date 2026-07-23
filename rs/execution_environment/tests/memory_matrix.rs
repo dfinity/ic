@@ -878,6 +878,14 @@ fn setup_fixed_memory_canister(test: &mut ExecutionTest, canister_id: CanisterId
         .unwrap();
 }
 
+/// Sets up a canister with a minimal execution state (an empty Wasm module and no
+/// Wasm chunks), so that uninstalling it frees less memory than the
+/// `CanisterCodeUninstall` canister history entry that the uninstall records.
+fn setup_minimal_canister(test: &mut ExecutionTest, canister_id: CanisterId) {
+    test.install_canister(canister_id, wat::parse_str("(module)").unwrap())
+        .unwrap();
+}
+
 fn test_memory_suite_grow_memory_entry_point_(payload: Vec<u8>) {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
         let msg_id = test.ingress_raw(canister_id, "update", payload.clone()).0;
@@ -1713,6 +1721,23 @@ fn test_memory_suite_uninstall_code() {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::Decrease,
         setup: setup_universal_canister_with_much_memory,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_uninstall_code_below_canister_history() {
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        test.uninstall_code(canister_id).err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        // Uninstalling frees the canister's (minimal) execution state but records a
+        // larger `CanisterCodeUninstall` canister history entry, so the canister's
+        // memory usage increases overall.
+        memory_usage_change: MemoryUsageChange::Increase,
+        setup: setup_minimal_canister,
         op,
     };
     test_memory_suite(params);
