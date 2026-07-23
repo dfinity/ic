@@ -15,9 +15,10 @@
 //! split, the delegation might already carry the new key while the certified state
 //! still carries the old key.
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
+use ic_registry_routing_table::CanisterIdRange;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    PrincipalId, SubnetId,
+    CanisterId, PrincipalId, SubnetId,
     messages::{Certificate, CertificateDelegation, CertificateDelegationFormat},
 };
 use std::fmt;
@@ -108,15 +109,26 @@ pub fn is_delegation_valid_with_respect_to_state(
     let tree = LabeledTree::try_from(certificate.tree)
         .map_err(|err| DelegationValidationError::MalformedHashTree(format!("{err:?}")))?;
 
-    let network_topology = &state.metadata.network_topology;
-    let subnet_topology = network_topology
+    Ok(does_public_key_match(&tree, state, subnet_id)?
+        && do_canister_ranges_match(&tree, state, format, subnet_id)?)
+}
+
+/// Returns whether the public key certified in `tree` matches the public key
+/// assigned to `subnet_id` in `state`.
+fn does_public_key_match(
+    tree: &LabeledTree<Vec<u8>>,
+    state: &ReplicatedState,
+    subnet_id: SubnetId,
+) -> Result<bool, DelegationValidationError> {
+    let subnet_topology = state
+        .metadata
+        .network_topology
         .subnets_for_certification()
         .get(&subnet_id)
         .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?;
 
-    // 1. The certified public key must match the one recorded in the state.
     let certified_public_key = match lookup_path(
-        &tree,
+        tree,
         &[b"subnet", subnet_id.get_ref().as_slice(), b"public_key"],
     ) {
         Some(LabeledTree::Leaf(public_key)) => public_key,
@@ -126,38 +138,24 @@ pub fn is_delegation_valid_with_respect_to_state(
             )));
         }
     };
-    if certified_public_key.as_slice() != subnet_topology.public_key.as_slice() {
-        return Ok(false);
-    }
-
-    // 2. The certified canister ranges must match the ranges the state assigns
-    //    to the subnet. Pruned delegations carry no ranges, so there is nothing
-    //    left to compare once the public key matches.
-    let Some(certified_ranges) = certified_canister_ranges(&tree, format, subnet_id)? else {
-        return Ok(true);
-    };
-
-    let expected_ranges: Vec<(PrincipalId, PrincipalId)> = network_topology
-        .routing_table_for_certification()
-        .ranges(subnet_id)
-        .iter()
-        .map(|range| (range.start.get(), range.end.get()))
-        .collect();
-
-    Ok(certified_ranges == expected_ranges)
+    Ok(certified_public_key.as_slice() == subnet_topology.public_key.as_slice())
 }
 
-/// Extracts the canister ID ranges certified for `subnet_id` from the
-/// delegation's certificate `tree`, according to `format`.
-///
-/// Returns `Ok(None)` for [`CertificateDelegationFormat::Pruned`] (the ranges
-/// are absent, so there is nothing to compare), and `Ok(Some(ranges))`
-/// otherwise.
-fn certified_canister_ranges(
+/// Returns whether the canister ranges certified in `tree` match the ranges
+/// assigned to `subnet_id` in `state`. The check differs depending on the
+/// `format` of the delegation:
+///   - In the `Flat` layout, all ranges must match exactly.
+///   - In the `Tree` layout, only the ranges that are present in the delegation
+///     are compared against the state. Any additional ranges in the state that
+///     are not present in the delegation are ignored.
+///   - In the `Pruned` layout, there are no ranges to compare and the function
+///     always returns `Ok(true)`.
+fn do_canister_ranges_match(
     tree: &LabeledTree<Vec<u8>>,
+    state: &ReplicatedState,
     format: CertificateDelegationFormat,
     subnet_id: SubnetId,
-) -> Result<Option<Vec<(PrincipalId, PrincipalId)>>, DelegationValidationError> {
+) -> Result<bool, DelegationValidationError> {
     let subnet_id_bytes = subnet_id.get_ref().as_slice();
     // Canister ranges are stored as self-describing CBOR of `(start, end)`
     // principal pairs (see `encoding::encode_subnet_canister_ranges`).
@@ -166,11 +164,26 @@ fn certified_canister_ranges(
             .map_err(|err| DelegationValidationError::MalformedCanisterRanges(err.to_string()))
     };
 
+    let state_routing_table = state
+        .metadata
+        .network_topology
+        .routing_table_for_certification();
+
     match format {
         // A single leaf at /subnet/<subnet_id>/canister_ranges.
         CertificateDelegationFormat::Flat => {
             match lookup_path(tree, &[b"subnet", subnet_id_bytes, b"canister_ranges"]) {
-                Some(LabeledTree::Leaf(bytes)) => Ok(Some(decode(bytes)?)),
+                Some(LabeledTree::Leaf(bytes)) => {
+                    // In the flat layout, all certified ranges must match the state ranges exactly.
+                    let certified_ranges = decode(bytes)?;
+                    let state_ranges: Vec<(PrincipalId, PrincipalId)> = state_routing_table
+                        .ranges(subnet_id)
+                        .iter()
+                        .map(|range| (range.start.get(), range.end.get()))
+                        .collect();
+
+                    Ok(certified_ranges == state_ranges)
+                }
                 _ => Err(DelegationValidationError::UnexpectedTreeShape(format!(
                     "missing /subnet/{subnet_id}/canister_ranges leaf"
                 ))),
@@ -180,10 +193,34 @@ fn certified_canister_ranges(
         CertificateDelegationFormat::Tree => {
             match lookup_path(tree, &[b"canister_ranges", subnet_id_bytes]) {
                 Some(LabeledTree::SubTree(children)) => {
-                    let mut ranges = Vec::new();
+                    // In the tree layout, we only check that the ranges present in the delegation
+                    // match the ranges assigned to the subnet in the state.
+                    if children.is_empty() {
+                        // This could genuinely happen if the routing table has changed but we
+                        // haven't refreshed the NNS delegation just yet.
+                        return Ok(false);
+                    }
                     for (_label, child) in children.iter() {
                         match child {
-                            LabeledTree::Leaf(bytes) => ranges.extend(decode(bytes)?),
+                            LabeledTree::Leaf(bytes) => {
+                                for (start, end) in decode(bytes)? {
+                                    let certified_range = CanisterIdRange {
+                                        start: CanisterId::unchecked_from_principal(start),
+                                        end: CanisterId::unchecked_from_principal(end),
+                                    };
+
+                                    // Return early if the state does not assign this range to the
+                                    // subnet or if it assigns it to a different subnet.
+                                    let Some(assigned_subnet) =
+                                        state_routing_table.lookup_range(certified_range)
+                                    else {
+                                        return Ok(false);
+                                    };
+                                    if assigned_subnet != subnet_id {
+                                        return Ok(false);
+                                    }
+                                }
+                            }
                             LabeledTree::SubTree(_) => {
                                 return Err(DelegationValidationError::UnexpectedTreeShape(
                                     format!(
@@ -193,14 +230,16 @@ fn certified_canister_ranges(
                             }
                         }
                     }
-                    Ok(Some(ranges))
+
+                    // At this point, all certified ranges have been checked and match the state.
+                    Ok(true)
                 }
                 _ => Err(DelegationValidationError::UnexpectedTreeShape(format!(
                     "missing /canister_ranges/{subnet_id} subtree"
                 ))),
             }
         }
-        CertificateDelegationFormat::Pruned => Ok(None),
+        CertificateDelegationFormat::Pruned => Ok(true),
     }
 }
 
@@ -210,18 +249,19 @@ mod tests {
     use crate::encoding::encode_subnet_canister_ranges;
     use assert_matches::assert_matches;
     use ic_canonical_state_tree_hash_test_utils::build_witness_gen;
-    use ic_crypto_tree_hash::{Label, LabeledTree, WitnessGenerator, flatmap};
+    use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, WitnessGenerator, flatmap};
     use ic_registry_routing_table::CanisterIdRange;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         ReplicatedState, SubnetTopology,
         metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     };
-    use ic_test_utilities_types::ids::SUBNET_1;
+    use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
     use ic_types::{
         CanisterId, PrincipalId, SubnetId,
         messages::{Blob, Certificate, CertificateDelegation, CertificateDelegationFormat},
     };
+    use rstest::rstest;
     use serde::Serialize;
 
     fn range(start: u64, end: u64) -> CanisterIdRange {
@@ -258,20 +298,26 @@ mod tests {
     }
 
     /// `/subnet/<subnet_id>/public_key` plus a `/canister_ranges/<subnet_id>`
-    /// subtree whose leaves hold the ranges split into two chunks (the `Tree`
+    /// subtree holding one leaf per range, keyed by the range's start (the `Tree`
     /// layout).
     fn tree_layout(
         subnet_id: SubnetId,
         public_key: &[u8],
-        chunk_a: &[CanisterIdRange],
-        chunk_b: &[CanisterIdRange],
+        ranges: &[CanisterIdRange],
     ) -> LabeledTree<Vec<u8>> {
+        let leaves: Vec<(Label, LabeledTree<Vec<u8>>)> = ranges
+            .iter()
+            .map(|r| {
+                (
+                    Label::from(r.start.get().to_vec()),
+                    ranges_leaf(std::slice::from_ref(r)),
+                )
+            })
+            .collect();
         LabeledTree::SubTree(flatmap![
             Label::from("canister_ranges") => LabeledTree::SubTree(flatmap![
-                Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
-                    Label::from(chunk_a[0].start.get().to_vec()) => ranges_leaf(chunk_a),
-                    Label::from(chunk_b[0].start.get().to_vec()) => ranges_leaf(chunk_b),
-                ]),
+                Label::from(subnet_id.get().to_vec()) =>
+                    LabeledTree::SubTree(FlatMap::from_key_values(leaves)),
             ]),
             Label::from("subnet") => LabeledTree::SubTree(flatmap![
                 Label::from(subnet_id.get().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -290,6 +336,22 @@ mod tests {
                 ]),
             ]),
         ])
+    }
+
+    /// Builds the certificate tree carrying `public_key` and `ranges` for
+    /// `subnet_id` in the layout matching `format`. The `Pruned` layout carries
+    /// no ranges, so `ranges` is ignored for it.
+    fn build_tree(
+        format: CertificateDelegationFormat,
+        subnet_id: SubnetId,
+        public_key: &[u8],
+        ranges: &[CanisterIdRange],
+    ) -> LabeledTree<Vec<u8>> {
+        match format {
+            CertificateDelegationFormat::Flat => flat_tree(subnet_id, public_key, ranges),
+            CertificateDelegationFormat::Tree => tree_layout(subnet_id, public_key, ranges),
+            CertificateDelegationFormat::Pruned => pruned_tree(subnet_id, public_key),
+        }
     }
 
     /// Wraps `tree` into a delegation for `subnet_id`. The signature is
@@ -335,138 +397,214 @@ mod tests {
         state
     }
 
-    #[test]
-    fn flat_delegation_matching_public_key_and_ranges_is_valid() {
+    /// A delegation whose certified public key and canister ranges agree with the
+    /// state is valid, in every layout. In the `Pruned` layout the ranges are
+    /// absent (and thus ignored), so a matching public key alone suffices even
+    /// though the state does carry ranges.
+    #[rstest]
+    #[case::flat(CertificateDelegationFormat::Flat)]
+    #[case::tree(CertificateDelegationFormat::Tree)]
+    #[case::pruned(CertificateDelegationFormat::Pruned)]
+    fn delegation_matching_public_key_and_ranges_is_valid(
+        #[case] format: CertificateDelegationFormat,
+    ) {
+        let subnet_id = SUBNET_1;
         let public_key = vec![1, 2, 3];
         let ranges = [range(10, 20), range(100, 200)];
-        let state = state_with(SUBNET_1, public_key.clone(), &ranges);
-        let delegation = delegation(SUBNET_1, &flat_tree(SUBNET_1, &public_key, &ranges));
-
-        assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Flat,
-                &state,
-            ),
-            Ok(true)
-        );
-    }
-
-    #[test]
-    fn tree_delegation_matching_public_key_and_ranges_is_valid() {
-        let public_key = vec![1, 2, 3];
-        // The state holds both ranges; the delegation splits them across two leaves.
-        let state = state_with(
-            SUBNET_1,
-            public_key.clone(),
-            &[range(10, 20), range(100, 200)],
-        );
+        let state = state_with(subnet_id, public_key.clone(), &ranges);
         let delegation = delegation(
-            SUBNET_1,
-            &tree_layout(SUBNET_1, &public_key, &[range(10, 20)], &[range(100, 200)]),
+            subnet_id,
+            &build_tree(format, subnet_id, &public_key, &ranges),
         );
 
         assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Tree,
-                &state,
-            ),
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
             Ok(true)
         );
     }
 
-    #[test]
-    fn pruned_delegation_ignores_ranges_and_only_checks_public_key() {
-        let public_key = vec![1, 2, 3];
-        // The state has ranges, but a pruned delegation carries none: they must
-        // not be compared, so a matching public key is enough. The tree only
-        // contains the public key.
-        let state = state_with(SUBNET_1, public_key.clone(), &[range(10, 20)]);
-        let delegation = delegation(SUBNET_1, &pruned_tree(SUBNET_1, &public_key));
-
-        assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Pruned,
-                &state,
-            ),
-            Ok(true)
-        );
-    }
-
-    #[test]
-    fn mismatching_public_key_is_invalid() {
+    /// A mismatching public key makes the delegation invalid in every layout,
+    /// regardless of whether the ranges match.
+    #[rstest]
+    #[case::flat(CertificateDelegationFormat::Flat)]
+    #[case::tree(CertificateDelegationFormat::Tree)]
+    #[case::pruned(CertificateDelegationFormat::Pruned)]
+    fn mismatching_public_key_is_invalid(#[case] format: CertificateDelegationFormat) {
+        let subnet_id = SUBNET_1;
         let ranges = [range(10, 20)];
-        let state = state_with(SUBNET_1, vec![1, 2, 3], &ranges);
+        let state = state_with(subnet_id, vec![1, 2, 3], &ranges);
         // Same ranges, different public key.
-        let delegation = delegation(SUBNET_1, &flat_tree(SUBNET_1, &[9, 9, 9], &ranges));
-
-        assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Flat,
-                &state,
-            ),
-            Ok(false)
-        );
-    }
-
-    #[test]
-    fn mismatching_canister_ranges_are_invalid() {
-        let public_key = vec![1, 2, 3];
-        let state = state_with(SUBNET_1, public_key.clone(), &[range(10, 20)]);
-        // Same public key, but the delegation certifies a different range.
         let delegation = delegation(
-            SUBNET_1,
-            &flat_tree(SUBNET_1, &public_key, &[range(10, 999)]),
+            subnet_id,
+            &build_tree(format, subnet_id, &[9, 9, 9], &ranges),
         );
 
         assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Flat,
-                &state,
-            ),
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
             Ok(false)
         );
     }
 
-    #[test]
-    fn unknown_subnet_is_an_error() {
+    /// The state having no topology for the delegated subnet is an error in every
+    /// layout: the subnet is looked up while checking the public key, before the
+    /// ranges are considered.
+    #[rstest]
+    #[case::flat(CertificateDelegationFormat::Flat)]
+    #[case::tree(CertificateDelegationFormat::Tree)]
+    #[case::pruned(CertificateDelegationFormat::Pruned)]
+    fn unknown_subnet_is_an_error(#[case] format: CertificateDelegationFormat) {
+        let subnet_id = SUBNET_1;
         // The state does not know about SUBNET_1.
-        let state = ReplicatedState::new(SUBNET_1, SubnetType::Application);
-        let delegation = delegation(SUBNET_1, &flat_tree(SUBNET_1, &[1, 2, 3], &[range(10, 20)]));
+        let state = ReplicatedState::new(subnet_id, SubnetType::Application);
+        let delegation = delegation(
+            subnet_id,
+            &build_tree(format, subnet_id, &[1, 2, 3], &[range(10, 20)]),
+        );
 
         assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Flat,
-                &state,
-            ),
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
             Err(DelegationValidationError::UnknownSubnet(_))
         );
     }
 
-    #[test]
-    fn public_key_missing_from_delegation_is_an_error() {
-        let state = state_with(SUBNET_1, vec![1, 2, 3], &[range(10, 20)]);
-        // A tree that has canister ranges but no public_key leaf.
-        let tree = LabeledTree::SubTree(flatmap![
-            Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                Label::from(SUBNET_1.get().to_vec()) => LabeledTree::SubTree(flatmap![
-                    Label::from("canister_ranges") => ranges_leaf(&[range(10, 20)]),
-                ]),
-            ]),
-        ]);
-        let delegation = delegation(SUBNET_1, &tree);
+    /// The `Flat` layout requires the certified ranges to match the state
+    /// exactly, whereas the `Tree` layout only requires them to be a subset of
+    /// what the state assigns to the subnet. Certifying a strict subset of the
+    /// state's ranges is therefore invalid under `Flat` but valid under `Tree`.
+    /// In the `Pruned` layout, the ranges are absent and thus ignored, so a matching
+    /// public key alone suffices for validity.
+    #[rstest]
+    #[case::flat_requires_exact_match(CertificateDelegationFormat::Flat)]
+    #[case::tree_accepts_a_subset(CertificateDelegationFormat::Tree)]
+    #[case::pruned_accepts_a_subset(CertificateDelegationFormat::Pruned)]
+    fn delegation_certifying_a_subset_of_state_ranges(#[case] format: CertificateDelegationFormat) {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        let state = state_with(
+            subnet_id,
+            public_key.clone(),
+            &[range(10, 20), range(100, 200), range(300, 400)],
+        );
+        // Certify only a subset of the ranges the state assigns to the subnet.
+        let subset = [range(10, 20), range(300, 400)];
+        let delegation = delegation(
+            subnet_id,
+            &build_tree(format, subnet_id, &public_key, &subset),
+        );
 
         assert_matches!(
-            is_delegation_valid_with_respect_to_state(
-                &delegation,
-                CertificateDelegationFormat::Flat,
-                &state,
-            ),
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
+            Ok(is_valid) if is_valid == matches!(format, CertificateDelegationFormat::Tree | CertificateDelegationFormat::Pruned)
+        );
+    }
+
+    /// A delegation certifying a range that the state does not assign to the subnet
+    /// is invalid in the `Flat` and `Tree` layouts, but valid in the `Pruned` layout (which ignores
+    /// ranges).
+    #[rstest]
+    #[case::different_end(vec![range(10, 999)])]
+    #[case::extra_range(vec![range(10, 20), range(100, 200), range(500, 1000)])]
+    #[case::replaced_range(vec![range(10, 20), range(500, 1000)])]
+    #[case::disjoint_range(vec![range(30, 40)])]
+    #[case::subset_range(vec![range(10, 13), range(16, 18), range(101, 120)])]
+    #[case::merged_range(vec![range(10, 200)])]
+    fn delegation_with_ranges_not_matching_state_is_invalid(
+        #[case] certified_ranges: Vec<CanisterIdRange>,
+        #[values(
+            CertificateDelegationFormat::Flat,
+            CertificateDelegationFormat::Tree,
+            CertificateDelegationFormat::Pruned
+        )]
+        format: CertificateDelegationFormat,
+    ) {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        // The state assigns a single range to the subnet.
+        let state = state_with(
+            subnet_id,
+            public_key.clone(),
+            &[range(10, 20), range(100, 200)],
+        );
+        let delegation = delegation(
+            subnet_id,
+            &build_tree(format, subnet_id, &public_key, &certified_ranges),
+        );
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
+            Ok(is_valid) if is_valid == matches!(format, CertificateDelegationFormat::Pruned)
+        );
+    }
+
+    /// A delegation certifying no ranges at all is invalid in the `Flat` and `Tree` layouts, but
+    /// valid in the `Pruned` layout (which ignores ranges).
+    #[rstest]
+    fn delegation_with_empty_ranges_is_invalid(
+        #[values(
+            CertificateDelegationFormat::Flat,
+            CertificateDelegationFormat::Tree,
+            CertificateDelegationFormat::Pruned
+        )]
+        format: CertificateDelegationFormat,
+    ) {
+        let subnet_id = SUBNET_1;
+        let public_key = vec![1, 2, 3];
+        // The state assigns a single range to the subnet.
+        let state = state_with(subnet_id, public_key.clone(), &[range(10, 20)]);
+        // The delegation certifies no ranges at all.
+        let delegation = delegation(subnet_id, &build_tree(format, subnet_id, &public_key, &[]));
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
+            Ok(is_valid) if is_valid == matches!(format, CertificateDelegationFormat::Pruned)
+        );
+    }
+
+    /// In the `Tree` layout a certified range that the state assigns to a
+    /// *different* subnet makes the delegation invalid.
+    #[rstest]
+    #[case::flat(CertificateDelegationFormat::Flat)]
+    #[case::tree(CertificateDelegationFormat::Tree)]
+    fn tree_delegation_with_range_assigned_to_another_subnet_is_invalid(
+        #[case] format: CertificateDelegationFormat,
+    ) {
+        let public_key = vec![1, 2, 3];
+        // SUBNET_1 owns 10-20; SUBNET_2 owns 100-200.
+        let mut state = state_with(SUBNET_1, public_key.clone(), &[range(10, 20)]);
+        state.metadata.modify_network_topology(|topology| {
+            topology
+                .routing_table_mut()
+                .insert(range(100, 200), SUBNET_2)
+                .unwrap();
+        });
+        // The delegation for SUBNET_1 certifies a range the state assigns to SUBNET_2.
+        let delegation = delegation(
+            SUBNET_1,
+            &build_tree(format, SUBNET_1, &public_key, &[range(100, 200)]),
+        );
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
+            Ok(false)
+        );
+    }
+
+    /// The canister-ranges path required by the layout being absent is an error (a
+    /// missing `Flat` leaf or a missing `Tree` subtree). A `Pruned` tree carries
+    /// the public key but neither ranges path, so validating it as `Flat` or
+    /// `Tree` fails.
+    #[rstest]
+    #[case::flat(CertificateDelegationFormat::Flat)]
+    #[case::tree(CertificateDelegationFormat::Tree)]
+    fn delegation_missing_canister_ranges_is_an_error(#[case] format: CertificateDelegationFormat) {
+        let public_key = vec![1, 2, 3];
+        let state = state_with(SUBNET_1, public_key.clone(), &[range(10, 20)]);
+        // The public key is present (so that check passes) but the ranges path
+        // required by `format` is missing.
+        let delegation = delegation(SUBNET_1, &pruned_tree(SUBNET_1, &public_key));
+
+        assert_matches!(
+            is_delegation_valid_with_respect_to_state(&delegation, format, &state),
             Err(DelegationValidationError::UnexpectedTreeShape(_))
         );
     }

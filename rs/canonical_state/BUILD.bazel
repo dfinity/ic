@@ -52,6 +52,7 @@ rust_test(
         "@crate_index//:lazy_static",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
+        "@crate_index//:rstest",
         "@crate_index//:tempfile",
     ],
 )
