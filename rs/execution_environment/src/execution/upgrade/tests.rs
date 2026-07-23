@@ -18,7 +18,7 @@ use ic_types_cycles::Cycles;
 // Constants and templates
 
 /// Slice size used across tests is 10K instructions
-const MAX_INSTRUCTIONS_PER_SLICE: u64 = 10_000;
+const MAX_INSTRUCTIONS_PER_SLICE: u64 = 240_000;
 /// Declare local variables for a loop in WAT
 const LOOP_LOCALS_WAT: &str = r#"
                 (local $limit i64)
@@ -26,7 +26,7 @@ const LOOP_LOCALS_WAT: &str = r#"
 /// Declare loop which takes a bit less than 10K instructions (8K)
 const LOOP_10K_WAT: &str = r#"
                 (local.set $limit
-                    (i64.add (call $performance_counter (i32.const 0)) (i64.const 8000))
+                    (i64.add (call $performance_counter (i32.const 0)) (i64.const 200000))
                 )
                 (loop $loop
                     (if (i64.lt_s

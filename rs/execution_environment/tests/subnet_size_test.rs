@@ -108,20 +108,12 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         MeteringType::None => 0,
     };
 
-    let cost_dirty = if let MeteringType::New = config.embedders_config.metering_type {
-        ic_config::subnet_config::SchedulerConfig::application_subnet()
-            .dirty_page_overhead
-            .get()
-    } else {
-        0
-    };
-
     let cost_default = 1; // Default cost of executing a function, even if it is empty.
 
     // Total cost of `(func $inc ...)`:
     cost_default +
     // (i32.store
-    cost_store + cost_dirty +
+    cost_store +
     // (i32.const 0)
     cost_const +
     // (i32.add
@@ -1132,14 +1124,17 @@ fn test_subnet_size_ingress_induction_cost() {
 
 #[test]
 fn test_subnet_size_execute_message_cost() {
+    let dirty_page_overhead = ic_config::subnet_config::SchedulerConfig::application_subnet()
+        .dirty_page_overhead
+        .get();
     let subnet_type = SubnetType::Application;
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     // The `inc` method writes to the heap (first access), so the deterministic
     // memory tracker charges an extra 32 instructions in-band (accessed + dirty
     // for 1 Wasm page) when enabled.
-    let reference_instructions_cost =
-        inc_instruction_cost(HypervisorConfig::default()) + deterministic_tracker_write_overhead(1);
+    let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default())
+        + dirty_page_overhead * deterministic_tracker_write_overhead(1);
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(reference_instructions_cost),
@@ -1149,7 +1144,7 @@ fn test_subnet_size_execute_message_cost() {
     // Check default cost.
     assert_eq!(
         reference_instructions_cost,
-        2019 + deterministic_tracker_write_overhead(1)
+        1019 + dirty_page_overhead * deterministic_tracker_write_overhead(1)
     );
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(

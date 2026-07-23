@@ -907,8 +907,8 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 #[test]
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(100_000)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1008,8 +1008,8 @@ fn dts_abort_works_in_response_callback() {
 #[test]
 fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(100_000)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1905,10 +1905,10 @@ fn cleanup_callback_cannot_make_calls() {
 
 #[test]
 fn dts_uninstall_with_aborted_response() {
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 50_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1923,10 +1923,10 @@ fn dts_uninstall_with_aborted_response() {
                 .on_reply(
                     wasm()
                         .stable64_grow(1)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000),
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000),
                 ),
         )
         .build();
@@ -2047,9 +2047,11 @@ fn reserve_instructions_for_cleanup_callback_scenario(
 
 #[test]
 fn reserve_instructions_for_cleanup_callback() {
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 500_000_000;
+    let slice_instruction_limit = 500_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(slice_instruction_limit)
         .with_manual_execution()
         .build();
 
@@ -2058,8 +2060,8 @@ fn reserve_instructions_for_cleanup_callback() {
 
 #[test]
 fn reserve_instructions_for_cleanup_callback_with_dts() {
-    let instruction_limit = 1_000_000;
-    let slice_instruction_limit = 10_000;
+    let instruction_limit = 500_000_000;
+    let slice_instruction_limit = 500_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(slice_instruction_limit)

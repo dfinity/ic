@@ -342,7 +342,6 @@ fn setup_execution_helper(
             wasm_executor,
             config.embedders_config.create_execution_state_base_cost,
             config.embedders_config.cost_to_compile_wasm_instruction,
-            config.embedders_config.dirty_page_overhead,
             config.canister_guaranteed_callback_quota,
         ),
     });
