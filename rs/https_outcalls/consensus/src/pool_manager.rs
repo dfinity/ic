@@ -486,10 +486,7 @@ impl CanisterHttpPoolManagerImpl {
                 // single replica is allowed to consume. Free subnets charge
                 // nothing, so their spend (used only for cost accounting) may
                 // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
-                let spend_limit = max_http_outcall_spend(
-                    context.cost_schedule,
-                    context.refund_status.per_replica_allowance,
-                );
+                let spend_limit = context.max_http_outcall_spend();
                 if share.content.spent() > spend_limit {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),

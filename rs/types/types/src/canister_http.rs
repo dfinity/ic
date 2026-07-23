@@ -1121,21 +1121,21 @@ impl CountBytes for CanisterHttpPaymentReceipt {
 ///
 pub const MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET: Cycles = Cycles::new(1_000_000_000_000);
 
-/// Returns the maximum cycles a single replica may report having `spent` on an
-/// HTTP outcall, given the subnet's `cost_schedule` and the request's
-/// `per_replica_allowance`.
-///
-/// On a [`CanisterCyclesCostSchedule::Normal`] schedule this is the
-/// `per_replica_allowance` (a replica may never spend more than it was granted).
-/// On a [`CanisterCyclesCostSchedule::Free`] schedule nothing is charged, so the
-/// spend is instead bounded by [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
-pub fn max_http_outcall_spend(
-    cost_schedule: CanisterCyclesCostSchedule,
-    per_replica_allowance: Cycles,
-) -> Cycles {
-    match cost_schedule {
-        CanisterCyclesCostSchedule::Free => MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
-        CanisterCyclesCostSchedule::Normal => per_replica_allowance,
+impl CanisterHttpRequestContext {
+    /// Returns the maximum cycles a single replica may report having `spent` on
+    /// this outcall, derived from the cost schedule and per-replica allowance
+    /// pinned in the context.
+    ///
+    /// On a [`CanisterCyclesCostSchedule::Normal`] schedule this is the
+    /// `per_replica_allowance` (a replica may never spend more than it was
+    /// granted). On a [`CanisterCyclesCostSchedule::Free`] schedule nothing is
+    /// charged, so the spend is instead bounded by
+    /// [`MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`].
+    pub fn max_http_outcall_spend(&self) -> Cycles {
+        match self.cost_schedule {
+            CanisterCyclesCostSchedule::Free => MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET,
+            CanisterCyclesCostSchedule::Normal => self.refund_status.per_replica_allowance,
+        }
     }
 }
 
