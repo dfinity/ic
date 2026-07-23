@@ -1,7 +1,9 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
-use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous, munmap};
+use std::num::NonZeroUsize;
+use std::ptr::NonNull;
 
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
@@ -72,19 +74,18 @@ fn vec_from_mmap(memory_size: usize, page_size: PageSize) {
     let size = num_blocks * size_of::<u32>();
     for _ in 0..NUM_EXECUTIONS {
         let addr = unsafe {
-            mmap(
-                std::ptr::null_mut(),
-                size,
+            mmap_anonymous(
+                None,
+                NonZeroUsize::new(size).expect("mmap length must be non-zero"),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 MapFlags::MAP_PRIVATE | MapFlags::MAP_ANON,
-                -1,
-                0,
             )
             .unwrap()
-        };
+        }
+        .as_ptr();
         let vec = black_box(unsafe { Vec::from_raw_parts(addr as *mut u32, 0, num_blocks) });
         let _manually_drop = std::mem::ManuallyDrop::new(vec);
-        unsafe { munmap(addr, size).unwrap() }
+        unsafe { munmap(NonNull::new(addr).expect("addr is null"), size).unwrap() }
     }
 }
 

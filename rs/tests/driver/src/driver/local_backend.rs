@@ -901,7 +901,7 @@ impl LocalBackend {
     /// overlays at the end of the group.
     fn ensure_base_image(&self, src: &Path) -> Result<PathBuf> {
         use ic_crypto_sha2::Sha256;
-        use std::os::unix::io::AsRawFd;
+        use nix::fcntl::{Flock, FlockArg};
 
         let cache_dir = self.active_local_backend.working_dir.join("image_cache");
         std::fs::create_dir_all(&cache_dir)
@@ -921,13 +921,14 @@ impl LocalBackend {
             .append(true)
             .open(&lock_path)
             .with_context(|| format!("opening image cache lock {}", lock_path.display()))?;
-        nix::fcntl::flock(lock.as_raw_fd(), nix::fcntl::FlockArg::LockExclusive)
+        // Hold an exclusive advisory lock through a `Flock` guard. The lock is
+        // released when the guard is dropped at the end of this function (which
+        // also closes the underlying `File`). Rust opens files `O_CLOEXEC`, so a
+        // forked task subprocess that `exec`s does not inherit this fd and
+        // therefore cannot keep the lock held after we return.
+        let _image_cache_lock = Flock::lock(lock, FlockArg::LockExclusive)
+            .map_err(|(_, errno)| errno)
             .with_context(|| format!("locking image cache lock {}", lock_path.display()))?;
-        // The lock is released when `lock` is dropped at the end of this function
-        // (its `File` closes the fd, which drops the advisory lock). Rust opens
-        // files `O_CLOEXEC`, so a forked task subprocess that `exec`s does not
-        // inherit this fd and therefore cannot keep the lock held after we
-        // return.
 
         if !base.exists() {
             // Extract to a temp file on the same filesystem, then atomically

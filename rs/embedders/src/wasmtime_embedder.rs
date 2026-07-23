@@ -778,7 +778,8 @@ impl WasmtimeEmbedder {
                 // SAFETY: This is the array we created in the host_memory creator, so we know it is a valid memory region that we own.
                 unsafe {
                     mman::mprotect(
-                        addr as *mut _,
+                        std::ptr::NonNull::new(addr as *mut std::ffi::c_void)
+                            .expect("mprotect address is null"),
                         size_in_bytes,
                         mman::ProtFlags::PROT_READ | mman::ProtFlags::PROT_WRITE,
                     )

@@ -6,8 +6,8 @@ use memory_tracker::{
 
 use libc::{self, c_void};
 use memory_tracker::signal_mutex::SignalMutex;
-use nix::sys::mman::{MapFlags, ProtFlags, mmap};
-use std::ptr;
+use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -34,16 +34,15 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("fault_handler");
 
     let ptr: *mut c_void = unsafe {
-        mmap(
-            ptr::null_mut(),
-            PAGE_SIZE,
+        mmap_anonymous(
+            None,
+            NonZeroUsize::new(PAGE_SIZE).expect("mmap length must be non-zero"),
             ProtFlags::PROT_NONE,
             MapFlags::MAP_ANON | MapFlags::MAP_PRIVATE,
-            0,
-            0,
         )
         .unwrap()
-    };
+    }
+    .as_ptr();
 
     group.bench_function("fault handler sim read", |bench| {
         bench.iter_with_setup(
@@ -85,16 +84,15 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("fault_handler");
 
     let ptr: *mut c_void = unsafe {
-        mmap(
-            ptr::null_mut(),
-            PAGE_SIZE,
+        mmap_anonymous(
+            None,
+            NonZeroUsize::new(PAGE_SIZE).expect("mmap length must be non-zero"),
             ProtFlags::PROT_NONE,
             MapFlags::MAP_ANON | MapFlags::MAP_PRIVATE,
-            0,
-            0,
         )
         .unwrap()
-    };
+    }
+    .as_ptr();
 
     group.bench_function("fault handler sim write", |bench| {
         bench.iter_with_setup(

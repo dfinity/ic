@@ -9,6 +9,7 @@ use nix::sys::mman::{ProtFlags, mprotect};
 use std::{
     cell::RefCell,
     ops::Range,
+    ptr::NonNull,
     sync::{Arc, atomic::Ordering},
 };
 
@@ -112,7 +113,13 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                 &tracker.metrics,
             );
         } else {
-            unsafe { mprotect(start, size.get() as usize, ProtFlags::PROT_NONE)? }
+            unsafe {
+                mprotect(
+                    NonNull::new(start).expect("mprotect address is null"),
+                    size.get() as usize,
+                    ProtFlags::PROT_NONE,
+                )?
+            }
             tracker
                 .metrics
                 .mprotect_count
@@ -249,7 +256,8 @@ pub fn basic_signal_handler(
         // Upgrade its protection to read+write.
         unsafe {
             nix::sys::mman::mprotect(
-                fault_address_page_boundary as *mut libc::c_void,
+                NonNull::new(fault_address_page_boundary as *mut libc::c_void)
+                    .expect("mprotect address is null"),
                 PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
             )
@@ -266,7 +274,8 @@ pub fn basic_signal_handler(
         // data
         unsafe {
             nix::sys::mman::mprotect(
-                fault_address_page_boundary as *mut libc::c_void,
+                NonNull::new(fault_address_page_boundary as *mut libc::c_void)
+                    .expect("mprotect address is null"),
                 PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
             )
@@ -288,7 +297,8 @@ pub fn basic_signal_handler(
         // Now reduce the access privileges to read-only
         unsafe {
             nix::sys::mman::mprotect(
-                fault_address_page_boundary as *mut libc::c_void,
+                NonNull::new(fault_address_page_boundary as *mut libc::c_void)
+                    .expect("mprotect address is null"),
                 PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ,
             )
@@ -441,7 +451,7 @@ pub fn prefetching_signal_handler(
                     .page_start_addr_from(prefetch_range.start);
                 unsafe {
                     mprotect(
-                        page_start_addr,
+                        NonNull::new(page_start_addr).expect("mprotect address is null"),
                         range_size_in_bytes(&prefetch_range),
                         ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                     )

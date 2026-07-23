@@ -3253,7 +3253,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0b1fab2ae45819af2d0731d60f2afe17227ebb1a1538a236da84c93e9a60162"
 dependencies = [
  "dispatch2",
- "nix 0.31.2",
+ "nix 0.31.3",
  "windows-sys 0.61.2",
 ]
 
@@ -5194,7 +5194,7 @@ dependencies = [
  "itertools 0.12.1",
  "libcryptsetup-rs",
  "mockall 0.13.1",
- "nix 0.24.3",
+ "nix 0.31.3",
  "parking_lot",
  "prometheus",
  "rand 0.8.6",
@@ -5329,7 +5329,7 @@ dependencies = [
  "macaddr",
  "memchr",
  "mockall 0.13.1",
- "nix 0.24.3",
+ "nix 0.31.3",
  "prometheus",
  "regex",
  "sev_host",
@@ -5356,7 +5356,7 @@ dependencies = [
  "ic_os_logging",
  "indoc 1.0.9",
  "network",
- "nix 0.24.3",
+ "nix 0.31.3",
  "serde",
  "serde_json",
  "tracing",
@@ -6372,7 +6372,7 @@ dependencies = [
  "ic-types",
  "lmdb-rkv",
  "lmdb-rkv-sys",
- "nix 0.24.3",
+ "nix 0.31.3",
  "prometheus",
  "prost",
  "rand 0.8.6",
@@ -6654,7 +6654,7 @@ dependencies = [
  "mockall 0.13.1",
  "moka",
  "nftables",
- "nix 0.24.3",
+ "nix 0.31.3",
  "rand 0.8.6",
  "rate-limits-api",
  "ratelimit",
@@ -7061,7 +7061,7 @@ dependencies = [
  "libc",
  "memory_tracker",
  "mockall 0.13.1",
- "nix 0.24.3",
+ "nix 0.31.3",
  "num-traits",
  "object 0.37.3",
  "once_cell",
@@ -9412,7 +9412,7 @@ dependencies = [
  "maplit",
  "memory_tracker",
  "more-asserts",
- "nix 0.24.3",
+ "nix 0.31.3",
  "num-traits",
  "pretty_assertions",
  "prometheus",
@@ -13363,7 +13363,7 @@ dependencies = [
  "ic-types",
  "ic-xnet-payload-builder",
  "libc",
- "nix 0.24.3",
+ "nix 0.31.3",
  "num_cpus",
  "pprof",
  "predicates",
@@ -13518,7 +13518,7 @@ dependencies = [
  "libc",
  "maplit",
  "more-asserts",
- "nix 0.24.3",
+ "nix 0.31.3",
  "phantom_newtype",
  "prometheus",
  "proptest",
@@ -13654,7 +13654,7 @@ dependencies = [
  "ic-rosetta-api",
  "ic-types",
  "icp-ledger",
- "nix 0.24.3",
+ "nix 0.31.3",
  "rand 0.8.6",
  "reqwest",
  "rosetta-core",
@@ -14570,7 +14570,7 @@ dependencies = [
  "ic-validate-eq",
  "ic-wasm-types",
  "maplit",
- "nix 0.24.3",
+ "nix 0.31.3",
  "parking_lot",
  "prometheus",
  "proptest",
@@ -14694,7 +14694,7 @@ dependencies = [
  "ic-test-utilities-privileges",
  "lazy_static",
  "libc",
- "nix 0.24.3",
+ "nix 0.31.3",
  "phantom_newtype",
  "prost",
  "rand 0.8.6",
@@ -14786,7 +14786,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "macaddr",
- "nix 0.24.3",
+ "nix 0.31.3",
  "num_cpus",
  "on_wire",
  "phantom_newtype",
@@ -14910,7 +14910,7 @@ dependencies = [
  "ic-types-cycles",
  "ic-universal-canister",
  "lazy_static",
- "nix 0.24.3",
+ "nix 0.31.3",
  "rusty-fork",
  "serde",
  "serde_cbor",
@@ -15071,7 +15071,7 @@ name = "ic-test-utilities-privileges"
 version = "0.9.0"
 dependencies = [
  "ic-test-utilities-privileges-macros",
- "nix 0.24.3",
+ "nix 0.31.3",
  "tempfile",
 ]
 
@@ -15193,7 +15193,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
- "nix 0.24.3",
+ "nix 0.31.3",
  "once_cell",
  "rand 0.8.6",
  "registry-canister",
@@ -15788,7 +15788,7 @@ dependencies = [
  "ic-xnet-uri",
  "maplit",
  "mockall 0.13.1",
- "nix 0.24.3",
+ "nix 0.31.3",
  "prometheus",
  "proptest",
  "rand 0.8.6",
@@ -16127,7 +16127,7 @@ dependencies = [
  "devicemapper",
  "gpt",
  "loopdev-3",
- "nix 0.24.3",
+ "nix 0.31.3",
  "partition_tools",
  "rand 0.8.6",
  "sys-mount",
@@ -17913,15 +17913,6 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
-name = "memoffset"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
@@ -17957,7 +17948,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "memmap2",
- "nix 0.24.3",
+ "nix 0.31.3",
  "phantom_newtype",
  "proptest",
  "rayon",
@@ -18451,18 +18442,6 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.24.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
-dependencies = [
- "bitflags 1.3.2",
- "cfg-if",
- "libc",
- "memoffset 0.6.5",
-]
-
-[[package]]
-name = "nix"
 version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
@@ -18470,7 +18449,7 @@ dependencies = [
  "bitflags 2.11.0",
  "cfg-if",
  "libc",
- "memoffset 0.9.1",
+ "memoffset",
 ]
 
 [[package]]
@@ -18499,14 +18478,15 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.31.2"
+version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d0705320c1e6ba1d912b5e37cf18071b6c2e9b7fa8215a1e8a7651966f5d3"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
 dependencies = [
  "bitflags 2.11.0",
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
@@ -19259,7 +19239,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "mockall 0.13.1",
- "nix 0.24.3",
+ "nix 0.31.3",
  "pem",
  "prometheus",
  "prost",

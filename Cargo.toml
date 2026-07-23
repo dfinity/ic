@@ -778,7 +778,7 @@ mockall = "0.13.0"
 mockito = "1.6.1"
 more-asserts = "0.3.1"
 nftables = "0.4"
-nix = { version = "0.24.3", features = ["ptrace", "user", "signal"] }
+nix = { version = "0.31.3", features = ["fs", "ioctl", "mman", "net", "process", "ptrace", "signal", "socket", "time", "user", "zerocopy"] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 num_cpus = "1.16.0"

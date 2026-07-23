@@ -499,7 +499,9 @@ impl SandboxManager {
         // we can mmap the data without mutating the fd.
         let initial_state_data: InitialStateData = {
             use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
-            use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
+            use std::num::NonZeroUsize;
+            use std::os::unix::fs::MetadataExt;
+            use std::ptr::NonNull;
 
             let mmap_size = initial_state_data.metadata().unwrap().size() as usize;
             if mmap_size == 0 {
@@ -511,16 +513,16 @@ impl SandboxManager {
                 // `File`. We're mapping privately so the data won't be mutated.
                 let mmap_ptr = unsafe {
                     mmap(
-                        std::ptr::null_mut(),
-                        mmap_size,
+                        None,
+                        NonZeroUsize::new(mmap_size).expect("mmap length must be non-zero"),
                         ProtFlags::PROT_READ,
                         MapFlags::MAP_PRIVATE,
-                        initial_state_data.as_raw_fd(),
+                        &initial_state_data,
                         0,
                     )
                 }
                 .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {err:?}"))
-                    as *mut u8;
+                .as_ptr() as *mut u8;
                 // SAFETY: We've mmapped `mmap_size` and gotten a succesful
                 // reply at address `mmap_ptr` and the mapping is readonly
                 // private.
@@ -529,8 +531,12 @@ impl SandboxManager {
                 // SAFETY: `mmap_ptr`/`mmap_size` are exactly what `mmap` returned;
                 // `data` is not used past this point.
                 unsafe {
-                    munmap(mmap_ptr as *mut std::ffi::c_void, mmap_size)
-                        .expect("Unable to unmap initial state data file");
+                    munmap(
+                        NonNull::new(mmap_ptr as *mut std::ffi::c_void)
+                            .expect("mmap pointer is null"),
+                        mmap_size,
+                    )
+                    .expect("Unable to unmap initial state data file");
                 }
                 initial_state_data
             }
