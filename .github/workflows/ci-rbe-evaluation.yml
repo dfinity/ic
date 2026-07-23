@@ -119,7 +119,7 @@ jobs:
 
   infer-bazel-targets:
     name: Infer Bazel Targets
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
     needs: [config]
     steps:
       # calculate which bazel targets may need to be rebuilt
