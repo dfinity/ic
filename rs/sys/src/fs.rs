@@ -622,13 +622,12 @@ pub fn copy_file_range_all(
     mut dst_offset: i64,
     len: usize,
 ) -> Result<(), CopyFileRangeAllError> {
-    use std::os::unix::io::AsRawFd;
     let mut copied_total = 0;
     while copied_total < len {
         let copied = nix::fcntl::copy_file_range(
-            src.as_raw_fd(),
+            src,
             Some(&mut src_offset),
-            dst.as_raw_fd(),
+            dst,
             Some(&mut dst_offset),
             len - copied_total,
         );
