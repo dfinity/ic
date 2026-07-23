@@ -118,8 +118,7 @@ use ic_types::messages::{
     CertificateDelegationFormat, CertificateDelegationMetadata, SignedSenderInfo,
 };
 use ic_types::{
-    CanisterId, Height, NumInstructions, NumberOfNodes, PrincipalId, RegistryVersion, SnapshotId,
-    SubnetId,
+    CanisterId, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpReject,
@@ -3809,8 +3808,6 @@ impl Operation for ProcessCanisterHttpInternal {
                     id,
                     context,
                     socks_proxy_addrs: vec![],
-                    cost_schedule: CanisterCyclesCostSchedule::Normal,
-                    subnet_size: NumberOfNodes::from(sm.nodes.len() as u32),
                 }) {
                     canister_http.pending.insert(id);
                 }
@@ -3985,8 +3982,6 @@ fn process_mock_canister_https_response(
                     id: canister_http_request_id,
                     context: context.clone(),
                     socks_proxy_addrs: vec![],
-                    cost_schedule: CanisterCyclesCostSchedule::Normal,
-                    subnet_size: NumberOfNodes::from(subnet.nodes.len() as u32),
                 })
                 .unwrap();
             let response = loop {
