@@ -201,7 +201,7 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
                 request
             },
             |request| fetch_canister_logs_response_for_bench(sender, canister, request),
-            // The response (up to ~2 MiB) is dropped outside the timed region,
+            // The response (up to ~2 MB) is dropped outside the timed region,
             // with bounded memory across the batch.
             BatchSize::LargeInput,
         );
@@ -405,7 +405,7 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
     {
         // Sanity checks (run once, outside the timed loop) so the benchmarks
         // measure the real read/encode path rather than an error or empty result.
-        // Unfiltered worst case must return a full ~2 MiB response of log data
+        // Unfiltered worst case must return a full ~2 MB response of log data
         // (the response is trimmed to `RESULT_MAX_SIZE`, i.e. 2 MB).
         assert!(fetch_response_len(None, 2 * MIB, (32 * KIB) as usize) > 1_800_000);
         // A match-all by-index filter returns the same records as no filter (the
@@ -514,7 +514,7 @@ pub fn canister_logging_benchmark(c: &mut Criterion) {
         run_bench_fetch_canister_log(&mut group, "fetch:1MiB/msg:100B", MIB, 100, None);
         run_bench_fetch_canister_log(&mut group, "fetch:2MiB/msg:100B", 2 * MIB, 100, None);
         // Worst case for the returned payload size: large (32 KiB, the maximum
-        // `debug_print` size) messages so a single fetch returns a full ~2 MiB
+        // `debug_print` size) messages so a single fetch returns a full ~2 MB
         // response (`RESULT_MAX_SIZE`) of actual log data rather than mostly
         // per-record overhead.
         run_bench_fetch_canister_log(
