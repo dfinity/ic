@@ -262,6 +262,7 @@ members = [
     "rs/nervous_system/governance",
     "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/ids",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
     "rs/nervous_system/instruction_stats_update_attribute",

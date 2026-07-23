@@ -11463,6 +11463,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-ids"
+version = "0.0.1"
+
+[[package]]
 name = "ic-nervous-system-initial-supply"
 version = "0.0.1"
 dependencies = [
@@ -11982,6 +11986,7 @@ dependencies = [
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
+ "ic-nervous-system-ids",
  "ic-nervous-system-linear-map",
  "ic-nervous-system-lock",
  "ic-nervous-system-long-message",
