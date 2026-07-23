@@ -514,7 +514,7 @@ impl SandboxManager {
                 let mmap_ptr = unsafe {
                     mmap(
                         None,
-                        NonZeroUsize::new(mmap_size).expect("mmap length must be non-zero"),
+                        NonZeroUsize::new(mmap_size).expect("`mmap_size` is checked above and is non-zero"),
                         ProtFlags::PROT_READ,
                         MapFlags::MAP_PRIVATE,
                         &initial_state_data,

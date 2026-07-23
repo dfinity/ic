@@ -67,7 +67,7 @@ fn setup(
             None,
             NonZeroUsize::new(memory_pages * PAGE_SIZE).expect("mmap length must be non-zero"),
             ProtFlags::PROT_NONE,
-            MapFlags::MAP_PRIVATE | MapFlags::MAP_ANON,
+            MapFlags::MAP_PRIVATE
         )
         .unwrap()
     }

@@ -38,7 +38,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             None,
             NonZeroUsize::new(PAGE_SIZE).expect("mmap length must be non-zero"),
             ProtFlags::PROT_NONE,
-            MapFlags::MAP_ANON | MapFlags::MAP_PRIVATE,
+            MapFlags::MAP_PRIVATE,
         )
         .unwrap()
     }
@@ -88,7 +88,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
             None,
             NonZeroUsize::new(PAGE_SIZE).expect("mmap length must be non-zero"),
             ProtFlags::PROT_NONE,
-            MapFlags::MAP_ANON | MapFlags::MAP_PRIVATE,
+            MapFlags::MAP_PRIVATE,
         )
         .unwrap()
     }

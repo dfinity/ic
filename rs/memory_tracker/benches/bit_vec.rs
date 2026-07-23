@@ -78,7 +78,7 @@ fn vec_from_mmap(memory_size: usize, page_size: PageSize) {
                 None,
                 NonZeroUsize::new(size).expect("mmap length must be non-zero"),
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                MapFlags::MAP_PRIVATE | MapFlags::MAP_ANON,
+                MapFlags::MAP_PRIVATE,
             )
             .unwrap()
         }
