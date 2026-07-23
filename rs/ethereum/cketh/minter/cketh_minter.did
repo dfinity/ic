@@ -763,7 +763,8 @@ service : (MinterArg) -> {
 
     // Derive and register the ckERC20 deposit address for the caller.
     // The account is derived from the caller's principal and the subaccount in the argument.
-    // Returns the EIP-55 checksummed Ethereum deposit address.
+    // Returns the EIP-55 checksummed deposit address together with `valid_until`, the timestamp
+    // (nanoseconds since the Unix epoch) until which a deposit to it is guaranteed to be noticed.
     deposit_erc20 : (DepositErc20Arg) -> (variant { Ok : DepositErc20Response; Err : DepositErc20Error });
 
     // Retrieve the status of a Eth withdrawal request.

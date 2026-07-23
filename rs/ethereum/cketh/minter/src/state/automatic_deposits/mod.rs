@@ -16,10 +16,14 @@ pub const DEPOSIT_ADDRESS_SCAN_WINDOW: Duration = Duration::from_secs(24 * 60 * 
 // Use 1 transaction per block to a minter-controlled address as a crude upper-bound.
 const MAX_ACTIVE_DEPOSIT_ADDRESSES: NonZeroUsize = NonZeroUsize::new(7_000).unwrap();
 
-/// State machine to handle deposits made to addresses controlled by the minter individually-derived for each user.
-/// This is in particular allows deposits from central exchanges (CEX).
-/// Overall the deposit lifecycle is as follows:
-/// 1. The user deposit request adds the corresponding user-derived address to the watchlist.
+/// Registry of minter-controlled ckERC20 deposit addresses, each derived
+/// individually for a user's account. This in particular enables deposits from
+/// central exchanges (CEX), which send from an address the user does not
+/// control.
+///
+/// A `deposit_erc20` request arms the user-derived address by adding it to a
+/// bounded, time-expiring watchlist. Scanning those addresses and minting the
+/// corresponding ckERC20 is future work (DEFI-2927).
 #[derive(Clone, PartialEq, Debug)]
 pub struct AutomaticDeposits {
     watchlist: TimedSizedMap<Account, DepositRequest>,
