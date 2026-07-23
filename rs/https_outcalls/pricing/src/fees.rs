@@ -19,47 +19,29 @@ use ic_types_cycles::{CompoundCycles, Cycles, CyclesAccountManagerSubnetConfig, 
 // ============================ Base-fee constants ============================
 // Charged up-front for every request by [`base_fee`].
 
-/// Fixed per-request base fee.
 pub const HTTP_REQUEST_BASE_FEE: u128 = 1_000_000;
-/// Fee per request byte.
 pub const HTTP_REQUEST_PER_BYTE_FEE: u128 = 50;
-/// Fully-replicated: fee per subnet node.
 pub const HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE: u128 = 140_000;
-/// Fully-replicated: quadratic (per node squared) fee.
 pub const HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE: u128 = 800;
-/// Flexible/non-replicated: fee per subnet node.
 pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE: u128 = 90_000;
-/// Flexible/non-replicated: consensus fee per (node, response). The base fee
-/// charges it for the `min_responses` required responses; the consensus fee
-/// ([`flexible_initial_spent`]) charges it for each response beyond `min_responses`.
 pub const HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE: u128 = 2_000;
-/// Flexible/non-replicated: consensus fee per response. The base fee charges it
-/// for the `min_responses` required responses; the consensus fee
-/// ([`flexible_initial_spent`]) charges it for each response beyond `min_responses`.
 pub const HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE: u128 = 100_000;
 
 // ========================= Per-replica-fee constants =========================
 // Charged as-you-go by the `PayAsYouGoTracker` in `payg.rs`.
 
-/// Fee per downloaded response byte.
 pub const PER_DOWNLOADED_BYTE_FEE: u128 = 50;
-/// Fee per millisecond of request round-trip time.
 pub const PER_RESPONSE_MS_FEE: u128 = 300;
-/// Divisor applied to transform instructions (priced against the 13-node
-/// reference subnet).
+/// HTTP outcalls are priced consistently against a reference subnet size of 13.
 pub const TRANSFORM_INSTRUCTION_DIVISOR: u128 = 13;
-/// Flexible/non-replicated: gossip fee per transformed response byte per node.
 pub const FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE: u128 = 50;
 
 // ========================== Consensus-fee constants ==========================
 // Charged for including the aggregated response in a block, via
 // [`fully_replicated_initial_spent`] / [`flexible_initial_spent`].
 
-/// Per-node coefficient of the per-response-byte consensus cost.
 const CONSENSUS_PER_NODE_BYTE_FEE: u128 = 10;
-/// Constant coefficient of the per-response-byte consensus cost.
 const CONSENSUS_BYTE_FEE: u128 = 600;
-/// Fixed per-response size overhead added to each flexible response's size term.
 const FLEXIBLE_RESPONSE_SIZE_OVERHEAD: u128 = 181;
 
 // ================================= Base fee =================================
