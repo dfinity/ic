@@ -68,6 +68,9 @@ impl<T> BackwardsCompatible<T, true> {
 }
 
 impl<T, const SETTABLE: bool> BackwardsCompatible<T, SETTABLE> {
+    /// Creates a new `BackwardsCompatible` value with the given inner value. This is only intended
+    /// for use in unit tests, where we would want to be able to fill a field that would not be
+    /// settable yet in production.
     #[doc(hidden)]
     pub const fn new_for_test_only(value: Option<T>) -> Self {
         Self(value)
