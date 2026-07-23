@@ -37,7 +37,7 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
                 ic_cdk_create_canister(
                     CreateCanisterArgument {
                         settings: Some(CanisterSettings {
-                            controllers: Some(vec![ic_cdk::api::id()]),
+                            controllers: Some(vec![ic_cdk::api::canister_self()]),
                             ..CanisterSettings::default()
                         }),
                     },
@@ -159,7 +159,7 @@ pub struct UpdateSettingsArgs {
 
 #[update]
 async fn update_settings(args: UpdateSettingsArgs) {
-    let controllers = vec![ic_cdk::api::id(); args.controllers_number as usize];
+    let controllers = vec![ic_cdk::api::canister_self(); args.controllers_number as usize];
     let futures: Vec<_> = args
         .canister_ids
         .into_iter()

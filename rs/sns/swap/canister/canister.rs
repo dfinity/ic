@@ -4,7 +4,8 @@
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::{api::time, caller, id, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::api::{canister_self, msg_caller, time};
+use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
@@ -80,13 +81,13 @@ fn swap_mut() -> &'static mut Swap {
 
 /// Returns caller as PrincipalId
 fn caller_principal_id() -> PrincipalId {
-    PrincipalId::from(caller())
+    PrincipalId::from(msg_caller())
 }
 
 /// This canister id
 fn this_canister_id() -> CanisterId {
     // We know the CanisterId is always valid.
-    CanisterId::unchecked_from_principal(PrincipalId::from(id()))
+    CanisterId::unchecked_from_principal(PrincipalId::from(canister_self()))
 }
 
 // =============================================================================
@@ -494,7 +495,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_cycle_balance",
-        ic_cdk::api::canister_balance() as f64,
+        ic_cdk::api::canister_cycle_balance() as f64,
         "Cycle balance on the sale canister.",
     )?;
     w.encode_gauge(

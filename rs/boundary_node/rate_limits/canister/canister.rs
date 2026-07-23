@@ -34,7 +34,7 @@ const REPLICATED_QUERY_METHOD: &str = "get_config";
 #[inspect_message]
 fn inspect_message() {
     // In order for this hook to succeed, accept_message() must be invoked.
-    let caller_id: Principal = ic_cdk::api::caller();
+    let caller_id: Principal = ic_cdk::api::msg_caller();
     let called_method = ic_cdk::api::call::method_name();
 
     let (has_full_access, has_full_read_access) = with_canister_state(|state| {
@@ -109,7 +109,7 @@ fn post_upgrade(init_arg: InitArg) {
 /// The response includes the config containing all rate-limit rules and the JSON schema version needed for decoding the rules.
 #[query]
 fn get_config(version: Option<Version>) -> GetConfigResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = ic_cdk::api::msg_caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = ConfigConfidentialityFormatter;
@@ -122,7 +122,7 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
 /// Retrieves a specific rate-limit rule by its ID, applying confidentiality formatting, based on caller's access level and rule's confidentiality status
 #[query]
 fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = ic_cdk::api::msg_caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = RuleConfidentialityFormatter;
@@ -135,7 +135,7 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
 /// Retrieves all rate-limit rules associated with a specific incident ID, applying confidentiality formatting, based on caller's access level and rule's confidentiality status
 #[query]
 fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = ic_cdk::api::msg_caller();
     let response = with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter = RuleConfidentialityFormatter;
@@ -151,7 +151,7 @@ fn get_rules_by_incident_id(incident_id: IncidentId) -> GetRulesByIncidentIdResp
 /// This update method includes authorization check and metrics collection.
 #[update]
 fn add_config(config: InputConfig) -> AddConfigResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = ic_cdk::api::msg_caller();
     let current_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
@@ -169,7 +169,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 /// making them viewable by the public. It includes authorization check and metrics collection.
 #[update]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
-    let caller_id = ic_cdk::api::caller();
+    let caller_id = ic_cdk::api::msg_caller();
     let disclose_time = ic_cdk::api::time();
     with_canister_state(|state| {
         let access_resolver = AccessLevelResolver::new(caller_id, state.clone());

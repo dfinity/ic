@@ -58,7 +58,7 @@ struct CanisterApiImpl {}
 impl CanisterApi for CanisterApiImpl {
     /// See CanisterApi::local_canister_id
     fn local_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::canister_self()))
     }
 
     /// See CanisterApi::create_canister
@@ -154,7 +154,7 @@ impl CanisterApi for CanisterApiImpl {
     }
 
     fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
-        let available = ic_cdk::api::canister_balance();
+        let available = ic_cdk::api::canister_cycle_balance() as u64;
 
         if available < required_cycles {
             return Err(format!(
@@ -253,7 +253,7 @@ impl CanisterApiImpl {
 }
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(ic_cdk::caller())
+    PrincipalId::from(ic_cdk::api::msg_caller())
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.

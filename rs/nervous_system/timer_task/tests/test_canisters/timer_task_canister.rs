@@ -86,7 +86,7 @@ fn get_metrics() -> String {
 fn __self_call() {}
 
 async fn invoke_self_call() {
-    let () = ic_cdk::call(ic_cdk::api::id(), "__self_call", ())
+    let () = ic_cdk::call(ic_cdk::api::canister_self(), "__self_call", ())
         .await
         .unwrap();
 }

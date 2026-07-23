@@ -374,7 +374,7 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse 
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 method: "transform".to_string(),
-                principal: ic_cdk::id(),
+                principal: ic_cdk::api::canister_self(),
             }),
             context,
         }),
@@ -387,7 +387,7 @@ async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse 
 
 #[update]
 async fn whoami() -> String {
-    ic_cdk::id().to_string()
+    ic_cdk::api::canister_self().to_string()
 }
 
 #[update]
@@ -464,7 +464,7 @@ async fn execute_many_instructions(n: u64) {
 
 #[update]
 async fn canister_log(msg: String) {
-    ic_cdk::print(msg);
+    ic_cdk::api::debug_print(msg);
 }
 
 // time

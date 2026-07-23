@@ -181,7 +181,7 @@ async fn get_sns_canisters_summary(
     let update_canister_list = request.update_canister_list.unwrap_or(false);
     // Only governance can set this parameter to true
     if update_canister_list {
-        assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+        assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
     }
 
     let canister_env = CanisterEnvironment {};
@@ -191,7 +191,7 @@ async fn get_sns_canisters_summary(
         &create_ledger_client(),
         &canister_env,
         update_canister_list,
-        PrincipalId(ic_cdk::api::id()),
+        PrincipalId(ic_cdk::api::canister_self()),
     )
     .await
 }
@@ -206,7 +206,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     STATE.with(|sns_root_canister| {
         sns_root_canister
             .borrow()
-            .list_sns_canisters(PrincipalId(ic_cdk::api::id()))
+            .list_sns_canisters(PrincipalId(ic_cdk::api::canister_self()))
     })
 }
 
@@ -215,7 +215,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
 #[update]
 fn change_canister(request: ChangeCanisterRequest) {
     log!(INFO, "change_canister");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
 
     // We do not want the reply to the Candid change_canister method call to be
     // blocked on performing the canister change, because that could cause a
@@ -254,7 +254,7 @@ fn change_canister(request: ChangeCanisterRequest) {
 #[update]
 async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtensionResponse {
     log!(INFO, "register_extension");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
 
     let canister_id = match PrincipalId::try_from(request) {
         Ok(canister_id) => canister_id,
@@ -263,7 +263,7 @@ async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtens
         }
     };
 
-    let root_canister_id = PrincipalId(ic_cdk::api::id());
+    let root_canister_id = PrincipalId(ic_cdk::api::canister_self());
 
     let result = SnsRootCanister::register_extension(
         &STATE,
@@ -289,7 +289,7 @@ async fn clean_up_failed_register_extension(
     request: CleanUpFailedRegisterExtensionRequest,
 ) -> CleanUpFailedRegisterExtensionResponse {
     log!(INFO, "clean_up_failed_register_extension");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
 
     let result = SnsRootCanister::clean_up_failed_register_extension(
         &STATE,
@@ -324,14 +324,14 @@ async fn register_dapp_canister(
     request: RegisterDappCanisterRequest,
 ) -> RegisterDappCanisterResponse {
     log!(INFO, "register_dapp_canister");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
     let request = RegisterDappCanistersRequest {
         canister_ids: request.canister_id.into_iter().collect(),
     };
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        PrincipalId(ic_cdk::api::id()),
+        PrincipalId(ic_cdk::api::canister_self()),
         request,
     )
     .await;
@@ -354,11 +354,11 @@ async fn register_dapp_canisters(
     request: RegisterDappCanistersRequest,
 ) -> RegisterDappCanistersResponse {
     log!(INFO, "register_dapp_canisters");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
     SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        PrincipalId(ic_cdk::api::id()),
+        PrincipalId(ic_cdk::api::canister_self()),
         request,
     )
     .await
@@ -387,8 +387,8 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
     SnsRootCanister::set_dapp_controllers(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        PrincipalId(ic_cdk::api::id()),
-        PrincipalId(ic_cdk::api::caller()),
+        PrincipalId(ic_cdk::api::canister_self()),
+        PrincipalId(ic_cdk::api::msg_caller()),
         &request,
     )
     .await
@@ -400,7 +400,7 @@ async fn manage_dapp_canister_settings(
     request: ManageDappCanisterSettingsRequest,
 ) -> ManageDappCanisterSettingsResponse {
     log!(INFO, "manage_dapp_canister_settings");
-    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::msg_caller()));
 
     STATE.with_borrow(|state| {
         state.manage_dapp_canister_settings(

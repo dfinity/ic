@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, println, query, update};
+use ic_cdk::api::msg_caller;
+use ic_cdk::{init, post_upgrade, pre_upgrade, println, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
@@ -178,7 +179,7 @@ impl Environment for CanisterEnv {
 
     /// Return the canister's ID.
     fn canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::id()))
+        CanisterId::unchecked_from_principal(PrincipalId::from(ic_cdk::api::canister_self()))
     }
 
     /// Return the canister version.
@@ -205,7 +206,7 @@ fn now_seconds() -> u64 {
 }
 
 fn caller() -> PrincipalId {
-    PrincipalId::from(cdk_caller())
+    PrincipalId::from(msg_caller())
 }
 
 #[init]

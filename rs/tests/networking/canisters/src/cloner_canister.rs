@@ -32,7 +32,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     let canister_id = create_canister(
         CreateCanisterArgument {
             settings: Some(CanisterSettings {
-                controllers: Some(vec![ic_cdk::api::id()]),
+                controllers: Some(vec![ic_cdk::api::canister_self()]),
                 ..CanisterSettings::default()
             }),
         },
