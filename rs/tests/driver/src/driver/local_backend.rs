@@ -1058,9 +1058,10 @@ impl LocalBackend {
         // `user <uid>` tags the TAP as owned by the driver's effective uid,
         // letting QEMU — which runs as that same uid — open it via
         // `-netdev tap,ifname=...,script=no,downscript=no` by owner match, so
-        // QEMU itself needs no capability. Recreating it fresh (delete first)
-        // keeps this idempotent across a re-used VM (e.g. `vm().kill()` +
-        // `vm().start()`).
+        // opening the device relies on no QEMU capability (even though QEMU does
+        // inherit the ambient net caps — see `raise_ambient_net_caps`). Recreating
+        // it fresh (delete first) keeps this idempotent across a re-used VM (e.g.
+        // `vm().kill()` + `vm().start()`).
         //
         // We pass the numeric effective uid, not a username: the kernel resolves
         // the `TUNSETOWNER` uid through the driver's private user namespace, whose
