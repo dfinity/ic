@@ -967,13 +967,13 @@ crate.spec(
 crate.spec(
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv",
-    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
+    rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f",
 )
 crate.spec(
     default_features = False,
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv-sys",
-    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
+    rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f",
 )
 crate.spec(
     package = "local-ip-address",
