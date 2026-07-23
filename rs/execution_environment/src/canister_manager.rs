@@ -24,7 +24,6 @@ use ic_cycles_account_manager::{
 use ic_embedders::wasm_utils::decoding::decode_wasm;
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::SubnetAvailableExecutionMemoryChange;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
@@ -627,7 +626,6 @@ impl CanisterManager {
                 new_canister_memory_usage,
                 canister.memory_usage(),
                 &subnet_memory_saturation,
-                None,
             )?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
             let limit = requested_limit.get() as usize;
@@ -718,11 +716,10 @@ impl CanisterManager {
                     // settings and ran `cycles_and_memory_usage_checks_and_updates` for
                     // any memory usage change resulting from the update. Recording the
                     // `settings_change` canister history entry is therefore the only
-                    // memory change past that point, so the old and new memory usage
-                    // (excluding the change itself) are equal; the change is accounted
-                    // for via the `canister_history_change` argument.
-                    let memory_usage = canister.memory_usage();
-                    let canister_history_change = canister.add_canister_change(
+                    // memory change past that point, so the new memory usage (read after
+                    // recording it) differs from the old one exactly by that entry.
+                    let old_memory_usage = canister.memory_usage();
+                    let _ = canister.add_canister_change(
                         timestamp_nanos,
                         origin,
                         CanisterChangeDetails::settings_change(
@@ -730,16 +727,16 @@ impl CanisterManager {
                             new_environment_variables_hash,
                         ),
                     );
+                    let new_memory_usage = canister.memory_usage();
                     self.cycles_and_memory_usage_checks_and_updates(
                         subnet_cycles_config,
                         canister,
                         sender,
                         NumInstructions::new(0),
                         round_limits,
-                        memory_usage,
-                        memory_usage,
+                        new_memory_usage,
+                        old_memory_usage,
                         &subnet_memory_saturation,
-                        Some(canister_history_change),
                     )?;
                 }
             }
@@ -749,26 +746,25 @@ impl CanisterManager {
             // `validate_and_update_canister_settings` above already applied the
             // settings and ran `cycles_and_memory_usage_checks_and_updates` for any
             // memory usage change resulting from the update. Recording the
-            // `controllers_change` canister history entry is therefore the only
-            // memory change past that point, so the old and new memory usage
-            // (excluding the change itself) are equal; the change is accounted for
-            // via the `canister_history_change` argument.
-            let memory_usage = canister.memory_usage();
-            let canister_history_change = canister.add_canister_change(
+            // `controllers_change` canister history entry is therefore the only memory
+            // change past that point, so the new memory usage (read after recording it)
+            // differs from the old one exactly by that entry.
+            let old_memory_usage = canister.memory_usage();
+            let _ = canister.add_canister_change(
                 timestamp_nanos,
                 origin,
                 CanisterChangeDetails::controllers_change(new_controllers),
             );
+            let new_memory_usage = canister.memory_usage();
             self.cycles_and_memory_usage_checks_and_updates(
                 subnet_cycles_config,
                 canister,
                 sender,
                 NumInstructions::new(0),
                 round_limits,
-                memory_usage,
-                memory_usage,
+                new_memory_usage,
+                old_memory_usage,
                 &subnet_memory_saturation,
-                Some(canister_history_change),
             )?;
         }
         /*
@@ -1024,15 +1020,15 @@ impl CanisterManager {
         // `cycles_and_memory_usage_checks_and_updates`.
         let rejects = uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
 
-        // Memory usage after dropping the execution state etc., but before the
-        // `CanisterCodeUninstall` canister history change, which is accounted for
-        // via the `canister_history_change` argument.
-        let new_memory_usage = canister.memory_usage();
-        let canister_history_change = canister.add_canister_change(
+        // Record the `CanisterCodeUninstall` canister history change, then read the
+        // memory usage after dropping the execution state etc. *and* recording the
+        // history entry, i.e. the overall memory usage including all of the above.
+        let _ = canister.add_canister_change(
             time,
             origin,
             CanisterChangeDetails::CanisterCodeUninstall,
         );
+        let new_memory_usage = canister.memory_usage();
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
             canister,
@@ -1042,7 +1038,6 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
-            Some(canister_history_change),
         )?;
 
         Ok(CanisterManagerResponse {
@@ -1598,15 +1593,16 @@ impl CanisterManager {
         // `validate_and_update_canister_settings` above already applied the settings
         // and ran `cycles_and_memory_usage_checks_and_updates` for any memory usage
         // change resulting from the update. Recording the `canister_creation` canister
-        // history entry is therefore the only memory change past that point, so the old
-        // and new memory usage (excluding the change itself) are equal; the change is
-        // accounted for via the `canister_history_change` argument.
-        let new_memory_usage = new_canister.memory_usage();
-        let canister_history_change = new_canister.add_canister_change(
+        // history entry is therefore the only memory change past that point, so the new
+        // memory usage (read after recording it) differs from the old one exactly by
+        // that entry.
+        let old_memory_usage = new_canister.memory_usage();
+        let _ = new_canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
         );
+        let new_memory_usage = new_canister.memory_usage();
         if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
             state.get_own_subnet_cycles_config(),
             &mut new_canister,
@@ -1614,9 +1610,8 @@ impl CanisterManager {
             NumInstructions::new(0),
             round_limits,
             new_memory_usage,
-            new_memory_usage,
+            old_memory_usage,
             &subnet_memory_saturation,
-            Some(canister_history_change),
         ) {
             *round_limits = round_limits_snapshot;
             return Err(err);
@@ -1843,7 +1838,6 @@ impl CanisterManager {
             new_memory_usage,
             memory_usage,
             resource_saturation,
-            None,
         )?;
 
         let hash = validated_chunk.hash().to_vec();
@@ -1890,7 +1884,6 @@ impl CanisterManager {
             new_memory_usage,
             memory_usage,
             resource_saturation,
-            None,
         )?;
 
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
@@ -1930,6 +1923,15 @@ impl CanisterManager {
     // 2. The canister is not frozen due to its new memory usage.
     // 3. Cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
     // 4. Storage reservation cycles can be reserved.
+    //
+    // `new_memory_usage` must be the canister's memory usage *including* any canister
+    // history recorded by the operation (canister history is accounted for like any
+    // other canister memory). Callers that record a canister history entry therefore
+    // read `new_memory_usage` after recording it, so that the subnet available
+    // execution memory, freezing threshold, and storage reservation below all account
+    // for it over the true total memory usage (computing the allocated bytes just
+    // once, rather than folding an already-allocated history delta back through
+    // `allocated_bytes()`).
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
@@ -1940,21 +1942,7 @@ impl CanisterManager {
         new_memory_usage: NumBytes,
         old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
-        canister_history_change: Option<SubnetAvailableExecutionMemoryChange>,
     ) -> Result<(), CanisterManagerError> {
-        // Fold the canister history recorded by the operation into the new memory
-        // used, so that the subnet available execution memory, freezing threshold,
-        // and storage reservation below all take it into account.
-        let new_memory_usage = match canister_history_change {
-            Some(SubnetAvailableExecutionMemoryChange::Allocated(bytes)) => {
-                new_memory_usage.saturating_add(&bytes)
-            }
-            Some(SubnetAvailableExecutionMemoryChange::Deallocated(bytes)) => {
-                new_memory_usage.saturating_sub(&bytes)
-            }
-            None => new_memory_usage,
-        };
-
         // Update subnet available memory:
         // - return deallocated bytes back to subnet available memory;
         // - deduct allocated bytes from subnet available memory.
@@ -2143,31 +2131,30 @@ impl CanisterManager {
 
         // Optionally uninstall the canister's code atomically after taking the
         // snapshot, recording the corresponding `CanisterCodeUninstall` canister
-        // history entry. `new_memory_usage` is read from the canister state after
-        // taking the snapshot and (optionally) uninstalling the code, so it reflects
-        // both, but before the history entry is recorded, so it excludes it (the
-        // entry is folded in via the `canister_history_change` argument below).
-        let (deleted_call_context_responses, new_memory_usage, canister_history_change) =
-            if uninstall_code {
-                let rejects =
-                    uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
-                let new_memory_usage = canister.memory_usage();
-                let canister_history_change = canister.add_canister_change(
-                    time,
-                    origin,
-                    CanisterChangeDetails::CanisterCodeUninstall,
-                );
-                (rejects, new_memory_usage, Some(canister_history_change))
-            } else {
-                (vec![], canister.memory_usage(), None)
-            };
+        // history entry.
+        let deleted_call_context_responses = if uninstall_code {
+            let rejects =
+                uninstall_canister(&self.log, canister, time, Arc::clone(&self.fd_factory));
+            let _ = canister.add_canister_change(
+                time,
+                origin,
+                CanisterChangeDetails::CanisterCodeUninstall,
+            );
+            rejects
+        } else {
+            vec![]
+        };
+
+        // Memory usage after taking the snapshot, optionally uninstalling the code,
+        // and recording the optional `CanisterCodeUninstall` canister history entry,
+        // i.e. the overall memory usage including all of the above.
+        let new_memory_usage = canister.memory_usage();
 
         // A single cycles-and-memory-usage check-and-update accounting for the new
         // snapshot allocation, the optional uninstall deallocation, and the optional
-        // `CanisterCodeUninstall` canister history entry (folded in via the
-        // `canister_history_change` argument). The subnet available memory is updated
-        // together with all of the above. Any partial state mutations above are rolled
-        // back by the caller if this check fails.
+        // `CanisterCodeUninstall` canister history entry. The subnet available memory
+        // is updated together with all of the above. Any partial state mutations above
+        // are rolled back by the caller if this check fails.
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
             canister,
@@ -2177,7 +2164,6 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
-            canister_history_change,
         )?;
         round_limits.instructions -= as_round_instructions(instructions);
 
@@ -2474,7 +2460,6 @@ impl CanisterManager {
             scheduler_state,
             canister.canister_snapshots.clone(),
         );
-        let new_memory_usage = new_canister.memory_usage();
 
         // If the snapshot was uploaded, make sure the snapshot's memory hook status matches the actual status.
         // Otherwise, the snapshot is invalid.
@@ -2502,11 +2487,11 @@ impl CanisterManager {
         };
 
         // Increment canister version and record the `load_snapshot` canister
-        // history change; its memory is accounted for below via the
-        // `canister_history_change` argument (`new_memory_usage` was captured
-        // before the change).
+        // history change; its memory is accounted for below by reading
+        // `new_memory_usage` after recording it (i.e. the overall memory usage
+        // including the loaded snapshot and the history entry).
         new_canister.system_state.bump_canister_version();
-        let canister_history_change = new_canister.add_canister_change(
+        let _ = new_canister.add_canister_change(
             time,
             origin,
             CanisterChangeDetails::load_snapshot(
@@ -2517,6 +2502,7 @@ impl CanisterManager {
                 from_canister_id,
             ),
         );
+        let new_memory_usage = new_canister.memory_usage();
 
         // Compute cycles for instructions spent for memory overhead when loading a snapshot of the canister.
         let instructions_for_snapshot_size: NumInstructions =
@@ -2531,7 +2517,6 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
-            Some(canister_history_change),
         )?;
         round_limits.instructions -= as_round_instructions(instructions_for_snapshot_size);
 
@@ -2609,7 +2594,6 @@ impl CanisterManager {
             new_memory_usage,
             memory_usage,
             resource_saturation,
-            None,
         )?;
 
         canister.canister_snapshots.remove(delete_snapshot_id);
@@ -2839,7 +2823,6 @@ impl CanisterManager {
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
-            None,
         )?;
         round_limits.instructions -= as_round_instructions(instructions);
 
@@ -3010,7 +2993,6 @@ impl CanisterManager {
                     new_memory_usage,
                     memory_usage,
                     resource_saturation,
-                    None,
                 )?;
 
                 if let Err(()) = canister

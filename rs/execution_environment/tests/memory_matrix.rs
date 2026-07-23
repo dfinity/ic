@@ -211,16 +211,15 @@ where
         MemoryAllocation::BestEffort => 0,
         MemoryAllocation::Small => 1,
         MemoryAllocation::CrossedDuringTest => {
-            // Things to consider when chosing offset:
-            // - chunk store changes memory usage by 1 MiB at most
-            // - canister logging changes memory by 1 OS-page of 4 KiB
+            // The offset places the memory allocation strictly between the memory
+            // usage before and after the operation, so that the operation "crosses"
+            // it. It must therefore be smaller than the smallest memory usage change
+            // across all scenarios. The smallest such change is a single canister
+            // history entry (recorded e.g. by `take_snapshot_and_uninstall`), so the
+            // offset is kept well below one `CanisterChange`.
+            let memory_allocation_crossed_offset = 64;
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
-                    // Increasing memory is often done on already installed
-                    // canister, which does not increase canister log, so
-                    // we don't have to account for that.
-                    let memory_allocation_crossed_offset = 512 * KIB;
-                    // What increases memory usage: chunk upload, installing code (canister logs).
                     memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
@@ -232,10 +231,6 @@ where
                     _ => memory_usage_after_setup.get(),
                 },
                 MemoryUsageChange::Decrease => {
-                    // Decreasing memory is often done by uninstalling canister
-                    // which also clears canister logs, so we need to account for that.
-                    let memory_allocation_crossed_offset = 2 * KIB;
-                    // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
                     assert_ge!(
                         memory_usage_after_setup.get(),
                         memory_allocation_crossed_offset
@@ -353,33 +348,16 @@ where
     let final_history_memory_usage = test
         .canister_state(canister_id)
         .canister_history_memory_usage();
-    // Primary quantities: the canister's actual memory usage and allocated bytes
-    // after the operation, *including* any canister history it recorded. Canister
-    // history is accounted for like any other canister memory (it decrements the
-    // subnet available execution memory, reserves storage cycles, and counts
-    // towards the freezing threshold), so these drive all the cycles-and-memory
-    // accounting checks below.
+    // The canister's actual memory usage and allocated bytes after the operation,
+    // *including* any canister history it recorded. Canister history is accounted
+    // for like any other canister memory (it decrements the subnet available
+    // execution memory, reserves storage cycles, and counts towards the freezing
+    // threshold), so the `Scenario` classification and all the cycles-and-memory
+    // accounting checks below reflect the *overall* change, canister history
+    // included.
     let final_memory_usage = test.canister_state(canister_id).memory_usage();
     let final_allocated_bytes = test.canister_state(canister_id).memory_allocated_bytes();
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
-    // Secondary quantities used only for the scenario-classification assertions
-    // (memory usage change, allocated bytes, crossed memory allocation): the memory
-    // usage *excluding* the canister history recorded by the operation itself. This
-    // lets e.g. `take_snapshot_and_uninstall` be classified as
-    // `MemoryUsageChange::None` even though it records a `CanisterCodeUninstall`
-    // history entry.
-    let final_memory_usage_without_history = match scenario_params.scenario {
-        Scenario::OtherManagement => {
-            final_memory_usage - final_history_memory_usage + initial_history_memory_usage
-        }
-        _ => final_memory_usage,
-    };
-    let final_allocated_bytes_without_history = test
-        .canister_state(canister_id)
-        .memory_allocation()
-        .allocated_bytes(final_memory_usage_without_history);
-    let newly_allocated_bytes_without_history =
-        final_allocated_bytes_without_history.saturating_sub(&initial_allocated_bytes);
     // Note. The cycles prepayment in `install_code` and `load_canister_snapshot` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
     // The cycles prepayment for response callback execution is charged during setup
@@ -416,38 +394,40 @@ where
         let expected_reserved_cycles = test
             .expected_storage_reservation_cycles(&subnet_memory_saturation, newly_allocated_bytes);
         assert_eq!(newly_reserved_cycles, expected_reserved_cycles);
-        // The memory usage changed as expected (excluding the canister history
+        // The memory usage changed as expected (including the canister history
         // recorded by the operation itself).
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
-                assert_lt!(initial_memory_usage, final_memory_usage_without_history)
+                assert_lt!(initial_memory_usage, final_memory_usage)
             }
             MemoryUsageChange::None => {
-                assert_eq!(initial_memory_usage, final_memory_usage_without_history)
+                assert_eq!(initial_memory_usage, final_memory_usage)
             }
             MemoryUsageChange::Decrease => {
-                assert_gt!(initial_memory_usage, final_memory_usage_without_history)
+                assert_gt!(initial_memory_usage, final_memory_usage)
             }
         };
         if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
+            // The short-threshold invariant (reserved cycles dominate the freezing
+            // limit) only holds when the operation's new allocation is large relative
+            // to the canister's pre-existing memory usage.
             // Exception: `IncreaseLogAndMemoryAllocation` with `MemoryAllocation::Large`
             // reserves cycles only for 128 KiB (memory allocation increase)
             // while the freezing limit is based on the pre-existing 80 GiB allocation,
             // so the invariant may not hold.
-            // Exception: an `OtherManagement` operation with `MemoryUsageChange::None`
-            // makes no "real" net allocation and only records a small canister history
-            // entry; the cycles reserved for those few bytes are dominated by the
-            // freezing limit based on the pre-existing memory usage, so the invariant
-            // may not hold.
+            // Exception: an operation whose only new allocation is a small canister
+            // history entry (e.g. `take_snapshot_and_uninstall`) reserves cycles for
+            // just those few bytes, while the freezing limit is based on the much
+            // larger pre-existing memory usage, so the invariant may not hold.
+            let canister_history_bytes = final_history_memory_usage - initial_history_memory_usage;
             let skip_short_invariant =
                 (matches!(
                     scenario_params.scenario,
                     Scenario::IncreaseLogAndMemoryAllocation
                 ) && matches!(run_params.memory_allocation, MemoryAllocation::Large))
-                    || (matches!(scenario_params.scenario, Scenario::OtherManagement)
-                        && matches!(scenario_params.memory_usage_change, MemoryUsageChange::None));
+                    || newly_allocated_bytes <= canister_history_bytes;
             match run_params.freezing_threshold {
                 FreezingThreshold::Long => {
                     assert_gt!(freezing_limit_cycles, newly_reserved_cycles);
@@ -460,23 +440,17 @@ where
         }
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
-                assert_le!(
-                    initial_allocated_bytes,
-                    final_allocated_bytes_without_history
-                );
+                assert_le!(initial_allocated_bytes, final_allocated_bytes);
                 match scenario_params.scenario {
                     // New bytes are always allocated because memory allocation increases.
                     Scenario::IncreaseLogAndMemoryAllocation => {
-                        assert_lt!(
-                            initial_allocated_bytes,
-                            final_allocated_bytes_without_history
-                        )
+                        assert_lt!(initial_allocated_bytes, final_allocated_bytes)
                     }
                     _ => {
                         // New bytes are *allocated* if and only if the memory usage is not covered
                         // by memory allocation, i.e., if memory allocation is "large".
                         assert_eq!(
-                            newly_allocated_bytes_without_history.get() > 0,
+                            newly_allocated_bytes.get() > 0,
                             !matches!(run_params.memory_allocation, MemoryAllocation::Large)
                         )
                     }
@@ -486,36 +460,21 @@ where
             // only change if memory allocation changes.
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert_lt!(
-                        initial_allocated_bytes,
-                        final_allocated_bytes_without_history
-                    )
+                    assert_lt!(initial_allocated_bytes, final_allocated_bytes)
                 }
                 Scenario::DecreaseMemoryAllocation => {
                     // If memory usage exceeds memory allocation, then
                     // no bytes are deallocated when memory allocation decreases.
                     if initial_memory_usage.get() > memory_allocation {
-                        assert_eq!(
-                            initial_allocated_bytes,
-                            final_allocated_bytes_without_history
-                        );
+                        assert_eq!(initial_allocated_bytes, final_allocated_bytes);
                     } else {
-                        assert_gt!(
-                            initial_allocated_bytes,
-                            final_allocated_bytes_without_history
-                        );
+                        assert_gt!(initial_allocated_bytes, final_allocated_bytes);
                     }
                 }
-                _ => assert_eq!(
-                    initial_allocated_bytes,
-                    final_allocated_bytes_without_history
-                ),
+                _ => assert_eq!(initial_allocated_bytes, final_allocated_bytes),
             },
             MemoryUsageChange::Decrease => {
-                assert_ge!(
-                    initial_allocated_bytes,
-                    final_allocated_bytes_without_history
-                )
+                assert_ge!(initial_allocated_bytes, final_allocated_bytes)
             }
         };
         // Ensure that memory allocation is "crossed" if applicable.
@@ -539,15 +498,8 @@ where
                         assert_gt!(current_memory_usage, current_memory_allocation)
                     }
                     _ => {
-                        // Memory allocation is set to match the memory usage after setup,
-                        // but canister history memory usage can increase even in case of `MemoryUsageChange::None`.
-                        let canister_history_memory_usage_increase =
-                            final_history_memory_usage - initial_history_memory_usage;
-                        assert_eq!(
-                            current_memory_usage,
-                            current_memory_allocation
-                                + canister_history_memory_usage_increase.get()
-                        );
+                        // Memory allocation is set to match the memory usage after setup.
+                        assert_eq!(current_memory_usage, current_memory_allocation);
                     }
                 },
                 MemoryUsageChange::Decrease => {
@@ -1133,7 +1085,10 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
     };
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
-        memory_usage_change: MemoryUsageChange::None,
+        // Taking the snapshot adds exactly what uninstalling the code frees (the
+        // canister has no custom sections), so the only net memory change is the
+        // `CanisterCodeUninstall` canister history entry: an overall increase.
+        memory_usage_change: MemoryUsageChange::Increase,
         setup,
         op,
     };
