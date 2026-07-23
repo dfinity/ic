@@ -27,13 +27,13 @@ impl UpdateStandardEngineReplicaVersion {
         // Replica version IDs must be plausible full git commit IDs.
         if !is_potential_full_git_commit_id(new_replica_version_id) {
             return Err(invalid_proposal_error(&format!(
-                "new_replica_version_id is not a 40 character hexidecimal string (it was {:?})",
+                "new_replica_version_id is not a 40-character hexadecimal string (it was {:?})",
                 new_replica_version_id,
             )));
         }
         if !is_potential_full_git_commit_id(old_replica_version_id) {
             return Err(invalid_proposal_error(&format!(
-                "old_replica_version_id is not a 40 character hexidecimal string (it was {:?})",
+                "old_replica_version_id is not a 40-character hexadecimal string (it was {:?})",
                 old_replica_version_id,
             )));
         }

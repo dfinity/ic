@@ -49,14 +49,14 @@ fn test_invalid_update_standard_engine_replica_version() {
             new_replica_version_id: "g@rbage".to_string(),
             ..VALID_UPDATE.clone()
         },
-        &["new_replica_version_id", "40", "hexidecimal"],
+        &["new_replica_version_id", "40", "hexadecimal"],
     );
     assert_invalid_update(
         UpdateStandardEngineReplicaVersion {
             old_replica_version_id: "not_a_git_commit_id".to_string(),
             ..VALID_UPDATE.clone()
         },
-        &["old_replica_version_id", "40", "hexidecimal"],
+        &["old_replica_version_id", "40", "hexadecimal"],
     );
 
     // Replica versions must differ.
