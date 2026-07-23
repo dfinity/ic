@@ -733,10 +733,6 @@ impl ReplicatedStateInvariants {
             .maximum_state_size_or(self.default_subnet_memory_capacity);
 
         // Check that subnet memory usage invariant still holds after the round execution.
-        // Canister history memory usage is accounted for in `SubnetAvailableMemory`
-        // during a round like any other canister memory, so the total canister memory
-        // allocated bytes (which includes canister history) must not exceed the subnet
-        // memory capacity.
         if total_canister_memory_allocated_bytes > subnet_memory_capacity {
             self.subnet_memory_usage_invariant.inc();
             warn!(

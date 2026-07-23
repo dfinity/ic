@@ -2105,8 +2105,7 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size.get().into());
 
         // Create new snapshot (capturing the canister state before the optional
-        // uninstall below). This can fail (e.g. the canister has no execution
-        // state) before any canister state is mutated.
+        // uninstall below).
         let new_snapshot =
             CanisterSnapshot::from_canister(canister, time).map_err(CanisterManagerError::from)?;
 
@@ -2147,8 +2146,7 @@ impl CanisterManager {
         // A single cycles-and-memory-usage check-and-update accounting for the new
         // snapshot allocation, the optional uninstall deallocation, and the optional
         // `CanisterCodeUninstall` canister history entry. The subnet available memory
-        // is updated together with all of the above. Any partial state mutations above
-        // are rolled back by the caller if this check fails.
+        // is updated together with all of the above.
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
             canister,
