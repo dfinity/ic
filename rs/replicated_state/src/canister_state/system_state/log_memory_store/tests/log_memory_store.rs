@@ -528,7 +528,7 @@ fn fetch_canister_logs_response_within_limit() {
         // overhead), so the trim keeps precisely that one record and the returned size hits
         // the cap exactly — not merely below it. This pins the trim boundary: an off-by-one
         // that dropped the boundary record (`>` vs `>=`) would leave `returned_size` short
-        // of the cap and fail here. And because the stored per-record overhead (40 B)
+        // of the cap and fail here. And although the stored per-record overhead (40 B)
         // exceeds the Candid-encoded fixed fields (16 B), that maximal record's encoding
         // still spills past `RESULT_MAX_SIZE` once content plus framing are counted — the
         // exact case the 4 KiB `max_response` margin exists for, so assert the margin is
