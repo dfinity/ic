@@ -156,10 +156,7 @@ pub fn setup(env: TestEnv) {
         // all mainnet canister IDs (where canisters can be created at
         // specified IDs), and a disjoint one for the allocation of new
         // canister IDs. Without this, no canister ID range in the test
-        // environment would contain the usual Exchange Rate canister ID, and
-        // we would have to pad the routing table by creating 32 bogus
-        // single-node Application subnets to make a system subnet end up with
-        // the canister ID range containing that ID.
+        // environment would contain the usual Exchange Rate canister ID.
         .use_specified_ids_allocation_range()
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
@@ -576,6 +573,9 @@ fn install_nns_canisters(env: &TestEnv) {
     // sequentially starting from 0; instead, the NNS canisters must be
     // explicitly created at their usual canister IDs.
     let mut installer = NnsInstallationBuilder::new()
+        // This causes NNS canisters to be created with their well-known
+        // production IDs. In order for this to work,
+        // use_specified_ids_allocation_range must also be used.
         .at_ids()
         .with_subnet_rental_canister()
         .with_exchange_rate_canister();
