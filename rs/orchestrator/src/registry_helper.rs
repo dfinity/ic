@@ -241,9 +241,18 @@ impl RegistryHelper {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<ReplicaVersion> {
-        let subnet_record = self.get_subnet_record(subnet_id, registry_version)?;
-        ReplicaVersion::try_from(subnet_record.replica_version_id.as_ref())
-            .map_err(OrchestratorError::ReplicaVersionParseError)
+        let replica_version = self
+            .registry_client
+            .get_replica_version(subnet_id, registry_version)?;
+
+        let Some(replica_version) = replica_version else {
+            return Err(OrchestratorError::SubnetMissingError(
+                subnet_id,
+                registry_version,
+            ));
+        };
+
+        Ok(replica_version)
     }
 
     /// Get the recalled replica versions of the given subnet in the given registry
@@ -403,3 +412,7 @@ impl RegistryHelper {
         result.ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id, version))
     }
 }
+
+#[cfg(test)]
+#[path = "./registry_helper_tests.rs"]
+mod tests;

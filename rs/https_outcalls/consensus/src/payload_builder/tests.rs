@@ -876,7 +876,7 @@ fn non_replicated_request_response_coming_in_gossip_payload_created() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Insert the context in the replicated state
@@ -950,7 +950,7 @@ fn non_replicated_request_with_extra_share_includes_only_delegated_share() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Insert the context in the replicated state
@@ -1025,7 +1025,7 @@ fn non_replicated_share_is_ignored_if_content_is_missing() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
@@ -1079,7 +1079,7 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1392,7 +1392,7 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader.
@@ -1463,7 +1463,7 @@ fn validate_payload_fails_for_response_with_no_signatures() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader used by the validator.
@@ -1541,7 +1541,7 @@ fn validate_payload_fails_when_non_replicated_proof_is_for_fully_replicated_requ
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // Inject this context into the state reader.
@@ -1621,7 +1621,7 @@ fn validate_payload_fails_for_duplicate_non_replicated_response() {
             refund_status: ic_types::canister_http::RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         };
 
         // 2. Inject this context into the state reader
@@ -4938,17 +4938,20 @@ pub(crate) fn inject_request_contexts(
     inject_request_contexts_with_cost_schedule(payload_builder, contexts, None);
 }
 
-/// Like [`inject_request_contexts`], but also pins the validating replica's own
-/// subnet cost schedule. When `cost_schedule` is `Some`, the state's own subnet
-/// topology is set to it, so `get_own_cost_schedule()` returns that value during
-/// validation; when `None`, the default (`Normal`) is left in place.
+/// Like [`inject_request_contexts`], but also overrides the cost schedule pinned
+/// in each injected request context. When `cost_schedule` is `Some`, every
+/// context's `cost_schedule` is set to that value (the single source of truth
+/// used during validation); when `None`, the contexts are left unchanged.
 pub(crate) fn inject_request_contexts_with_cost_schedule(
     payload_builder: &mut CanisterHttpPayloadBuilderImpl,
     contexts: impl IntoIterator<Item = (CallbackId, CanisterHttpRequestContext)>,
     cost_schedule: Option<CanisterCyclesCostSchedule>,
 ) {
     let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
-    for (cb, ctx) in contexts {
+    for (cb, mut ctx) in contexts {
+        if let Some(cost_schedule) = cost_schedule {
+            ctx.cost_schedule = cost_schedule;
+        }
         init_state
             .metadata
             .subnet_call_context_manager
@@ -5008,7 +5011,7 @@ pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestCo
         refund_status: ic_types::canister_http::RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
-        cost_schedule: None,
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 
@@ -5035,7 +5038,7 @@ fn flexible_request_context(
         refund_status: ic_types::canister_http::RefundStatus::default(),
         registry_version: RegistryVersion::from(1),
         subnet_size: NumberOfNodes::from(13),
-        cost_schedule: None,
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     }
 }
 

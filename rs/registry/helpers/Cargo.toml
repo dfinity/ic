@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }

@@ -27,14 +27,11 @@ use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, ZERO_REGISTRY
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord,
-    dc::v1::DataCenterRecord,
+    api_boundary_node::v1::ApiBoundaryNodeRecord, dc::v1::DataCenterRecord,
     node_operator::v1::NodeOperatorRecord,
     provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::SubnetListRecord,
-    unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
+    replica_version::v1::ReplicaVersionRecord, routing_table::v1::RoutingTable as PbRoutingTable,
+    subnet::v1::SubnetListRecord, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_protobuf::registry::{
     dc::v1::Gps,
@@ -190,15 +187,15 @@ impl TopologyConfig {
 
     /// Set node operator on nodes that don't already have one set.
     pub fn with_initial_node_operator(mut self, node_operator: PrincipalId) -> Self {
-        for (_, sc) in self.subnets.iter_mut() {
-            for (_, nc) in sc.membership.iter_mut() {
+        for sc in self.subnets.values_mut() {
+            for nc in sc.membership.values_mut() {
                 if nc.node_operator_principal_id.is_none() {
                     nc.node_operator_principal_id = Some(node_operator);
                 }
             }
         }
 
-        for (_, nc) in self.unassigned_nodes.iter_mut() {
+        for nc in self.unassigned_nodes.values_mut() {
             if nc.node_operator_principal_id.is_none() {
                 nc.node_operator_principal_id = Some(node_operator);
             }
@@ -654,38 +651,13 @@ impl IcConfig {
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurements: self.guest_launch_measurements,
         };
+
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
             make_replica_version_key(self.initial_replica_version_id.clone()).as_ref(),
             version,
             replica_version_record,
-        );
-
-        // TOOD: Commit d91a23fe (#10495, "Drop final active blessed version components")
-        // stopped writing the `blessed_replica_versions` registry key in `ic-prep`.
-        // However, the registry canister currently **deployed on mainnet** still reads this key
-        // when processing `ReviseElectedGuestosVersions` proposals and panics if it is absent:
-        //
-        //   'BlessedReplicaVersions key not found in registry', rs/registry/canister/src/mutations/do_revise_elected_replica_versions.rs:186:10
-        //
-        // This broke all system_test_nns tests which use the mainnet NNS and attempt an upgrade.
-        // To fix the following inserts a "blessed_replica_versions" entry into the registry.
-        // Remove this once the mainnet canister has been upgraded not to read it anymore.
-        let initial_replica_version = self.initial_replica_version_id.to_string();
-        let blessed_replica_versions_record = BlessedReplicaVersions {
-            blessed_version_ids: vec![initial_replica_version],
-        };
-        write_registry_entry(
-            &data_provider,
-            self.target_dir.as_path(),
-            // Written inline (rather than via a helper in ic_registry_keys) for
-            // backwards compatibility only: the registry canister no longer
-            // maintains the blessed replica versions list, but mainnet versions
-            // of it still expect this key to be present.
-            "blessed_replica_versions",
-            version,
-            blessed_replica_versions_record,
         );
 
         let provisional_whitelist = match self.provisional_whitelist {

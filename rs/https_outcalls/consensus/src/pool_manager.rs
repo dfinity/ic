@@ -16,17 +16,15 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, NodeId, NumBytes, NumberOfNodes, RegistryVersion, ReplicaVersion, canister_http::*,
-    crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig,
+    CountBytes, NodeId, NumBytes, ReplicaVersion, canister_http::*, crypto::Signed,
+    messages::CallbackId, replica_config::ReplicaConfig,
 };
-use ic_types_cycles::CanisterCyclesCostSchedule;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -246,26 +244,6 @@ impl CanisterHttpPoolManagerImpl {
             .collect::<Vec<String>>()
     }
 
-    /// Reads the subnet's pricing inputs (number of nodes and cycles cost
-    /// schedule) from the registry at `registry_version`. Returns `None` if
-    /// they cannot be determined.
-    fn pricing_inputs(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Option<(NumberOfNodes, CanisterCyclesCostSchedule)> {
-        let record = self
-            .registry_client
-            .get_subnet_record(self.replica_config.subnet_id, registry_version)
-            .ok()
-            .flatten()?;
-        let subnet_size = u32::try_from(record.membership.len()).ok()?;
-        let cost_schedule =
-            CanisterCyclesCostScheduleProto::try_from(record.canister_cycles_cost_schedule)
-                .ok()
-                .map(CanisterCyclesCostSchedule::from)?;
-        Some((NumberOfNodes::from(subnet_size), cost_schedule))
-    }
-
     /// Returns whether `node_id` belongs to the committee responsible for the
     /// given request, evaluated at the registry version pinned in the request
     /// context.
@@ -346,20 +324,6 @@ impl CanisterHttpPoolManagerImpl {
             }
 
             if !request_ids_already_made.contains(id) {
-                let Some((subnet_size, cost_schedule)) =
-                    self.pricing_inputs(context.registry_version)
-                else {
-                    warn!(
-                        every_n_seconds => 10,
-                        self.log,
-                        "Skipping canister http request {} because the subnet size or cost \
-                         schedule could not be determined at registry version {}",
-                        id,
-                        context.registry_version
-                    );
-                    continue;
-                };
-
                 if let Err(err) = self
                     .http_adapter_shim
                     .lock()
@@ -368,8 +332,6 @@ impl CanisterHttpPoolManagerImpl {
                         id: *id,
                         context: context.clone(),
                         socks_proxy_addrs: socks_proxy_addrs.clone(),
-                        cost_schedule,
-                        subnet_size,
                     })
                 {
                     warn!(
@@ -488,8 +450,6 @@ impl CanisterHttpPoolManagerImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts;
-        // TODO: Use cost schedule from the context instead, once it exists.
-        let cost_schedule = state.get_own_cost_schedule();
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
@@ -506,14 +466,16 @@ impl CanisterHttpPoolManagerImpl {
             .filter_map(|artifact| {
                 let share = &artifact.share;
 
+                // Reject shares from different replica versions
+                if !is_current_protocol_version(share.content.replica_version()) {
+                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                }
+
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(share.content.replica_version()) {
-                        true => Some(CanisterHttpChangeAction::HandleInvalid(
-                            share.clone(),
-                            "Redundant share".into(),
-                        )),
-                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
-                    };
+                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                        share.clone(),
+                        "Redundant share".into(),
+                    ));
                 }
 
                 let Some(context) = active_contexts.get(&share.content.id()) else {
@@ -524,10 +486,7 @@ impl CanisterHttpPoolManagerImpl {
                 // single replica is allowed to consume. Free subnets charge
                 // nothing, so their spend (used only for cost accounting) may
                 // exceed the zero allowance, up to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
-                let spend_limit = max_http_outcall_spend(
-                    cost_schedule,
-                    context.refund_status.per_replica_allowance,
-                );
+                let spend_limit = context.max_http_outcall_spend();
                 if share.content.spent() > spend_limit {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
@@ -712,22 +671,18 @@ pub mod test {
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
-    use ic_replicated_state::metadata_state::SubnetTopology;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
-    use ic_replicated_state::metadata_state::testing::{
-        NetworkTopologyTesting, SystemMetadataTesting,
-    };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::CountBytes;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
-        Height, NodeId, NumBytes, RegistryVersion,
+        Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
     };
-    use ic_types_cycles::Cycles;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use mockall::predicate::*;
     use mockall::*;
     use std::{collections::BTreeMap, str::FromStr};
@@ -793,7 +748,7 @@ pub mod test {
             refund_status: RefundStatus::default(),
             registry_version: RegistryVersion::from(1),
             subnet_size: NumberOfNodes::from(13),
-            cost_schedule: None,
+            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -997,6 +952,110 @@ pub mod test {
 
                 let changes = pool_manager.validate_shares(&canister_http_pool);
 
+                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
+            })
+        });
+    }
+
+    #[test]
+    fn test_removal_of_wrong_version_share_without_existing_validated_share() {
+        // A share signed under a different replica version must be removed from
+        // the unvalidated pool even when no share for the same (signer,
+        // callback) is present in the validated pool yet.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = test_request_context(
+                    Replication::FullyReplicated,
+                    PricingVersion::Legacy,
+                    None,
+                );
+
+                // A context must be present so that `next_callback_id` is 1 and
+                // the share for callback 0 is considered (id < next_callback_id).
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                // A share from a committee member with a valid signature that
+                // would otherwise be validated, but which carries an outdated
+                // replica version.
+                let response_metadata = CanisterHttpResponseReceipt {
+                    metadata: CanisterHttpResponseMetadata {
+                        id: CallbackId::from(0),
+                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        content_size: 0,
+                        is_reject: false,
+                        replica_version: ReplicaVersion::from_str("outdated_version").unwrap(),
+                    },
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                };
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let share = Signed {
+                    content: response_metadata,
+                    signature,
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                // Note: the validated pool is intentionally left empty, so the
+                // (signer, callback) slot is free.
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: CanisterHttpResponseArtifact {
+                        share,
+                        response: None,
+                    },
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(&canister_http_pool);
+
+                // The share is dropped silently (removed, not marked invalid).
+                assert_eq!(changes.len(), 1);
                 assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
         });
@@ -2417,8 +2476,6 @@ pub mod test {
                         id: CallbackId::from(7),
                         context: request.clone(),
                         socks_proxy_addrs: vec![],
-                        cost_schedule: CanisterCyclesCostSchedule::Normal,
-                        subnet_size: NumberOfNodes::from(4),
                     }))
                     .times(1)
                     .return_const(Ok(()));
@@ -3244,7 +3301,9 @@ pub mod test {
 
                 // A free subnet grants a zero per-replica allowance (nothing is
                 // charged), yet the reported spend is still accumulated for cost
-                // accounting and may exceed that allowance.
+                // accounting and may exceed that allowance. The `Free` cost
+                // schedule is pinned in the request context, raising the spend
+                // limit to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
                 let request = CanisterHttpRequestContext {
                     refund_status: RefundStatus {
                         refundable_cycles: Cycles::new(0),
@@ -3252,6 +3311,7 @@ pub mod test {
                         refunded_cycles: Cycles::new(0),
                         refunding_nodes: BTreeSet::new(),
                     },
+                    cost_schedule: CanisterCyclesCostSchedule::Free,
                     ..test_request_context(
                         Replication::FullyReplicated,
                         PricingVersion::Legacy,
@@ -3259,21 +3319,8 @@ pub mod test {
                     )
                 };
 
-                // Put the validating replica's own subnet on a `Free` cost
-                // schedule so `get_own_cost_schedule()` returns `Free`, raising
-                // the spend limit to `MAX_HTTP_OUTCALL_SPEND_FREE_SUBNET`.
-                let mut state =
+                let state =
                     state_with_pending_http_calls(BTreeMap::from([(CallbackId::from(0), request)]));
-                let own_subnet_id = state.metadata.own_subnet_id;
-                state.metadata.modify_network_topology(|network_topology| {
-                    network_topology.subnets_mut().insert(
-                        own_subnet_id,
-                        SubnetTopology {
-                            cost_schedule: CanisterCyclesCostSchedule::Free,
-                            ..Default::default()
-                        },
-                    );
-                });
 
                 state_manager
                     .get_mut()

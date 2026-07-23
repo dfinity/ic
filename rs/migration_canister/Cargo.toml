@@ -17,7 +17,7 @@ ic-limits = { path = "../limits" }
 ic-stable-structures = "0.7.0"
 itertools = { workspace = true }
 ic-management-canister-types = { workspace = true }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }

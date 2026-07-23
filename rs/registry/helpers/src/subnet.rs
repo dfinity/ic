@@ -1,4 +1,5 @@
 use crate::deserialize_registry_value;
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
@@ -7,13 +8,15 @@ use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
         replica_version::v1::ReplicaVersionRecord,
+        standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
         subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord, SubnetType},
     },
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
     DEFAULT_INITIAL_DKG_SUBNET_ID_KEY, ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key,
-    make_node_record_key, make_replica_version_key, make_subnet_list_record_key,
+    make_node_record_key, make_replica_version_key,
+    make_standard_engine_replica_version_record_key, make_subnet_list_record_key,
     make_subnet_record_key,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -155,8 +158,32 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<bool>;
 
-    /// Return the [ReplicaVersion] as recorded in the subnet record
-    /// at the given height.
+    /// Except for CloudEngine subnets, this just returns the value in the
+    /// [SubnetRecord]'s `replica_version_id` field, which is generally the git
+    /// commit ID from which Replica was built.
+    ///
+    /// But when the subnet is of type CloudEngine, `replica_version_id` can be
+    /// blank, which means that the engine is following
+    /// [StandardEngineReplicaVersionRecord]. Non-blank `replica_version_id`
+    /// means the same thing as in the non-CloudEngine case.
+    ///
+    /// Err is returned in various cases, but we call out a few in particular,
+    /// because the error type is unintuitive: DecodeError is returned in the
+    /// following cases:
+    ///
+    /// 1. CloudEngine with blank replica_version_id, but no
+    ///    StandardEngineReplicaVersionRecord.
+    ///
+    /// 2. Non-CloudEngine with blank replica_version_id.
+    ///
+    /// 3. Replica version ID string cannot be converted to a ReplicaVersion
+    ///    object. This means that the string contains some illegal characters.
+    ///    In particular, only latin letters, digits, dot, dash, and underscore
+    ///    are allowed (as of July 2026).
+    ///
+    /// In practice, such data problems are prevented from happening elsewhere
+    /// (specifically, Registry's invariants checks), but we mention them here
+    /// for completeness.
     fn get_replica_version(
         &self,
         subnet_id: SubnetId,
@@ -411,8 +438,76 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         version: RegistryVersion,
     ) -> RegistryClientResult<ReplicaVersion> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
-            .and_then(|record| ReplicaVersion::try_from(record.replica_version_id.as_ref()).ok()))
+        let Some(subnet_record) = deserialize_registry_value::<SubnetRecord>(bytes)? else {
+            return Ok(None);
+        };
+
+        let str_to_result = |replica_version_id: &str,
+                             case: &str|
+         -> Result<Option<ReplicaVersion>, RegistryClientError> {
+            let ok = ReplicaVersion::try_from(replica_version_id)
+                // This wouldn't happen in practice (because of validation that
+                // happens elsewhere), but we handle it here anyway, because
+                // bugs.
+                .map_err(|err| DecodeError {
+                    error: format!(
+                        "get_replica_version({subnet_id}): {case}: '{replica_version_id}' is not a valid \
+                        ReplicaVersion: {err}"
+                    ),
+                })?;
+
+            Ok(Some(ok))
+        };
+
+        // Specified directly in SubnetRecord.
+        if !subnet_record.replica_version_id.is_empty() {
+            return str_to_result(
+                &subnet_record.replica_version_id,
+                "specified directly in SubnetRecord",
+            );
+        }
+
+        // Only engines are allowed to have a blank replica_version_id (i.e.
+        // follow the standard engine deployment). Any other subnet type
+        // with a blank replica_version_id indicates a real inconsistency.
+        if subnet_record.subnet_type() != SubnetType::CloudEngine {
+            return Err(DecodeError {
+                error: format!(
+                    "get_replica_version(): subnet {subnet_id} has a blank replica_version_id, \
+                     but its subnet_type is {:?}, not CloudEngine",
+                    subnet_record.subnet_type()
+                ),
+            });
+        }
+
+        let Some(standard_engine_record) =
+            get_standard_engine_replica_version_record(self, version)?
+        else {
+            return Err(DecodeError {
+                error: format!(
+                    "get_replica_version(): subnet {subnet_id} has a blank replica_version_id, \
+                     but no StandardEngineReplicaVersionRecord exists to resolve it"
+                ),
+            });
+        };
+
+        // Decide whether to take new or old version, based on our upgrade
+        // priority vs. deployment_progress.
+        let priority =
+            engine_upgrade_priority(subnet_id, &standard_engine_record.new_replica_version_id);
+        let resolved_replica_version_id = if priority <= standard_engine_record.deployment_progress
+        {
+            standard_engine_record.new_replica_version_id
+        } else {
+            standard_engine_record.old_replica_version_id
+        };
+
+        // At this point, resolved_replica_version_id should be a git commit ID
+        // in the ic repo. This just converts it from a raw string.
+        str_to_result(
+            &resolved_replica_version_id,
+            "using standard engine replica version",
+        )
     }
 
     fn get_replica_version_record(
@@ -531,6 +626,36 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     }
 }
 
+fn get_standard_engine_replica_version_record<T: RegistryClient + ?Sized>(
+    client: &T,
+    version: RegistryVersion,
+) -> RegistryClientResult<StandardEngineReplicaVersionRecord> {
+    let bytes = client.get_value(&make_standard_engine_replica_version_record_key(), version);
+    deserialize_registry_value::<StandardEngineReplicaVersionRecord>(bytes)
+}
+
+/// Computes an engine's upgrade priority, a pseudo-random real/floating point
+/// number in the closed interval [0.0, 1.0].
+///
+/// When an engine's upgrade priority <= deployment_progress, the engine takes
+/// the standard new replica version (otherwise, it takes the old one).
+///
+/// Based on 2 things (their text/display representations, for consistency):
+///
+/// 1. the engine's ID
+/// 2. the new replica version
+fn engine_upgrade_priority(subnet_id: SubnetId, new_replica_version_id: &str) -> f64 {
+    let mut hasher = Sha256::new_with_context(&DomainSeparationContext::new("upgrade priority"));
+    hasher.write(new_replica_version_id.as_bytes());
+    hasher.write(subnet_id.to_string().as_bytes());
+    let digest = hasher.finish();
+
+    let first_8_bytes = <[u8; 8]>::try_from(&digest[0..8]).unwrap();
+    let priority_int = u64::from_le_bytes(first_8_bytes);
+
+    priority_int as f64 / u64::MAX as f64
+}
+
 pub fn get_node_ids_from_subnet_record(
     subnet: &SubnetRecord,
 ) -> Result<Vec<NodeId>, PrincipalIdBlobParseError> {
@@ -632,10 +757,11 @@ impl<T: RegistryClient + ?Sized> SubnetTransportRegistry for T {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_types::PrincipalId;
-    use std::sync::Arc;
+    use std::{str::FromStr, sync::Arc};
 
     fn node_id(id: u64) -> NodeId {
         NodeId::from(PrincipalId::new_node_test_id(id))
@@ -724,6 +850,243 @@ mod tests {
             .get_replica_version_record(subnet_id, version)
             .unwrap();
         assert_eq!(result, Some(replica_version_record))
+    }
+
+    #[test]
+    fn engine_priority_matches_hand_computed_value() {
+        // Step 1: Prepare the world. Constructed directly from its known
+        // text representation, so this is correct by construction.
+        let subnet_id =
+            SubnetId::from(PrincipalId::from_str("y6zu2-uqdaa-aaaaa-aaaap-yai").unwrap());
+
+        // Step 2: Run the code under test.
+        let priority =
+            engine_upgrade_priority(subnet_id, "eb3ab997954f2a91db8a42f84132cf37078d481c");
+
+        // Step 3: Verify result(s). Value independently computed (via
+        // Python's hashlib.sha256, not this crate's own code) over
+        // len(domain) || domain || "eb3ab997954f2a91db8a42f84132cf37078d481c" || subnet_id.to_string(),
+        // where domain = "upgrade priority". This confirms engine_upgrade_priority
+        // implements the specified recipe exactly, not just some other
+        // deterministic-but-wrong one.
+        assert!((priority - 0.211_377).abs() < 1e-6, "got {priority}");
+    }
+
+    #[test]
+    fn engine_replica_version_selection() {
+        // Step 1: Prepare the world.
+
+        // The first two subnets in Registry use the standard engine replica
+        // version by having a blank replica_version_id.
+        let id_dead = subnet_id(0xDEAD);
+        let id_beef = subnet_id(0xBEEF);
+        let priority_dead = engine_upgrade_priority(id_dead, "new");
+        let priority_beef = engine_upgrade_priority(id_beef, "new");
+        let (low_subnet_id, high_subnet_id) = if priority_dead < priority_beef {
+            (id_dead, id_beef)
+        } else {
+            (id_beef, id_dead)
+        };
+
+        let data_provider = ProtoRegistryDataProvider::new();
+
+        // Insert the first two subnets.
+        for subnet_id in [low_subnet_id, high_subnet_id] {
+            data_provider
+                .add(
+                    &make_subnet_record_key(subnet_id),
+                    RegistryVersion::from(2),
+                    Some(SubnetRecord {
+                        replica_version_id: "".to_string(),
+                        subnet_type: SubnetType::CloudEngine as i32,
+                        ..Default::default()
+                    }),
+                )
+                .unwrap();
+        }
+
+        // The third subnet overrides, does not use the standard engine replica
+        // version.
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(0xCAFE)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "override".to_string(),
+                    subnet_type: SubnetType::CloudEngine as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        // Standard engine replica version.
+        assert_ne!(priority_dead, priority_beef);
+        let deployment_progress = (priority_dead + priority_beef) / 2.0;
+        data_provider
+            .add(
+                &make_standard_engine_replica_version_record_key(),
+                RegistryVersion::from(2),
+                Some(StandardEngineReplicaVersionRecord {
+                    new_replica_version_id: "new".to_string(),
+                    old_replica_version_id: "old".to_string(),
+                    deployment_progress,
+                }),
+            )
+            .unwrap();
+
+        // From the Registry data assembled above, create a RegistryClient.
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let low_priority_result = registry
+            .get_replica_version(low_subnet_id, RegistryVersion::from(2))
+            .unwrap();
+        let high_priority_result = registry
+            .get_replica_version(high_subnet_id, RegistryVersion::from(2))
+            .unwrap();
+        let override_result = registry
+            .get_replica_version(subnet_id(0xCAFE), RegistryVersion::from(2))
+            .unwrap();
+
+        // Step 3: Verify result(s).
+        assert_eq!(
+            low_priority_result,
+            Some(ReplicaVersion::try_from("new").unwrap())
+        );
+        assert_eq!(
+            high_priority_result,
+            Some(ReplicaVersion::try_from("old").unwrap())
+        );
+        assert_eq!(
+            override_result,
+            Some(ReplicaVersion::try_from("override").unwrap())
+        );
+    }
+
+    // This wouldn't occur in practice, so this test is "just" for completeness.
+    #[test]
+    fn blank_replica_version_id_without_standard_engine_record_is_an_error() {
+        // Step 1: Prepare the world. A blank-replica_version_id subnet, but
+        // no StandardEngineReplicaVersionRecord at all.
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(0xBABE)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "".to_string(),
+                    subnet_type: SubnetType::CloudEngine as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry.get_replica_version(subnet_id(0xBABE), RegistryVersion::from(2));
+
+        // Step 3: Verify result(s).
+        assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
+    }
+
+    // This wouldn't occur in practice, so this test is "just" for completeness.
+    #[test]
+    fn blank_replica_version_id_on_a_non_engine_subnet_is_an_error() {
+        // Step 1: Prepare the world.
+        let data_provider = ProtoRegistryDataProvider::new();
+
+        // Add just one normal (i.e. non engine) subnet.
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(0xBABE)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "".to_string(),
+                    subnet_type: SubnetType::Application as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+
+        // Assemble the above Registry data into a RegistryClient.
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry.get_replica_version(subnet_id(0xBABE), RegistryVersion::from(2));
+
+        // Step 3: Verify result(s).
+        assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
+    }
+
+    // This wouldn't occur in practice, so this test is "just" for completeness.
+    #[test]
+    fn replica_version_id_with_illegal_characters_is_an_error() {
+        // Step 1: Prepare the world. A SubnetRecord whose replica_version_id
+        // contains a character that ReplicaVersion::try_from rejects.
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(1)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "G@RBAGE".to_string(),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry.get_replica_version(subnet_id(1), RegistryVersion::from(2));
+
+        // Step 3: Verify result(s).
+        assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
+    }
+
+    // This wouldn't occur in practice, so this test is "just" for completeness.
+    #[test]
+    fn resolved_standard_engine_replica_version_id_with_illegal_characters_is_an_error() {
+        // Step 1: Prepare the world. An engine subnet with a blank
+        // replica_version_id, resolving (via
+        // StandardEngineReplicaVersionRecord) to a new_replica_version_id
+        // that ReplicaVersion::try_from rejects.
+        let data_provider = ProtoRegistryDataProvider::new();
+        data_provider
+            .add(
+                &make_subnet_record_key(subnet_id(1)),
+                RegistryVersion::from(2),
+                Some(SubnetRecord {
+                    replica_version_id: "".to_string(),
+                    subnet_type: SubnetType::CloudEngine as i32,
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        data_provider
+            .add(
+                &make_standard_engine_replica_version_record_key(),
+                RegistryVersion::from(2),
+                Some(StandardEngineReplicaVersionRecord {
+                    new_replica_version_id: "G@RBAGE".to_string(),
+                    old_replica_version_id: "old".to_string(),
+                    // Guarantees priority <= this, so new_replica_version_id
+                    // (the illegal one) is the one that gets resolved.
+                    deployment_progress: 1.0,
+                }),
+            )
+            .unwrap();
+        let registry = FakeRegistryClient::new(Arc::new(data_provider));
+        registry.update_to_latest_version();
+
+        // Step 2: Run the code under test.
+        let result = registry.get_replica_version(subnet_id(1), RegistryVersion::from(2));
+
+        // Step 3: Verify result(s).
+        assert_matches!(result, Err(RegistryClientError::DecodeError { .. }));
     }
 
     #[test]

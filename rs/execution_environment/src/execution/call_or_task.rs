@@ -267,6 +267,7 @@ fn finish_err(
     canister.system_state.apply_ingress_induction_cycles_debit(
         canister.canister_id(),
         round.cost_schedule,
+        true, // strict
         round.log,
         round.counters.charging_from_balance_error,
     );
@@ -485,6 +486,7 @@ impl CallOrTaskHelper {
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.cost_schedule,
+                true, // strict
                 round.log,
                 round.counters.charging_from_balance_error,
             );

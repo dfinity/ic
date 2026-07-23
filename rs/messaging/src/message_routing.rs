@@ -663,7 +663,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         )));
         let stream_handler = Box::new(routing::stream_handler::StreamHandlerImpl::new(
             subnet_id,
-            hypervisor_config.clone(),
             metrics_registry,
             &metrics,
             Arc::clone(&time_in_stream_metrics),
@@ -696,7 +695,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             scheduler,
             demux,
             stream_builder,
-            hypervisor_config.clone(),
             log.clone(),
             metrics.clone(),
         ));
