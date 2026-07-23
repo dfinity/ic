@@ -20,8 +20,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound, Height,
-    MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
+    CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
+    NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
@@ -211,9 +211,6 @@ pub struct CanisterStateBits {
     pub snapshot_visibility: SnapshotVisibility,
     pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
-    pub canister_log: CanisterLog,
-    pub next_canister_log_record_idx: u64,
-    pub log_memory_store_migrated: bool,
     pub log_memory_store_persistent_next_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,

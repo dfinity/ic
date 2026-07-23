@@ -1,7 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_config::execution_environment::{
-    Config as ExecutionConfig, LOG_MEMORY_STORE_FEATURE_ENABLED, TEST_DEFAULT_LOG_MEMORY_USAGE,
-};
+use ic_config::execution_environment::{Config as ExecutionConfig, TEST_DEFAULT_LOG_MEMORY_USAGE};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_execution_environment::units::{KIB, MIB};
@@ -1002,7 +1000,7 @@ fn test_canister_log_in_state_stays_within_limit() {
         let _ = env.execute_ingress(canister_id, "test", vec![]);
     }
     // Expect that the total size of the log in canister state is not zero and less than the limit.
-    let log_size = env.canister_log(canister_id).bytes_used();
+    let log_size = env.canister_log_bytes_used(canister_id);
     assert_lt!(0, log_size);
     assert_le!(log_size, TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
@@ -1747,45 +1745,11 @@ const METRIC_BYTES_OVERHEAD_FACTOR: f64 = 1.05;
 const METRIC_PAYLOAD_SIZE: usize = 1_000;
 
 #[test]
-fn test_metric_canister_log_memory_usage_bytes_from_canister_log() {
-    // When the log memory store feature is disabled, the metric tracks
-    // `CanisterLog.bytes_used()`, which grows with each debug_print.
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
-    const METRIC: &str = "canister_log_memory_usage_bytes_v3";
-    let env = setup_env();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new().build(),
-        wat_canister()
-            .update("test", wat_fn().debug_print(&[37; METRIC_PAYLOAD_SIZE]))
-            .build_wasm(),
-    );
-
-    // Nothing logged yet — sum is zero.
-    let stats = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
-    assert_eq!(stats.sum, 0.0);
-
-    // One debug_print — sum reflects the payload plus small record metadata.
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let stats = fetch_histogram_stats(env.metrics_registry(), METRIC).unwrap();
-    assert_le!(METRIC_PAYLOAD_SIZE as f64, stats.sum);
-    assert_le!(
-        stats.sum,
-        METRIC_BYTES_OVERHEAD_FACTOR * METRIC_PAYLOAD_SIZE as f64
-    );
-}
-
-#[test]
 fn test_metric_canister_log_memory_usage_bytes_from_log_memory_store() {
-    // When the log memory store feature is enabled, the metric tracks
-    // `LogMemoryStore.memory_usage()` — the allocated capacity of the store.
-    // It is set at canister creation from the default limit and stays stable
-    // under debug_print; only a `log_memory_limit` resize changes it.
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
+    // The metric tracks `LogMemoryStore.memory_usage()` — the allocated
+    // capacity of the store. It is set at canister creation from the default
+    // limit and stays stable under debug_print; only a `log_memory_limit`
+    // resize changes it.
     const METRIC: &str = "canister_log_memory_usage_bytes_v3";
     let env = setup_env();
     let canister_id = create_and_install_canister(
@@ -1846,9 +1810,7 @@ fn test_metric_canister_log_delta_memory_usage_bytes() {
 fn test_metric_canister_log_retention_seconds() {
     // Observed by the scheduler at round finalization for canisters that
     // appended log records this round. Retention is the wall-clock span
-    // between the oldest and newest records held in the buffer. Both log
-    // stores (old `CanisterLog` and new `LogMemoryStore`) compute it the
-    // same way — the assertions hold regardless of the feature flag.
+    // between the oldest and newest records held in the `LogMemoryStore`.
     const METRIC: &str = "canister_log_retention_seconds";
     const TIME_ADVANCE: Duration = Duration::from_secs(60);
     let env = setup_env();
@@ -1880,9 +1842,6 @@ fn test_metric_canister_log_resize_duration_seconds() {
     // Observed at the resize call site in `CanisterManager::update_settings`
     // whenever `log_memory_limit` actually changes. The `would_resize` gate
     // ensures no-op resizes (same limit) do not emit samples.
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     const METRIC: &str = "canister_log_resize_duration_seconds";
     let controller = PrincipalId::new_anonymous();
     let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
@@ -2082,9 +2041,6 @@ fn test_canister_log_on_cleanup() {
 
 #[test]
 fn test_default_log_memory_limit_and_size() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let controller = PrincipalId::new_anonymous();
     let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
 
@@ -2101,9 +2057,6 @@ fn test_default_log_memory_limit_and_size() {
 
 #[test]
 fn test_changing_log_memory_limit_and_size() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let controller = PrincipalId::new_anonymous();
     let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
 
@@ -2128,9 +2081,6 @@ fn test_changing_log_memory_limit_and_size() {
 
 #[test]
 fn test_setting_log_memory_limit_to_zero() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let controller = PrincipalId::new_anonymous();
     let (env, canister_id) = setup_with_controller(controller, UNIVERSAL_CANISTER_WASM.to_vec());
 
@@ -2151,9 +2101,6 @@ fn test_setting_log_memory_limit_to_zero() {
 
 #[test]
 fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let expected_memory_usage = 8 * KIB + TEST_DEFAULT_LOG_MEMORY_LIMIT as u64;
     let controller = PrincipalId::new_anonymous();
     let wasm = wat_canister()
@@ -2182,9 +2129,6 @@ fn test_canister_reinstall_clears_logs_but_preserves_log_memory_limit() {
 
 #[test]
 fn test_canister_uninstall_code_clears_logs() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let controller = PrincipalId::new_anonymous();
     let wasm = wat_canister()
         .update("test", wat_fn().debug_print(b"hello"))
@@ -2226,9 +2170,6 @@ fn test_canister_uninstall_code_clears_logs() {
 
 #[test]
 fn test_canister_uninstall_and_install_clears_log() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let controller = PrincipalId::new_anonymous();
     let wasm = wat_canister()
         .update("test", wat_fn().debug_print(b"hello"))
@@ -2260,9 +2201,6 @@ fn test_canister_uninstall_and_install_clears_log() {
 
 #[test]
 fn test_large_delta_log_in_single_execution() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     // Test that a single message execution can generate a large delta log
     // (e.g., ~1.5 MiB) that exceeds the default 4 KiB capacity but is still
     // within the configured canister log memory limit.
@@ -2295,9 +2233,6 @@ fn test_large_delta_log_in_single_execution() {
 
 #[test]
 fn test_canister_resize_up_preserves_logs() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let log_memory_limit = 2 * MIB;
 
     let env = setup_env();
@@ -2348,9 +2283,6 @@ fn test_canister_resize_up_preserves_logs() {
 
 #[test]
 fn test_canister_resize_down_preserves_logs() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let log_memory_limit = 2 * MIB;
 
     let env = setup_env();
@@ -2401,9 +2333,6 @@ fn test_canister_resize_down_preserves_logs() {
 
 #[test]
 fn test_canister_log_resize_deducts_cycles() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let log_memory_limit = 2 * MIB;
 
     let env = setup_env();
@@ -2455,9 +2384,6 @@ fn test_canister_log_resize_deducts_cycles() {
 
 #[test]
 fn test_canister_log_resize_rejected_insufficient_cycles() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let log_memory_limit = 256 * KIB;
 
     let env = setup_env();
@@ -2508,9 +2434,6 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
 
 #[test]
 fn test_canister_log_resize_empty_buffer_minimal_charge() {
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let log_memory_limit = 2 * MIB;
     let env = setup_env();
     let controller = PrincipalId::new_anonymous();
@@ -2549,60 +2472,6 @@ fn test_canister_log_resize_empty_buffer_minimal_charge() {
         resize_cost,
         baseline_cost * 2,
         "Empty buffer resize cost ({}) should be close to baseline ({})",
-        resize_cost,
-        baseline_cost
-    );
-}
-
-#[test]
-fn test_canister_log_resize_no_extra_charge_feature_disabled() {
-    if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
-    let env = setup_env();
-    let controller = PrincipalId::new_anonymous();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_controllers(vec![controller])
-            .build(),
-        wat_canister()
-            .update("test", wat_fn().debug_print(b"hello"))
-            .build_wasm(),
-    );
-
-    // Write some logs (goes to old canister_log, not log_memory_store).
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-    let _ = env.execute_ingress(canister_id, "test", vec![]);
-
-    // Baseline: update_settings without log_memory_limit.
-    let balance_before_baseline = env.cycle_balance(canister_id);
-    let _ = env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-    );
-    let baseline_cost = balance_before_baseline - env.cycle_balance(canister_id);
-
-    // Update_settings with log_memory_limit — should cost the same as baseline
-    // because log_memory_store.bytes_used() is 0 when the feature is disabled.
-    let balance_before_resize = env.cycle_balance(canister_id);
-    let result = env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(4096)
-            .build(),
-    );
-    assert!(result.is_ok());
-    let resize_cost = balance_before_resize - env.cycle_balance(canister_id);
-
-    // Costs should be roughly equal — no extra charge for resize.
-    assert_le!(
-        resize_cost,
-        baseline_cost * 2,
-        "With feature disabled, resize cost ({}) should be close to baseline ({})",
         resize_cost,
         baseline_cost
     );
@@ -2692,12 +2561,8 @@ fn test_fetch_canister_logs_update_call_deducts_cycles() {
 #[test]
 fn test_canister_log_with_zero_log_memory_limit() {
     let subnet_type = SubnetType::Application;
-    let config = StateMachineConfig::new(
-        SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            ..Default::default()
-        },
-    );
+    let config =
+        StateMachineConfig::new(SubnetConfig::new(subnet_type), ExecutionConfig::default());
     let env = StateMachineBuilder::new()
         .with_config(Some(config.clone()))
         .with_subnet_type(subnet_type)
@@ -2725,20 +2590,18 @@ fn test_canister_log_with_zero_log_memory_limit() {
             .build(),
     );
 
-    // Produce a second log with no ring buffer. Both canister_log and
-    // persistent_next_idx advance to next_idx == 2.
+    // Produce a second log with no ring buffer. persistent_next_idx advances
+    // to next_idx == 2.
     let _ = env.execute_ingress(
         canister_id,
         "update",
         wasm().debug_print(b"log").reply().build(),
     );
 
-    // Both canister_log.next_idx() and lms.next_idx() must be 2 before
-    // and after a checkpoint/reload cycle.
+    // lms.next_idx() must be 2 before and after a checkpoint/reload cycle.
     let check_next_idx = |env: &StateMachine| {
         let state = env.get_latest_state();
         let ss = &state.canister_state(&canister_id).unwrap().system_state;
-        assert_eq!(ss.canister_log.next_idx(), 2);
         assert_eq!(ss.log_memory_store.next_idx(), 2);
     };
     check_next_idx(&env);
@@ -2750,9 +2613,6 @@ fn test_canister_log_with_zero_log_memory_limit() {
 #[test]
 fn test_log_memory_store_deallocated_when_canister_out_of_cycles() {
     // Test that the log memory store is deallocated when a canister runs out of cycles.
-    if !LOG_MEMORY_STORE_FEATURE_ENABLED {
-        return;
-    }
     let controller = PrincipalId::new_anonymous();
     let env = setup_env();
     // Use 300T cycles — enough to satisfy the freeze-threshold reserve for

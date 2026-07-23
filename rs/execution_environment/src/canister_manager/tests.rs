@@ -20,10 +20,9 @@ use ic_config::embedders::DEFAULT_CREATE_EXECUTION_STATE_BASE_COST;
 use ic_config::{
     execution_environment::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
-        LOG_MEMORY_STORE_FEATURE_ENABLED, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_ENVIRONMENT_VARIABLES,
-        MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, SUBNET_CALLBACK_SOFT_LIMIT,
-        SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION, TEST_DEFAULT_LOG_MEMORY_USAGE,
     },
     flag_status::FlagStatus,
     subnet_config::{CANISTER_CREATION_FEE, SchedulerConfig},
@@ -536,11 +535,8 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     // Try installing canister2, should fail due to insufficient memory capacity on the subnet.
     let err = test.install_canister(canister2, wasm).unwrap_err();
-    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
-    } else {
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
-    };
+    let msg =
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
     err.assert_contains(ErrorCode::SubnetOversubscribed, msg);
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2294,11 +2290,8 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     // Try upgrading the canister, should fail because there is not enough memory capacity
     // on the subnet.
-    let msg = if LOG_MEMORY_STORE_FEATURE_ENABLED {
-        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet."
-    } else {
-        "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet."
-    };
+    let msg =
+        "Canister requested 10.00 MiB of memory but only 9.99 MiB are available in the subnet.";
     test.upgrade_canister(canister2, wasm)
         .unwrap_err()
         .assert_contains(ErrorCode::SubnetOversubscribed, msg);
