@@ -1039,7 +1039,7 @@ mod tests {
         /// Starts a VM service in the background.
         /// This roughly corresponds to invoking `run_guest_vm()` in prod code.
         /// The returned instance can be used to interact with the newly started service.
-        fn start_service(&self, guest_vm_type: GuestVMType) -> TestServiceInstance {
+        fn start_service(&self, guest_vm_type: GuestVMType, slot: Option<u8>) -> TestServiceInstance {
             let console_file = NamedTempFile::new().expect("Failed to create console log file");
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = MockSystemdNotifier::new();
@@ -1063,7 +1063,7 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
-                guest_vm_slot: None,
+                guest_vm_slot: slot,
                 sev_certificate_provider,
                 disk_device: GUESTOS_DEVICE.into(),
                 _upgrade_mapped_device: None,
@@ -1083,7 +1083,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
-                vm_domain_name: vm_domain_name(guest_vm_type, None).to_string(),
+                vm_domain_name: vm_domain_name(guest_vm_type, slot).to_string(),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
@@ -1126,7 +1126,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_guest_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
         // The signal handlers work on the process level. All unit tests in this file are run in the
         // same process. We must only test the signal handler in one test otherwise a signal sent in
         // one unit test may be caught by a service running in another unit test which leads to
@@ -1173,7 +1173,7 @@ mod tests {
     #[tokio::test]
     async fn test_vm_killed() {
         let fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
         // Wait for the service to start the VM and notify systemd
         service.wait_for_systemd_ready().await;
 
@@ -1187,7 +1187,7 @@ mod tests {
     #[tokio::test]
     async fn test_vm_cannot_be_started() {
         let fixture = TestFixture::new(invalid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
 
         // Wait until the service fails
         (&mut service.task)
@@ -1208,11 +1208,11 @@ mod tests {
     async fn test_stops_already_running_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
 
-        let mut service1 = fixture.start_service(GuestVMType::Default);
+        let mut service1 = fixture.start_service(GuestVMType::Default, None);
         service1.wait_for_systemd_ready().await;
         let domain_id1 = service1.get_domain().get_id().unwrap();
 
-        let mut service2 = fixture.start_service(GuestVMType::Default);
+        let mut service2 = fixture.start_service(GuestVMType::Default, None);
         service2.wait_for_systemd_ready().await;
 
         // Assert that the first VM was stopped and the second VM is running
@@ -1228,10 +1228,10 @@ mod tests {
     async fn test_run_default_and_upgrade_vm_at_once() {
         let fixture = TestFixture::new(valid_hostos_config());
 
-        let mut service1 = fixture.start_service(GuestVMType::Default);
+        let mut service1 = fixture.start_service(GuestVMType::Default, None);
         service1.wait_for_systemd_ready().await;
 
-        let mut service2 = fixture.start_service(GuestVMType::Upgrade);
+        let mut service2 = fixture.start_service(GuestVMType::Upgrade, None);
         service2.wait_for_systemd_ready().await;
 
         // Assert that both VMs are running
@@ -1251,9 +1251,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_run_multiple_guest_vm_at_once() {
+        let fixture = TestFixture::new(valid_hostos_config());
+
+        let mut service1 = fixture.start_service(GuestVMType::Default, Some(0));
+        service1.wait_for_systemd_ready().await;
+
+        let mut service2 = fixture.start_service(GuestVMType::Default, Some(64));
+        service2.wait_for_systemd_ready().await;
+
+        // Assert that both VMs are running
+        service1.check_vm_running().unwrap();
+        service2.check_vm_running().unwrap();
+
+        assert!(
+            service1
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
+        );
+        assert!(
+            service2
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
+        );
+    }
+
+    #[tokio::test]
     async fn test_guestos_boot_success() {
         let mut fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
         service.wait_for_systemd_ready().await;
         writeln!(
             fixture.guest_serial_log,
@@ -1266,7 +1292,7 @@ mod tests {
     #[tokio::test]
     async fn test_guestos_boot_failure() {
         let mut fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
         service.wait_for_systemd_ready().await;
         writeln!(
             fixture.guest_serial_log,
@@ -1280,7 +1306,7 @@ mod tests {
     async fn test_guestos_boot_timeout() {
         let mut fixture = TestFixture::new(valid_hostos_config());
         fixture.guestos_boot_timeout = Duration::from_millis(50);
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
         service.wait_for_systemd_ready().await;
         writeln!(fixture.guest_serial_log, "foo bar").unwrap();
         sleep(Duration::from_millis(500)).await;
@@ -1331,7 +1357,7 @@ mod tests {
         )));
         fixture.command_runner = Arc::new(mock_command_runner);
 
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
 
         // The service should stop with an error indicating an unrecoverable state.
         let err = (&mut service.task)
@@ -1385,7 +1411,7 @@ mod tests {
             })));
         fixture.command_runner = Arc::new(mock_command_runner);
 
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, None);
         service.wait_for_systemd_ready().await;
     }
 }

@@ -3,8 +3,8 @@ Description=Manage GuestOS virtual machine
 # Not Requires, otherwise guestos will restart when libvirtd restarts
 Wants=libvirtd.service
 After=libvirtd.service
-
 RequiresMountsFor=/var
+PartOf=guestos.target
 
 [Service]
 Type=notify
