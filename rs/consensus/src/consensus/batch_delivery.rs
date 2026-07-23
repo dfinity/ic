@@ -317,8 +317,7 @@ fn generate_responses_to_subnet_calls(
     log: &ReplicaLogger,
 ) -> (Vec<ConsensusResponse>, CanisterHttpSpent) {
     let mut consensus_responses = Vec::new();
-    let mut canister_http_spent = CanisterHttpSpent::default();
-    match block.payload.as_ref() {
+    let canister_http_spent = match block.payload.as_ref() {
         BlockPayload::Summary(summary_payload) => {
             info!(
                 log,
@@ -328,7 +327,8 @@ fn generate_responses_to_subnet_calls(
             consensus_responses.append(&mut generate_responses_to_remote_dkgs(
                 &summary_payload.dkg.transcripts_for_remote_subnets,
                 log,
-            ))
+            ));
+            CanisterHttpSpent::default()
         }
         BlockPayload::Data(data_payload) => {
             consensus_responses.append(&mut generate_responses_to_remote_dkgs(
@@ -341,20 +341,17 @@ fn generate_responses_to_subnet_calls(
                     .append(&mut generate_responses_to_initial_dealings_calls(payload));
             }
 
-            let (mut http_responses, mut http_spent, http_stats) =
+            let (mut http_responses, http_spent, http_stats) =
                 CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
             consensus_responses.append(&mut http_responses);
-            canister_http_spent.initial.append(&mut http_spent.initial);
-            canister_http_spent
-                .asynchronous
-                .append(&mut http_spent.asynchronous);
             stats.canister_http = http_stats;
 
             let mut chain_key_responses =
                 ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
             consensus_responses.append(&mut chain_key_responses);
+            http_spent
         }
-    }
+    };
     (consensus_responses, canister_http_spent)
 }
 

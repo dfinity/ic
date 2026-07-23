@@ -2315,6 +2315,7 @@ fn flexible_valid_mixed_content_responses() {
             let payload = flexible_payload(vec![flexible_group(
                 callback_id,
                 subnet_size as u32,
+                2,
                 vec![
                     flexible_response(42, 0, b"response_a"),
                     flexible_response(42, 1, b"response_b"),
@@ -2349,6 +2350,7 @@ fn flexible_valid_at_min_responses_boundary() {
             let payload = flexible_payload(vec![flexible_group(
                 callback_id,
                 subnet_size as u32,
+                2,
                 vec![
                     flexible_response(42, 0, b"a"),
                     flexible_response(42, 1, b"b"),
@@ -2382,6 +2384,7 @@ fn flexible_valid_at_max_responses_boundary() {
             let payload = flexible_payload(vec![flexible_group(
                 callback_id,
                 subnet_size as u32,
+                2,
                 vec![
                     flexible_response(42, 0, b"a"),
                     flexible_response(42, 1, b"b"),
@@ -2397,6 +2400,61 @@ fn flexible_valid_at_max_responses_boundary() {
                 &[],
             );
             assert_matches!(result, Ok(_));
+        },
+    );
+}
+
+#[test]
+fn validate_payload_fails_for_initial_spent_mismatch_flexible_response() {
+    let subnet_size = 4;
+    let committee: BTreeSet<_> = (0..subnet_size).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    setup_test_with_flexible_context(
+        subnet_size as usize,
+        callback_id,
+        committee,
+        2,
+        subnet_size as u32,
+        |payload_builder, _pool| {
+            // Build an otherwise-valid group, then claim a collective initial
+            // spend that differs from what the receipts and subnet size
+            // recompute to.
+            let mut group = flexible_group(
+                callback_id,
+                subnet_size as u32,
+                2,
+                vec![
+                    flexible_response(42, 0, b"a"),
+                    flexible_response(42, 1, b"b"),
+                ],
+            );
+            // A content-bearing group has a nonzero consensus cost, so the honest
+            // value is nonzero; claim one cycle too many.
+            let computed = group.initial_spent;
+            group.initial_spent = computed + Cycles::new(1);
+
+            let result = payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                &payload_to_bytes_max_4mb(flexible_payload(vec![group])),
+                &[],
+            );
+
+            assert_matches!(
+                result,
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidCanisterHttpPayload(
+                        InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                            callback_id: cb,
+                            payload_spent,
+                            computed_spent,
+                        }
+                    )
+                )) if cb == callback_id
+                    && payload_spent == computed + Cycles::new(1)
+                    && computed_spent == computed
+            );
         },
     );
 }
@@ -2440,11 +2498,13 @@ fn flexible_invalid_duplicate_callback_id_within_payload() {
                 flexible_group(
                     callback_id,
                     subnet_size as u32,
+                    1,
                     vec![flexible_response(42, 0, b"a")],
                 ),
                 flexible_group(
                     callback_id,
                     subnet_size as u32,
+                    1,
                     vec![flexible_response(42, 1, b"b")],
                 ),
             ]);
@@ -3033,6 +3093,7 @@ fn flexible_invalid_signature_error() {
             let payload = flexible_payload(vec![flexible_group(
                 callback_id,
                 subnet_size as u32,
+                1,
                 vec![flexible_response(42, 0, b"data")],
             )]);
 
@@ -4014,6 +4075,7 @@ fn flexible_error_duplicate_callback_id_cross_type() {
             flexible_responses: vec![flexible_group(
                 callback_id,
                 num_nodes as u32,
+                1,
                 vec![flexible_response(42, 0, b"a")],
             )],
             flexible_errors: vec![FlexibleCanisterHttpError::Timeout { callback_id }],
@@ -4518,6 +4580,7 @@ fn flexible_error_too_many_rejects_valid() {
             flexible_errors: vec![too_many_rejects(
                 callback_id,
                 num_nodes as u32,
+                3,
                 reject_entries,
             )],
             ..Default::default()
@@ -4529,6 +4592,59 @@ fn flexible_error_too_many_rejects_valid() {
             &[],
         );
         assert_matches!(result, Ok(()));
+    });
+}
+
+#[test]
+fn validate_payload_fails_for_initial_spent_mismatch_too_many_rejects() {
+    let num_nodes = 4;
+    let committee: BTreeSet<_> = (0..num_nodes as u64).map(node_test_id).collect();
+    let callback_id = CallbackId::from(42);
+
+    // min_responses=3, committee=4. max_allowed_rejects = 1, so 2 rejects form an
+    // otherwise-valid TooManyRejects error.
+    setup_test_with_flexible_context(num_nodes, callback_id, committee, 3, 4, |pb, _pool| {
+        let reject_entries: Vec<_> = (0..2_u64)
+            .map(|node_idx| flexible_reject_response(callback_id.get(), node_idx))
+            .collect();
+        // The honest collective initial spend the validator recomputes from the
+        // receipts and subnet size...
+        let computed = super::utils::flexible_initial_spent(
+            reject_entries.iter().map(|r| &r.proof),
+            num_nodes as u32,
+            3,
+        );
+        // ...but the payload claims one cycle more.
+        let payload = CanisterHttpPayload {
+            flexible_errors: vec![FlexibleCanisterHttpError::TooManyRejects {
+                callback_id,
+                reject_responses: reject_entries,
+                initial_spent: computed + Cycles::new(1),
+            }],
+            ..Default::default()
+        };
+
+        let result = pb.validate_payload(
+            Height::new(1),
+            &test_proposal_context(&default_validation_context()),
+            &payload_to_bytes_max_4mb(payload),
+            &[],
+        );
+
+        assert_matches!(
+            result,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
+                        callback_id: cb,
+                        payload_spent,
+                        computed_spent,
+                    }
+                )
+            )) if cb == callback_id
+                && payload_spent == computed + Cycles::new(1)
+                && computed_spent == computed
+        );
     });
 }
 
@@ -4549,6 +4665,7 @@ fn flexible_error_too_many_rejects_insufficient_rejects() {
             flexible_errors: vec![too_many_rejects(
                 callback_id,
                 num_nodes as u32,
+                3,
                 reject_entries,
             )],
             ..Default::default()
@@ -4883,6 +5000,7 @@ fn flexible_error_too_many_rejects_invalid_signature() {
             flexible_errors: vec![too_many_rejects(
                 callback_id,
                 num_nodes as u32,
+                3,
                 reject_entries,
             )],
             ..Default::default()
@@ -5091,10 +5209,14 @@ fn flexible_reject_response(
 fn flexible_group(
     callback_id: CallbackId,
     subnet_size: u32,
+    min_responses: u32,
     responses: Vec<FlexibleCanisterHttpResponseWithProof>,
 ) -> FlexibleCanisterHttpResponses {
-    let initial_spent =
-        super::utils::flexible_initial_spent(responses.iter().map(|r| &r.proof), subnet_size);
+    let initial_spent = super::utils::flexible_initial_spent(
+        responses.iter().map(|r| &r.proof),
+        subnet_size,
+        min_responses,
+    );
     FlexibleCanisterHttpResponses {
         callback_id,
         responses,
@@ -5107,11 +5229,13 @@ fn flexible_group(
 fn too_many_rejects(
     callback_id: CallbackId,
     subnet_size: u32,
+    min_responses: u32,
     reject_responses: Vec<FlexibleCanisterHttpResponseWithProof>,
 ) -> FlexibleCanisterHttpError {
     let initial_spent = super::utils::flexible_initial_spent(
         reject_responses.iter().map(|r| &r.proof),
         subnet_size,
+        min_responses,
     );
     FlexibleCanisterHttpError::TooManyRejects {
         callback_id,

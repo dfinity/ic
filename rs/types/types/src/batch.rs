@@ -349,8 +349,8 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
     }
 }
 
-/// The amount of cycles spent on HTTP outcalls, delivered alongside (but
-/// separately from) the [`ConsensusResponse`]s of a batch.
+/// The amount of cycles spent on HTTP outcalls, delivered to the DSM
+/// as part of the batch.
 ///
 /// There are two kinds of reports:
 ///  - an *initial* report, where the set of nodes that produced a response

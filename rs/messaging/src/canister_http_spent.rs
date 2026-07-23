@@ -294,7 +294,7 @@ mod tests {
                 refund_status,
                 registry_version: RegistryVersion::from(1),
                 subnet_size: NumberOfNodes::from(SUBNET_SIZE as u32),
-                cost_schedule: None,
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             };
             state
                 .metadata

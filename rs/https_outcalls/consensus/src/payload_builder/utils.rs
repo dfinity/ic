@@ -110,19 +110,29 @@ pub(crate) fn fully_replicated_initial_spent(
 ///
 /// The spend is the sum of the per-replica spends claimed in the shares' payment
 /// receipts, plus the consensus cost
-/// `N * (10 * N + 600) * sum over K replicas (181 + <transformed_response_size_i>)`.
+/// `N * (10 * N + 600) * sum over K replicas (181 + <transformed_response_size_i>)`,
+/// plus an additional per-extra-response cost
+/// `N * (2000 * N * (K - min_responses) + 100_000 * (K - min_responses))` charged
+/// for every response beyond the `min_responses` required to reach consensus,
+/// where `K` is the number of shares.
 pub(crate) fn flexible_initial_spent<'a>(
     shares: impl Iterator<Item = &'a CanisterHttpResponseShare>,
     subnet_size: u32,
+    min_responses: u32,
 ) -> Cycles {
     let mut spent_sum = Cycles::zero();
     let mut size_term: u128 = 0;
+    let mut count: u32 = 0;
     for share in shares {
         spent_sum += share.content.payment_receipt.spent;
         size_term += 181 + share.content.content_size() as u128;
+        count += 1;
     }
+    let n = subnet_size as u128;
     let consensus_cost = Cycles::from(consensus_cost_coefficient(subnet_size) * size_term);
-    spent_sum + consensus_cost
+    let extra_responses = count.saturating_sub(min_responses) as u128;
+    let extra_cost = Cycles::from(n * (2000 * n * extra_responses + 100_000 * extra_responses));
+    spent_sum + consensus_cost + extra_cost
 }
 
 /// Enforces the per-replica spend limit from the request context: the amount
@@ -534,8 +544,11 @@ pub(crate) fn find_flexible_result(
 
     // 1. Enough OK responses collected?
     if ok_responses.len() >= min_responses {
-        let initial_spent =
-            flexible_initial_spent(ok_responses.iter().map(|(_, share)| *share), subnet_size);
+        let initial_spent = flexible_initial_spent(
+            ok_responses.iter().map(|(_, share)| *share),
+            subnet_size,
+            min_responses as u32,
+        );
         return FlexibleFindResult::OkResponses(
             FlexibleCanisterHttpResponses {
                 callback_id,
@@ -557,6 +570,7 @@ pub(crate) fn find_flexible_result(
         let initial_spent = flexible_initial_spent(
             reject_responses.iter().map(|(_, share)| *share),
             subnet_size,
+            min_responses as u32,
         );
         let error = FlexibleCanisterHttpError::TooManyRejects {
             callback_id,

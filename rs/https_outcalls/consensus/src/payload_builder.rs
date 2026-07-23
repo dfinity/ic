@@ -672,6 +672,7 @@ impl CanisterHttpPayloadBuilderImpl {
             let computed_spent = utils::flexible_initial_spent(
                 group.responses.iter().map(|r| &r.proof),
                 subnet_size,
+                min_responses,
             );
             if group.initial_spent != computed_spent {
                 return invalid_artifact(InvalidCanisterHttpPayloadReason::InitialSpentMismatch {
@@ -756,6 +757,7 @@ impl CanisterHttpPayloadBuilderImpl {
                     let computed_spent = utils::flexible_initial_spent(
                         reject_responses.iter().map(|r| &r.proof),
                         subnet_size,
+                        min_responses as u32,
                     );
                     if *initial_spent != computed_spent {
                         return invalid_artifact(
